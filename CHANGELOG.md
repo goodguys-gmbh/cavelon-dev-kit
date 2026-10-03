@@ -7,6 +7,10 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-03
+
+A security release: upgrade if your coding agent uses `cavelon mcp`.
+
 ### Added
 
 - `cavelon validate --verbose` says which copy of the package schema it used:
