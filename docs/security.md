@@ -87,9 +87,13 @@ activates. Over MCP, `cavelon` limits it further:
   [MCP page](mcp.md#how-agents-use-it) lists which they are. The Cavelon
   skills tell the agent to show you any preview that reaches an active
   solution or production first.
-- `api` refuses, even with `confirm`, an operation that changes a secret,
-  creates or revokes a credential (personal access tokens, API keys, sign-in)
-  or decides an approval.
+- `api` refuses, even with `confirm`, an operation the instance keeps for a
+  person: one its OpenAPI marks with `x-cavelon-person-only` (setting or
+  deleting a secret value, issuing, resetting or revoking a credential,
+  deciding an approval), with the instance's reason in the error. On an
+  instance that marks no operation, `api` refuses by the words of the path an
+  operation that changes a secret, creates or revokes a credential (personal
+  access tokens, API keys, sign-in) or decides an approval.
 - A tool reads and writes files only inside the solution folder (the folder
   of `cavelon.yaml`, or the one the server started in), following symlinks,
   and never in `cavelon`'s config or cache directory, which hold the stored

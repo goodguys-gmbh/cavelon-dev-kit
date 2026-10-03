@@ -2548,7 +2548,9 @@
               }
             }
           }
-        }
+        },
+        "x-cavelon-person-only": true,
+        "x-cavelon-person-only-reason": "Sets or deletes a secret value"
       },
       "delete": {
         "tags": [
@@ -2583,7 +2585,9 @@
               }
             }
           }
-        }
+        },
+        "x-cavelon-person-only": true,
+        "x-cavelon-person-only-reason": "Sets or deletes a secret value"
       }
     },
     "/api/v1/tenants": {
@@ -3403,6 +3407,22 @@
               "default": 200,
               "title": "Limit"
             }
+          },
+          {
+            "name": "entrypoint_node_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Entrypoint Node Id"
+            }
           }
         ],
         "responses": {
@@ -3891,6 +3911,20 @@
               "type": "string",
               "format": "uuid",
               "title": "Run Id"
+            }
+          },
+          {
+            "name": "view",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "full",
+                "workbench"
+              ],
+              "type": "string",
+              "default": "full",
+              "title": "View"
             }
           }
         ],
@@ -4692,6 +4726,30 @@
               }
             ],
             "title": "Run Payload"
+          },
+          "runtime_trigger_payload": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runtime Trigger Payload"
+          },
+          "runtime_metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runtime Metadata"
           },
           "schema_version": {
             "type": "string",

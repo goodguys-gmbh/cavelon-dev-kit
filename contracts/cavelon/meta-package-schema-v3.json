@@ -4068,7 +4068,7 @@
           }
         }
       },
-      "additionalProperties": true,
+      "additionalProperties": false,
       "required": [
         "url"
       ],
@@ -4188,9 +4188,19 @@
           "type": "boolean",
           "default": false,
           "description": "Refuse a decision by the person who requested the approval: the platform user who chatted, or the chat user's linked platform user (same verified email). Absent means false; a node created in the Admin or through the node API is created with true."
+        },
+        "label": {
+          "type": "string",
+          "deprecated": true,
+          "description": "Legacy name of title; read when title is unset."
+        },
+        "description": {
+          "type": "string",
+          "deprecated": true,
+          "description": "Legacy name of instructions; read when instructions is unset."
         }
       },
-      "additionalProperties": true,
+      "additionalProperties": false,
       "x-rules": [
         "Cannot run as a parallel-fanout branch (a fanout cannot suspend for a human).",
         "approvers takes roles and groups directly, or tiers chosen by the number at approvers.by: the first tier whose up_to is at least the value applies, and the last tier, without up_to, takes every value above. A value that is not a number fails the node.",
@@ -4238,9 +4248,42 @@
         "max_results": {
           "type": "integer",
           "exclusiveMinimum": 0
+        },
+        "retry": {
+          "type": "object",
+          "description": "Replays the node when it fails; the runner caps the retries and the delay.",
+          "properties": {
+            "max_retries": {
+              "type": "integer"
+            },
+            "delay_seconds": {
+              "type": "number"
+            },
+            "backoff": {
+              "type": "object",
+              "properties": {
+                "strategy": {
+                  "enum": [
+                    "exponential",
+                    "fixed"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "max_retries": {
+          "type": "integer",
+          "deprecated": true,
+          "description": "Legacy name of retry.max_retries; read when retry.max_retries is unset."
+        },
+        "retry_delay_seconds": {
+          "type": "number",
+          "deprecated": true,
+          "description": "Legacy name of retry.delay_seconds; read when retry.delay_seconds is unset."
         }
       },
-      "additionalProperties": true,
+      "additionalProperties": false,
       "required": [
         "outbound_config_id",
         "window"
@@ -4278,7 +4321,7 @@
           }
         }
       },
-      "additionalProperties": true,
+      "additionalProperties": false,
       "required": [
         "wait_kind"
       ],
@@ -4299,9 +4342,50 @@
         "sample_payload": {
           "type": "object",
           "description": "Optional example payload for the Workbench. Its fields are reported downstream as observed, not guaranteed."
+        },
+        "retry": {
+          "type": "object",
+          "description": "Replays the node when it fails; the runner caps the retries and the delay.",
+          "properties": {
+            "max_retries": {
+              "type": "integer"
+            },
+            "delay_seconds": {
+              "type": "number"
+            },
+            "backoff": {
+              "type": "object",
+              "properties": {
+                "strategy": {
+                  "enum": [
+                    "exponential",
+                    "fixed"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "max_retries": {
+          "type": "integer",
+          "deprecated": true,
+          "description": "Legacy name of retry.max_retries; read when retry.max_retries is unset."
+        },
+        "retry_delay_seconds": {
+          "type": "number",
+          "deprecated": true,
+          "description": "Legacy name of retry.delay_seconds; read when retry.delay_seconds is unset."
+        },
+        "demo_message": {
+          "type": "string",
+          "description": "The editor's test message; not enforced."
+        },
+        "demo_request_context": {
+          "type": "object",
+          "description": "The editor's test request context; not enforced."
         }
       },
-      "additionalProperties": true,
+      "additionalProperties": false,
       "x-rules": [
         "payload_schema, when set, must be a valid JSON Schema.",
         "payload_schema describes $.chat_payload, not the node's output. The node always emits message, chat_payload, metadata, session_id, contact_id and conversation_id; attachments only when the run has some.",
@@ -4330,7 +4414,7 @@
           "type": "boolean"
         }
       },
-      "additionalProperties": true,
+      "additionalProperties": false,
       "x-rules": [
         "Superseded by document_save (no kb_id = metadata-only). Prefer document_save for new graphs.",
         "'document' must be a JSON path ($.documents[0].id or $.loop.item.id) or empty for the context default."
@@ -4370,9 +4454,13 @@
         "identity": {
           "type": "string",
           "description": "JSON path starting with '$' (e.g. $.previous_output.field)."
+        },
+        "external_source_url": {
+          "type": "string",
+          "description": "A single-valued JSON path to the document's source URL, kept with the filed document; needs kb_id."
         }
       },
-      "additionalProperties": true,
+      "additionalProperties": false,
       "x-rules": [
         "kb_id must be a UUID, or empty (metadata-only, to the document's existing placement).",
         "'document', 'fields' and 'identity' must be SINGLE-VALUED JSON paths — the runtime reads one value from each and refuses a collection. Inside a documents loop bind $.loop.item.id (NOT a fixed $.documents[0], and no [*] wildcard).",
@@ -4416,9 +4504,42 @@
         "max_concurrency": {
           "type": "integer",
           "exclusiveMinimum": 0
+        },
+        "retry": {
+          "type": "object",
+          "description": "Replays the node when it fails; the runner caps the retries and the delay.",
+          "properties": {
+            "max_retries": {
+              "type": "integer"
+            },
+            "delay_seconds": {
+              "type": "number"
+            },
+            "backoff": {
+              "type": "object",
+              "properties": {
+                "strategy": {
+                  "enum": [
+                    "exponential",
+                    "fixed"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "max_retries": {
+          "type": "integer",
+          "deprecated": true,
+          "description": "Legacy name of retry.max_retries; read when retry.max_retries is unset."
+        },
+        "retry_delay_seconds": {
+          "type": "number",
+          "deprecated": true,
+          "description": "Legacy name of retry.delay_seconds; read when retry.delay_seconds is unset."
         }
       },
-      "additionalProperties": true,
+      "additionalProperties": false,
       "required": [
         "source"
       ],
@@ -4455,7 +4576,7 @@
           "description": "Optional $.path narrowing the child's output."
         }
       },
-      "additionalProperties": true,
+      "additionalProperties": false,
       "x-rules": [
         "Requires target_harness_id or target_harness_slug.",
         "input_mapping must be an object of { inputKey: expression } with at least one key; omit the key entirely to pass the previous payload through.",
@@ -4487,9 +4608,42 @@
           ],
           "default": "fail",
           "description": "Unavailable text blocks abort the node, or substitute empty text with a visible warning."
+        },
+        "retry": {
+          "type": "object",
+          "description": "Replays the node when it fails; the runner caps the retries and the delay.",
+          "properties": {
+            "max_retries": {
+              "type": "integer"
+            },
+            "delay_seconds": {
+              "type": "number"
+            },
+            "backoff": {
+              "type": "object",
+              "properties": {
+                "strategy": {
+                  "enum": [
+                    "exponential",
+                    "fixed"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "max_retries": {
+          "type": "integer",
+          "deprecated": true,
+          "description": "Legacy name of retry.max_retries; read when retry.max_retries is unset."
+        },
+        "retry_delay_seconds": {
+          "type": "number",
+          "deprecated": true,
+          "description": "Legacy name of retry.delay_seconds; read when retry.delay_seconds is unset."
         }
       },
-      "additionalProperties": true,
+      "additionalProperties": false,
       "x-rules": [
         "A Join consumes a {branches:{...}} payload that ONLY a parallel fanout produces — feed it from fanout branches.",
         "merge_mode 'template_json'/'template_text' require a 'template'.",
@@ -4665,9 +4819,19 @@
             "text"
           ],
           "default": "auto"
+        },
+        "mcp_server_id": {
+          "type": "string",
+          "deprecated": true,
+          "description": "Legacy id of the server; ignored, mcp_server_slug names it."
+        },
+        "mcp_tool_id": {
+          "type": "string",
+          "deprecated": true,
+          "description": "Legacy id of the tool; ignored."
         }
       },
-      "additionalProperties": true,
+      "additionalProperties": false,
       "x-rules": [
         "requires mcp_server_slug and mcp_tool_name once configured.",
         "MCP server setup, credentials, OAuth, and transport configuration stay on the Tools page.",
@@ -4737,9 +4901,42 @@
           ],
           "default": "fail",
           "description": "Unavailable text blocks abort the node, or substitute empty text with a visible warning."
+        },
+        "retry": {
+          "type": "object",
+          "description": "Replays the node when it fails; the runner caps the retries and the delay.",
+          "properties": {
+            "max_retries": {
+              "type": "integer"
+            },
+            "delay_seconds": {
+              "type": "number"
+            },
+            "backoff": {
+              "type": "object",
+              "properties": {
+                "strategy": {
+                  "enum": [
+                    "exponential",
+                    "fixed"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "max_retries": {
+          "type": "integer",
+          "deprecated": true,
+          "description": "Legacy name of retry.max_retries; read when retry.max_retries is unset."
+        },
+        "retry_delay_seconds": {
+          "type": "number",
+          "deprecated": true,
+          "description": "Legacy name of retry.delay_seconds; read when retry.delay_seconds is unset."
         }
       },
-      "additionalProperties": true,
+      "additionalProperties": false,
       "x-rules": [
         "mode='webhook_callback' REQUIRES a non-empty callback_url (config.delivery.callback_url or config.callback_url) — no payload fallback.",
         "mode='email' should set a recipient (delivery.email_to or email_to); otherwise it falls back to run.payload.email_to (warning).",
@@ -4863,7 +5060,7 @@
           }
         }
       },
-      "additionalProperties": true,
+      "additionalProperties": false,
       "required": [
         "check",
         "condition"
@@ -4885,6 +5082,39 @@
           "type": "string",
           "default": "condition",
           "description": "Label only — a router always routes by its condition edges."
+        },
+        "retry": {
+          "type": "object",
+          "description": "Replays the node when it fails; the runner caps the retries and the delay.",
+          "properties": {
+            "max_retries": {
+              "type": "integer"
+            },
+            "delay_seconds": {
+              "type": "number"
+            },
+            "backoff": {
+              "type": "object",
+              "properties": {
+                "strategy": {
+                  "enum": [
+                    "exponential",
+                    "fixed"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "max_retries": {
+          "type": "integer",
+          "deprecated": true,
+          "description": "Legacy name of retry.max_retries; read when retry.max_retries is unset."
+        },
+        "retry_delay_seconds": {
+          "type": "number",
+          "deprecated": true,
+          "description": "Legacy name of retry.delay_seconds; read when retry.delay_seconds is unset."
         },
         "default_branch": {
           "type": [
@@ -4991,7 +5221,7 @@
           "description": "Unavailable text blocks abort the node, or substitute empty text with a visible warning."
         }
       },
-      "additionalProperties": true,
+      "additionalProperties": false,
       "required": [
         "writes"
       ],
@@ -5035,7 +5265,7 @@
           "description": "replace_snapshot only: true lets an empty records array clear the table."
         }
       },
-      "additionalProperties": true,
+      "additionalProperties": false,
       "anyOf": [
         {
           "required": [
@@ -5106,7 +5336,7 @@
           "default": "auto"
         }
       },
-      "additionalProperties": true,
+      "additionalProperties": false,
       "x-rules": [
         "requires tool_definition_id or tool_slug.",
         "only function-style built-ins and webhooks are executable; MCP servers and hosted-only tools are rejected at runtime.",
@@ -5152,9 +5382,42 @@
           ],
           "default": "fail",
           "description": "Unavailable text blocks abort the node, or substitute empty text with a visible warning."
+        },
+        "retry": {
+          "type": "object",
+          "description": "Replays the node when it fails; the runner caps the retries and the delay.",
+          "properties": {
+            "max_retries": {
+              "type": "integer"
+            },
+            "delay_seconds": {
+              "type": "number"
+            },
+            "backoff": {
+              "type": "object",
+              "properties": {
+                "strategy": {
+                  "enum": [
+                    "exponential",
+                    "fixed"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "max_retries": {
+          "type": "integer",
+          "deprecated": true,
+          "description": "Legacy name of retry.max_retries; read when retry.max_retries is unset."
+        },
+        "retry_delay_seconds": {
+          "type": "number",
+          "deprecated": true,
+          "description": "Legacy name of retry.delay_seconds; read when retry.delay_seconds is unset."
         }
       },
-      "additionalProperties": true,
+      "additionalProperties": false,
       "x-rules": [
         "mode='json_mapping' requires a 'mapping' object; 'template_json'/'template_text' require a 'template' string.",
         "mode='template_json': interpolate every value through the tojson filter and do NOT quote it — write '\"field\": {{ $path | tojson }}', never '\"field\": \"{{ $path }}\"'. tojson emits the quotes itself and escapes \", newlines and backslashes; bare interpolation writes str(value) into the JSON source, so a quote or newline in the data makes the node fail with 'rendered invalid JSON', and a dict/None/True lands as {'k': 'v'} / \"None\" / \"True\".",
@@ -5181,6 +5444,39 @@
           "type": "object",
           "description": "Optional JSON Schema for the trigger payload, when the node declares it."
         },
+        "retry": {
+          "type": "object",
+          "description": "Replays the node when it fails; the runner caps the retries and the delay.",
+          "properties": {
+            "max_retries": {
+              "type": "integer"
+            },
+            "delay_seconds": {
+              "type": "number"
+            },
+            "backoff": {
+              "type": "object",
+              "properties": {
+                "strategy": {
+                  "enum": [
+                    "exponential",
+                    "fixed"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "max_retries": {
+          "type": "integer",
+          "deprecated": true,
+          "description": "Legacy name of retry.max_retries; read when retry.max_retries is unset."
+        },
+        "retry_delay_seconds": {
+          "type": "number",
+          "deprecated": true,
+          "description": "Legacy name of retry.delay_seconds; read when retry.delay_seconds is unset."
+        },
         "input_schema": {
           "type": "object",
           "deprecated": true,
@@ -5201,10 +5497,11 @@
           }
         },
         "demo_request_context": {
-          "type": "object"
+          "type": "object",
+          "description": "The editor's test request context; not enforced."
         }
       },
-      "additionalProperties": true,
+      "additionalProperties": false,
       "required": [
         "trigger_slug"
       ],
@@ -5239,9 +5536,24 @@
         },
         "resume_event": {
           "type": "string"
+        },
+        "seconds": {
+          "type": "number",
+          "deprecated": true,
+          "description": "Legacy name of duration_seconds; read when duration_seconds is unset."
+        },
+        "resume_after": {
+          "type": "string",
+          "deprecated": true,
+          "description": "Legacy name of until_datetime; read when until_datetime is unset."
+        },
+        "event_name": {
+          "type": "string",
+          "deprecated": true,
+          "description": "Legacy name of resume_event; read when resume_event is unset."
         }
       },
-      "additionalProperties": true,
+      "additionalProperties": false,
       "x-rules": [
         "mode='duration' requires positive duration_seconds; 'until_datetime' requires an ISO until_datetime; 'external_event' requires a resume_event."
       ]

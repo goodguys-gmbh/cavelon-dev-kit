@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { OpenApiDoc } from "../src/contracts.js";
 import { branchConcurrency } from "../src/branches.js";
 import { isOperatorChange, LIMIT_ABOVE_CEILING, parseLimits } from "../src/limits.js";
-import { operationAt, operationForPath, schemaErrors } from "../src/openapi.js";
+import { operationAt, operationForPath, operations, schemaErrors } from "../src/openapi.js";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import { buildArchive } from "../src/tar.js";
 import { CAPACITY_PAGES } from "../src/capacity.js";
@@ -328,6 +328,11 @@ describe("the OpenAPI snapshot", () => {
     expect(doc.info?.title).toBe("Cavelon API");
     // No prose: the server's descriptions explain its implementation, not the shapes the kit reads.
     expect(openapiSnapshot()).not.toMatch(/"description": "/);
+  });
+
+  it("keeps the instance's person-only marker through the trim", () => {
+    const marked = operations(doc).filter((o) => o.personOnly?.marked).map((o) => `${o.method} ${o.path}: ${o.personOnly?.reason}`);
+    expect(marked).toEqual(["PUT /api/v1/secrets/{name}: Sets or deletes a secret value", "DELETE /api/v1/secrets/{name}: Sets or deletes a secret value"]);
   });
 
   it("carry no developer notes, as scripts/scrub-contracts.mjs leaves them", () => {

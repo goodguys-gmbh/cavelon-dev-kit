@@ -7,6 +7,19 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Changed
+
+- Over MCP, the `api` tool now refuses exactly the operations the instance
+  marks for a person only in its OpenAPI (`x-cavelon-person-only`: setting or
+  deleting a secret value, issuing, resetting or revoking a credential,
+  deciding an approval), read-only or not, and the `operation_for_a_person`
+  error carries the instance's reason (`x-cavelon-person-only-reason`, also in
+  `details.reason`). On such an instance the words of the path no longer
+  decide, so an operation the instance does not mark is previewed and sent
+  with `confirm` like any other. An instance that marks no operation keeps the
+  previous check by the words of the path. The contract snapshots are
+  refreshed from a current instance.
+
 ### Fixed
 
 - A command run with `--env <name> --tenant <tenant>` acted in the `--tenant`

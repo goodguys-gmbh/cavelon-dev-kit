@@ -340,7 +340,7 @@ describe("cavelon mcp", () => {
     const api = tools.find((t) => t.name === "api")!;
     expect(Object.keys((api.inputSchema as { properties: object }).properties)).toContain("confirm");
     expect(client.getInstructions()).toMatch(/api for an operation that is not read-only, return what they would do and change nothing without confirm: true/);
-    expect(client.getInstructions()).toMatch(/api refuses, even with confirm, an operation that changes a secret, creates or revokes a credential/);
+    expect(client.getInstructions()).toMatch(/api refuses, even with confirm, an operation the instance marks for a person \(x-cavelon-person-only; its reason is in the error\), or on an instance that marks none, one that changes a secret, creates or revokes a credential/);
     const changes = (before: number) => server.state.requests.slice(before).filter((r) => r.method !== "GET");
 
     // Without confirm: what would be sent, and nothing is.

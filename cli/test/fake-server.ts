@@ -20,6 +20,21 @@ export function openapiSnapshot(): string {
   openapiText ??= readFileSync(path.join(CONTRACTS, "openapi.json"), "utf8");
   return openapiText;
 }
+/** The snapshot with its person-only markers changed, or without any (null). */
+function withPersonOnly(marks: Record<string, string | false> | null): string {
+  const doc = JSON.parse(openapiSnapshot()) as { paths: Record<string, Record<string, Record<string, unknown>>> };
+  for (const [route, item] of Object.entries(doc.paths)) {
+    for (const [method, op] of Object.entries(item)) {
+      if (method === "parameters") continue;
+      const mark = marks ? marks[`${method.toUpperCase()} ${route}`] : false;
+      if (mark === undefined) continue;
+      delete op["x-cavelon-person-only"];
+      delete op["x-cavelon-person-only-reason"];
+      if (mark !== false) Object.assign(op, { "x-cavelon-person-only": true, "x-cavelon-person-only-reason": mark });
+    }
+  }
+  return JSON.stringify(doc);
+}
 const readContract = (name: string) => readFileSync(path.join(CONTRACTS, name), "utf8");
 export const FIXTURES = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
 /** A small solution package that matches the package schema snapshot (checked in contract.test.ts). */
@@ -129,6 +144,12 @@ export interface FakeState {
   rootPathsReachApi: boolean;
   /** False answers 404 for the OpenAPI at both paths, as an instance that does not serve it. */
   serveOpenapi: boolean;
+  /**
+   * The `x-cavelon-person-only` marker over the snapshot's, by "METHOD /path":
+   * a reason marks the operation, false leaves it unmarked. `null` serves the
+   * OpenAPI without any marker, as an instance older than the marker.
+   */
+  personOnly: Record<string, string | false> | null;
   /**
    * Answers that break off after the status and part of the body, as a proxy
    * or a dropped connection leaves them: "cut" closes the connection, "stall"
@@ -382,6 +403,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     runResults: null,
     rootPathsReachApi: true,
     serveOpenapi: true,
+    personOnly: {},
     interruptions: [],
     failures: [],
     uploadsBeforeFailure: Infinity,
@@ -465,7 +487,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     }
     if (p === "/openapi.json" || (p === "/api/v1/openapi.json" && !state.rootPathsReachApi)) {
       res.writeHead(200, { "content-type": "application/json" });
-      return res.end(openapiSnapshot());
+      return res.end(state.personOnly && !Object.keys(state.personOnly).length ? openapiSnapshot() : withPersonOnly(state.personOnly));
     }
 
     // Auth: every API and docs route needs a known bearer token.
