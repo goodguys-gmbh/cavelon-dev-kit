@@ -78,15 +78,33 @@ provider may process what the agent reads, under your agreement with it.
 
 **What the agent may do** is limited by the token. Use a token without **May
 activate** for day-to-day work, so the agent can build and test but a person
-activates. Destructive tools change nothing without explicit confirmation, and
-the Cavelon skills tell the agent to show you any preview that reaches an
-active solution or production first.
+activates. Over MCP, `cavelon` limits it further:
+
+- `apply` imports only with the id of a preview, and `limits_set`,
+  `models_set_limit`, `loop_cancel`, `sandbox_seed`, `trigger_identity` and
+  `api` (for any operation that is not read-only) change nothing without
+  `confirm: true`. The other changing tools act at once; the
+  [MCP page](mcp.md#how-agents-use-it) lists which they are. The Cavelon
+  skills tell the agent to show you any preview that reaches an active
+  solution or production first.
+- `api` refuses, even with `confirm`, an operation that changes a secret,
+  creates or revokes a credential (personal access tokens, API keys, sign-in)
+  or decides an approval.
+- A tool reads and writes files only inside the solution folder (the folder
+  of `cavelon.yaml`, or the one the server started in), following symlinks,
+  and never in `cavelon`'s config or cache directory, which hold the stored
+  token.
+
+These limits apply to the MCP tools. An agent that runs shell commands has
+whatever your shell allows it; your agent client's permission settings decide
+that.
 
 ## What is sent where
 
 - **To your instance only.** Every request goes to the instance URL you
   named, with the token in the `Authorization` header and the tenant in
-  `X-Tenant-Id`. A request to any other host is refused (`foreign_url`). Plain
+  `X-Tenant-Id`. A request to any other host is refused (`foreign_url`),
+  including one to a path the instance itself supplies. Plain
   `http://` is refused except for `localhost`, unless you set
   `CAVELON_ALLOW_HTTP=1` for a test instance on a private network.
 - **What it sends:** the package files you `apply`, the documents you

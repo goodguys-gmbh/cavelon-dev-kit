@@ -187,6 +187,16 @@ describe("docs/commands.md", () => {
     expect(missing).toEqual([]);
   });
 
+  it("docs/mcp.md says which changing tools need confirm and which act at once", () => {
+    const mcp = readFileSync(path.resolve(__dirname, "../../docs/mcp.md"), "utf8");
+    const bullet = (title: string) => mcp.split(`- **${title}**`)[1]!.split("\n- **")[0]!;
+    const changing = COMMANDS.filter((c) => c.mcpTool && !c.readOnly);
+    const gated = changing.filter((c) => c.options?.confirm).map((c) => c.mcpTool as string);
+    const atOnce = changing.filter((c) => !c.options?.confirm).map((c) => c.mcpTool as string);
+    expect(gated.filter((t) => !bullet("What needs `confirm`.").includes(`\`${t}\``))).toEqual([]);
+    expect(atOnce.filter((t) => !bullet("What changes without `confirm`.").includes(`\`${t}\``))).toEqual([]);
+  });
+
   it("is the commands' own help (npm run docs:commands rewrites it)", async () => {
     await expect(renderCommandsDoc(COMMANDS)).toMatchFileSnapshot(path.resolve(__dirname, "../../docs/commands.md"));
   });

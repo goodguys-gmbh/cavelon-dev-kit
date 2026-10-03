@@ -70,6 +70,13 @@ export function tokensDisabledError(url: string): CavelonError {
   });
 }
 
+/** How many leading characters the URL parser drops (whitespace and controls), and slashes too when asked. */
+function leading(text: string, slashes: boolean): number {
+  let i = 0;
+  while (i < text.length && (text.charCodeAt(i) <= 0x20 || (slashes && (text[i] === "/" || text[i] === "\\")))) i++;
+  return i;
+}
+
 export class ApiClient {
   /** Whether the instance has personal access tokens turned off, asked once. */
   private tokensOff?: Promise<boolean>;
@@ -83,20 +90,31 @@ export class ApiClient {
     return this.target.url;
   }
 
+  /**
+   * The URL of a path on the instance. Paths also come from the instance (limit
+   * links, OpenAPI paths, docs index URLs), so a path is judged by what the URL
+   * parser makes of it, never by its text: the parser drops leading
+   * whitespace and tabs and reads backslashes as slashes.
+   */
   resolve(pathOrUrl: string, query?: Record<string, QueryValue>): URL {
     const base = new URL(this.target.url.endsWith("/") ? this.target.url : `${this.target.url}/`);
-    let url: URL;
-    if (/^https?:\/\//i.test(pathOrUrl)) {
-      url = new URL(pathOrUrl);
-      if (url.origin !== base.origin) {
-        throw new CavelonError(ExitCode.usage, {
-          code: "foreign_url",
-          message: `Refusing to send the token to ${url.origin}; the instance is ${base.origin}.`,
-        });
+    const foreign = (where: string, why = `the instance is ${base.origin}`) =>
+      new CavelonError(ExitCode.usage, { code: "foreign_url", message: `Refusing to send the token to ${where}; ${why}.` });
+    const parse = (input: string, against?: URL): URL => {
+      try {
+        return new URL(input, against);
+      } catch {
+        throw foreign(JSON.stringify(input), "it is not a URL on the instance");
       }
-    } else {
-      url = new URL(pathOrUrl.replace(/^\/+/, ""), base);
+    };
+    const hasScheme = /^[a-z][a-z0-9+.-]*:/i.test(pathOrUrl.slice(leading(pathOrUrl, false)));
+    // A path is relative to the instance's base path, which may not be the root.
+    const url = hasScheme ? parse(pathOrUrl) : parse(pathOrUrl.slice(leading(pathOrUrl, true)), base);
+    // Read against the base as well, so an input that names a host in any spelling is refused, not reinterpreted.
+    for (const candidate of [url, parse(pathOrUrl, base)]) {
+      if (candidate.origin !== base.origin) throw foreign(candidate.origin === "null" ? candidate.protocol : candidate.origin);
     }
+    if (!hasScheme && !url.pathname.startsWith(base.pathname)) throw foreign(url.pathname, `it is outside the instance's path ${base.pathname}`);
     for (const [key, value] of Object.entries(query ?? {})) {
       if (value === undefined || value === null) continue;
       if (Array.isArray(value)) for (const item of value) url.searchParams.append(key, String(item));

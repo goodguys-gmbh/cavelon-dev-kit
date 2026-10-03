@@ -4,6 +4,7 @@ import { parseDocument } from "yaml";
 import { boolOption, listOption, stringOption, type CommandSpec, type Context } from "../command.js";
 import { AGENTS, bundledSkills, generatedCopy, parseAgents, SKILL_ROOTS, type AgentTarget, type McpTarget } from "../agents.js";
 import { CavelonError, ExitCode, usageError } from "../errors.js";
+import { confinedPath } from "../paths.js";
 import { readTextFile, writeFileAtomic } from "../fsutil.js";
 import { git } from "../git.js";
 import { ensureStateDir, STATE_DIR } from "../local-state.js";
@@ -261,8 +262,8 @@ function importFileError(from: string, reason: string, hint?: string): CavelonEr
 }
 
 /** Read a package export (JSON or YAML) that `--from` names. */
-async function readImportFile(cwd: string, from: string): Promise<Record<string, unknown>> {
-  const file = path.resolve(cwd, from);
+async function readImportFile(ctx: Context, from: string): Promise<Record<string, unknown>> {
+  const file = await confinedPath(ctx, from, "The package file");
   const stat = await fs.stat(file).catch(() => undefined);
   if (!stat?.isFile()) throw usageError(`No file ${from}.`, "Pass the path of a package export (JSON or YAML) to --from.");
   if (stat.size > MAX_PACKAGE_FILE_BYTES) throw importFileError(from, `it is larger than ${MAX_PACKAGE_FILE_BYTES / 1024 / 1024} MB`);
@@ -340,7 +341,7 @@ async function runInit(ctx: Context, input: Parameters<CommandSpec["run"]>[1]) {
   if (from && update) throw usageError("--from and --update do not go together.", "Run `cavelon init --from <file>` and `cavelon init --update` one after the other.");
   if (boolOption(input, "force") && !from) throw usageError("--force only applies to --from.");
   // Read the file before anything is written: a wrong path changes nothing.
-  const imported = from ? await readImportFile(ctx.io.cwd, from) : undefined;
+  const imported = from ? await readImportFile(ctx, from) : undefined;
 
   if (update) {
     if (!session.project) throw usageError("No cavelon.yaml here or above.", "Run `cavelon init` first.");

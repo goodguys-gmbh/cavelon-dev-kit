@@ -1,5 +1,8 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { existsSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { Readable } from "node:stream";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { COMMANDS } from "../src/commands/index.js";
@@ -227,6 +230,21 @@ describe("cavelon mcp", () => {
     expect(downloaded).toMatchObject({ file: "result.tar", status: "succeeded" });
     const refused = await client.callTool({ name: "sandbox_seed", arguments: { sandbox: "orders-test", source: "nowhere", confirm: true } });
     expect(refused.isError).toBe(true);
+    // The archive is written only inside the solution folder.
+    const outside = mkdtempSync(path.join(os.tmpdir(), "cavelon-outside-"));
+    try {
+      for (const [out, code] of [
+        [path.join(outside, "export.tar"), "path_outside_solution"],
+        [path.join(sb.env.CAVELON_CONFIG_DIR!, "export.tar"), "path_in_kit_directory"],
+      ] as const) {
+        const elsewhere = await client.callTool({ name: "artifacts_export", arguments: { sandbox: "orders-test", job: exported.job_id, out } });
+        expect(elsewhere.isError).toBe(true);
+        expect(payload(elsewhere).error).toMatchObject({ code, exit_code: 2 });
+        expect(existsSync(out)).toBe(false);
+      }
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
   });
 
   it("runs the repository loop: init, pull, validate, apply with an env, confirm", async () => {
@@ -315,6 +333,100 @@ describe("cavelon mcp", () => {
     const missing = await client.callTool({ name: "docs_search", arguments: {} });
     expect(missing.isError).toBe(true);
     expect(payload(missing).error.exit_code).toBe(2);
+  });
+
+  it("sends a changing api operation only with confirm, and never one that is kept for a person", async () => {
+    const { tools } = await client.listTools();
+    const api = tools.find((t) => t.name === "api")!;
+    expect(Object.keys((api.inputSchema as { properties: object }).properties)).toContain("confirm");
+    expect(client.getInstructions()).toMatch(/api for an operation that is not read-only, return what they would do and change nothing without confirm: true/);
+    expect(client.getInstructions()).toMatch(/api refuses, even with confirm, an operation that changes a secret, creates or revokes a credential/);
+    const changes = (before: number) => server.state.requests.slice(before).filter((r) => r.method !== "GET");
+
+    // Without confirm: what would be sent, and nothing is.
+    let before = server.state.requests.length;
+    const preview = await client.callTool({ name: "api", arguments: { operation: "set_variable", params: ["name=api_region"], body: '{"value":"eu"}' } });
+    expect(preview.isError).toBeFalsy();
+    expect(payload(preview)).toMatchObject({ operation: "set_variable", method: "PUT", path: "/api/v1/variables/api_region", body: { value: "eu" }, sent: false });
+    expect(changes(before)).toEqual([]);
+    const missing = await client.callTool({ name: "api", arguments: { operation: "set_variable", body: '{"value":"eu"}' } });
+    expect(payload(missing).error).toMatchObject({ code: "validation_failed" });
+    const sent = await client.callTool({ name: "api", arguments: { operation: "set_variable", params: ["name=api_region"], body: '{"value":"eu"}', confirm: true } });
+    expect(sent.isError).toBeFalsy();
+    expect(payload(await client.callTool({ name: "variables_get", arguments: { name: "api_region" } }))).toMatchObject({ value: "eu" });
+    before = server.state.requests.length;
+    expect(payload(await client.callTool({ name: "api", arguments: { operation: "delete_variable", params: ["name=api_region"] } }))).toMatchObject({ method: "DELETE", sent: false });
+    expect(changes(before)).toEqual([]);
+    expect(payload(await client.callTool({ name: "variables_get", arguments: { name: "api_region" } }))).toMatchObject({ value: "eu" });
+
+    // A secret's value and its deletion stay with a person, confirm or not.
+    expect((await cli(sb, ["secrets", "set", "smtp_password"], { stdin: "person-chosen" })).code).toBe(0);
+    before = server.state.requests.length;
+    for (const confirm of [false, true]) {
+      for (const call of [
+        { operation: "delete_secret", params: ["name=smtp_password"] },
+        { operation: "set_secret", params: ["name=smtp_password"], body: '{"value":"agent-chosen"}' },
+      ]) {
+        const refused = await client.callTool({ name: "api", arguments: { ...call, confirm } });
+        expect(refused.isError, `${call.operation} confirm=${confirm}`).toBe(true);
+        expect(payload(refused).error).toMatchObject({ code: "operation_for_a_person", exit_code: 2 });
+        expect(payload(refused).error.hint).toMatch(/cavelon secrets set <name>/);
+      }
+    }
+    expect(changes(before)).toEqual([]);
+    expect(payload(await client.callTool({ name: "secrets_list", arguments: {} })).items).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "smtp_password", status: "set" })]),
+    );
+    // The CLI is a person: it sends at once, as before.
+    expect((await cli(sb, ["api", "delete_secret", "name=smtp_password", "--json"])).code).toBe(0);
+  });
+
+  it("reads and writes files only inside the solution folder, never in cavelon's own directories", async () => {
+    const credentials = path.join(sb.env.CAVELON_CONFIG_DIR!, "credentials.json");
+    expect(existsSync(credentials)).toBe(true);
+    const kb = "0f0e0d0c-0000-4000-8000-0000000000d1";
+    server.state.kbs.push({ id: kb, tenant_id: tenant, name: "Docs" });
+    const outside = mkdtempSync(path.join(os.tmpdir(), "cavelon-outside-"));
+    try {
+      writeFileSync(path.join(outside, "notes.md"), "# outside\n");
+      writeFileSync(path.join(outside, "body.json"), '{"value":"eu"}');
+      const before = server.state.requests.length;
+      const refusedWith = async (name: string, args: Record<string, unknown>, code: string) => {
+        const result = await client.callTool({ name, arguments: args });
+        expect(result.isError, `${name} ${JSON.stringify(args)}`).toBe(true);
+        expect(payload(result).error, `${name} ${JSON.stringify(args)}`).toMatchObject({ code, exit_code: 2 });
+      };
+      const upload = (file: string) => ({ operation: "upload_documents", params: [`kb_id=${kb}`], file: [`files=${file}`], confirm: true });
+      await refusedWith("api", upload(credentials), "path_in_kit_directory");
+      await refusedWith("api", upload(path.relative(sb.home, credentials)), "path_in_kit_directory");
+      await refusedWith("api", upload(path.join(outside, "notes.md")), "path_outside_solution");
+      await refusedWith("api", upload(`${sb.home}/../${path.basename(outside)}/notes.md`), "path_outside_solution");
+      await refusedWith("api", { operation: "set_variable", params: ["name=x"], body: `@${credentials}` }, "path_in_kit_directory");
+      await refusedWith("api", { operation: "set_variable", params: ["name=x"], body: `@${path.join(outside, "body.json")}` }, "path_outside_solution");
+      await refusedWith("kb_upload", { dir: sb.env.CAVELON_CONFIG_DIR!, kb: "Docs" }, "path_in_kit_directory");
+      await refusedWith("kb_upload", { dir: outside, kb: "Docs" }, "path_outside_solution");
+      await refusedWith("sandbox_seed", { sandbox: "orders-test", source: outside }, "path_outside_solution");
+      await refusedWith("sandbox_seed", { sandbox: "orders-test", source: sb.env.CAVELON_CACHE_DIR! }, "path_in_kit_directory");
+      await refusedWith("init", { from: path.join(outside, "notes.md") }, "path_outside_solution");
+      if (process.platform !== "win32") {
+        // A link inside the folder is judged by where it leads.
+        symlinkSync(credentials, path.join(sb.home, "linked.json"));
+        symlinkSync(outside, path.join(sb.home, "linked-dir"));
+        await refusedWith("api", upload("linked.json"), "path_in_kit_directory");
+        await refusedWith("api", upload("linked-dir/notes.md"), "path_outside_solution");
+        await refusedWith("kb_upload", { dir: "linked-dir", kb: "Docs" }, "path_outside_solution");
+      }
+      expect(server.state.requests.slice(before).filter((r) => r.method !== "GET")).toEqual([]);
+
+      // A file inside the solution folder goes, once confirmed.
+      writeFileSync(path.join(sb.home, "faq.md"), "# FAQ\n");
+      const inside = await client.callTool({ name: "api", arguments: upload("faq.md") });
+      expect(inside.isError).toBeFalsy();
+      // The CLI is a person, who may name any file.
+      expect((await cli(sb, ["api", "set_variable", "name=from_outside", "--json", `@${path.join(outside, "body.json")}`])).code).toBe(0);
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
   });
 
   it("searches the docs", async () => {

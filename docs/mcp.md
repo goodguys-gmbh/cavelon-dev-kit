@@ -129,12 +129,32 @@ repeat them:
   `loop_start`, `sandbox_seed`, `artifacts_export`) return operation ids at
   once; the agent reads them with `operation_status` and follows a loop with
   `loop_iterations`.
-- **Destructive tools change nothing without `confirm`.** `apply` returns a
-  preview and imports only with `confirm` set to that preview's id;
-  `limits_set`, `models_set_limit`, `loop_cancel`, `sandbox_seed` and
-  `trigger_identity` return what they would do and act only with
-  `confirm: true`. The agent shows that to you first, and must show you any preview that
-  reaches an active solution or production.
+- **What needs `confirm`.** `apply` returns a preview and imports only with
+  `confirm` set to that preview's id. `limits_set`, `models_set_limit`,
+  `loop_cancel`, `sandbox_seed`, `trigger_identity`, and `api` for any
+  operation that is not read-only (anything but GET, HEAD and OPTIONS), return
+  what they would do (for `api`: the method, path, parameters and body) and
+  act only with `confirm: true`. The agent shows that to you first, and must
+  show you any preview that reaches an active solution or production.
+- **What changes without `confirm`.** `init` and `pull` write files in the
+  solution folder (`pull` refuses to replace package files with uncommitted
+  changes unless `force`), and the other tools marked changing act at once:
+  `use_tenant`, `tenant_create`, `harness_new`, `harness_clone`, `activate`
+  (through the readiness gate), `variables_set`, `kb_upload`, `test_run`,
+  `loop_start`, `loop_pause`, `loop_resume`, `sandbox_validate`,
+  `sandbox_refresh` and `artifacts_export`.
+- **What no tool does, even with `confirm`.** `api` refuses an operation that
+  changes a secret, creates or revokes a credential (personal access tokens,
+  API keys, sign-in) or decides an approval (`operation_for_a_person`); a
+  person does those in Cavelon or in their terminal.
+- **Files stay in the solution folder.** Every path a tool takes (`api`'s
+  `file` and `body` `@file`, `loop_start`'s `input` `@file`, `kb_upload`'s
+  folder, `sandbox_seed`'s source, `artifacts_export`'s `out`, `init`'s
+  `from`) must lead, after symlinks, into the folder of `cavelon.yaml`, or the
+  folder the server started in when there is none (`path_outside_solution`),
+  and never into cavelon's own config or cache directory, which hold the
+  stored token (`path_in_kit_directory`). In your terminal, `cavelon` takes
+  any path you name.
 - **Limits are read, not changed.** The agent reads `limits` before planning a
   solution. It never changes a limit on its own: it proposes the old and new
   value and lets you decide; an operator's limit goes to the operator.

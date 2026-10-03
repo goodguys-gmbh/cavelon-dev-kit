@@ -55,6 +55,28 @@ CLI, the skills and the plugin.
   `validate` returns the same. Every other command's `warnings` was already a
   list of messages; the command reference now says so.
 
+### Security
+
+Upgrade to this version if your coding agent uses `cavelon mcp`.
+
+- Over MCP, the `api` tool returns what it would send (method, path,
+  parameters, body) and sends an operation that is not read-only only with
+  `confirm: true`. It refuses, even with `confirm`, an operation that changes a
+  secret, creates or revokes a credential (personal access tokens, API keys,
+  sign-in) or decides an approval (`operation_for_a_person`). The CLI's
+  `cavelon api` is unchanged. The server's instructions, `docs/mcp.md` and
+  `docs/security.md` now say exactly which tools need `confirm` and which act
+  at once.
+- Over MCP, every path a tool takes (`api`'s `file` and `body` `@file`,
+  `loop_start`'s `input` `@file`, `kb_upload`'s folder, `sandbox_seed`'s
+  source, `artifacts_export`'s `out`, `init`'s `from`) must lead, after
+  symlinks, into the solution folder (`path_outside_solution`), and never into
+  `cavelon`'s config or cache directory (`path_in_kit_directory`). The CLI
+  still takes any path.
+- Every request URL is resolved before its origin is compared with the
+  instance's (`foreign_url`), whatever its spelling, and a relative path
+  outside the instance's base path is refused too.
+
 ## [0.1.1] - 2026-10-03
 
 The first release built from the public repository: with provenance on npm,

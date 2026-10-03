@@ -90,13 +90,23 @@ export function buildRequest(op: Operation, args: CallArguments): { path: string
   return { path: filled, query, headers };
 }
 
+function isMultipart(op: Operation, args: CallArguments): boolean {
+  const contentTypes = Object.keys(op.requestBody?.content ?? {});
+  return (contentTypes.includes("multipart/form-data") && !contentTypes.includes("application/json")) || Boolean(args.files?.length);
+}
+
+/** What callOperation would send, checked as it checks it, without sending anything or reading a file. */
+export function previewRequest(doc: OpenApiDoc | undefined, op: Operation, args: CallArguments) {
+  const { path: target, query, headers } = buildRequest(op, args);
+  if (!isMultipart(op, args) && args.body !== undefined && doc) validateBody(doc, op, args.body);
+  return { method: op.method, path: target, query, headers, body: args.body ?? null };
+}
+
 export async function callOperation(ctx: Context, client: ApiClient, doc: OpenApiDoc | undefined, op: Operation, args: CallArguments): Promise<CallResult> {
   const { path: target, query, headers } = buildRequest(op, args);
-  const contentTypes = Object.keys(op.requestBody?.content ?? {});
-  const multipart = contentTypes.includes("multipart/form-data") && !contentTypes.includes("application/json");
   let form: FormData | undefined;
   let json: unknown;
-  if (multipart || args.files?.length) {
+  if (isMultipart(op, args)) {
     form = new FormData();
     if (args.body && typeof args.body === "object") {
       for (const [key, value] of Object.entries(args.body as Record<string, unknown>)) {
