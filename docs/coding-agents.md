@@ -143,11 +143,12 @@ the folder.
 > submits an expense with an amount, a category, a date and a receipt. The
 > solution checks it against `policies/expense-policy.md` and writes a short
 > memo: compliant or not, and for every finding the rule it relies on, quoted
-> with its section number. Then the employee's manager approves or rejects it.
+> with its section number. Then a person approves or rejects it: a team lead up
+> to 500 EUR, a department head up to 2,000 EUR, management above that.
 > Nobody approves their own request. Write tests for a compliant expense, one
-> over each limit in the policy, one without a receipt, and one where the
-> submitter is the approver. Read the instance's docs for the approval step
-> before you configure it.
+> over each limit in the policy, one without a receipt, and one in each
+> approval tier. Read the instance's docs for the approval step before you
+> configure who may decide it.
 
 A brief can be short. The expense brief above, with the policy file, is enough
 for an agent to build a working solution (see
@@ -260,7 +261,7 @@ have shown. Where your instance's package schema offers it, a trigger case can
 expect exactly that:
 
 ```yaml
-- name: Over-limit expense reaches the manager
+- name: An expense in the department head's tier reaches the approval
   type: trigger
   trigger:
     trigger_slug: expense-submitted
@@ -272,10 +273,15 @@ expect exactly that:
 ```
 
 So a test shows that the approval is reached, with its title and instructions
-and the memo the approver sees. The branches after it (approved, rejected) need
-a person to decide once: run the solution with a real request in the test
-environment, let the right person approve one and reject one, and read both
-runs with `cavelon trace`.
+and the memo the approver sees: give each approval tier a case with an amount
+in it. Who may decide is not tested by a test run, because it decides nothing;
+it is set on the approval step (see
+[the lesson below](#what-we-learned-from-real-runs)). The branches after it
+(approved, rejected) need a person to decide once: run the solution with a real
+request in the test environment, let a person the rule names approve one and
+reject one, and read both runs with `cavelon trace`. If the instance refuses
+the decision, `cavelon explain <code>` says why
+([Approvals](troubleshooting.md#approvals)).
 
 **Keep the thresholds in the suite.** The pass threshold, the judge mode and
 the other judge settings belong in the suite's `settings`, with the names the
@@ -315,11 +321,19 @@ these lessons:
   A copy pasted into a prompt drifts.
 - **Enforce an approval rule through who may decide.** A rule such as "nobody
   approves their own request" written only in the memo is a request to the
-  approver, not a control. An approval step does not check today who submitted
-  the request: anyone who holds the permission to decide approvals can decide
-  any of them. Give that permission only to the people who approve, keep the
-  people who submit requests out of it, and let the memo name the rule so the
-  approver can check it.
+  approver, not a control. Put it on the approval step, where the instance
+  enforces it: `approvers` names the tenant roles or access groups that may
+  decide, directly or in tiers chosen by a number the run carries (such as the
+  amount), and `forbid_self_approval: true` refuses a decision by the person
+  whose conversation started the run. The instance refuses anyone else
+  (`approval_approver_rule_not_met`, `approval_requester_cannot_decide`). A
+  run started by a trigger has no requester to compare, so there the approver
+  rule is the control. Ask the agent to read the approval step in the
+  instance's docs and package schema, test that each tier reaches the
+  approval, and let the memo still name the rule so the approver sees it. Then
+  decide once per branch yourself, as a person the rule names; the
+  [`expense-approval` example](../examples/expense-approval/) has tiers by
+  amount.
 
 ## Claude Code, Codex and other agents
 

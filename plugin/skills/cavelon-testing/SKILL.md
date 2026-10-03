@@ -37,6 +37,9 @@ the person would see: that the approval was reached, who approves, the facts
 and the recommendation in the instructions. The branches after the decision
 (approved, rejected, expired) are never reached by a test; a person checks them
 on a draft solution by deciding a real approval, and you never decide one.
+Who may decide (`approvers`, `forbid_self_approval`) is enforced when a person
+decides, not in a test: with tiers by amount, write one case per tier that
+reaches the approval, and leave the refusals to the instance.
 `examples/expense-approval` in the dev-kit repository has such a suite.
 
 ## Running

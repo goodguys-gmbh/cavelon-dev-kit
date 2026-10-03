@@ -168,6 +168,14 @@ version; leave it as `pull` wrote it.
   (`cavelon docs get reference/builtin-tools` names it). Without one the agent
   answers from memory; `cavelon validate` warns
   (`knowledge_base_without_search_tool`).
+- **Who approves goes on the Approval node, not into the memo.** When the
+  brief says who approves, or that nobody approves their own request, set the
+  node's `approvers` (tenant roles or access groups, directly or in `tiers`
+  chosen by a number at `by`, such as the amount) and `forbid_self_approval:
+  true`, where the package schema publishes them; the instance then refuses
+  anyone else. Read the approval node in the schema and the human-in-the-loop
+  docs for the shape. A test only shows the approval is reached; a person
+  decides once per branch.
 
 ## Variables and secrets the solution needs
 

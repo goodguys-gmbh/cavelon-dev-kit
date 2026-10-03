@@ -772,6 +772,18 @@ describe("explain", () => {
     expect(unknown.code).toBe(1);
     expect(unknown.json<{ error: { hint: string } }>().error.hint).toMatch(/agent_pipeline_fanout_unsupported/);
   });
+
+  it("explains a decision an Approval node's approver rule or self-approval refused", async () => {
+    const dir = await initSolution();
+    const rule = await cli(sb, ["explain", "approval_approver_rule_not_met", "--json"], { cwd: dir });
+    expect(rule.code).toBe(0);
+    expect(rule.json()).toMatchObject({ code: "approval_approver_rule_not_met", kind: "api", area: "approval" });
+    expect(rule.json<{ hint: string }>().hint).toMatch(/approvers/);
+    const self = await cli(sb, ["explain", "approval_requester_cannot_decide"], { cwd: dir });
+    expect(self.code).toBe(0);
+    expect(self.stdout).toMatch(/kind:\s+API error code \(approval\)/);
+    expect(self.stdout).toMatch(/forbid_self_approval/);
+  });
 });
 
 describe("activate", () => {

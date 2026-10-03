@@ -49,6 +49,15 @@ expense-approval/
 - **The decision memo** turns the check into the approval's title and
   instructions, and a person approves or rejects in the Admin. The router
   **Decision** reads the decision and sends the matching notice.
+- **Who may decide** is set on the approval, not left to the memo. Its
+  `approvers` follow R8.1 by the gross amount: up to 500 EUR the access group
+  `team-leads`, up to 2,000 EUR `department-heads`, above that `management`.
+  `forbid_self_approval: true` follows R8.2: the person whose chat submitted
+  the request cannot decide it. The instance refuses anyone else
+  (`approval_approver_rule_not_met`, `approval_requester_cannot_decide`). An
+  instance whose package schema does not publish these two keys under the
+  approval node cannot enforce them; there, give the permission to decide
+  approvals only to the people who approve.
 
 ## Try it
 
@@ -61,7 +70,10 @@ git init
 ```
 
 Edit two lines of `cavelon.yaml`: `instance` is your Cavelon URL, `tenant` your
-tenant's slug (`cavelon whoami` shows it). Both agents use the model `gpt-4.1`
+tenant's slug (`cavelon whoami` shows it). The approval names three access
+groups: create them in your tenant and add the approvers' chat users, with
+their verified email (`cavelon docs get administration/chat-users-and-groups`),
+or name your own groups or tenant roles in `package/registry_entities.yaml`. Both agents use the model `gpt-4.1`
 from `openai`; `cavelon models list` shows the models your tenant has, so change
 `llm_model` and `llm_provider` in `package/agents.yaml` if it has another.
 
@@ -83,6 +95,8 @@ criteria. So the tests show that a compliant request reaches the right approver
 with a sound memo, and that a request which breaks a rule cites that rule.
 
 What happens after the decision, the two notices behind **Decision**, is not
-reached by a test run. Check those branches yourself on the draft solution: send
-a request in the Admin's chat, approve it (or reject it) as a person, and read
-the notice. Neither `cavelon` nor your coding agent decides an approval.
+reached by a test run, and neither is who may decide. Check those branches
+yourself on the draft solution: send a request in the Admin's chat, let another
+person in the group of its tier approve it (or reject it), and read the notice.
+You cannot decide your own request. Neither `cavelon` nor your coding agent
+decides an approval.

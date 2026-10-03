@@ -98,6 +98,22 @@ because all run slots, or all of a model endpoint's slots, were in use. Retry
 later. `cavelon explain run_capacity_busy` names the limit to raise and who
 can. See [Limits](limits.md#run-capacity).
 
+## Approvals
+
+A person decides an approval, in the Admin or with their own personal access
+token; neither `cavelon` nor a coding agent decides one. When an Approval node
+says who may decide, the instance refuses anyone else before anything about
+the run changes, approving and rejecting alike:
+
+| Code | Exit | Cause and fix |
+|---|---|---|
+| `approval_approver_rule_not_met` (403) | 7 | The node's `approvers` name the tenant roles and access groups that may decide this request (for a tiered rule, the tier its amount chose), and you hold none of them. Someone who does decides it. Your access groups are those of the chat user with your verified email in this workspace; a tenant API key matches no approver rule. |
+| `approval_requester_cannot_decide` (403) | 7 | The node sets `forbid_self_approval`, and you requested this approval: the conversation that started the run was yours. Another person who may decide it does. |
+
+`cavelon explain <code>` gives your instance's own wording for both. To check
+who may decide before you test, read the node's `approvers` in
+`package/registry_entities.yaml`.
+
 ## Validation and packages
 
 | Code | Exit | Cause and fix |

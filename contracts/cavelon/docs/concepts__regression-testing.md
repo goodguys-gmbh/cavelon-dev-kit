@@ -512,4 +512,4 @@ A suite can be built and run without the dashboard, with the operations listed u
 }
 ```
 
-In a solution package, suites travel in the `test_suites` section, each with its `settings` and `test_cases`.
+In a solution package, suites travel in the `test_suites` section, each with its `settings` and `test_cases`. The package schema (`GET /api/v1/meta/package-schema`, `TestSuiteSettings`) lists the settings keys; an import refuses any other key and names the valid ones. `score_threshold` is a fraction from 0 to 1, not a percentage.
