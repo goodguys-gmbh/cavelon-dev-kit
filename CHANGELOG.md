@@ -9,6 +9,9 @@ CLI, the skills and the plugin.
 
 ### Added
 
+- `cavelon validate --verbose` says which copy of the package schema it used:
+  cached or read from the instance now, when, the instance version and the
+  copy's hash; `--json` carries the same as `schema`.
 - `docs/troubleshooting.md` has an Approvals section: the refusals of a
   decision by someone an approver rule does not name, and by the requester.
 
@@ -30,6 +33,18 @@ CLI, the skills and the plugin.
   catalog has the refusals of an approver rule
   (`approval_approver_rule_not_met`) and of self-approval
   (`approval_requester_cannot_decide`), which `cavelon explain` explains.
+
+### Fixed
+
+- On a development build of the instance, which keeps one version while its
+  package schema changes, `cavelon validate` used the schema it cached first
+  until the cache was removed. It now reads a development build's schema,
+  error catalog and capabilities again once its copy is a minute old, checks
+  a copy with the ETag the instance sent when there is one, and with
+  `--offline` or an unreachable instance uses the old copy and says so. The
+  other cached contracts of a development build (OpenAPI, docs index) follow
+  the same minute; `CAVELON_CONTRACT_TTL_SECONDS` sets it. A release's copies
+  are kept as before.
 
 ## [0.1.1] - 2026-10-03
 

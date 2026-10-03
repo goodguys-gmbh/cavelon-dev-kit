@@ -189,12 +189,13 @@ Check the package files against the instance's package schema, offline.
 cavelon validate [options]
 ```
 
-Uses the schema and error catalog cached by init, pull or apply; fetches them only when none is cached (never with --offline). Warns (never fails) when a fan-out or Map loop's max_concurrency is above the instance's branch width, and when the tenant runs fan-outs and Map loops in sequence, from the limits the instance last published. Each finding carries a code: `cavelon explain <code>` says more. The import preview checks everything again on the server.
+Uses the schema and error catalog cached by init, pull or apply; fetches them only when none is cached or a development build's copy is past its time-to-live, and never with --offline. A development build keeps one version while its schema changes, so its copy is read again after a minute (CAVELON_CONTRACT_TTL_SECONDS), or checked with the ETag the instance sent with it; --verbose says which copy was used. Warns (never fails) when a fan-out or Map loop's max_concurrency is above the instance's branch width, and when the tenant runs fan-outs and Map loops in sequence, from the limits the instance last published. Each finding carries a code: `cavelon explain <code>` says more. The import preview checks everything again on the server.
 
 | Option | Description | MCP |
 |---|---|---|
 | `--offline` | Never contact the instance, even when nothing is cached. | yes |
 | `--limit <n>` | Print at most n findings (default 50). | yes |
+| `--verbose` | Also say which copy of the package schema was used: cached or read now, when, and its hash. | yes |
 
 ### cavelon apply
 

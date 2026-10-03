@@ -693,6 +693,12 @@ an agent only with a new plugin or `init --update`. With `cavelon` installed,
 
 `CAVELON_CONFIG_DIR` and `CAVELON_CACHE_DIR` move them; `XDG_CONFIG_HOME` and
 `XDG_CACHE_HOME` are honoured. `CAVELON_CREDENTIAL_STORE=file` skips the OS store.
+A release's cached copies are kept until the instance reports another version.
+A development build (a version with `dev`, `snapshot` or `local` in it) keeps
+one version while what it publishes changes, so its copies are read again after
+a minute, or checked with the ETag the instance sent with them;
+`CAVELON_CONTRACT_TTL_SECONDS` sets that time. `cavelon validate --verbose` says
+which copy of the package schema it used.
 In the working directory, only `init`, `pull` and `apply` write, as described
 in "Solution as code", and `artifacts export`, which writes the tar it
 downloads to a new file.

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { CavelonError, ExitCode } from "./errors.js";
 import { NOT_HERE, type ApiClient } from "./http.js";
@@ -9,6 +10,9 @@ import { SUPPORTED_CONTRACTS } from "./version.js";
  * The instance's published contracts, cached per instance and version under
  * `~/.cache/cavelon/<instance>/<version>/`. A new instance version gets a new
  * folder, so the kit learns a core release's features without a kit release.
+ * A development build keeps one version string while its contracts change, so
+ * its copies are read again after a short time, and a copy the instance gave
+ * an ETag for is checked with it instead of read again.
  */
 
 export interface Capabilities {
@@ -59,7 +63,33 @@ interface CacheState {
   checked_at: string;
 }
 
+/** Beside each cached file: when it was read from the instance, and the ETag the instance sent with it. */
+interface CacheMeta {
+  fetched_at: string;
+  etag?: string;
+}
+
+/** A cached contract file as `validate` reads it: whether it is still trusted, and which copy it is. */
+export interface CachedContract<T> {
+  value: T;
+  version: string;
+  fetched_at: string | null;
+  etag: string | null;
+  /** The first 12 hex digits of the file's SHA-256, to tell two copies of one version apart. */
+  sha256: string;
+  /** A development build's copy past the time-to-live: read it again when the instance is reachable. */
+  stale: boolean;
+}
+
+type Loaded<T> = { value: T; serialized: string; etag?: string };
+
+/** What a loader answers when the instance confirms the copy behind the ETag it was sent. */
+const NOT_MODIFIED = Symbol("not modified");
+
 type Env = Record<string, string | undefined>;
+
+const RELEASE_TTL_SECONDS = 3600;
+const DEVELOPMENT_TTL_SECONDS = 60;
 
 const OPENAPI_PATHS = ["/openapi.json", "/api/v1/openapi.json"];
 
@@ -81,13 +111,16 @@ export class Contracts {
     return path.join(cacheDir(this.env), instanceKey(this.client.url));
   }
 
-  private get ttlMs(): number {
-    const seconds = Number(this.env.CAVELON_CONTRACT_TTL_SECONDS);
-    return (Number.isFinite(seconds) && seconds >= 0 && this.env.CAVELON_CONTRACT_TTL_SECONDS !== "" ? seconds : 3600) * 1000;
+  /** How long a copy is trusted: CAVELON_CONTRACT_TTL_SECONDS, else an hour for a release and a minute for a development build. */
+  ttlSeconds(version: string): number {
+    const raw = this.env.CAVELON_CONTRACT_TTL_SECONDS;
+    const seconds = Number(raw);
+    if (raw !== undefined && raw !== "" && Number.isFinite(seconds) && seconds >= 0) return seconds;
+    return Contracts.isDevelopment(version) ? DEVELOPMENT_TTL_SECONDS : RELEASE_TTL_SECONDS;
   }
 
   /** Development builds keep one version string for many contracts; never trust their cache past the TTL. */
-  private isMoving(version: string): boolean {
+  static isDevelopment(version: string): boolean {
     return version === "unknown" || /dev|snapshot|local/i.test(version);
   }
 
@@ -95,16 +128,16 @@ export class Contracts {
     return path.join(this.root, version.replace(/[^A-Za-z0-9._-]+/g, "_"));
   }
 
-  private fresh(fetchedAt: string | undefined): boolean {
+  private fresh(fetchedAt: string | undefined, version: string): boolean {
     if (!fetchedAt) return false;
-    return this.now().getTime() - new Date(fetchedAt).getTime() < this.ttlMs;
+    return this.now().getTime() - new Date(fetchedAt).getTime() < this.ttlSeconds(version) * 1000;
   }
 
   /** The instance's capabilities, or null when it does not publish them. */
   async capabilities(options: { refresh?: boolean } = {}): Promise<Capabilities | null> {
     if (this.caps !== undefined && !options.refresh) return this.caps;
     const state = await readJsonFile<CacheState>(path.join(this.root, "state.json"));
-    if (!options.refresh && state && this.fresh(state.checked_at)) {
+    if (!options.refresh && state && this.fresh(state.checked_at, state.version)) {
       const cached = await readJsonFile<Capabilities>(path.join(this.versionDir(state.version), "capabilities.json"));
       if (cached) {
         this.caps = cached;
@@ -159,39 +192,71 @@ export class Contracts {
 
   private async cached<T>(
     file: string,
-    load: () => Promise<{ value: T; serialized: string }>,
+    load: (etag: string | undefined) => Promise<Loaded<T> | typeof NOT_MODIFIED>,
     parse: (text: string) => T,
     options: { refresh?: boolean } = {},
   ): Promise<T> {
     const version = await this.version();
     const target = path.join(this.versionDir(version), file);
-    const meta = path.join(this.versionDir(version), `${file}.meta.json`);
-    if (!options.refresh) {
-      const text = await readTextFile(target);
-      const info = await readJsonFile<{ fetched_at: string }>(meta);
-      if (text !== undefined && (!this.isMoving(version) || this.fresh(info?.fetched_at))) {
-        try {
-          return parse(text);
-        } catch {
-          // A damaged cache file is fetched again.
-        }
+    const metaFile = path.join(this.versionDir(version), `${file}.meta.json`);
+    const text = await readTextFile(target);
+    const meta = await readJsonFile<CacheMeta>(metaFile);
+    let cached: { value: T } | undefined;
+    if (text !== undefined) {
+      try {
+        cached = { value: parse(text) };
+      } catch {
+        // A damaged cache file is fetched again.
       }
     }
-    const { value, serialized } = await load();
-    await writeFileAtomic(target, serialized);
-    await writeFileAtomic(meta, JSON.stringify({ fetched_at: this.now().toISOString() }));
-    return value;
+    if (cached && !options.refresh && (!Contracts.isDevelopment(version) || this.fresh(meta?.fetched_at, version))) return cached.value;
+    const loaded = await load(cached ? meta?.etag : undefined);
+    const fetchedAt = this.now().toISOString();
+    if (loaded === NOT_MODIFIED) {
+      if (!cached) throw new Error(`${file}: the instance answered 304 Not Modified without being sent an ETag.`);
+      await writeFileAtomic(metaFile, JSON.stringify({ ...meta, fetched_at: fetchedAt } satisfies CacheMeta));
+      return cached.value;
+    }
+    await writeFileAtomic(target, loaded.serialized);
+    await writeFileAtomic(metaFile, JSON.stringify({ fetched_at: fetchedAt, ...(loaded.etag ? { etag: loaded.etag } : {}) } satisfies CacheMeta));
+    return loaded.value;
+  }
+
+  /**
+   * GET a JSON contract, conditionally when there is an ETag to check the
+   * cached copy with. Undefined only for a status the caller allowed.
+   */
+  private async getJson<T>(
+    route: string,
+    etag: string | undefined,
+    options: { query?: Record<string, string | undefined>; allow?: number[]; timeoutMs?: number } = {},
+  ): Promise<Loaded<T> | typeof NOT_MODIFIED | undefined> {
+    const response = await this.client.get<T>(route, {
+      query: options.query,
+      timeoutMs: options.timeoutMs,
+      allow: [...(options.allow ?? []), ...(etag ? [304] : [])],
+      headers: etag ? { "If-None-Match": etag } : undefined,
+    });
+    if (etag && response.status === 304) return NOT_MODIFIED;
+    if (response.status < 200 || response.status >= 300) return undefined;
+    return { value: response.data, serialized: response.text, etag: response.headers.get("etag") ?? undefined };
+  }
+
+  /** A contract route without allowed statuses answers or throws. */
+  private async getRequired<T>(route: string, etag: string | undefined, query?: Record<string, string | undefined>): Promise<Loaded<T> | typeof NOT_MODIFIED> {
+    const loaded = await this.getJson<T>(route, etag, { query });
+    if (!loaded) throw new Error(`${route} answered neither a body nor an error.`);
+    return loaded;
   }
 
   async openapi(options: { refresh?: boolean } = {}): Promise<OpenApiDoc> {
     return this.cached(
       "openapi.json",
-      async () => {
+      async (etag) => {
         for (const candidate of OPENAPI_PATHS) {
-          const response = await this.client.get<OpenApiDoc>(candidate, { allow: NOT_HERE, timeoutMs: 120_000 });
-          if (response.status === 200 && response.data && typeof response.data === "object" && "paths" in response.data) {
-            return { value: response.data, serialized: response.text };
-          }
+          const loaded = await this.getJson<OpenApiDoc>(candidate, etag, { allow: NOT_HERE, timeoutMs: 120_000 });
+          if (loaded === NOT_MODIFIED) return loaded;
+          if (loaded?.value && typeof loaded.value === "object" && "paths" in loaded.value) return loaded;
         }
         throw new CavelonError(ExitCode.failure, {
           code: "openapi_unavailable",
@@ -208,10 +273,7 @@ export class Contracts {
     try {
       return await this.cached(
         "error-catalog.json",
-        async () => {
-          const response = await this.client.get<ErrorCatalog>("/api/v1/meta/error-catalog");
-          return { value: response.data, serialized: response.text };
-        },
+        (etag) => this.getRequired<ErrorCatalog>("/api/v1/meta/error-catalog", etag),
         (text) => JSON.parse(text) as ErrorCatalog,
         options,
       );
@@ -231,12 +293,7 @@ export class Contracts {
     try {
       return await this.cached(
         file,
-        async () => {
-          const response = await this.client.get<PackageSchema>("/api/v1/meta/package-schema", {
-            query: { version: wanted },
-          });
-          return { value: response.data, serialized: response.text };
-        },
+        (etag) => this.getRequired<PackageSchema>("/api/v1/meta/package-schema", etag, { version: wanted }),
         (text) => JSON.parse(text) as PackageSchema,
         options,
       );
@@ -259,14 +316,31 @@ export class Contracts {
 
   /**
    * A contract file from the cache only, never from the network: the newest
-   * cached copy for the instance version seen last. For `validate`, which runs
-   * offline.
+   * cached copy for the instance version seen last, and whether a development
+   * build's copy is past its time-to-live. For `validate`, which runs offline.
    */
-  async cachedOnly<T>(file: string): Promise<{ value: T; version: string } | undefined> {
+  async cachedOnly<T>(file: string): Promise<CachedContract<T> | undefined> {
     const state = await readJsonFile<CacheState>(path.join(this.root, "state.json"));
     if (!state) return undefined;
-    const value = await readJsonFile<T>(path.join(this.versionDir(state.version), file));
-    return value === undefined ? undefined : { value, version: state.version };
+    const target = path.join(this.versionDir(state.version), file);
+    const text = await readTextFile(target);
+    if (text === undefined) return undefined;
+    let value: T;
+    try {
+      value = JSON.parse(text) as T;
+    } catch {
+      return undefined;
+    }
+    // The capabilities are checked with the state, the other files each with their own meta.
+    const meta = file === "capabilities.json" ? { fetched_at: state.checked_at } : await readJsonFile<CacheMeta>(`${target}.meta.json`);
+    return {
+      value,
+      version: state.version,
+      fetched_at: meta?.fetched_at ?? null,
+      etag: meta?.etag ?? null,
+      sha256: createHash("sha256").update(text).digest("hex").slice(0, 12),
+      stale: Contracts.isDevelopment(state.version) && !this.fresh(meta?.fetched_at, state.version),
+    };
   }
 
   static packageSchemaFile(version: string): string {

@@ -110,6 +110,9 @@ active solution or production first.
 
 `CAVELON_CONFIG_DIR` and `CAVELON_CACHE_DIR` move them; `XDG_CONFIG_HOME` and
 `XDG_CACHE_HOME` are honoured.
+A development build of the instance keeps one version while what it publishes
+changes, so `cavelon` reads its copies again after a minute
+(`CAVELON_CONTRACT_TTL_SECONDS`), or checks them with the ETag the instance sent.
 
 In a solution folder, only `init`, `pull` and `apply` write files, plus
 `artifacts export`, which writes the archive it downloads to a new file.
