@@ -14,6 +14,12 @@ CLI, the skills and the plugin.
   checked in CI), the MCP server, limits, troubleshooting, security and an FAQ.
   The README is now the landing page that links them.
 - `CONTRIBUTING.md` for contributors.
+- `cavelon activate` prints each readiness check with its result and every
+  warning, in its text and in `--json` (`checks`, `warnings`).
+- `cavelon trace <test run>` shows the judge's reasoning for every judged case,
+  a pass included, when the instance returns it.
+- `cavelon test run --wait` ends, when the wait runs out first, with one line
+  that says how to resume, with the same `--timeout`.
 
 ### Changed
 
@@ -22,6 +28,12 @@ CLI, the skills and the plugin.
   `cli/scripts/trim-openapi.mjs` and `cli/scripts/scrub-contracts.mjs` keep it
   that way on every refresh.
 - The published package carries no source comments.
+
+### Fixed
+
+- `cavelon trace` prints each drill-down command with the id its route needs,
+  labelled (a case's conversation id, a trigger case's run id, the trace id),
+  and a wrong id's 404 answers with a hint naming the id to use.
 
 ## [0.1.0] - 2026-10-03
 

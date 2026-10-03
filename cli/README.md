@@ -394,7 +394,10 @@ An operation only says that the work finished: for a test run, `wait` and
 `watch` also read the run's summary, and a run whose cases failed or errored
 exits 1 with those cases and the reason the instance recorded (`--json`:
 `failed_results`). `trace <test run>` lists every case that did not pass with
-its error, the judge's reasoning and, for a trigger case, the run it started.
+its error, the judge's reasoning and the command that opens its traces (by its
+conversation id, or for a trigger case by the run it started), and the judge's
+reasoning for each scored pass the instance sent it for. `test run --wait` ends,
+when its wait ran out, with the one `wait` command that resumes.
 
 A trigger or channel run that meets a full run cap stays `queued` and the
 instance retries it every 5–20 s. The run says so itself

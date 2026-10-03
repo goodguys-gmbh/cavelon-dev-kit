@@ -163,7 +163,7 @@ describe("a test run whose cases failed", () => {
     expect(result.code).toBe(0);
     expect(result.stdout).toMatch(/Did not pass:\n {2}Counter loop \(step 1\) {2}fail\n {4}Assertion failed: The run ended cancelled; expected completed\.; output\/report\.json does not exist/);
     expect(result.stdout).toContain("Judge: The trigger run did not complete.");
-    expect(result.stdout).toContain(`Its run: cavelon trace ${caseRun}`);
+    expect(result.stdout).toContain(`Its traces (by its trigger run id): cavelon trace ${caseRun} --kind trigger`);
     expect(result.stdout).not.toMatch(/no trace to open/);
     const json = await cli(sb, ["trace", run_id, "--json"]);
     expect(json.json<{ results: { items: Array<Record<string, unknown>> } }>().results.items[0]).toMatchObject({

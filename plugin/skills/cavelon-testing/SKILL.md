@@ -35,21 +35,27 @@ cavelon wait <operation-id> --timeout 90s
 
 `wait` exits 6 when the run is still going; run the same `wait` again (keep
 each call under your shell's time limit). `test run --wait --timeout 5m` does
-both in one call where your client allows long commands. Exit 1 after a run
+both in one call where your client allows long commands; when its wait ends
+first, its last line is the command that resumes, with the same timeout. Exit 1 after a run
 means a case failed, even though the run itself finished; the output names the
 cases that did not pass and why, and `cavelon trace <run>` shows each one.
 
 ## Reading what happened
 
 ```bash
-cavelon trace <run-id or operation-id>             # cases and their traces
-cavelon trace <run> --trace <trace-id>             # one trace's spans
-cavelon trace <run> --trace <trace-id> --span <id> # one span in full
+cavelon trace <test-run-id or operation-id>                                   # cases, scores, judge's reasoning
+cavelon trace <conversation-id> --kind conversation                           # one case's traces
+cavelon trace <conversation-id> --kind conversation --trace <trace-id>        # one trace's spans
+cavelon trace <conversation-id> --kind conversation --trace <trace-id> --span <span-id>
 ```
 
 Go down only as far as you need: the summary first, then the failing case's
 trace, then the one span that went wrong (the model call, the tool call or the
-retrieval). Output is bounded; follow the command each level prints.
+retrieval). Output is bounded; run the command each level prints as printed: it
+carries the id its route needs. A case's traces are under its
+`conversation_id` (a trigger case's under its `run_id`, `--kind trigger`), not
+under the test run's id; a wrong id answers with a hint naming the right one.
+A low-scoring pass shows the judge's reasoning too.
 
 ## Optimizing
 

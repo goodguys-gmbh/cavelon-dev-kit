@@ -55,13 +55,15 @@ export async function waitAndReport(ctx: Context, ids: string[], timeout: number
     ...(failedResults.length ? { failed_results: failedResults } : {}),
   };
   const lines = operations.map((op, i) => describe(op, notes[i]));
+  // `body` leaves out the resume line, for a caller that ends its own output with one.
+  const body = lines.join("\n");
+  const why = waits.length === pending.length ? "Waiting for run capacity" : "Still running";
   if (pending.length) {
-    const why = waits.length === pending.length ? "Waiting for run capacity" : "Still running";
     lines.push(
       timeout === 0 ? `${why}. Wait with: cavelon wait ${pending.join(" ")}` : `${why} after the timeout; resume with: cavelon wait ${pending.join(" ")}`,
     );
   }
-  return { data, text: lines.join("\n"), exitCode };
+  return { data, text: lines.join("\n"), exitCode, body, pending, why };
 }
 
 function withResult(note: OperationNote | undefined, failure: OperationNote["result_failure"]): OperationNote | undefined {

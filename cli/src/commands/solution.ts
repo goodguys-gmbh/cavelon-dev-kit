@@ -803,15 +803,51 @@ export const explain: CommandSpec = {
 // activate
 // ---------------------------------------------------------------------------
 
+interface ReadinessCheck {
+  key?: string | null;
+  label?: string | null;
+  state?: string | null;
+  detail?: string | null;
+  /** Not in the published readiness schema; kept for an instance that words a check this way. */
+  message?: string | null;
+}
+
 interface Readiness {
   ready_to_activate: boolean;
   status?: string;
-  blockers?: Array<{ key?: string; label?: string; message?: string; detail?: string }>;
-  warnings?: Array<{ key?: string; label?: string; message?: string }>;
+  checks?: ReadinessCheck[];
+  blockers?: ReadinessCheck[];
+  warnings?: ReadinessCheck[];
 }
 
-function checkLine(c: { key?: string; label?: string; message?: string; detail?: string }): string {
-  return [c.label ?? c.key, c.message ?? c.detail].filter(Boolean).join(": ");
+function checkLine(c: ReadinessCheck): string {
+  return clip([c.label ?? c.key, c.message ?? c.detail].filter(Boolean).join(": "), 300);
+}
+
+/**
+ * Every check the gate ran, with its result. An instance that publishes no
+ * `checks` still names its blockers and warnings, so those stand in for it.
+ */
+function readinessChecks(readiness: Readiness): Array<{ key: string | null; label: string | null; state: string; detail: string | null }> {
+  const fallback = [
+    ...(readiness.blockers ?? []).map((c) => ({ ...c, state: c.state ?? "blocker" })),
+    ...(readiness.warnings ?? []).map((c) => ({ ...c, state: c.state ?? "warning" })),
+  ];
+  return (readiness.checks ?? fallback).map((c) => ({
+    key: c.key ?? null,
+    label: c.label ?? null,
+    state: c.state ?? "unknown",
+    detail: c.detail ?? c.message ?? null,
+  }));
+}
+
+/** The checks and warnings as lines, so a non-blocking warning is read, not only logged. */
+function readinessText(checks: ReturnType<typeof readinessChecks>, warnings: string[]): string[] {
+  const width = Math.max(0, ...checks.map((c) => c.state.length));
+  return [
+    ...(checks.length ? ["Readiness checks:", ...checks.map((c) => `  ${c.state.padEnd(width)}  ${checkLine(c)}`)] : []),
+    ...(warnings.length ? ["Warnings:", ...warnings.map((w) => `  - ${w}`)] : []),
+  ];
 }
 
 export const activate: CommandSpec = {
@@ -845,15 +881,18 @@ export const activate: CommandSpec = {
     const readiness = await callStable<Readiness>(ctx, "GET", "/api/v1/harnesses/{harness_id}/readiness", "reading readiness", {
       params: { harness_id: [harness.id] },
     });
+    const checks = readinessChecks(readiness);
+    const warnings = (readiness.warnings ?? []).map(checkLine);
     if (!readiness.ready_to_activate) {
       const blockers = readiness.blockers ?? [];
       // A Masterloop parent activated before its iteration solution.
-      const pair = pairOrderHint(await catalogFor(ctx, false), blockers.flatMap((b) => [b.message, b.detail]));
+      const pair = pairOrderHint(await catalogFor(ctx, false), blockers.flatMap((b) => [b.message ?? undefined, b.detail ?? undefined]));
       return {
-        data: { activated: false, harness, readiness, ...(pair ? { hint: pair.hint } : {}) },
+        data: { activated: false, harness, checks, warnings, readiness, ...(pair ? { hint: pair.hint } : {}) },
         text: [
           `${harness.name} (${harness.slug}) is not ready to activate:`,
           ...blockers.map((b) => `  - ${checkLine(b)}`),
+          ...readinessText(checks, warnings),
           ...(pair ? [`hint: ${pair.hint}`] : []),
           "Resolve these (often: a passing test run), then activate again. Forcing past the gate is a person's decision in the Admin.",
         ].join("\n"),
@@ -864,11 +903,9 @@ export const activate: CommandSpec = {
       params: { harness_id: [harness.id] },
       body: { force: false },
     });
-    const warnings = (readiness.warnings ?? []).map(checkLine);
-    for (const w of warnings) ctx.warn(w);
     return {
-      data: { activated: true, harness: activated, readiness },
-      text: `Activated ${activated.name} (${activated.slug}); status ${activated.status}.`,
+      data: { activated: true, harness: activated, checks, warnings, readiness },
+      text: [`Activated ${activated.name} (${activated.slug}); status ${activated.status}.`, ...readinessText(checks, warnings)].join("\n"),
     };
   },
 };
