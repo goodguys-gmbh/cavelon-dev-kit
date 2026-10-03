@@ -189,8 +189,9 @@ test_cases:
 `apply` sends the suites with the rest of the package. `cavelon test run`
 starts them on the instance, where a judge scores each answer. With `--wait`,
 a run whose cases failed exits 1 and names them. `cavelon trace <run>` shows
-each case with its score, error and the judge's reasoning, and leads to the
-conversation behind it, span by span. The package schema also allows cases
+each case with its score, error and the judge's reasoning (for a pass too, when
+the instance sends it), and leads to the conversation behind it, span by span,
+with each command carrying the id its route needs. The package schema also allows cases
 that start a trigger and check how its run ends.
 
 ## Readiness and activation
@@ -200,7 +201,8 @@ solution may go live (its agents are complete, what it needs is set, and so
 on). `cavelon harness list --readiness` shows each solution's state.
 
 **`cavelon activate`** reads the gate and activates only when it passes; it
-never forces. A solution that is not ready exits 3 with its blockers. A
+never forces. It prints each check with its result and every warning. A
+solution that is not ready exits 3 with its blockers. A
 personal access token must have been created with **May activate**; otherwise
 `activate` is refused before anything is sent (exit 7), and a person activates
 in the Admin.

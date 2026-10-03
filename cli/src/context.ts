@@ -52,3 +52,9 @@ export function createContext(io: Io, globals: GlobalOptions, mode: "cli" | "mcp
   };
   return ctx;
 }
+
+/** A command that reports warnings of its own keeps them; the context's are added after. */
+export function withWarnings(data: Record<string, unknown>, warnings: string[]): Record<string, unknown> {
+  const own = Array.isArray(data.warnings) ? (data.warnings as unknown[]) : [];
+  return { ...data, warnings: [...own, ...warnings.filter((w) => !own.includes(w))] };
+}

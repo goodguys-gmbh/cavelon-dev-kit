@@ -146,6 +146,11 @@ export interface FakeState {
   ready: boolean;
   /** The blockers readiness names while not ready; a missing test run by default. */
   readinessBlockers?: Array<{ key: string; label: string; state: string; detail: string; href: string | null }>;
+  /** Every check readiness ran, and its non-blocking warnings; none by default. */
+  readinessChecks?: Array<{ key: string; label: string; state: string; detail: string; href: string }>;
+  readinessWarnings?: Array<{ key: string; label: string; state: string; detail: string; href: string }>;
+  /** An older instance's readiness, without `checks`. */
+  readinessWithoutChecks?: boolean;
   servePrincipal: boolean;
   servePackageSchema: boolean;
   /** Triggers, runs, loops, Sandboxes, archive jobs, API keys. */
@@ -574,9 +579,9 @@ export async function startFakeServer(): Promise<FakeServer> {
         harness_id: h.id,
         status: h.status,
         ready_to_activate: state.ready,
-        checks: [],
+        ...(state.readinessWithoutChecks ? {} : { checks: state.readinessChecks ?? [] }),
         blockers: state.ready ? [] : (state.readinessBlockers ?? [{ key: "test_run", label: "A passing test run", state: "missing", detail: "Run the regression suite.", href: null }]),
-        warnings: [],
+        warnings: state.readinessWarnings ?? [],
         latest_test_run: null,
         activation_override: null,
       };

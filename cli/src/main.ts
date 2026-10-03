@@ -1,6 +1,6 @@
 import { parseArgs, type ParseArgsConfig } from "node:util";
 import { GLOBAL_OPTIONS, type CommandResult, type CommandSpec, type Context, type Input, type OptionSpec } from "./command.js";
-import { createContext } from "./context.js";
+import { createContext, withWarnings } from "./context.js";
 import { asCavelonError, CavelonError, ExitCode, usageError } from "./errors.js";
 import { blockerLines } from "./format.js";
 import type { Io } from "./io.js";
@@ -148,7 +148,7 @@ function printResult(ctx: Context, result: CommandResult): void {
   if (ctx.json) {
     let data = result.data;
     if (ctx.warnings.length && data && typeof data === "object" && !Array.isArray(data)) {
-      data = { ...(data as Record<string, unknown>), warnings: ctx.warnings };
+      data = withWarnings(data as Record<string, unknown>, ctx.warnings);
     }
     if (data !== undefined) io.stdout.write(`${JSON.stringify(data)}\n`);
     return;

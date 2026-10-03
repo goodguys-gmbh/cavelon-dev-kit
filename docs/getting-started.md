@@ -258,13 +258,27 @@ Return window   1     pass    0.95   22222222-2222-4222-8222-222222222222
 Refund time     1     pass    0.9    33333333-3333-4333-8333-333333333333
 Not in the FAQ  1     pass    1      44444444-4444-4444-8444-444444444444
 
-A case's trace: cavelon trace <conversation_id> --kind conversation
+Judge's reasoning:
+  Opening hours (step 1)  pass  score 0.9
+    Judge: Gives the hours for weekdays and Saturday, as the reference does.
+  Return window (step 1)  pass  score 0.95
+    Judge: States the 30-day return window.
+  Refund time (step 1)  pass  score 0.9
+    Judge: Says refunds take five working days; omits the payment method.
+  Not in the FAQ (step 1)  pass  score 1
+    Judge: Declines and points to the shop's questions only.
+
+A case's traces, by the conversation_id in its row: cavelon trace 11111111-1111-4111-8111-111111111111 --kind conversation
 ```
 
-For a test run, `trace` lists each case with its score; a case that did not
-pass shows its error and the judge's reasoning. `cavelon trace <conversation_id>
---kind conversation` opens one case's conversation: its spans (model calls,
-retrievals, tool calls), each with the command that shows its detail.
+For a test run, `trace` lists each case with its score and, where the instance
+sent it, the judge's reasoning; a case that did not pass also shows its error.
+Each command `trace` prints works as printed: it carries the id its route
+needs. A case's traces are under its conversation id, so `cavelon trace
+<conversation_id> --kind conversation` opens one case's conversation: its
+traces, then with `--trace <trace_id>` their spans (model calls, retrievals,
+tool calls), each level with the command that shows the next. A test run's id
+where a conversation id belongs answers with a hint naming the id to use.
 
 Change the prompt in `package/agents.yaml`, the skill in `package/skills.yaml`
 or the cases in `tests/smoke.yaml`, then run the loop again: `validate`,
@@ -289,10 +303,17 @@ cavelon activate
 
 ```text
 Activated Support FAQ (support-faq); status active.
+Readiness checks:
+  complete  A passing test run: Smoke passed.
+  warning   Description and outcome: The outcome is undefined.
+Warnings:
+  - Description and outcome: The outcome is undefined.
 ```
 
 `activate` reads the solution's readiness first and activates only when it
-passes; it never forces. A solution that is not ready exits 3 and lists its
+passes; it never forces. It prints each check with its result and every
+warning; a warning does not block activation (`--json`: `checks` and
+`warnings`). A solution that is not ready exits 3 and lists its
 blockers. A token without **May activate** is refused before anything is sent
 (exit 7): a person then activates in the Admin, or creates a token that may.
 

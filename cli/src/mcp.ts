@@ -1,7 +1,7 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListToolsRequestSchema, type Tool } from "@modelcontextprotocol/sdk/types.js";
 import type { CommandSpec, Input } from "./command.js";
-import { createContext } from "./context.js";
+import { createContext, withWarnings } from "./context.js";
 import { asCavelonError, usageError } from "./errors.js";
 import type { Io } from "./io.js";
 import { KIT_VERSION } from "./version.js";
@@ -132,7 +132,7 @@ export function createMcpServer(io: Io, commands: CommandSpec[]): Server {
       const result = await spec.run(ctx, inputFrom(spec, args));
       let data = result.data;
       if (data && typeof data === "object" && !Array.isArray(data)) {
-        data = { ...(data as Record<string, unknown>), ...(ctx.warnings.length ? { warnings: ctx.warnings } : {}) };
+        data = ctx.warnings.length ? withWarnings(data as Record<string, unknown>, ctx.warnings) : { ...(data as Record<string, unknown>) };
         if (result.exitCode) (data as Record<string, unknown>).exit_code = result.exitCode;
       }
       return { content: [{ type: "text" as const, text: JSON.stringify(data ?? null) }] };

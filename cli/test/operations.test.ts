@@ -217,6 +217,26 @@ describe("test run", () => {
     }
   });
 
+  it("--wait ends its output with the one command that resumes, with the same timeout (exit 6)", async () => {
+    server.state.defaultSteps = ["queued", ...Array<"running">(12).fill("running"), "succeeded"];
+    const text = await cli(sb, ["test", "run", "--suite", "smoke", "--wait", "--timeout", "100ms"]);
+    expect(text.code).toBe(6);
+    const lines = text.stdout.trimEnd().split("\n");
+    const last = lines.at(-1)!;
+    expect(last).toMatch(/^Still running after the timeout; the runs go on\. Resume: cavelon wait op_test_run_\S+ --timeout 100ms$/);
+    // Said once, at the end.
+    expect(text.stdout.match(/cavelon wait/g)).toHaveLength(1);
+
+    const json = await cli(sb, ["test", "run", "--suite", "smoke", "--wait", "--timeout", "100ms", "--json"]);
+    expect(json.code).toBe(6);
+    const resume = json.json<{ resume: string }>().resume;
+    expect(resume).toMatch(/^cavelon wait op_test_run_\S+ --timeout 100ms$/);
+    // The command works as printed: each call resumes, until the run finishes.
+    let again = await cli(sb, resume.split(" ").slice(1));
+    for (let i = 0; i < 30 && again.code === 6; i++) again = await cli(sb, resume.split(" ").slice(1));
+    expect(again.code, again.stdout).toBe(0);
+  });
+
   it("names a suite that does not exist", async () => {
     const result = await cli(sb, ["test", "run", "--suite", "ghost", "--json"]);
     expect(result.code).toBe(1);
@@ -249,7 +269,10 @@ describe("trace", () => {
     expect(full.json<{ input: { prompt: string } }>().input.prompt).toHaveLength(5000);
 
     const text = await cli(sb, ["trace", runId]);
-    expect(text.stdout).toMatch(/Spans of one: cavelon trace/);
+    expect(text.stdout).toContain(`Spans of a trace, by the trigger run id and the trace_id in its row: cavelon trace ${runId} --kind trigger --trace ${traceId}`);
+    expect(list.json<{ traces: { items: Array<{ spans_command: string }> } }>().traces.items[0]!.spans_command).toBe(
+      `cavelon trace ${runId} --kind trigger --trace ${traceId}`,
+    );
   });
 
   it("follows an operation id to its test run's results", async () => {
@@ -274,6 +297,100 @@ describe("trace", () => {
     // Named, an empty kind is shown as empty rather than skipped.
     const empty = await cli(sb, ["trace", conversation, "--kind", "test", "--json"]);
     expect(empty.json<{ kind: string; results: { items: unknown[] } }>()).toMatchObject({ kind: "test", results: { items: [] } });
+  });
+
+  describe("a test run's cases", () => {
+    const conversation = "c0a7e000-0000-4000-8000-000000000001";
+    const traceId = "c0a7e000-0000-4000-8000-0000000000aa";
+    const caseRun = "c0a7e000-0000-4000-8000-0000000000bb";
+
+    beforeAll(() => {
+      server.state.traces.set(`conversation:${conversation}`, [traceFixture(traceId, conversation)]);
+      server.state.runResults = [
+        // A case answered in a conversation also names the agent's run: its traces are under the conversation.
+        { name: "Refund limit", status: "pass", conversation_id: conversation, agent_run_id: caseRun, llm_judge_score: 0.55, llm_judge_reasoning: "Names the limit but not the approver." },
+        { name: "Greets", status: "pass", llm_judge_score: 0.9 },
+        { name: "Escalates", status: "fail", llm_judge_score: 0.1, llm_judge_reasoning: "Did not escalate." },
+      ];
+    });
+    afterAll(() => {
+      server.state.runResults = null;
+    });
+
+    async function testRunId(): Promise<string> {
+      const started = await cli(sb, ["test", "run", "--suite", "smoke", "--json"]);
+      return started.json<{ runs: Array<{ run_id: string }> }>().runs[0]!.run_id;
+    }
+
+    /** The command on the line that starts with `label`, split as a shell would. */
+    function printed(stdout: string, label: string): string[] {
+      const line = stdout.split("\n").find((l) => l.startsWith(label));
+      expect(line, `no line "${label}" in:\n${stdout}`).toBeDefined();
+      return line!.slice(line!.indexOf("cavelon ")).split(" ").slice(1);
+    }
+
+    it("print the drill-down with the id each route needs, and each command works as printed", async () => {
+      const runId = await testRunId();
+      const view = await cli(sb, ["trace", runId]);
+      expect(view.code, view.stderr).toBe(0);
+      const byCase = printed(view.stdout, "A case's traces, by the conversation_id in its row:");
+      expect(byCase).toEqual(["trace", conversation, "--kind", "conversation"]);
+      expect(view.stdout).not.toContain(`cavelon trace ${caseRun}`);
+
+      const traces = await cli(sb, byCase);
+      expect(traces.code, traces.stderr).toBe(0);
+      const spansOf = printed(traces.stdout, "Spans of a trace, by the conversation id and the trace_id in its row:");
+      expect(spansOf).toEqual(["trace", conversation, "--kind", "conversation", "--trace", traceId]);
+
+      const spans = await cli(sb, spansOf);
+      expect(spans.code, spans.stderr).toBe(0);
+      const oneSpan = printed(spans.stdout, "One span in full, by the span_id in its row:");
+      const span = await cli(sb, oneSpan);
+      expect(span.code, span.stderr).toBe(0);
+      expect(JSON.parse(span.stdout)).toMatchObject({ span_id: `${traceId}-span-1` });
+
+      const json = await cli(sb, ["trace", runId, "--json"]);
+      const items = json.json<{ results: { items: Array<{ case: string; trace_command: string | null }> } }>().results.items;
+      expect(items.map((r) => r.trace_command)).toEqual([`cavelon trace ${conversation} --kind conversation`, null, null]);
+    });
+
+    it("show the judge's reasoning for every judged case, a pass too", async () => {
+      const runId = await testRunId();
+      const view = await cli(sb, ["trace", runId]);
+      expect(view.stdout).toContain("Did not pass:\n  Escalates (step 1)  fail\n    Did not escalate.");
+      expect(view.stdout).toContain("Judge's reasoning:\n  Refund limit (step 1)  pass  score 0.55\n    Judge: Names the limit but not the approver.");
+      // A pass the instance sent no reasoning for is only scored.
+      expect(view.stdout).not.toMatch(/Greets \(step 1\) {2}pass/);
+      const json = await cli(sb, ["trace", runId, "--json"]);
+      const items = json.json<{ results: { items: Array<{ case: string; judge_reasoning: string | null }> } }>().results.items;
+      expect(items.map((r) => [r.case, r.judge_reasoning])).toEqual([
+        ["Refund limit", "Names the limit but not the approver."],
+        ["Greets", null],
+        ["Escalates", "Did not escalate."],
+      ]);
+    });
+
+    it("a wrong id gets a hint naming the id to use", async () => {
+      const runId = await testRunId();
+      // A test run's id where the route needs a conversation id.
+      const wrongOwner = await cli(sb, ["trace", runId, "--trace", traceId, "--json"]);
+      expect(wrongOwner.code).toBe(1);
+      const error = wrongOwner.json<{ error: { code: string; message: string; hint: string } }>().error;
+      expect(error.code).toBe("trace_not_found");
+      expect(error.message).toContain(`No trace ${traceId} under trigger run or conversation ${runId}`);
+      expect(error.hint).toMatch(/a conversation id with --kind conversation \(a test case's traces are under its conversation_id/);
+      expect(error.hint).toContain(`List them with: cavelon trace ${runId}`);
+
+      // The agent's run id named as a conversation.
+      const asConversation = await cli(sb, ["trace", caseRun, "--kind", "conversation", "--json"]);
+      expect(asConversation.code).toBe(1);
+      expect(asConversation.json<{ error: { code: string; hint: string } }>().error).toMatchObject({
+        code: "run_not_found",
+        hint: expect.stringContaining("--kind conversation takes a conversation id (a test case's conversation_id"),
+      });
+      const named = await cli(sb, ["trace", caseRun, "--kind", "conversation", "--trace", traceId, "--json"]);
+      expect(named.json<{ error: { code: string; hint: string } }>().error).toMatchObject({ code: "trace_not_found", hint: expect.stringContaining("conversation_id") });
+    });
   });
 
   it("says when nothing has that id", async () => {

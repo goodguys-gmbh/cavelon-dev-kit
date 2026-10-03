@@ -20,7 +20,7 @@ import { bindsNow, changedBy, limitError, limitsOrWarn, readLimits, type Limit, 
 import { getOperation } from "../operations.js";
 import { caseCounts, caseLabel, failedCase, NOT_PASSED, type TestResultState } from "../results.js";
 import { isUuid } from "../session.js";
-import { cavelonCommand } from "../shell.js";
+import { cavelonCommand, shellWord } from "../shell.js";
 import { readZipSummary, ZipError, type ZipSummary } from "../zip.js";
 import { TIMEOUT_OPTION, timeoutMs, waitAndReport } from "./async.js";
 import { stageErrors, stageErrorText, type StageError } from "./loops.js";
@@ -468,6 +468,11 @@ function summaryText(summary: Record<string, unknown>): string {
     .join("  ");
 }
 
+/** `cavelon wait` for the runs still going, with the caller's timeout so each call fits the same shell limit. */
+function resumeCommand(pending: string[], timeout: string | undefined): string {
+  return cavelonCommand("wait", ...pending, ...(timeout ? ["--timeout", timeout] : []));
+}
+
 export const testRun: CommandSpec = {
   name: "test run",
   summary: "Start test-suite runs; returns operation ids.",
@@ -531,7 +536,8 @@ export const testRun: CommandSpec = {
     const operationIds = runs.map((r) => r.operation_id).filter((id): id is string => Boolean(id));
     const started = runs.map((r) => ({ run_id: r.id, suite: r.suite_name ?? r.suite_id, status: r.status, operation_id: r.operation_id ?? null }));
     if (boolOption(input, "wait") && ctx.mode === "cli" && operationIds.length) {
-      const waited = await waitAndReport(ctx, operationIds, timeoutMs(ctx, stringOption(input, "timeout")));
+      const rawTimeout = stringOption(input, "timeout");
+      const waited = await waitAndReport(ctx, operationIds, timeoutMs(ctx, rawTimeout));
       // The operation says the run finished; the run's summary says whether its cases passed (the wait names them).
       const results = [];
       let failedCases = 0;
@@ -543,12 +549,15 @@ export const testRun: CommandSpec = {
       }
       let exitCode = waited.exitCode;
       if (exitCode === ExitCode.ok && failedCases > 0) exitCode = ExitCode.failure;
+      // The bounded wait ended first: the last line is the one command that picks the runs up again.
+      const resume = waited.pending.length ? resumeCommand(waited.pending, rawTimeout) : undefined;
       const text = [
-        waited.text,
+        waited.body,
         "",
         ...results.map((r) => `${r.suite}: ${r.status}  ${summaryText(r.summary)}`),
+        ...(resume ? ["", `${waited.why} after the timeout; the runs go on. Resume: ${resume}`] : []),
       ].join("\n");
-      return { data: { runs: results, failed_cases: failedCases, ...waited.data }, text, exitCode };
+      return { data: { runs: results, failed_cases: failedCases, ...waited.data, ...(resume ? { resume } : {}) }, text, exitCode };
     }
     return {
       data: { runs: started, operation_ids: operationIds },
@@ -597,6 +606,42 @@ interface Span {
 }
 
 type TraceKind = "trigger" | "test" | "conversation";
+
+/** The id each kind's route takes, as a person or agent finds it in a listing. */
+const KIND_ID: Record<TraceKind, string> = {
+  trigger: "a trigger run id (a test case's run_id)",
+  test: "a test run id (from `cavelon test run`)",
+  conversation: "a conversation id (a test case's conversation_id, or a trace's)",
+};
+
+/**
+ * The command that opens a test case's traces, with the id its route needs: a
+ * case answered in a conversation has its traces there, a trigger case under
+ * the run it started. Undefined when the instance recorded neither.
+ */
+function caseTraceCommand(r: TestResultState): { label: string; command: string } | undefined {
+  if (r.conversation_id) return { label: "by its conversation id", command: cavelonCommand("trace", r.conversation_id, "--kind", "conversation") };
+  if (r.agent_run_id) return { label: "by its trigger run id", command: cavelonCommand("trace", r.agent_run_id, "--kind", "trigger") };
+  return undefined;
+}
+
+/** The command that shows one trace's spans: the route takes the id the list was read for, and the trace id. */
+function spansCommand(owner: string, kind: TraceKind, traceId: string): string {
+  return cavelonCommand("trace", owner, "--kind", kind, "--trace", traceId);
+}
+
+/** A detail route's 404: say which ids `--trace` needs, so a wrong one is not retried. */
+function traceNotFound(id: string, kind: TraceKind | undefined, traceId: string, error: CavelonError): CavelonError {
+  const tried = kind ? `${kind === "trigger" ? "trigger run" : "conversation"} ${id}` : `trigger run or conversation ${id}`;
+  return new CavelonError(ExitCode.failure, {
+    code: "trace_not_found",
+    message: `No trace ${traceId} under ${tried} (${error.message}).`,
+    hint:
+      "<run> must be the id the trace was listed under: a trigger run id with --kind trigger, or a conversation id with --kind conversation " +
+      "(a test case's traces are under its conversation_id; a test run id or an agent's run id does not work here). " +
+      `--trace takes a trace_id from that list. List them with: ${cavelonCommand("trace", id)}`,
+  });
+}
 
 function summarizeTrace(t: TraceSummary) {
   return {
@@ -686,8 +731,15 @@ function notPassedLines(r: TestResultState, max: number): string[] {
   const lines = [`  ${caseLabel(c)}  ${c.status}`];
   if (c.reason) lines.push(`    ${c.reason}`);
   if (r.llm_judge_reasoning && r.llm_judge_reasoning !== r.error_message) lines.push(`    Judge: ${clip(r.llm_judge_reasoning, max)}`);
-  if (c.run_id) lines.push(`    Its run: ${cavelonCommand("trace", c.run_id)}`);
+  const open = caseTraceCommand(r);
+  if (open) lines.push(`    Its traces (${open.label}): ${open.command}`);
   return lines;
+}
+
+/** A case that did not fail, as the judge saw it: a low-scoring pass is read, not only counted. */
+function judgedLines(r: TestResultState, max: number): string[] {
+  const score = r.llm_judge_score === null || r.llm_judge_score === undefined ? "" : `  score ${r.llm_judge_score}`;
+  return [`  ${caseLabel(failedCase(r))}  ${r.status}${score}`, `    Judge: ${clip(r.llm_judge_reasoning!, max)}`];
 }
 
 /** A test run's results: one line per case, then each case that did not pass with the reasons the instance recorded. */
@@ -702,15 +754,19 @@ async function testRunView(ctx: Context, id: string, results: TestResultState[],
     conversation_id: r.conversation_id ?? null,
     run_id: r.agent_run_id ?? null,
     error: r.error_message ? clip(r.error_message, 200) : null,
+    judge_reasoning: r.llm_judge_reasoning ? clip(r.llm_judge_reasoning, max) : null,
+    trace_command: caseTraceCommand(r)?.command ?? null,
     // judge_breakdown is an open object in the OpenAPI; it is passed on as the instance sends it.
-    ...(NOT_PASSED.has(r.status)
-      ? { reason: failedCase(r, max).reason, judge_reasoning: r.llm_judge_reasoning ? clip(r.llm_judge_reasoning, max) : null, judge_breakdown: detailOf(r.judge_breakdown, options.full) }
-      : {}),
+    ...(NOT_PASSED.has(r.status) ? { reason: failedCase(r, max).reason, judge_breakdown: detailOf(r.judge_breakdown, options.full) } : {}),
   }));
   const notPassed = page.items.filter((r) => NOT_PASSED.has(r.status));
+  // An older instance, or one that keeps the reasoning of failures only, sends none for a pass.
+  const judged = page.items.filter((r) => !NOT_PASSED.has(r.status) && r.llm_judge_reasoning);
+  const byConversation = page.items.find((r) => r.conversation_id);
+  const byRun = page.items.find((r) => !r.conversation_id && r.agent_run_id);
   const where = [
-    items.some((r) => r.conversation_id) ? `A case's trace: ${cavelonCommand("trace")} <conversation_id> --kind conversation` : "",
-    items.some((r) => r.run_id) ? `A trigger case's run: ${cavelonCommand("trace")} <run_id>` : "",
+    byConversation ? `A case's traces, by the conversation_id in its row: ${caseTraceCommand(byConversation)!.command}` : "",
+    byRun ? `A trigger case's traces, by the run_id in its row: ${caseTraceCommand(byRun)!.command}` : "",
   ].filter(Boolean);
   return {
     data: { kind: "test", run_id: id, results: { ...page, items } },
@@ -718,6 +774,7 @@ async function testRunView(ctx: Context, id: string, results: TestResultState[],
       table(items, ["case", "step", "status", "score", ...(items.some((r) => r.run_id) ? ["run_id"] : []), "conversation_id"]) +
       moreHint(page.next_cursor, cavelonCommand("trace", id, "--kind", "test")) +
       (notPassed.length ? `\n\nDid not pass:\n${notPassed.flatMap((r) => notPassedLines(r, max)).join("\n")}` : "") +
+      (judged.length ? `\n\nJudge's reasoning:\n${judged.flatMap((r) => judgedLines(r, options.full ? max : 300)).join("\n")}` : "") +
       `\n\n${where.length ? where.join("\n") : "The instance recorded no conversation or run for these results, so they have no trace to open."}` +
       (await capacityFooter(ctx, items.map((r) => r.error))),
   };
@@ -770,15 +827,20 @@ export const trace: CommandSpec = {
       const template =
         detailKind === "trigger" ? "/api/v1/triggers/runs/{run_id}/traces/{trace_id}" : "/api/v1/conversations/{conversation_id}/traces/{trace_id}";
       const owner = detailKind === "trigger" ? "run_id" : "conversation_id";
+      const notFound = (error: unknown): error is CavelonError => error instanceof CavelonError && (error.status === 404 || error.status === 422);
       let detail: TraceSummary & { spans?: Span[] };
       try {
         detail = await callStable(ctx, "GET", template, "traces", { params: { [owner]: [id], trace_id: [traceId] } });
       } catch (error) {
-        if (!kind && error instanceof CavelonError && error.status === 404) {
+        if (!notFound(error)) throw error;
+        if (kind) throw traceNotFound(id, kind, traceId, error);
+        try {
           detail = await callStable(ctx, "GET", "/api/v1/conversations/{conversation_id}/traces/{trace_id}", "traces", {
             params: { conversation_id: [id], trace_id: [traceId] },
           });
-        } else throw error;
+        } catch (second) {
+          throw notFound(second) ? traceNotFound(id, undefined, traceId, second) : second;
+        }
       }
       const spans = (detail.spans ?? []).slice().sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
       if (spanId) {
@@ -798,14 +860,14 @@ export const trace: CommandSpec = {
         return { data, text: JSON.stringify(data, null, 2) };
       }
       const page = pageOf(spans.map(summarizeSpan), limit, cursor);
-      const base = `cavelon trace ${id}${kind ? ` --kind ${kind}` : ""} --trace ${traceId}`;
+      const base = cavelonCommand("trace", id, ...(kind ? ["--kind", kind] : []), "--trace", traceId);
       return {
         data: { trace: summarizeTrace(detail), spans: page },
         text:
           `${keyValues(Object.entries(summarizeTrace(detail)))}\n\n` +
           table(page.items, ["seq", "type", "name", "status", "duration_ms", "span_id"]) +
           moreHint(page.next_cursor, base) +
-          `\n\nOne span in full: ${base} --span <span_id>`,
+          (page.items.length ? `\n\nOne span in full, by the span_id in its row: ${base} --span ${shellWord(page.items[0]!.span_id)}` : ""),
       };
     }
 
@@ -842,20 +904,35 @@ export const trace: CommandSpec = {
         }
       }
       if (!traces || (!kind && traces.length === 0)) continue;
-      const page = pageOf(traces.map(summarizeTrace), limit, cursor);
+      const page = pageOf(
+        traces.map((t) => ({ ...summarizeTrace(t), spans_command: spansCommand(id, candidate, t.id) })),
+        limit,
+        cursor,
+      );
       return {
         data: { kind: candidate, id, traces: page },
         text:
           (table(page.items, ["trace_id", "workflow", "status", "duration_ms", "spans", "error"]) || "No traces recorded.") +
-          moreHint(page.next_cursor, `cavelon trace ${id} --kind ${candidate}`) +
-          (page.items.length ? `\n\nSpans of one: cavelon trace ${id} --kind ${candidate} --trace <trace_id>` : "") +
+          moreHint(page.next_cursor, cavelonCommand("trace", id, "--kind", candidate)) +
+          (page.items.length
+            ? `\n\nSpans of a trace, by the ${candidate === "trigger" ? "trigger run" : "conversation"} id and the trace_id in its row: ${page.items[0]!.spans_command}`
+            : "") +
           (await capacityFooter(ctx, page.items.map((t) => t.error))),
       };
+    }
+    if (kind) {
+      throw new CavelonError(ExitCode.failure, {
+        code: "run_not_found",
+        message: `No ${kind === "trigger" ? "trigger run" : kind === "test" ? "test run" : "conversation"} ${id} in this tenant.`,
+        hint: `--kind ${kind} takes ${KIND_ID[kind]}. Without --kind, \`${cavelonCommand("trace", id)}\` finds out what the id is.`,
+      });
     }
     throw new CavelonError(ExitCode.failure, {
       code: "run_not_found",
       message: `No trigger run, test run or conversation ${id} with results or traces in this tenant.`,
-      hint: "Name the kind with --kind trigger|test|conversation to see an empty one.",
+      hint:
+        `<run> takes ${KIND_ID.trigger}, ${KIND_ID.test} or ${KIND_ID.conversation}; a trace id goes after --trace. ` +
+        "Name the kind with --kind trigger|test|conversation to see an empty one.",
     });
   },
 };

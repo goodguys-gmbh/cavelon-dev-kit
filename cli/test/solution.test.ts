@@ -71,6 +71,9 @@ beforeEach(() => {
   server.state.requests.length = 0;
   server.state.ready = true;
   server.state.readinessBlockers = undefined;
+  server.state.readinessChecks = undefined;
+  server.state.readinessWarnings = undefined;
+  server.state.readinessWithoutChecks = false;
 });
 
 describe("init", () => {
@@ -752,6 +755,66 @@ describe("activate", () => {
     } finally {
       limited.cleanup();
     }
+  });
+});
+
+describe("activate shows the readiness it went through", () => {
+  const warning = { key: "description", label: "Description and outcome", state: "warning", detail: "The outcome is undefined.", href: "/harnesses/x" };
+  const checks = [
+    { key: "test_run", label: "A passing test run", state: "complete", detail: "smoke passed.", href: "/harnesses/x/tests" },
+    { key: "models", label: "Models configured", state: "complete", detail: "Every agent has a model.", href: "/harnesses/x/agents" },
+    warning,
+  ];
+
+  it("prints each check with its result and every warning, as text and JSON", async () => {
+    await cli(sb, ["harness", "new", "checked"]);
+    server.state.readinessChecks = checks;
+    server.state.readinessWarnings = [warning];
+    const text = await cli(sb, ["activate", "--harness", "checked"]);
+    expect(text.code, text.stderr).toBe(0);
+    expect(text.stdout).toBe(
+      [
+        "Activated checked (checked); status active.",
+        "Readiness checks:",
+        "  complete  A passing test run: smoke passed.",
+        "  complete  Models configured: Every agent has a model.",
+        "  warning   Description and outcome: The outcome is undefined.",
+        "Warnings:",
+        "  - Description and outcome: The outcome is undefined.",
+        "",
+      ].join("\n"),
+    );
+    // The warning is in the output, not only on stderr.
+    expect(text.stderr).toBe("");
+
+    await cli(sb, ["harness", "new", "checked-json"]);
+    const json = await cli(sb, ["activate", "--harness", "checked-json", "--json"]);
+    expect(json.code).toBe(0);
+    const data = json.json<{ activated: boolean; checks: unknown[]; warnings: string[] }>();
+    expect(data.activated).toBe(true);
+    expect(data.checks).toEqual(checks.map(({ key, label, state, detail }) => ({ key, label, state, detail })));
+    expect(data.warnings).toEqual(["Description and outcome: The outcome is undefined."]);
+  });
+
+  it("lists the checks next to the blockers when not ready", async () => {
+    await cli(sb, ["harness", "new", "blocked"]);
+    server.state.ready = false;
+    server.state.readinessChecks = [{ key: "test_run", label: "A passing test run", state: "missing", detail: "Run the regression suite.", href: "/t" }, checks[1]!];
+    const text = await cli(sb, ["activate", "--harness", "blocked"]);
+    expect(text.code).toBe(3);
+    expect(text.stdout).toContain("Readiness checks:\n  missing   A passing test run: Run the regression suite.\n  complete  Models configured: Every agent has a model.");
+  });
+
+  it("an older instance without checks: its blockers and warnings stand in for them", async () => {
+    await cli(sb, ["harness", "new", "older"]);
+    server.state.readinessWithoutChecks = true;
+    server.state.readinessWarnings = [warning];
+    const json = await cli(sb, ["activate", "--harness", "older", "--json"]);
+    expect(json.code).toBe(0);
+    expect(json.json<{ checks: unknown[]; warnings: string[] }>()).toMatchObject({
+      checks: [{ key: "description", state: "warning", detail: "The outcome is undefined." }],
+      warnings: ["Description and outcome: The outcome is undefined."],
+    });
   });
 });
 
