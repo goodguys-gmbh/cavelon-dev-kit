@@ -119,6 +119,9 @@ release that may change behaviour (0.2) away until you update the plugin.
 Both clients also accept the path of a local clone instead of
 `goodguys-gmbh/cavelon-dev-kit`.
 
+With the plugin installed, [Building a solution with a coding agent](coding-agents.md)
+shows how to brief the agent and review its work.
+
 ## Agents without a plugin
 
 For Cursor, GitHub Copilot in VS Code, Gemini CLI, Kiro, Pi or any agent that

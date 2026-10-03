@@ -43,7 +43,7 @@ function anchors(file: string): Set<string> {
 describe("documentation links", () => {
   it("covers the pages the README links to", () => {
     const readme = readFileSync(path.join(ROOT, "README.md"), "utf8");
-    for (const page of ["installation", "getting-started", "concepts", "commands", "mcp", "limits", "troubleshooting", "security", "faq"]) {
+    for (const page of ["installation", "getting-started", "coding-agents", "concepts", "commands", "mcp", "limits", "troubleshooting", "security", "faq"]) {
       expect(readme, page).toContain(`(docs/${page}.md)`);
       expect(existsSync(path.join(ROOT, "docs", `${page}.md`)), page).toBe(true);
     }

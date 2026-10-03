@@ -144,6 +144,9 @@ repeat them:
   own documentation; `api_list`, `api_describe` and `api` reach any operation
   without its own tool.
 
+[Building a solution with a coding agent](coding-agents.md) shows what these
+rules mean while you work with the agent.
+
 ## Results and errors
 
 A tool returns the command's `--json` document, plus `warnings` when there are

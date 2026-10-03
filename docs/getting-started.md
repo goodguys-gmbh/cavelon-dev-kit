@@ -325,16 +325,14 @@ blockers. A token without **May activate** is refused before anything is sent
 
 ## With your coding agent
 
-With the plugin installed, open the folder in Claude Code or Codex and describe
-what you want, for example:
+Every step above is one your coding agent can run for you. With the plugin
+installed, open the folder in Claude Code or Codex and describe what you want,
+for example: *"Add a question about shipping costs to the smoke tests and make
+it pass."*
 
-> Add a question about shipping costs to the smoke tests and make it pass.
-
-The `cavelon-loop` skill takes the agent through the same steps: it edits the
-files, runs `validate`, shows you the `apply` preview before confirming one
-that reaches an active solution or production, uploads, tests and reads the
-traces. It never sees your token, never sets a secret's value, and never
-activates without you. See [MCP server](mcp.md) for what the agent can call.
+[Building a solution with a coding agent](coding-agents.md) explains how to
+brief the agent, what it shows you at each step, what it leaves to you, and how
+to review and test its work.
 
 ## Next
 
