@@ -86,12 +86,17 @@ questions from the FAQ pages in ./faq, and test it."*
 The [getting-started tutorial](docs/getting-started.md) walks through all of
 this with the ready-made example in [`examples/support-faq/`](examples/support-faq/).
 
+**Next: [Building a solution with a coding agent](docs/coding-agents.md).** How
+to brief the agent, what it shows you at each step, what it leaves to you, and
+how to review and test its work.
+
 ## Documentation
 
 | Page | What it covers |
 |---|---|
 | [Installation](docs/installation.md) | requirements, npm and npx, the plugin in Claude Code and Codex, other agents, updating, uninstalling, Windows/macOS/Linux, proxies |
 | [Getting started](docs/getting-started.md) | a full tutorial from an empty folder to an active solution |
+| [Building with a coding agent](docs/coding-agents.md) | briefing the agent, the loop as it runs it, what stays with you, reviewing and testing its work, prompts to copy |
 | [Concepts](docs/concepts.md) | instance, tenant, solution, package, environments, preview and confirm, operations, tests, activation, Platform mode |
 | [Command reference](docs/commands.md) | every command with its options and examples |
 | [MCP server](docs/mcp.md) | `cavelon mcp`, its tools and how agents use them |

@@ -14,6 +14,11 @@ CLI, the skills and the plugin.
   checked in CI), the MCP server, limits, troubleshooting, security and an FAQ.
   The README is now the landing page that links them.
 - `CONTRIBUTING.md` for contributors.
+- **Building a solution with a coding agent** (`docs/coding-agents.md`): what
+  the agent does and what stays with you, briefing it with example briefs, the
+  loop as the agent runs it, reviewing and testing its work, lessons from real
+  runs, and prompts to copy. The README, installation, getting-started and FAQ
+  pages link it.
 - `cavelon activate` prints each readiness check with its result and every
   warning, in its text and in `--json` (`checks`, `warnings`).
 - `cavelon trace <test run>` shows the judge's reasoning for every judged case,

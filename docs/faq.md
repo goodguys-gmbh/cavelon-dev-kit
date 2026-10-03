@@ -16,6 +16,14 @@ No. Every step is a `cavelon` command you can run yourself, in a terminal or in
 CI. The plugin and the MCP server make the same commands available to Claude
 Code, Codex and other agents.
 
+### How do I build a solution with my coding agent?
+
+Put the material the solution needs into the folder, describe the problem, and
+ask for tests; the agent writes, validates, applies to test and tests the
+solution, and stops for you before production, activation or a limit change.
+[Building a solution with a coding agent](coding-agents.md) walks through it,
+with example briefs and prompts to copy.
+
 ### Which coding agents work with it?
 
 Claude Code and Codex through the plugin. Cursor, GitHub Copilot in VS Code,
