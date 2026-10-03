@@ -1,0 +1,200 @@
+- slug: expense-assistant
+  harness_slug: expense-approval
+  name: Expense assistant
+  description: Answers questions about the travel and expense policy and takes expense requests until they are complete.
+  llm_model: gpt-4.1
+  llm_provider: openai
+  temperature: 0.2
+  parallel_tool_calls: false
+  is_entrypoint: true
+  system_prompt: |-
+    You are the expense assistant of Brightpeak GmbH. You help employees in English, briefly and politely.
+    You have two tasks.
+
+    1. Answer questions about the travel and expense policy (mode = policy_question).
+       Look every answer up in the policy, name the rule number (such as R4.1) and the exact amounts.
+       Make nothing up; when the policy does not say, say so.
+
+    2. Take expense requests. A request is complete when it has everything R2.4 asks for: the
+       requester's name, the cost centre, the business purpose, the date, the gross amount with its
+       currency and the category (travel, accommodation, meals, business meal, work equipment); whether
+       there is a receipt (R2.2); and what the check needs for its category:
+       - accommodation: the place and the number of nights;
+       - business meal: how many people, who they were, the occasion, whether external guests were
+         there and whether alcohol was served;
+       - travel: the means of transport (train class and journey time, flight class, kilometres by
+         private car, or the reason for a taxi above 50 EUR);
+       - work equipment: what was bought, whether it is an IT device, the team lead's consent from
+         250 EUR, two comparison offers above 1,000 EUR;
+       - meals: how long the trip took and whether meals were provided.
+       Take what the person said as given: a relative date ("yesterday", "three days ago") is a date,
+       a phrase such as "customer training at Bergbahn AG" is a purpose, and a laptop, tablet or phone
+       is an IT device. Ask only for what is really missing.
+       When something is missing: mode = request_incomplete, fill in request with what is known
+       (missing fields null), and ask for everything that is missing in one message in answer.
+       When everything is there: mode = request_complete, fill in request completely (collect the
+       details from the whole conversation), and confirm in answer that the request goes on to the
+       policy check and to a person for approval.
+       You do NOT check the request against the rules yourself; the policy check does that next.
+       A rule violation is no reason to ask for more: a request that violates a rule is submitted too.
+
+    Anything else (mode = other): say kindly that you only help with the travel and expense policy and
+    with expense requests. request is null when the person makes no request.
+    You never approve or reject a request yourself; a person decides (R8.1, R8.2).
+  output_mode: structured_json
+  output_schema:
+    type: object
+    additionalProperties: false
+    required: [mode, answer, request]
+    properties:
+      mode:
+        type: string
+        enum: [policy_question, request_incomplete, request_complete, other]
+        description: >-
+          policy_question: a question about the policy. request_incomplete: an expense request that
+          still lacks details. request_complete: an expense request with every detail, to submit.
+          other: anything else.
+      answer:
+        type: string
+        description: The answer to the person, in English, in Markdown.
+      request:
+        description: The expense request, once the person makes one; null otherwise.
+        anyOf:
+          - type: "null"
+          - type: object
+            additionalProperties: false
+            required: [requester, cost_centre, category, purpose, date, amount, currency, receipt, details]
+            properties:
+              requester:
+                type: [string, "null"]
+                description: The name of the person who requests the reimbursement.
+              cost_centre:
+                type: [string, "null"]
+              category:
+                type: [string, "null"]
+                enum: [travel, accommodation, meals, business meal, work equipment, null]
+              purpose:
+                type: [string, "null"]
+                description: The business purpose or occasion.
+              date:
+                type: [string, "null"]
+                description: The date of the expense or trip, as the person gave it.
+              amount:
+                type: [number, "null"]
+                description: The gross amount.
+              currency:
+                type: [string, "null"]
+                description: The currency, such as EUR.
+              receipt:
+                type: [string, "null"]
+                description: Whether there is a receipt, such as "scanned invoice" or "no receipt".
+              details:
+                type: [string, "null"]
+                description: >-
+                  Every other detail the check needs: place and nights, participants and whether external
+                  guests were there, alcohol, means of transport, class, journey time, kilometres, the team
+                  lead's consent, comparison offers, whether it is an IT device, and any reasons given.
+  skill_assignments:
+    - skill_slug: look-up-policy
+- slug: policy-check
+  harness_slug: expense-approval
+  name: Policy check
+  description: Checks a complete expense request rule by rule against the policy and quotes every rule that applies.
+  llm_model: gpt-4.1
+  llm_provider: openai
+  temperature: 0
+  parallel_tool_calls: false
+  is_entrypoint: false
+  system_prompt: |-
+    You are the policy check of Brightpeak GmbH. You receive a complete expense request as JSON.
+    Check it against the travel and expense policy. Look the rules up in the policy (the principles R2,
+    the rules of the request's category, and approval R8); do not rely on your memory.
+
+    - List in findings R2.2 (receipt), R2.4 (required details), every rule of the request's category (all
+      of R3 for travel, R4 accommodation, R5 meals, R6 business meal, R7 work equipment; not only the ones
+      that look relevant), and R8.1 (approval level). Quote each rule's wording from the policy word for
+      word in quote.
+    - assessment = violated when the request breaks the rule. Do the arithmetic (amount per person,
+      maximum per night, the 20 % tolerance of R4.2 only with a reason) and get it exactly right.
+    - result = violation as soon as one finding is violated, compliant otherwise.
+    - reimbursable_amount: what the policy reimburses (0 or the allowed part when a rule is violated).
+    - approval_level by R8.1, from the requested amount.
+    - recommendation: approve (compliant), reject (a violation without a sound reason) or
+      approve_as_exception (a violation with a reason in the request, R8.4).
+    - Copy requester, cost_centre, category, purpose, date, amount and currency from the request.
+    You do not decide the approval; a person does.
+  output_mode: structured_json
+  output_schema:
+    type: object
+    additionalProperties: false
+    required:
+      - requester
+      - cost_centre
+      - category
+      - purpose
+      - date
+      - amount
+      - currency
+      - summary
+      - result
+      - findings
+      - reimbursable_amount
+      - approval_level
+      - recommendation
+      - reasoning
+    properties:
+      requester:
+        type: string
+      cost_centre:
+        type: string
+      category:
+        type: string
+      purpose:
+        type: string
+      date:
+        type: string
+      amount:
+        type: number
+      currency:
+        type: string
+      summary:
+        type: string
+        description: The request in two or three sentences, with every detail that was checked.
+      result:
+        type: string
+        enum: [compliant, violation]
+      findings:
+        type: array
+        description: Every rule that applies, met or violated.
+        items:
+          type: object
+          additionalProperties: false
+          required: [rule, quote, assessment, reasoning]
+          properties:
+            rule:
+              type: string
+              description: The rule number, such as R6.1.
+            quote:
+              type: string
+              description: The rule's wording from the policy, word for word.
+            assessment:
+              type: string
+              enum: [met, violated, note]
+            reasoning:
+              type: string
+              description: Why, with the request's numbers.
+      reimbursable_amount:
+        type: number
+        description: The amount the policy reimburses.
+      approval_level:
+        type: string
+        enum: [team lead, head of department, managing director]
+        description: Who approves by R8.1 (up to 500 EUR the team lead, up to 2,000 EUR the head of department, above that the managing director).
+      recommendation:
+        type: string
+        enum: [approve, reject, approve_as_exception]
+      reasoning:
+        type: string
+        description: The reason for the recommendation, in two to four sentences.
+  skill_assignments:
+    - skill_slug: look-up-policy

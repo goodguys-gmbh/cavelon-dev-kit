@@ -543,6 +543,56 @@ describe("validate", () => {
     server.state.tenantFlags.clear();
   });
 
+  it("warns when an agent is given a knowledge base but no search tool reaches it", async () => {
+    const dir = await initSolution();
+    await cli(sb, ["pull"], { cwd: dir });
+    const skillsFile = path.join(dir, "package", "skills.yaml");
+    const agentsFile = path.join(dir, "package", "agents.yaml");
+    const skills = parse(read(skillsFile)) as Array<Record<string, unknown>>;
+    expect(skills[0]).toMatchObject({ slug: "faq", tool_assignments: [{ tool_slug: "search_documents" }] });
+    expect((await cli(sb, ["validate", "--offline", "--json"], { cwd: dir })).json()).toMatchObject({ warnings: 0 });
+
+    // The shape a copied skill often has: knowledge bases, and no tool to search them.
+    delete skills[0]!.tool_assignments;
+    writeFileSync(skillsFile, stringify(skills));
+    const warned = await cli(sb, ["validate", "--offline", "--json"], { cwd: dir });
+    expect(warned.code, warned.stdout).toBe(0);
+    const result = warned.json<{ valid: boolean; findings: Array<{ code: string; severity: string; file: string; line: number; message: string; hint: string; docs: string }> }>();
+    expect(result.valid).toBe(true);
+    expect(result.findings).toEqual([
+      expect.objectContaining({ code: "knowledge_base_without_search_tool", severity: "warning", file: "package/skills.yaml" }),
+    ]);
+    expect(read(skillsFile).split("\n")[result.findings[0]!.line - 1]).toMatch(/knowledge_base_name: Handbook/);
+    expect(result.findings[0]!.message).toBe(
+      'The agent "helper" is given the knowledge base "Handbook" through the skill "faq", but no search tool reaches it, so it cannot search it: add search_documents to the skill\'s tool_assignments.',
+    );
+    expect(result.findings[0]!.hint).toMatch(/tool_slug: search_documents/);
+    expect(result.findings[0]!.docs).toMatch(/builtin-tools#binding-knowledge-bases-to-search_documents$/);
+
+    // The agent's own assignment of the tool reaches it as well.
+    const agents = parse(read(agentsFile)) as Array<Record<string, unknown>>;
+    agents[0]!.tool_assignments = [{ tool_slug: "search_documents" }];
+    writeFileSync(agentsFile, stringify(agents));
+    expect((await cli(sb, ["validate", "--offline", "--json"], { cwd: dir })).json()).toMatchObject({ warnings: 0, findings: [] });
+
+    // An agent's tool assignment that names knowledge bases on another tool is no search either.
+    agents[0]!.tool_assignments = [{ tool_slug: "crm", config_overrides: { knowledge_base_names: ["Handbook"] } }];
+    agents[0]!.skill_assignments = [];
+    writeFileSync(agentsFile, stringify(agents));
+    const own = await cli(sb, ["validate", "--offline"], { cwd: dir });
+    expect(own.stdout).toMatch(
+      /warning knowledge_base_without_search_tool {2}package\/agents\.yaml:\d+ agents\[0\]\.tool_assignments\[0\]\.config_overrides\.knowledge_base_names: The agent "helper" is given the knowledge base "Handbook", but no search tool reaches it/,
+    );
+
+    // A skill this package does not carry may bring the tool: no warning.
+    agents[0]!.skill_assignments = [{ skill_slug: "tenant-wide-search" }];
+    writeFileSync(agentsFile, stringify(agents));
+    expect((await cli(sb, ["validate", "--offline", "--json"], { cwd: dir })).json()).toMatchObject({ warnings: 0 });
+
+    const explained = await cli(sb, ["explain", "knowledge_base_without_search_tool", "--json"], { cwd: dir });
+    expect(explained.json()).toMatchObject({ code: "knowledge_base_without_search_tool", kind: "kit" });
+  });
+
   it("says what to do when no schema is cached and it may not ask", async () => {
     const dir = await initSolution();
     await cli(sb, ["pull"], { cwd: dir });

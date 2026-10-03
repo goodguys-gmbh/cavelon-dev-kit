@@ -22,6 +22,16 @@ const PACKAGE_DOCS = "/docs/reference/api-endpoints";
 const BRANCH_WIDTH_CODE = "branch_width_capped";
 const BRANCHES_SEQUENTIAL_CODE = "branches_run_in_sequence";
 const BRANCH_DOCS = "/docs/concepts/capacity-and-concurrency#branch-concurrency";
+/** Knowledge bases an agent is given without a tool that searches them. */
+const KB_WITHOUT_SEARCH_CODE = "knowledge_base_without_search_tool";
+const SEARCH_DOCS = "/docs/reference/builtin-tools#binding-knowledge-bases-to-search_documents";
+/**
+ * The built-in tool that searches knowledge bases. No contract publishes it as
+ * data, only the instance's docs (reference/builtin-tools) name it; the two
+ * other names are the ones older instances searched with.
+ */
+const SEARCH_TOOL = "search_documents";
+const SEARCH_TOOL_KEYS = new Set([SEARCH_TOOL, "search_knowledge_base", "search_kb"]);
 
 /**
  * The codes `validate` reports itself. The instance's catalog wins where it
@@ -76,6 +86,13 @@ export const KIT_CODES: CatalogEntry[] = [
     message: "This tenant runs fan-outs and Map loops in sequence: a switch for concurrent branches is off.",
     hint: "The result is the same, only slower. `cavelon limits --key orchestration_parallel_branches` names the switch that is off and who turns it on.",
     docs: BRANCH_DOCS,
+  },
+  {
+    code: KB_WITHOUT_SEARCH_CODE,
+    area: "package",
+    message: "An agent is given knowledge bases, but no search tool reaches it, so it cannot read them.",
+    hint: `A knowledge base reaches an agent only through a search tool: add \`- tool_slug: ${SEARCH_TOOL}\` to the tool_assignments of the skill that names the knowledge base, or of the agent. \`cavelon docs get reference/builtin-tools\` shows the binding.`,
+    docs: SEARCH_DOCS,
   },
   {
     code: "package_file_duplicate",
@@ -176,6 +193,7 @@ export function checkPackage(disk: PackageOnDisk, options: CheckOptions): Findin
 
   findings.push(...checkEndpointLimits(disk, options.schema));
   findings.push(...checkBranchConcurrency(disk, options.limits));
+  findings.push(...checkKnowledgeSearch(disk));
 
   for (const finding of findings) {
     const entry = catalogEntry(options.catalog, finding.code);
@@ -314,5 +332,76 @@ function checkBranchConcurrency(disk: PackageOnDisk, limits: PublishedLimits | u
         `(same result, slower): ${offText(branches)}.`,
     });
   }
+  return findings;
+}
+
+const asList = (v: unknown): Record<string, unknown>[] =>
+  Array.isArray(v) ? v.map(asObject).filter((e): e is Record<string, unknown> => e !== undefined) : [];
+const active = (e: Record<string, unknown>) => e.is_active !== false;
+const quoted = (names: string[]) => names.map((n) => `"${n}"`).join(", ");
+
+/**
+ * A knowledge base named on a skill or an agent's tool assignment is only
+ * scoping: the agent reads it through a search tool, from its own tool
+ * assignments or from one of its skills. Without one, the agent cannot search
+ * and answers from memory, while the import and the preview accept the
+ * package. A warning: an agent may hold a skill this package does not carry,
+ * and then the check stays silent.
+ */
+function checkKnowledgeSearch(disk: PackageOnDisk): Finding[] {
+  const pkg = disk.package;
+  // A tenant may carry the built-in under another slug; its builtin_key says what it is.
+  const searchSlugs = new Set(SEARCH_TOOL_KEYS);
+  for (const tool of asList(pkg.tools)) {
+    if (typeof tool.slug === "string" && typeof tool.builtin_key === "string" && SEARCH_TOOL_KEYS.has(tool.builtin_key)) searchSlugs.add(tool.slug);
+  }
+  const searches = (assignments: unknown) => asList(assignments).some((a) => active(a) && typeof a.tool_slug === "string" && searchSlugs.has(a.tool_slug));
+  const skills = asList(pkg.skills);
+  const skillIndex = new Map<string, number>();
+  skills.forEach((skill, i) => {
+    if (typeof skill.slug === "string") skillIndex.set(skill.slug, i);
+  });
+
+  const findings: Finding[] = [];
+  asList(pkg.agents).forEach((agent, i) => {
+    if (!active(agent)) return;
+    const named: Array<{ names: string[]; pointer: string; via?: string }> = [];
+    let reached = searches(agent.tool_assignments);
+    let unseen = false;
+    asList(agent.tool_assignments).forEach((assignment, j) => {
+      const names = asObject(assignment.config_overrides)?.knowledge_base_names;
+      const list = Array.isArray(names) ? names.filter((n): n is string => typeof n === "string") : [];
+      if (active(assignment) && list.length) named.push({ names: list, pointer: `/agents/${i}/tool_assignments/${j}/config_overrides/knowledge_base_names` });
+    });
+    for (const assignment of asList(agent.skill_assignments)) {
+      if (!active(assignment) || typeof assignment.skill_slug !== "string") continue;
+      const k = skillIndex.get(assignment.skill_slug);
+      if (k === undefined) {
+        unseen = true;
+        continue;
+      }
+      const skill = skills[k]!;
+      if (!active(skill)) continue;
+      if (searches(skill.tool_assignments)) reached = true;
+      const names = asList(skill.knowledge_base_assignments)
+        .filter(active)
+        .map((a) => a.knowledge_base_name)
+        .filter((n): n is string => typeof n === "string");
+      if (names.length) named.push({ names, pointer: `/skills/${k}/knowledge_base_assignments`, via: assignment.skill_slug });
+    }
+    if (reached || unseen || !named.length) return;
+    const names = [...new Set(named.flatMap((n) => n.names))];
+    const first = named[0]!;
+    const agentName = typeof agent.slug === "string" ? ` "${agent.slug}"` : "";
+    findings.push({
+      code: KB_WITHOUT_SEARCH_CODE,
+      severity: "warning",
+      ...locate(disk, first.pointer),
+      message:
+        `The agent${agentName} is given the knowledge base${names.length === 1 ? "" : "s"} ${quoted(names)}` +
+        `${first.via ? ` through the skill "${first.via}"` : ""}, but no search tool reaches it, so it cannot search ${names.length === 1 ? "it" : "them"}: ` +
+        `add ${SEARCH_TOOL} to the ${first.via ? "skill's" : "agent's"} tool_assignments.`,
+    });
+  });
   return findings;
 }

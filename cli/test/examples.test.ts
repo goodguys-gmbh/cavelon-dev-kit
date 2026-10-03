@@ -8,34 +8,80 @@ import { startFakeServer, type FakeServer } from "./fake-server.js";
 import { cli, login, sandbox, type Sandbox } from "./helpers.js";
 
 /**
- * examples/support-faq/ is a solution a
- * developer copies, so it must pass `cavelon validate` against the package
- * schema the contract snapshot publishes, without warnings.
+ * The folders in examples/ are solutions a developer copies, so each must
+ * pass `cavelon validate` against the package schema the contract snapshot
+ * publishes, without warnings, and each agent that is given a knowledge base
+ * must have a tool to search it.
  */
 
-const EXAMPLE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../examples/support-faq");
+const EXAMPLES = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../examples");
+/** The built-in the instance's docs name for searching knowledge bases. */
+const SEARCH_TOOL = "search_documents";
+
+interface Assignment {
+  tool_slug?: string;
+  skill_slug?: string;
+  knowledge_base_name?: string;
+}
+interface Agent {
+  slug: string;
+  harness_slug: string;
+  output_mode?: string;
+  tool_assignments?: Assignment[];
+  skill_assignments?: Assignment[];
+}
+interface Skill {
+  slug: string;
+  tool_assignments?: Assignment[];
+  knowledge_base_assignments?: Assignment[];
+}
+interface Node {
+  slug: string;
+  node_type: string;
+  harness_slug: string;
+  config: Record<string, unknown>;
+}
+interface Edge {
+  from_node_ref: { kind: string; slug: string };
+  to_node_ref: { kind: string; slug: string };
+  edge_type: string;
+  harness_slug: string;
+  config: Record<string, unknown>;
+}
+interface Suite {
+  name: string;
+  harness_slug: string;
+  test_cases: Array<{ name: string; steps: Array<{ user_message: string; evaluation_criteria?: string[] }> }>;
+}
 
 let server: FakeServer;
 let sb: Sandbox;
-let dir: string;
+let scratch: string;
 
 beforeAll(async () => {
   server = await startFakeServer();
   sb = sandbox();
   const tenant = server.addTenant("acme", "Acme");
   await login(sb, server.url, server.addToken({ kind: "pat", tenantIds: [tenant], defaultTenant: tenant }));
-  // A copy, as a developer makes one: validate's cache never lands in the repository.
-  dir = path.join(mkdtempSync(path.join(os.tmpdir(), "cavelon-example-")), "support-faq");
-  cpSync(EXAMPLE, dir, { recursive: true });
+  scratch = mkdtempSync(path.join(os.tmpdir(), "cavelon-example-"));
 });
 afterAll(async () => {
   sb.cleanup();
-  rmSync(path.dirname(dir), { recursive: true, force: true });
+  rmSync(scratch, { recursive: true, force: true });
   await server.close();
 });
 
-describe("examples/support-faq", () => {
+function reader(example: string) {
+  return <T>(...parts: string[]) => parse(readFileSync(path.join(EXAMPLES, example, ...parts), "utf8")) as T;
+}
+
+describe.each(["support-faq", "expense-approval"])("examples/%s", (example) => {
+  const read = reader(example);
+
   it("validates against the snapshot's package schema, then offline from the cache", async () => {
+    // A copy, as a developer makes one: validate's cache never lands in the repository.
+    const dir = path.join(scratch, example);
+    cpSync(path.join(EXAMPLES, example), dir, { recursive: true });
     const online = await cli(sb, ["validate", "--instance", server.url, "--json"], { cwd: dir });
     expect(online.code, online.stdout + online.stderr).toBe(0);
     expect(online.json()).toMatchObject({ valid: true, schema_version: "v3", errors: 0, warnings: 0, findings: [] });
@@ -49,24 +95,80 @@ describe("examples/support-faq", () => {
   });
 
   it("is one solution: the package, tests and env name the harness in cavelon.yaml", () => {
-    const read = (...parts: string[]) => parse(readFileSync(path.join(EXAMPLE, ...parts), "utf8")) as unknown;
-    const project = read("cavelon.yaml") as { harness: string; package_version: string };
-    const harnesses = read("package", "harnesses.yaml") as Array<{ slug: string }>;
-    const agents = read("package", "agents.yaml") as Array<{ harness_slug: string; skill_assignments: Array<{ skill_slug: string }> }>;
-    const skills = read("package", "skills.yaml") as Array<{ slug: string; knowledge_base_assignments: Array<{ knowledge_base_name: string }> }>;
-    const kbs = read("package", "knowledge_bases.yaml") as Array<{ name: string }>;
-    const smoke = read("tests", "smoke.yaml") as { harness_slug: string; test_cases: unknown[] };
+    const project = read<{ harness: string; package_version: string }>("cavelon.yaml");
+    const harnesses = read<Array<{ slug: string }>>("package", "harnesses.yaml");
+    const agents = read<Agent[]>("package", "agents.yaml");
+    const skills = read<Skill[]>("package", "skills.yaml");
+    const kbs = read<Array<{ name: string }>>("package", "knowledge_bases.yaml");
 
     expect(harnesses.map((h) => h.slug)).toEqual([project.harness]);
-    expect((read("env", "test.yaml") as { harness: string }).harness).toBe(project.harness);
-    expect(smoke.harness_slug).toBe(project.harness);
-    expect(smoke.test_cases.length).toBeGreaterThan(0);
+    expect(read<{ harness: string }>("env", "test.yaml").harness).toBe(project.harness);
     for (const agent of agents) {
       expect(agent.harness_slug).toBe(project.harness);
-      for (const a of agent.skill_assignments) expect(skills.map((s) => s.slug)).toContain(a.skill_slug);
+      for (const a of agent.skill_assignments ?? []) expect(skills.map((s) => s.slug)).toContain(a.skill_slug);
     }
     for (const skill of skills) {
-      for (const a of skill.knowledge_base_assignments) expect(kbs.map((k) => k.name)).toContain(a.knowledge_base_name);
+      for (const a of skill.knowledge_base_assignments ?? []) expect(kbs.map((k) => k.name)).toContain(a.knowledge_base_name);
     }
+    expect(agents.filter((a) => (a as { is_entrypoint?: boolean }).is_entrypoint).length).toBe(1);
+  });
+
+  it("gives every agent with a knowledge base the search tool", () => {
+    const agents = read<Agent[]>("package", "agents.yaml");
+    const skills = read<Skill[]>("package", "skills.yaml");
+    for (const agent of agents) {
+      const held = (agent.skill_assignments ?? []).map((a) => skills.find((s) => s.slug === a.skill_slug)!);
+      const named = held.flatMap((s) => s.knowledge_base_assignments ?? []);
+      if (!named.length) continue;
+      const tools = [...(agent.tool_assignments ?? []), ...held.flatMap((s) => s.tool_assignments ?? [])].map((a) => a.tool_slug);
+      expect(tools, `agent ${agent.slug}`).toContain(SEARCH_TOOL);
+    }
+    expect(agents.some((a) => (a.skill_assignments ?? []).length)).toBe(true);
+  });
+});
+
+describe("examples/expense-approval", () => {
+  const read = reader("expense-approval");
+  const registry = () => read<{ orchestration_nodes: Node[]; graph_edges: Edge[] }>("package", "registry_entities.yaml");
+
+  it("is a pipeline: chat → agent → router → approval → output, every edge between nodes it has", () => {
+    const { orchestration_nodes: nodes, graph_edges: edges } = registry();
+    const agents = read<Agent[]>("package", "agents.yaml");
+    const types = new Set(nodes.map((n) => n.node_type));
+    for (const type of ["chat_start", "router", "transform", "approval", "output"]) expect(types).toContain(type);
+    for (const n of nodes) expect(n.harness_slug).toBe("expense-approval");
+
+    const exists = (ref: { kind: string; slug: string }) =>
+      ref.kind === "agent" ? agents.some((a) => a.slug === ref.slug) : nodes.some((n) => n.slug === ref.slug);
+    for (const e of edges) {
+      expect(exists(e.from_node_ref), JSON.stringify(e.from_node_ref)).toBe(true);
+      expect(exists(e.to_node_ref), JSON.stringify(e.to_node_ref)).toBe(true);
+      expect(e.harness_slug).toBe("expense-approval");
+    }
+    // The agents feed routers that read their fields, so both answer in structured JSON.
+    for (const a of agents) expect(a.output_mode).toBe("structured_json");
+
+    // Each router has exactly one default, and the router after the approval reads the decision.
+    for (const router of nodes.filter((n) => n.node_type === "router")) {
+      const out = edges.filter((e) => e.from_node_ref.slug === router.slug);
+      expect(out.length, router.slug).toBeGreaterThanOrEqual(2);
+      expect(out.filter((e) => e.config.default === true).length, router.slug).toBe(1);
+    }
+    const approval = nodes.find((n) => n.node_type === "approval")!;
+    expect(approval.config).toMatchObject({ title: expect.any(String), instructions: expect.any(String) });
+    const after = edges.find((e) => e.from_node_ref.slug === approval.slug)!;
+    const decision = edges.filter((e) => e.from_node_ref.slug === after.to_node_ref.slug && e.config.default !== true);
+    expect(decision.map((e) => (e.config.condition as { path: string }).path)).toEqual(["approval.approved"]);
+  });
+
+  it("has a suite with policy questions, a compliant request, a violation citing its rule, and the approval reached", () => {
+    const suite = read<Suite>("tests", "acceptance.yaml");
+    expect(suite.harness_slug).toBe("expense-approval");
+    const criteria = (name: RegExp) =>
+      suite.test_cases.filter((c) => name.test(c.name)).flatMap((c) => c.steps.flatMap((s) => s.evaluation_criteria ?? []));
+    expect(suite.test_cases.filter((c) => /^Question/.test(c.name)).length).toBeGreaterThanOrEqual(2);
+    expect(criteria(/compliant/).join("\n")).toMatch(/reached the approval/);
+    expect(criteria(/violates a rule/).join("\n")).toMatch(/R\d+\.\d+.*violated/);
+    expect(criteria(/^Approval/).join("\n")).toMatch(/reached the approval/);
   });
 });

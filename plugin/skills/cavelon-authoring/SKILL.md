@@ -162,6 +162,12 @@ version; leave it as `pull` wrote it.
   The preview names them with the Admin path where a person sets them.
 - **Knowledge-base documents** are not in the repository: the package declares
   the knowledge bases; `cavelon kb upload` brings the documents.
+- **A knowledge base reaches an agent only through a search tool.** Naming it
+  in a skill's `knowledge_base_assignments` only scopes the search; the skill
+  (or the agent) also needs the built-in search tool in its `tool_assignments`
+  (`cavelon docs get reference/builtin-tools` names it). Without one the agent
+  answers from memory; `cavelon validate` warns
+  (`knowledge_base_without_search_tool`).
 
 ## Variables and secrets the solution needs
 

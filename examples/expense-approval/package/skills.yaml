@@ -1,0 +1,18 @@
+- slug: look-up-policy
+  name: Look up the policy
+  description: Search the travel and expense policy and quote its rules word for word, with their numbers.
+  instructions: |-
+    Search the Expense Policy with search_documents before every statement about
+    rules, amounts, limits, deadlines or approvals. Search more than once when
+    needed (one search per category or rule, such as "hotel maximum", "business
+    meal" or "approval"). Quote a rule only in the words the search returns;
+    never make a rule up.
+    Name every rule with its number (such as R4.1), and give amounts,
+    percentages and deadlines exactly as the policy states them, together with
+    the exceptions and tolerances the policy allows for that rule.
+    When the policy does not cover something, say so instead of guessing.
+  # The search tool: a knowledge base named below only scopes it, it is no tool itself.
+  tool_assignments:
+    - tool_slug: search_documents
+  knowledge_base_assignments:
+    - knowledge_base_name: Expense Policy

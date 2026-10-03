@@ -1,0 +1,4 @@
+- slug: expense-approval
+  name: Expense approval
+  description: Answers questions about the travel and expense policy, takes expense requests, checks them against the policy and hands each one to a person for approval.
+  status: draft
