@@ -7,6 +7,11 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-03
+
+The first release built from the public repository: with provenance on npm,
+and without source comments in the package.
+
 ### Added
 
 - **User documentation** in `docs/`: installation, a getting-started tutorial,
