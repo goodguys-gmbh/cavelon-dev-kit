@@ -110,6 +110,27 @@ describe("limits set without --confirm", () => {
   });
 });
 
+describe("docs/limits.md", () => {
+  /** The exit code the table of refusals gives for a code. */
+  function documentedExit(code: string): number | undefined {
+    const doc = readFileSync(path.resolve(__dirname, "../../docs/limits.md"), "utf8");
+    const row = doc.split("\n").find((line) => line.startsWith(`| \`${code}\` |`));
+    return row ? Number(row.split("|")[2]!.trim()) : undefined;
+  }
+
+  it.each([
+    ["a word for a number", ["agent_max_turns", "abc"], "usage"],
+    ["a fraction for a whole number", ["agent_max_turns", "10.5"], "usage"],
+    ["neither on nor off for a switch", ["kb_upload_archive_enabled", "maybe"], "usage"],
+    ["a value out of bounds", ["agent_max_turns", "0"], "request_invalid"],
+  ])("states the exit code and error code of %s", async (_what, args, code) => {
+    const result = await cli(sb, ["limits", "set", ...args, "--json"]);
+    expect(errorOf(result).code).toBe(code);
+    expect(result.code).toBe(documentedExit(code));
+    expect(patches()).toEqual([]);
+  });
+});
+
 describe("limits set --confirm", () => {
   it("upload defaults: sends exactly the field and prints the new value from the answer", async () => {
     const result = await cli(sb, ["limits", "set", "kb_upload_max_file_size_mb", "50", "--confirm"]);
@@ -261,7 +282,7 @@ describe("the monthly Processing Step cap", () => {
     const preview = await cli(sb, ["limits", "set", "monthly_processing_step_cap", "40000"]);
     expect(preview.code, preview.stderr).toBe(0);
     expect(preview.stdout).toBe(
-      "monthly_processing_step_cap: 0 → 40000.\n" +
+      "monthly_processing_step_cap: none (no cap) → 40000.\n" +
         'Sends: PATCH /api/v1/tenants/current/processing-step-cap {"monthly_processing_step_cap":40000}\n' +
         "Allowed: a credential with settings.manage (a session, a personal access token, or an admin API key of the tenant).\n" +
         "Nothing was changed. Change it with: cavelon limits set monthly_processing_step_cap 40000 --confirm\n",
@@ -270,7 +291,7 @@ describe("the monthly Processing Step cap", () => {
 
     const set = await cli(sb, ["limits", "set", "monthly_processing_step_cap", "40000", "--confirm", "--json"]);
     expect(set.code, set.stderr).toBe(0);
-    expect(set.json()).toMatchObject({ kind: "quota", previous: 0, value: 40000, now: 40000, changed: true, sent: true });
+    expect(set.json()).toMatchObject({ kind: "quota", previous: null, value: 40000, now: 40000, changed: true, sent: true });
     expect(patches().map((r) => [r.path, r.body])).toEqual([["/api/v1/tenants/current/processing-step-cap", { monthly_processing_step_cap: 40000 }]]);
     // `cavelon limits` shows the cap with this month's use.
     server.state.processingStepsUsed = 36000;
@@ -283,6 +304,19 @@ describe("the monthly Processing Step cap", () => {
     expect(cleared.stdout).toBe("Changed monthly_processing_step_cap: 40000 → none (no cap).\n");
     expect(patches().at(-1)!.body).toEqual({ monthly_processing_step_cap: null });
     expect(server.state.processingStepCaps.has(tenant)).toBe(false);
+  });
+
+  it("with no cap set, none and 0 send nothing and say it is already none", async () => {
+    server.state.processingStepCaps.delete(tenant);
+    for (const value of ["none", "0"]) {
+      const preview = await cli(sb, ["limits", "set", "monthly_processing_step_cap", value, "--json"]);
+      expect(preview.code, preview.stderr).toBe(0);
+      expect(preview.json()).toMatchObject({ previous: null, changed: false, sent: false });
+      const confirmed = await cli(sb, ["limits", "set", "monthly_processing_step_cap", value, "--confirm"]);
+      expect(confirmed.code, confirmed.stderr).toBe(0);
+      expect(confirmed.stdout).toBe("monthly_processing_step_cap is already none (no cap); nothing to change.\n");
+    }
+    expect(patches()).toEqual([]);
   });
 
   it("explain explains the refusal of new work at the cap, with the cap, its use and who raises it", async () => {

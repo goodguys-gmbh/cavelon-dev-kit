@@ -136,6 +136,8 @@ export interface FakeState {
    * matching requests through whole.
    */
   interruptions: Array<{ method: string; path: RegExp; mode: "cut" | "stall"; skip?: number }>;
+  /** Routes that answer this status instead, as a failing route of an otherwise working instance. */
+  failures: Array<{ method: string; path: RegExp; status: number }>;
   /** Uploads after this many succeed answer 500 (for partial failures). */
   uploadsBeforeFailure: number;
   /** Event streams to cut off after their first frame. */
@@ -381,6 +383,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     rootPathsReachApi: true,
     serveOpenapi: true,
     interruptions: [],
+    failures: [],
     uploadsBeforeFailure: Infinity,
     dropStreams: 0,
     configs: new Map(),
@@ -438,6 +441,8 @@ export async function startFakeServer(): Promise<FakeServer> {
     const method = req.method ?? "GET";
     const body = method === "GET" ? { raw: Buffer.alloc(0) } : await readBody(req);
     state.requests.push({ method, path: p, query: url.searchParams, headers: req.headers, body: body.json ?? (body.form ? "multipart" : undefined) });
+    const failure = state.failures.find((f) => f.method === method && f.path.test(p));
+    if (failure) return send(res, failure.status, { detail: "Internal Server Error" });
     const interruption = state.interruptions.find((i) => i.method === method && i.path.test(p));
     if (interruption && (interruption.skip ?? 0) > 0) interruption.skip!--;
     else if (interruption) {

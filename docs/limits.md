@@ -106,7 +106,8 @@ limit_above_platform_ceiling` lists today's ceilings.
 | `limit_changed_by_operator` | 7 | only the operator changes this limit; the message names the setting and where |
 | `platform_role_required` | 7 | an operator's change needs a Platform-mode token of the role it names |
 | `forbidden` | 7 | your credential lacks the permission the change needs |
-| `request_invalid` | 3 | the value is outside the published bounds or the wrong kind |
+| `usage` | 2 | the value is not of the limit's kind: a word or a fraction for a whole number, a unit that is not the limit's, neither on nor off for a switch |
+| `request_invalid` | 3 | the value is outside the published bounds |
 | `operation_unavailable` | 1 | this instance does not publish how to change the limit (an older version); change it in the Admin |
 | `limit_not_found` | 1 | the instance publishes no such limit, or none you can change; `cavelon limits` lists them |
 
