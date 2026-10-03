@@ -6,8 +6,9 @@ import { failureLines, type ResultFailure } from "./results.js";
 /**
  * The instance's one resource for asynchronous work. Every kind reads as the
  * same Operation shape, and `needs_action` stops a wait with its own exit code
- * and the Admin link. A succeeded operation whose result says it failed (a
- * test run with failed cases, see results.ts) counts as failed.
+ * and the Admin link. A succeeded operation whose result says it did not pass
+ * (a test run with failed or unmeasured cases, see results.ts) counts as
+ * failed, or as needing a person when its answers wait for a verdict.
  */
 
 export type OperationStatus = "queued" | "running" | "needs_action" | "succeeded" | "failed" | "cancelled";
@@ -32,7 +33,7 @@ export function isSettled(op: Operation): boolean {
 }
 
 export function exitCodeFor(op: Operation, note?: OperationNote): ExitCodeValue {
-  if (note?.result_failure) return ExitCode.failure;
+  if (note?.result_failure) return note.result_failure.exit_code;
   switch (op.status) {
     case "succeeded":
       return ExitCode.ok;
