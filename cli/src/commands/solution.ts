@@ -1,4 +1,3 @@
-import path from "node:path";
 import { parseDocument } from "yaml";
 import { CAPACITY_CONCEPT_PAGE, CAPACITY_TUTORIAL_PAGE, capacityCodeIn, capacityHint, MODEL_ENDPOINT_BUSY } from "../capacity.js";
 import { boolOption, intOption, positional, stringOption, type CommandSpec, type Context } from "../command.js";
@@ -552,7 +551,7 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
     throw new CavelonError(ExitCode.conflict, {
       code: "preview_other_tenant",
       message: `Preview ${previewId} was made for tenant ${stored.tenant_id}, but this command acts in ${client.target.tenantId}.`,
-      hint: stored.env ? `Pass the same --env ${stored.env} as the preview.` : "Use the tenant of the preview, or preview again here.",
+      hint: "Run the confirm command the preview printed; it names the preview's --env and --tenant. Or preview again here.",
     });
   }
   if (stored.tenant_id && session.tokenKind !== "api_key") client.target.tenantId = stored.tenant_id;
@@ -568,7 +567,7 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
     // Every other open preview was made against the state this import changed.
     for (const other of await listPreviews(project.root)) await deletePreview(project.root, other.preview_id);
     const summary = (result.summary ?? {}) as Preview["summary"];
-    const flags = stored.env ? ` --env ${shellWord(stored.env)}` : targetFlags(session);
+    const flags = targetFlags(session, stored.env ?? session.envFile?.name);
     const still = setCommands(stored.preview as Preview, flags);
     const text = keyValues([
       ["applied", `preview ${stored.preview_id}${stored.harness ? ` to ${stored.harness.slug}` : ""}${stored.env ? ` (env ${stored.env})` : ""}`],
@@ -585,7 +584,7 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
   } catch (error) {
     if (error instanceof CavelonError && error.code === REQUIREMENTS_CHANGED && error.blockers?.length) {
       await deletePreview(project.root, stored.preview_id);
-      throw requirementsChanged(error, stored, await catalogFor(ctx, false));
+      throw requirementsChanged(error, stored, session, await catalogFor(ctx, false));
     }
     if (error instanceof CavelonError && (error.code === "import_preview_stale" || (error.status === 409 && /preview/i.test(error.message)))) {
       await deletePreview(project.root, stored.preview_id);
@@ -593,7 +592,7 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
         code: error.code === "conflict" ? "import_preview_stale" : error.code,
         status: 409,
         message: `The target changed since preview ${stored.preview_id}; nothing was imported.`,
-        hint: `Run \`${cavelonCommand("apply", ...previewTarget(stored))}\` again, show the new preview, and confirm its id.`,
+        hint: `Run \`${previewAgain(stored, session)}\` again, show the new preview, and confirm its id.`,
         docs: error.docs,
       });
     }
@@ -609,7 +608,7 @@ const REQUIREMENTS_CHANGED = "package_requirements_changed";
  * preview words it, and the kit adds its hint for a code it knows. An instance
  * without `blockers` reads as a stale preview.
  */
-function requirementsChanged(error: CavelonError, stored: StoredPreview, catalog: ErrorCatalog | null): CavelonError {
+function requirementsChanged(error: CavelonError, stored: StoredPreview, session: Session, catalog: ErrorCatalog | null): CavelonError {
   const blockers = error.blockers ?? [];
   const known = new Map<string, string>();
   for (const blocker of blockers) {
@@ -620,7 +619,7 @@ function requirementsChanged(error: CavelonError, stored: StoredPreview, catalog
     code: error.code,
     status: error.status,
     message: `The import's requirements changed since preview ${stored.preview_id}; nothing was imported; preview again.`,
-    hint: [...known.values(), `Run \`${cavelonCommand("apply", ...previewTarget(stored))}\` again, show the new preview, and confirm its id.`].join(" "),
+    hint: [...known.values(), `Run \`${previewAgain(stored, session)}\` again, show the new preview, and confirm its id.`].join(" "),
     docs: error.docs,
     blockers,
   });
@@ -631,10 +630,10 @@ function requirementsChanged(error: CavelonError, stored: StoredPreview, catalog
  * does not exist yet is created as a draft; one named on the command line
  * never is, so a typo cannot create a solution.
  */
-/** The options that make `apply` preview the same target again. */
-function previewTarget(stored: StoredPreview): string[] {
-  if (stored.env) return ["--env", stored.env];
-  return stored.harness ? ["--harness", stored.harness.slug] : [];
+/** The `apply` that previews the same target again, in the same tenant. */
+function previewAgain(stored: StoredPreview, session: Session): string {
+  const harness = !stored.env && stored.harness ? ` --harness ${shellWord(stored.harness.slug)}` : "";
+  return `cavelon apply${harness}${targetFlags(session, stored.env)}`;
 }
 
 async function applyTarget(
@@ -704,9 +703,6 @@ export const apply: CommandSpec = {
     if (confirm) return confirmPreview(ctx, project, confirm);
 
     const envFile = session.envFile;
-    if (envFile && !envFile.exists) {
-      throw usageError(`No ${path.relative(project.root, envFile.file).split(path.sep).join("/")}.`, "`cavelon init` writes env/test.yaml and env/prod.yaml.");
-    }
     if (envFile?.tenant && session.tenantSource !== `env/${envFile.name}.yaml`) {
       ctx.warn(`${session.tenantSource} names tenant "${session.tenant}" and takes precedence over ${envFile.name}.yaml's "${envFile.tenant}".`);
     }
@@ -776,8 +772,7 @@ export const apply: CommandSpec = {
     }
     const reason = personReason(preview, harness, mode, envFile?.name);
     data.show_to_person = Boolean(reason);
-    const envFlags = envFile ? ["--env", envFile.name] : [];
-    const confirmLine = preview.preview_id ? cavelonCommand("apply", "--confirm", preview.preview_id, ...envFlags) : undefined;
+    const confirmLine = preview.preview_id ? `${cavelonCommand("apply", "--confirm", preview.preview_id)}${flags}` : undefined;
     const text = [
       `Preview of ${project.layout.package}/ for ${harness ? `solution ${harness.slug}${harness.status ? ` (${harness.status})` : ""}` : "the tenant"}${envFile ? ` [env ${envFile.name}]` : ""}:`,
       previewText(preview, flags),

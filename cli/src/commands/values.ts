@@ -50,11 +50,19 @@ interface SecretStatus {
 }
 
 
-/** The options that make a printed command act where this one did: the env file, or a --tenant option. */
-export function targetFlags(session: Session): string {
-  if (session.envFile) return ` --env ${shellWord(session.envFile.name)}`;
-  if (session.tenantSource === "option" && session.tenant) return ` --tenant ${shellWord(session.tenant)}`;
-  return "";
+/**
+ * The options that make a printed command act where this one did. An option
+ * beats the env file, so a printed command keeps both: after `--env prod
+ * --tenant beta`, `--env prod` alone would act in prod's tenant, and without
+ * `--instance` it would go to another instance. `env` replaces the session's
+ * env file (null: none), for a command that acts where a stored preview did.
+ */
+export function targetFlags(session: Session, env: string | null | undefined = session.envFile?.name): string {
+  let flags = "";
+  if (session.urlSource === "option" && session.url) flags += ` --instance ${shellWord(session.url)}`;
+  if (env) flags += ` --env ${shellWord(env)}`;
+  if (session.tenantSource === "option" && session.tenant) flags += ` --tenant ${shellWord(session.tenant)}`;
+  return flags;
 }
 
 /** The command a person runs to set a secret; the value is typed or piped, never part of it. */

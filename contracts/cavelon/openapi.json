@@ -2874,6 +2874,49 @@
         }
       }
     },
+    "/api/v1/tenants/{tenant_id}": {
+      "get": {
+        "tags": [
+          "tenants"
+        ],
+        "summary": "Get Tenant Detail",
+        "operationId": "get_tenant_detail_api_v1_tenants__tenant_id__get",
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantDetailResponse"
+                }
+              }
+            }
+          },
+          "400": {},
+          "403": {},
+          "404": {},
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/tenants/{tenant_id}/api-keys": {
       "get": {
         "tags": [
