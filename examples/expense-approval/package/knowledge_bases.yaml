@@ -1,0 +1,3 @@
+- name: Expense Policy
+  description: The travel and expense policy of Alpenwerk GmbH (rules R1.1 to R9.1). Uploaded from seeds/policy/.
+  content_language: en

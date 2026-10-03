@@ -12,7 +12,7 @@ support-faq/
     manifest.yaml       package format v3
     harnesses.yaml      the solution "support-faq", a draft
     knowledge_bases.yaml the knowledge base "Support FAQ"
-    skills.yaml         "Answer from the FAQ", which searches it
+    skills.yaml         "Answer from the FAQ": the search tool and the knowledge base it searches
     agents.yaml         the one agent, its model and prompt
   tests/smoke.yaml    four test cases: three the FAQ answers, one it must decline
   env/test.yaml       where `cavelon apply --env test` goes

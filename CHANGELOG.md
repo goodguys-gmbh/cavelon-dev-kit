@@ -20,6 +20,15 @@ CLI, the skills and the plugin.
   a pass included, when the instance returns it.
 - `cavelon test run --wait` ends, when the wait runs out first, with one line
   that says how to resume, with the same `--timeout`.
+- `cavelon validate` warns (`knowledge_base_without_search_tool`) when an agent
+  is given knowledge bases, by a skill or on a tool assignment, but no search
+  tool reaches it, so it cannot search them.
+- `examples/expense-approval/`: a pipeline (chat, agent, router, policy check,
+  decision memo, approval by a person, outcome) with a short fictional travel
+  and expense policy and a test suite that reaches the approval.
+- The `cavelon-testing` skill says how an approval is tested: a test run
+  records that it was reached, with its title and instructions, and the judge
+  grades that; the branches after a person's decision stay untested.
 
 ### Changed
 
@@ -34,6 +43,9 @@ CLI, the skills and the plugin.
 - `cavelon trace` prints each drill-down command with the id its route needs,
   labelled (a case's conversation id, a trigger case's run id, the trace id),
   and a wrong id's 404 answers with a hint naming the id to use.
+- The `support-faq` example's skill now carries the search tool
+  (`search_documents`); before, its agent had a knowledge base but nothing to
+  search it with.
 
 ## [0.1.0] - 2026-10-03
 

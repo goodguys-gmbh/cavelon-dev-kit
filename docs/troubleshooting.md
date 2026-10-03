@@ -104,6 +104,7 @@ can. See [Limits](limits.md#run-capacity).
 |---|---|---|
 | `package_schema_invalid` | 3 | A package file does not match the instance's package schema. Each finding names the file, line and path. |
 | `package_version_unsupported` | 3 | The instance does not accept the package version in `cavelon.yaml` and `package/manifest.yaml`. `cavelon status --json` lists the accepted versions; `cavelon pull` writes a current package. |
+| `knowledge_base_without_search_tool` | 0 (a warning) | An agent is given a knowledge base, by a skill or on a tool assignment, but no search tool reaches it, so it answers without it. Add `- tool_slug: search_documents` to the `tool_assignments` of that skill or of the agent. |
 | `project_file_invalid`, `env_file_invalid` | 3 | `cavelon.yaml` or `env/<name>.yaml` is not valid YAML or has a wrong value. |
 | `project_file_has_secret` | 3 | `cavelon.yaml` contains something that looks like a token. Remove it, revoke the token, and use `cavelon login` or `CAVELON_TOKEN`. |
 | `no_solution` | 2 | The command needs a solution folder: run it in a folder with `cavelon.yaml`, or `cavelon init` first. |

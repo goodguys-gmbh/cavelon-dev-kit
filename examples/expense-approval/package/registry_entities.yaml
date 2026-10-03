@@ -1,0 +1,200 @@
+# The pipeline: chat → expense assistant → router → policy check → memo → approval → router → outcome.
+# A test run ends at the approval; the two outcome nodes after it run only when a person decides.
+orchestration_nodes:
+  - slug: chat
+    name: Chat
+    node_type: chat_start
+    harness_slug: expense-approval
+    config:
+      demo_message: May I book a hotel in Munich for 200 EUR a night?
+    canvas_x: 0
+    canvas_y: 200
+  - slug: request-complete
+    name: Request complete?
+    node_type: router
+    harness_slug: expense-approval
+    config: {}
+    canvas_x: 600
+    canvas_y: 200
+  - slug: answer
+    name: Answer the person
+    node_type: output
+    harness_slug: expense-approval
+    config:
+      mode: conversation_message
+      result_source: payload
+      response_path: $.previous_output.answer
+    canvas_x: 900
+    canvas_y: 0
+  - slug: decision-memo
+    name: Decision memo
+    node_type: transform
+    harness_slug: expense-approval
+    config:
+      mode: json_mapping
+      mapping:
+        memo:
+          op: text
+          template: |-
+            ## Expense request: decision memo
+
+            | | |
+            |---|---|
+            | Requester | {{ previous_output.requester }} |
+            | Cost centre | {{ previous_output.cost_centre }} |
+            | Category | {{ previous_output.category }} |
+            | Purpose | {{ previous_output.purpose }} |
+            | Date | {{ previous_output.date }} |
+            | Amount (gross) | {{ previous_output.amount }} {{ previous_output.currency }} |
+            | Reimbursable by the policy | {{ previous_output.reimbursable_amount }} {{ previous_output.currency }} |
+            | Result of the check | {{ 'Compliant' if previous_output.result == 'compliant' else 'Violation' }} |
+            | Recommendation | {{ previous_output.recommendation }} |
+            | Approved by (R8.1) | {{ previous_output.approval_level }} |
+
+            **Facts:** {{ previous_output.summary }}
+
+            ### Rules checked
+            {% for f in previous_output.findings %}
+            - **{{ f.rule }}** ({{ f.assessment }}): "{{ f.quote }}" – {{ f.reasoning }}
+            {% endfor %}
+
+            **Reason for the recommendation:** {{ previous_output.reasoning }}
+
+            For the approver: nobody approves their own expense (R8.2). A rejection names the rule
+            it violates (R8.3). An expense that violates a rule may be approved as an exception with
+            a reason; the approval then names the exception (R8.4).
+        requester: $.previous_output.requester
+        category: $.previous_output.category
+        amount: $.previous_output.amount
+        currency: $.previous_output.currency
+        result: $.previous_output.result
+        findings: $.previous_output.findings
+        recommendation: $.previous_output.recommendation
+        approval_level: $.previous_output.approval_level
+    canvas_x: 1200
+    canvas_y: 300
+  - slug: approval
+    name: Approval by a person
+    node_type: approval
+    harness_slug: expense-approval
+    config:
+      title: "Expense request {{ previous_output.requester }}: {{ previous_output.amount }} {{ previous_output.currency }} ({{ previous_output.category }}), approved by the {{ previous_output.approval_level }}"
+      instructions: "{{ previous_output.memo }}"
+      allow_edit: false
+      on_expiry: reject
+      expires_after_seconds: 1209600
+    canvas_x: 1500
+    canvas_y: 300
+  - slug: decision
+    name: Decision
+    node_type: router
+    harness_slug: expense-approval
+    config: {}
+    canvas_x: 1800
+    canvas_y: 300
+  - slug: approved
+    name: Notice – approved
+    node_type: output
+    harness_slug: expense-approval
+    config:
+      mode: conversation_message
+      result_source: text_template
+      template: |-
+        **Your expense request for {{ previous_output.amount }} {{ previous_output.currency }} was approved.**
+        It is paid with the next payroll (R9.1).
+        {% if previous_output.result == 'violation' %}
+        The request violates the policy and was approved as an exception (R8.4).
+        {% endif %}
+
+        {{ previous_output.memo }}
+    canvas_x: 2100
+    canvas_y: 200
+  - slug: rejected
+    name: Notice – rejected
+    node_type: output
+    harness_slug: expense-approval
+    config:
+      mode: conversation_message
+      result_source: text_template
+      template: |-
+        **Your expense request for {{ previous_output.amount }} {{ previous_output.currency }} was rejected.**
+        {% if previous_output.result == 'violation' %}
+        It violates these rules (R8.3):
+        {% for f in previous_output.findings if f.assessment == 'violated' %}
+        - **{{ f.rule }}**: "{{ f.quote }}" – {{ f.reasoning }}
+        {% endfor %}
+        {% else %}
+        The check found no violation; the approver rejected it all the same. Please ask them why.
+        {% endif %}
+
+        {{ previous_output.memo }}
+    canvas_x: 2100
+    canvas_y: 400
+graph_edges:
+  - from_node_ref: { kind: orchestration, slug: chat }
+    to_node_ref: { kind: agent, slug: expense-assistant }
+    edge_type: pipeline
+    harness_slug: expense-approval
+    config: {}
+  - from_node_ref: { kind: agent, slug: expense-assistant }
+    to_node_ref: { kind: orchestration, slug: request-complete }
+    edge_type: pipeline
+    harness_slug: expense-approval
+    config:
+      payload_mode: structured_json
+  # A complete request goes to the policy check; everything else is answered directly.
+  - from_node_ref: { kind: orchestration, slug: request-complete }
+    to_node_ref: { kind: agent, slug: policy-check }
+    edge_type: condition
+    harness_slug: expense-approval
+    config:
+      priority: 10
+      default: false
+      condition:
+        source: previous_output
+        path: mode
+        operator: equals
+        value: request_complete
+  - from_node_ref: { kind: orchestration, slug: request-complete }
+    to_node_ref: { kind: orchestration, slug: answer }
+    edge_type: condition
+    harness_slug: expense-approval
+    config:
+      priority: 100
+      default: true
+  - from_node_ref: { kind: agent, slug: policy-check }
+    to_node_ref: { kind: orchestration, slug: decision-memo }
+    edge_type: pipeline
+    harness_slug: expense-approval
+    config:
+      payload_mode: structured_json
+  - from_node_ref: { kind: orchestration, slug: decision-memo }
+    to_node_ref: { kind: orchestration, slug: approval }
+    edge_type: pipeline
+    harness_slug: expense-approval
+    config: {}
+  - from_node_ref: { kind: orchestration, slug: approval }
+    to_node_ref: { kind: orchestration, slug: decision }
+    edge_type: pipeline
+    harness_slug: expense-approval
+    config: {}
+  # The person's decision: approved goes one way, rejected or expired the other.
+  - from_node_ref: { kind: orchestration, slug: decision }
+    to_node_ref: { kind: orchestration, slug: approved }
+    edge_type: condition
+    harness_slug: expense-approval
+    config:
+      priority: 10
+      default: false
+      condition:
+        source: previous_output
+        path: approval.approved
+        operator: equals
+        value: true
+  - from_node_ref: { kind: orchestration, slug: decision }
+    to_node_ref: { kind: orchestration, slug: rejected }
+    edge_type: condition
+    harness_slug: expense-approval
+    config:
+      priority: 100
+      default: true

@@ -18,7 +18,7 @@ issue.
 | `plugin/` | the Cavelon plugin: `skills/` (the one source of the skills), `.mcp.json`, and a manifest each for Claude Code and Codex |
 | `.claude-plugin/`, `.agents/plugins/` | the marketplaces of Claude Code and Codex, naming `plugin/` |
 | `contracts/` | snapshots of what an instance publishes, and the list of operations the kit uses |
-| `examples/support-faq/` | a small solution repository; the tests validate it |
+| `examples/` | solution repositories to copy: `support-faq/` (one agent and a knowledge base) and `expense-approval/` (a pipeline with an approval); the tests validate them |
 | `docs/` | the user documentation |
 
 ## Build and test

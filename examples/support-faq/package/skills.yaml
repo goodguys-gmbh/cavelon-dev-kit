@@ -2,8 +2,11 @@
   name: Answer from the FAQ
   description: Look the question up in the support FAQ before answering.
   instructions: |-
-    Search the Support FAQ for every question about opening hours, shipping,
-    returns or refunds, and answer only from what it says.
+    Search the Support FAQ with search_documents for every question about
+    opening hours, shipping, returns or refunds, and answer only from what it says.
     Quote numbers (days, amounts, times) exactly as the FAQ gives them.
+  # The search tool: a knowledge base named below only scopes it, it is no tool itself.
+  tool_assignments:
+    - tool_slug: search_documents
   knowledge_base_assignments:
     - knowledge_base_name: Support FAQ

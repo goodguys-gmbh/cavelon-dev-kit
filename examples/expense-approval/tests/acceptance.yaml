@@ -1,0 +1,103 @@
+name: Acceptance
+harness_slug: expense-approval
+description: >-
+  Questions about the policy, an incomplete request, a compliant request, requests that violate a rule
+  (citing it) and the approval step. A test run ends at the approval: it records the approval's title and
+  instructions, and the judge grades those; whether a person approves or rejects is not tested.
+tags: [acceptance]
+settings: {}
+test_cases:
+  - name: Question – hotel in Munich
+    tags: [policy-question]
+    steps:
+      - user_message: How much may a hotel night in Munich cost?
+        reference_answer: >-
+          At most 180 EUR a night in Munich, breakfast included (R4.1). Up to 20 % more is allowed with a
+          reason, such as a trade fair or a fully booked city; the head of department decides (R4.2).
+        evaluation_criteria:
+          - Says 180 EUR a night, breakfast included, for Munich.
+          - Names rule R4.1.
+          - Mentions that up to 20 % more is allowed with a reason (R4.2).
+  - name: Question – business class
+    tags: [policy-question]
+    steps:
+      - user_message: May I book business class for a flight to Lisbon?
+        reference_answer: >-
+          No. Flights are allowed only when the train takes more than 4 hours, and only in economy class;
+          business class is excluded (R3.2).
+        evaluation_criteria:
+          - Says that business class is excluded.
+          - Names R3.2 and that only economy class is allowed.
+  - name: Question – wine with colleagues
+    tags: [policy-question]
+    steps:
+      - user_message: I am going out for dinner with two colleagues from my team. Can I claim the wine?
+        reference_answer: >-
+          No. Alcohol is reimbursed only when external guests are entertained (R6.4); at a dinner with
+          colleagues only, the wine is not reimbursed.
+        evaluation_criteria:
+          - Says that the wine is not reimbursed.
+          - Gives R6.4 as the reason (alcohol only when external guests are entertained).
+  - name: Request incomplete – asks for the missing details
+    tags: [request]
+    steps:
+      - user_message: I would like to claim 86 EUR for a taxi to a customer.
+        reference_answer: >-
+          Asks for the missing details (name, cost centre, purpose or customer, date, receipt) and points
+          out that a taxi above 50 EUR a ride needs a reason (R3.4).
+        evaluation_criteria:
+          - Asks for the cost centre.
+          - Asks for the date of the ride.
+          - Asks whether there is a receipt.
+          - Does not say that the request was submitted or approved.
+  - name: Request compliant – reaches the approval
+    tags: [request, approval]
+    steps:
+      - user_message: >-
+          Expense request: I am Lena Huber, cost centre 4711. Hotel in Salzburg for the customer training
+          at Bergbahn AG, 1 night from the day before yesterday to yesterday, 118 EUR gross including
+          breakfast. The invoice is scanned. Please submit it.
+        evaluation_criteria:
+          - The request reached the approval by a person; it was neither approved nor rejected by the solution itself.
+          - The check finds the request compliant, because 118 EUR is below the maximum of 130 EUR a night for Salzburg (R4.1).
+          - The recommendation is approve, and the team lead approves it (R8.1, up to 500 EUR).
+  - name: Request violates a rule – business meal above 70 EUR per person
+    tags: [request, violation]
+    steps:
+      - user_message: >-
+          Expense request: Max Gruber, cost centre 3100. Business dinner yesterday with two
+          representatives of Tiroler Stahl (external) to negotiate a contract; we were 3 people. The bill
+          was 285 EUR gross including drinks and tip, wine was served. The receipt names the participants
+          and the occasion and is scanned. Please submit it.
+        evaluation_criteria:
+          - Names rule R6.1 (at most 70 EUR per person) as violated, quoting its wording.
+          - Shows that 95 EUR per person is above 70 EUR.
+  - name: Request violates a rule – laptop bought privately
+    tags: [request, violation]
+    steps:
+      - user_message: >-
+          Expense request: Sophie Berger, cost centre 2200. Three days ago I bought a laptop for work
+          myself, 899 EUR gross; the invoice is scanned. My team lead Anna Moser agreed beforehand.
+          Purpose: replacing my broken device. Please submit it.
+        evaluation_criteria:
+          - Names rule R7.4 (IT devices are procured by the IT department only; an IT device bought privately is not reimbursed) as violated.
+  - name: Approval – memo to the right approver
+    tags: [request, approval]
+    steps:
+      - step_order: 1
+        user_message: I would like to claim an office chair.
+        fixed_response: >-
+          Of course. Please tell me your name, your cost centre, the date of purchase, the gross amount
+          with its currency, the purpose, whether there is a receipt and, from 250 EUR, which team lead
+          agreed beforehand.
+        evaluate: false
+      - step_order: 2
+        user_message: >-
+          Jonas Wimmer, cost centre 5300, bought the day before yesterday, 649 EUR gross, an ergonomic
+          office chair for my desk because of back problems. The invoice is scanned, and my team lead
+          Peter Lang agreed beforehand. It is not an IT device. Please submit it.
+        evaluation_criteria:
+          - The request reached the approval by a person; it was neither approved nor rejected by the solution itself.
+          - The head of department approves it by R8.1 (above 500 EUR, up to 2,000 EUR).
+          - There is a decision memo with the requester, the cost centre, the amount and the recommendation.
+          - R7.2 (the team lead's consent from 250 EUR to 1,000 EUR) is assessed as met.

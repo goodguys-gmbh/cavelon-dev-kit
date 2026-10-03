@@ -1,0 +1,10 @@
+# A Cavelon solution. `cavelon` finds this file from the working directory upwards;
+# it names the instance, tenant and solution, never a token.
+instance: https://cavelon.example.com
+tenant: acme
+harness: expense-approval
+package_version: v3
+layout:
+  package: package
+  items:
+    test_suites: tests

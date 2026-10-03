@@ -23,7 +23,21 @@ Write cases for:
 - the questions the solution exists for, with the facts a good answer needs;
 - edge cases: out of scope, ambiguous, a follow-up in the same conversation;
 - the tools it must call, and the ones it must not;
-- what it must refuse or hand over.
+- what it must refuse or hand over;
+- in a pipeline with an approval: the cases that must reach it, and the ones
+  that must not.
+
+## Testing an approval
+
+A test run never waits for a person and never approves anything. A run that
+reaches an Approval node ends there: its trace records that the approval was
+reached (`test_approval_reached`), with the approval's title and instructions,
+and the judge grades the step against those. So write the criteria about what
+the person would see: that the approval was reached, who approves, the facts
+and the recommendation in the instructions. The branches after the decision
+(approved, rejected, expired) are never reached by a test; a person checks them
+on a draft solution by deciding a real approval, and you never decide one.
+`examples/expense-approval` in the dev-kit repository has such a suite.
 
 ## Running
 

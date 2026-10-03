@@ -43,6 +43,17 @@ Replace `https://cavelon.example.com` with the address of your Cavelon
 instance: the URL you open Cavelon at in the browser. `example.com` stands for
 it throughout these docs.
 
+Where nothing can ask for it, in CI or for an agent that runs unattended, a
+person pipes the token in from a secret store with `--token-stdin`; it is never
+an argument:
+
+```bash
+op read op://dev/cavelon/token | cavelon login --instance https://cavelon.example.com --token-stdin
+```
+
+In CI, setting `CAVELON_URL` and `CAVELON_TOKEN` from the CI system's secrets
+works too ([Security](docs/security.md)).
+
 **4. Start a solution** in an empty folder:
 
 ```bash
@@ -51,8 +62,10 @@ cavelon init --tenant acme --harness support-faq
 ```
 
 Then let your agent write the package files, bring an existing solution in
-with `cavelon pull`, or copy `package/`, `tests/` and `seeds/` from
-[`examples/support-faq/`](examples/support-faq/).
+with `cavelon pull`, or copy `package/`, `tests/` and `seeds/` from an example:
+[`examples/support-faq/`](examples/support-faq/) (one agent answering from a
+knowledge base) or [`examples/expense-approval/`](examples/expense-approval/)
+(a pipeline with a router and an approval by a person).
 
 **5. Work in the loop**, yourself or through your agent:
 
@@ -112,7 +125,8 @@ Details in [Troubleshooting](docs/troubleshooting.md#exit-codes).
 | [`cli/`](cli/) | the `cavelon` CLI and MCP server (TypeScript, Node.js 20.3+), published as `@cavelon/cli` |
 | [`plugin/`](plugin/) | the Cavelon plugin: the skills, the MCP entry, and a manifest each for Claude Code and Codex |
 | `.claude-plugin/`, `.agents/plugins/` | the plugin marketplaces of Claude Code and Codex |
-| [`examples/support-faq/`](examples/support-faq/) | a small solution to copy and try |
+| [`examples/support-faq/`](examples/support-faq/) | a small solution to copy and try: one agent answering from a knowledge base |
+| [`examples/expense-approval/`](examples/expense-approval/) | a pipeline to copy and try: chat, agents, routers, an approval by a person, and its test suite |
 | [`docs/`](docs/) | the documentation |
 | [`contracts/`](contracts/) | snapshots of what an instance publishes; the tests run against them |
 

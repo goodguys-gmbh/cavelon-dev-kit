@@ -194,6 +194,12 @@ the instance sends it), and leads to the conversation behind it, span by span,
 with each command carrying the id its route needs. The package schema also allows cases
 that start a trigger and check how its run ends.
 
+A test run never waits for a person. A pipeline that reaches an approval ends
+there: the run records that the approval was reached, with its title and
+instructions, and the judge grades those; the branches after a person's
+decision are not reached by a test. The
+[`expense-approval` example](../examples/expense-approval/) has such a suite.
+
 ## Readiness and activation
 
 Every solution has a **readiness gate**: the checks the instance runs before a

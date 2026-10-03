@@ -23,7 +23,12 @@
   "guardrails": [],
   "knowledge_bases": [{ "name": "Handbook", "description": "Policies and opening hours" }],
   "skills": [
-    { "slug": "faq", "name": "FAQ", "knowledge_base_assignments": [{ "knowledge_base_name": "Handbook" }] }
+    {
+      "slug": "faq",
+      "name": "FAQ",
+      "tool_assignments": [{ "tool_slug": "search_documents" }],
+      "knowledge_base_assignments": [{ "knowledge_base_name": "Handbook" }]
+    }
   ],
   "harnesses": [{ "slug": "support", "name": "Support", "status": "draft" }],
   "agents": [

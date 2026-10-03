@@ -1,0 +1,6 @@
+# Where `cavelon apply --env test` goes. Never a token or a secret value.
+# tenant: <slug or id>        # default: the tenant in cavelon.yaml
+harness: expense-approval
+# mode: overwrite             # or replace
+# runtime_bindings:           # the package's runtime requirement key -> this tenant's resource id
+#   <key>: <id>

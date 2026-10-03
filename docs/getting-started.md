@@ -125,7 +125,7 @@ package/
   manifest.yaml          the package format (v3)
   harnesses.yaml         the solution "support-faq", a draft
   knowledge_bases.yaml   the knowledge base "Support FAQ"
-  skills.yaml            "Answer from the FAQ": search the knowledge base, answer only from it
+  skills.yaml            "Answer from the FAQ": the search tool, the knowledge base it searches, and how to answer
   agents.yaml            one agent, its model and its prompt
 tests/
   smoke.yaml             four test cases: three the FAQ answers, one it must decline
@@ -133,6 +133,10 @@ seeds/faq/               three FAQ pages to upload
 ```
 
 Each file under `package/` is one section of the instance's package schema.
+A knowledge base reaches the agent only through a search tool: the skill
+carries the built-in `search_documents` in its `tool_assignments`, and names the
+knowledge base it searches. `cavelon validate` warns about an agent that is
+given a knowledge base without one.
 Open `package/agents.yaml`: the agent uses the model `gpt-4.1` from `openai`.
 Check which models your tenant has:
 
@@ -338,5 +342,8 @@ activates without you. See [MCP server](mcp.md) for what the agent can call.
   and run `cavelon apply --env prod`. Show that preview to a person before
   confirming it.
 - Catch an invalid package before each commit: `cavelon init --hook`.
+- Try a pipeline: [`examples/expense-approval/`](../examples/expense-approval/)
+  routes expense requests through a policy check to an approval by a person,
+  with a test suite that reaches the approval.
 - Read the [concepts](concepts.md), the [command reference](commands.md) and
   [troubleshooting](troubleshooting.md).
