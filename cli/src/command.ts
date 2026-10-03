@@ -82,7 +82,7 @@ export interface CommandSpec {
 export const GLOBAL_OPTIONS: Record<string, OptionSpec> = {
   json: { type: "boolean", description: "Print one JSON document instead of text." },
   instance: { type: "string", value: "<url>", description: "The instance URL (overrides CAVELON_URL and cavelon.yaml)." },
-  tenant: { type: "string", value: "<tenant>", description: "Tenant slug or id (overrides CAVELON_TENANT and cavelon.yaml)." },
+  tenant: { type: "string", value: "<tenant>", description: "Tenant slug, name or id (overrides CAVELON_TENANT and cavelon.yaml)." },
   help: { type: "boolean", short: "h", description: "Show help for the command." },
 };
 

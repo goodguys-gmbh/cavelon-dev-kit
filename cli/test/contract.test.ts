@@ -390,6 +390,7 @@ describe("the fake server answers in the published shapes", () => {
     const clone = await call("POST", `/api/v1/harnesses/${(harness.data as { id: string }).id}/clone`, { slug: "h2" });
     check("POST", "/api/v1/harnesses/{harness_id}/clone", 201, clone.data);
     check("GET", "/api/v1/auth/me", 200, (await call("GET", "/api/v1/auth/me")).data);
+    check("GET", "/api/v1/tenants/{tenant_id}", 200, (await call("GET", `/api/v1/tenants/${tenant}`)).data);
     check("GET", "/api/v1/tenants/current/quota-usage", 200, (await call("GET", "/api/v1/tenants/current/quota-usage")).data);
     check("GET", "/api/v1/meta/principal", 200, (await call("GET", "/api/v1/meta/principal")).data);
     const id = (harness.data as { id: string }).id;

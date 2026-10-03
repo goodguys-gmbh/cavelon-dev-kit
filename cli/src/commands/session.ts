@@ -11,7 +11,7 @@ import { listPreviews, readPull } from "../local-state.js";
 import type { Operation } from "../operations.js";
 import { expiryOf, readPrincipal } from "../principal.js";
 import { readHidden } from "../prompt.js";
-import { lookupTenantId, requireInstance, requireToken, type Session } from "../session.js";
+import { lookupTenantId, requireInstance, requireToken, TENANT_REF_HINT, type Session } from "../session.js";
 import { loadUserConfig, saveUserConfig, tokenKind, updateInstance } from "../user-config.js";
 
 interface Me {
@@ -90,13 +90,21 @@ export const login: CommandSpec = {
     let tenant: { ref: string; id: string; name?: string } | undefined;
     if (session.tenant && kind !== "api_key") {
       const found = await lookupTenantId(client, session.tenant);
-      if (!found) throw new CavelonError(ExitCode.failure, { code: "tenant_not_found", message: `No tenant "${session.tenant}" for this token.` });
+      if (!found) {
+        throw new CavelonError(ExitCode.failure, { code: "tenant_not_found", message: `No tenant "${session.tenant}" for this token.`, hint: TENANT_REF_HINT });
+      }
       tenant = { ref: session.tenant, ...found };
       client.target.tenantId = found.id;
     }
     // Check the token before storing it: a refused token is never kept.
     const { caps, needsTenant } = await readCapabilities(contracts, true);
     const me = await readMe(client);
+    // An instance older than the /meta routes answers them 404 before it checks
+    // the caller, so neither read above proved the token. One authenticated read
+    // of a long-standing route does: its 401 is thrown as a refusal.
+    if (!caps && !needsTenant && !me) {
+      await client.get("/api/v1/knowledge-bases", { query: { page_size: 1 }, allow: [400, 403, 404, 422] });
+    }
     if (needsTenant && !me) {
       throw new CavelonError(ExitCode.validation, {
         code: "tenant_required",
@@ -299,7 +307,7 @@ export const use: CommandSpec = {
       throw new CavelonError(ExitCode.failure, {
         code: "tenant_not_found",
         message: `No tenant "${ref}" that this token can see.`,
-        hint: "`cavelon tenant list` shows the tenants and their ids.",
+        hint: TENANT_REF_HINT,
       });
     }
     // Ask the instance once with that tenant, so a tenant the token cannot reach fails here.

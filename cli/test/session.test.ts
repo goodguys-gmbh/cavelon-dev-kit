@@ -2,6 +2,7 @@ import { statSync, readFileSync, writeFileSync, mkdirSync, existsSync, readdirSy
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { setKeyringFactoryForTests, type KeyringEntry } from "../src/credentials.js";
+import { instanceKey } from "../src/paths.js";
 import { startFakeServer, type FakeServer } from "./fake-server.js";
 import { cli, login, sandbox, type Sandbox } from "./helpers.js";
 
@@ -38,7 +39,7 @@ describe("login", () => {
     expect(readFileSync(path.join(sb.env.CAVELON_CONFIG_DIR!, "config.json"), "utf8")).not.toContain(token);
     expect(result.stdout + result.stderr).not.toContain(token);
     // The contracts were cached per instance and version.
-    const cached = readdirSync(path.join(sb.env.CAVELON_CACHE_DIR!, `127.0.0.1_${new URL(server.url).port}`, "v0.0.0-dev"));
+    const cached = readdirSync(path.join(sb.env.CAVELON_CACHE_DIR!, instanceKey(server.url), "v0.0.0-dev"));
     expect(cached).toEqual(expect.arrayContaining(["capabilities.json", "openapi.json", "error-catalog.json"]));
   });
 
@@ -80,6 +81,24 @@ describe("login", () => {
       expect(result.stderr).toMatch(/warning: .*Update cavelon/);
     } finally {
       server.state.capsPatch = {};
+    }
+  });
+
+  it("refuses a wrong API key on an instance older than the /meta routes, which answers 404 before checking the caller", async () => {
+    server.state.serveMeta = false;
+    try {
+      const wrong = await cli(sb, ["login", "--instance", server.url, "--token-stdin", "--json"], { stdin: "cbp_wrong\n" });
+      expect(wrong.code, wrong.stdout).toBe(7);
+      expect(wrong.json<{ error: { code: string } }>().error.code).toBe("unauthorized");
+      expect(existsSync(path.join(sb.env.CAVELON_CONFIG_DIR!, "credentials.json"))).toBe(false);
+
+      // A key the instance knows still logs in there.
+      const key = server.addToken({ kind: "key", tenantIds: [tenantA] });
+      const right = await cli(sb, ["login", "--instance", server.url, "--token-stdin", "--json"], { stdin: key });
+      expect(right.code, right.stdout + right.stderr).toBe(0);
+      expect(readFileSync(path.join(sb.env.CAVELON_CONFIG_DIR!, "credentials.json"), "utf8")).toContain(key);
+    } finally {
+      server.state.serveMeta = true;
     }
   });
 
@@ -229,6 +248,48 @@ describe("use and the tenant precedence", () => {
     expect(await tenantOf(["--tenant", "globex"], { CAVELON_TENANT: tenantA }, project)).toBe(tenantB);
   });
 
+  it("finds a member's tenant by its slug when its name differs, and remembers the id", async () => {
+    const initech = server.addTenant("initech", "Initech Corporation");
+    const token = server.addToken({ kind: "pat", tenantIds: [tenantA, initech], defaultTenant: tenantA });
+    // At login, before anything is remembered.
+    const logged = await cli(sb, ["login", "--instance", server.url, "--tenant", "initech", "--token-stdin", "--json"], { stdin: token });
+    expect(logged.code, logged.stdout + logged.stderr).toBe(0);
+    const fresh = sandbox();
+    try {
+      await login(fresh, server.url, token);
+      const who = await cli(fresh, ["whoami", "--tenant", "initech", "--json"]);
+      expect(who.code, who.stdout + who.stderr).toBe(0);
+      expect(who.json<{ tenant: { id: string } }>().tenant.id).toBe(initech);
+      const used = await cli(fresh, ["use", "initech", "--json"]);
+      expect(used.code, used.stdout + used.stderr).toBe(0);
+      expect(used.json()).toMatchObject({ tenant: { ref: "initech", id: initech, name: "Initech Corporation" } });
+      // A solution folder that names the slug, as the quickstart writes it.
+      const dir = path.join(fresh.home, "solution");
+      mkdirSync(dir);
+      writeFileSync(path.join(dir, "cavelon.yaml"), `instance: ${server.url}\ntenant: initech\n`);
+      server.state.requests.length = 0;
+      expect((await cli(fresh, ["harness", "list", "--json"], { cwd: dir })).code).toBe(0);
+      expect(server.state.requests.find((q) => q.path === "/api/v1/harnesses")?.headers["x-tenant-id"]).toBe(initech);
+      // The slug was resolved once and remembered: no detail is read again.
+      expect(server.state.requests.some((q) => q.path.startsWith("/api/v1/tenants/"))).toBe(false);
+    } finally {
+      fresh.cleanup();
+    }
+  });
+
+  it("tells a member who may not read the tenant's detail to use its name or id", async () => {
+    const umbrella = server.addTenant("umbrella", "Umbrella Holdings");
+    const token = server.addToken({ kind: "pat", tenantIds: [umbrella], defaultTenant: umbrella, permissions: ["agents.view"] });
+    await login(sb, server.url, token);
+    const result = await cli(sb, ["use", "umbrella", "--json"]);
+    expect(result.code).toBe(1);
+    const error = result.json<{ error: { code: string; hint: string } }>().error;
+    expect(error.code).toBe("tenant_not_found");
+    expect(error.hint).toMatch(/name or id/);
+    expect((await cli(sb, ["use", "Umbrella Holdings", "--json"])).code).toBe(0);
+    expect((await cli(sb, ["use", umbrella, "--json"])).code).toBe(0);
+  });
+
   it("refuses a tenant the token cannot reach", async () => {
     const token = server.addToken({ kind: "pat", tenantIds: [tenantA], defaultTenant: tenantA });
     await login(sb, server.url, token);
@@ -287,6 +348,25 @@ describe("instance and token precedence", () => {
     const result = await cli(sb, ["status", "--json"], { cwd: dir });
     expect(result.code).toBe(3);
     expect(result.json<{ error: { code: string } }>().error.code).toBe("project_file_has_secret");
+  });
+
+  it("lets --instance override an unusable CAVELON_URL or cavelon.yaml instance", async () => {
+    const token = server.addToken({ kind: "pat", tenantIds: [tenantA], defaultTenant: tenantA });
+    const env = { CAVELON_URL: "http://ci.internal" };
+    const status = await cli(sb, ["status", "--offline", "--instance", "https://cavelon.example.com", "--json"], { env });
+    expect(status.code, status.stdout).toBe(0);
+    expect(status.json<{ instance: { url: string; source: string } }>().instance).toEqual({ url: "https://cavelon.example.com", source: "option" });
+    const dir = path.join(sb.home, "lan");
+    mkdirSync(dir);
+    writeFileSync(path.join(dir, "cavelon.yaml"), "instance: http://cavelon.lan\n");
+    expect((await cli(sb, ["status", "--offline", "--instance", "https://cavelon.example.com", "--json"], { cwd: dir })).code).toBe(0);
+    const logged = await cli(sb, ["login", "--instance", server.url, "--token-stdin", "--json"], { env, stdin: token, cwd: dir });
+    expect(logged.code, logged.stdout + logged.stderr).toBe(0);
+    const out = await cli(sb, ["logout", "--instance", server.url, "--json"], { env, cwd: dir });
+    expect(out.json()).toEqual({ logged_out: [{ instance: server.url, deleted: true }] });
+    // Where the unusable URL is the one chosen, it is still refused.
+    expect((await cli(sb, ["status", "--offline", "--json"], { env })).code).toBe(2);
+    expect((await cli(sb, ["status", "--offline", "--json"], { cwd: dir })).code).toBe(2);
   });
 
   it("refuses plain http to a remote host", async () => {
@@ -358,5 +438,19 @@ describe("credential store", () => {
     } finally {
       setKeyringFactoryForTests(undefined);
     }
+  });
+});
+
+describe("the contract cache", () => {
+  it("keeps instances apart that differ in port or path, in / or _, or in http and https", () => {
+    const pairs = [
+      ["https://cavelon.example.com:8443", "https://cavelon.example.com/8443"],
+      ["https://a.example.com/team/a", "https://a.example.com/team_a"],
+      ["http://localhost:8100", "https://localhost:8100"],
+    ];
+    for (const [a, b] of pairs) expect(instanceKey(a!), `${a} and ${b}`).not.toBe(instanceKey(b!));
+    // Still readable, and the same for the same instance.
+    expect(instanceKey("https://cavelon.example.com:8443")).toMatch(/^cavelon\.example\.com_8443-[0-9a-f]{8}$/);
+    expect(instanceKey("https://cavelon.example.com:8443")).toBe(instanceKey("https://cavelon.example.com:8443"));
   });
 });

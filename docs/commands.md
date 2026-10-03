@@ -19,7 +19,7 @@ Every command takes these:
 |---|---|
 | `--json` | Print one JSON document instead of text. |
 | `--instance <url>` | The instance URL (overrides CAVELON_URL and cavelon.yaml). |
-| `--tenant <tenant>` | Tenant slug or id (overrides CAVELON_TENANT and cavelon.yaml). |
+| `--tenant <tenant>` | Tenant slug, name or id (overrides CAVELON_TENANT and cavelon.yaml). |
 | `-h, --help` | Show help for the command. |
 
 The instance, tenant and token can also come from the environment (`CAVELON_URL`, `CAVELON_TENANT`,

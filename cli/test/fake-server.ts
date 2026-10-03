@@ -152,6 +152,8 @@ export interface FakeState {
   /** An older instance's readiness, without `checks`. */
   readinessWithoutChecks?: boolean;
   servePrincipal: boolean;
+  /** False is an instance older than the /api/v1/meta routes: they answer 404 before any check of the caller, as unknown routes do. */
+  serveMeta: boolean;
   servePackageSchema: boolean;
   /** Changes the package schema snapshot before it is served, as a development build gains fields under one version. */
   packageSchemaEdit: ((schema: { properties: Record<string, unknown> }) => void) | null;
@@ -269,7 +271,31 @@ function effectiveRole(info: TokenInfo): string | undefined {
 function tenantPermissions(): string[] {
   const caps = JSON.parse(readContract("meta-capabilities.json")) as { limits: { values: Array<{ change?: { permissions: string[]; requires_role?: string[] } }>; tenant_quotas: { changes: Array<{ permissions: string[] }> } } };
   const named = [...caps.limits.values.flatMap((v) => (v.change && !v.change.requires_role ? v.change.permissions : [])), ...caps.limits.tenant_quotas.changes.flatMap((c) => c.permissions)];
-  return [...new Set([...named, "agents.view", "limits.view", "usage.view"])].sort();
+  return [...new Set([...named, "agents.view", "limits.view", "settings.view", "usage.view"])].sort();
+}
+
+/** A tenant as GET /tenants/{tenant_id} answers it, in TenantDetailResponse's shape. */
+function tenantDetailOf(tenant: FakeState["tenants"][number]) {
+  return {
+    ...tenant,
+    is_system: false,
+    is_academy: false,
+    last_activity_at: null,
+    settings: {},
+    agent_max_turns_default: 25,
+    context_source_limits: {
+      attached_documents: {
+        source_kind: "attached_documents",
+        configured_value: null,
+        effective_value: null,
+        mode: "inherited",
+        effective_mode: "auto",
+        provenance: "built_in",
+        persisted_path: "settings.context_source_limits.attached_documents",
+      },
+    },
+    effective_conversation_retention: {},
+  };
 }
 
 /** What /meta/principal publishes as the request's permissions. */
@@ -352,6 +378,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     importRequirementsChanged: null,
     ready: true,
     servePrincipal: true,
+    serveMeta: true,
     servePackageSchema: true,
     packageSchemaEdit: null,
     packageSchemaEtag: false,
@@ -419,6 +446,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     const info = token ? state.tokens.get(token) : undefined;
     const isDocs = p === "/llms.txt" || p.startsWith("/api/v1/docs/");
     if (isDocs && !state.serveDocs) return send(res, 404, { detail: "Not Found" });
+    if (!state.serveMeta && p.startsWith("/api/v1/meta/")) return send(res, 404, { detail: "Not Found" });
     // With personal access tokens off, their routes answer 404 before any check of
     // the caller, and every cvpat_ bearer is refused.
     if (state.features.personal_access_tokens_enabled === false) {
@@ -558,6 +586,18 @@ export async function startFakeServer(): Promise<FakeServer> {
       const offset = Number(url.searchParams.get("offset") ?? 0);
       const all = state.tenants.filter((t) => !search || t.slug.includes(search) || t.name.toLowerCase().includes(search));
       return send(res, 200, { items: all.slice(offset, offset + limit), total: all.length });
+    }
+
+    // A tenant's detail: tenants.view (Platform mode) reads any; otherwise settings.view in the tenant the caller acts in, and only that one.
+    const tenantDetail = /^\/api\/v1\/tenants\/([0-9a-f-]{36})$/.exec(p);
+    if (tenantDetail && method === "GET") {
+      const tenant = state.tenants.find((t) => t.id === tenantDetail[1]);
+      const platformRead = info.platform && !tenantId;
+      if (!platformRead && (tenantId !== tenantDetail[1] || !permissionsOf(info, tenantId).includes("settings.view"))) {
+        return send(res, 403, { detail: "Insufficient permissions" });
+      }
+      if (!tenant) return send(res, 404, { detail: "Tenant not found" });
+      return send(res, 200, tenantDetailOf(tenant));
     }
 
     // An operator's changes: a Platform-mode token of a role, without X-Tenant-Id.

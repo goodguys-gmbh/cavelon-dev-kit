@@ -45,7 +45,7 @@ meaning.
 |---|---|---|
 | `no_instance` | 2 | No instance chosen. Log in (`cavelon login --instance <url>`), set `CAVELON_URL`, or work in a folder with `cavelon.yaml`. |
 | `tenant_required` | 2 | The token reaches several tenants, or none (Platform mode). Choose one: `cavelon use <tenant>`, or `--tenant`. |
-| `tenant_not_found` | 1 | The tenant named by `--tenant`, `CAVELON_TENANT`, `cavelon.yaml` or `cavelon use` is not one your token reaches. `cavelon tenant list` shows those it does. |
+| `tenant_not_found` | 1 | The tenant named by `--tenant`, `CAVELON_TENANT`, `cavelon.yaml` or `cavelon use` is not one your token reaches, or your token finds no tenant by that slug: a member's token finds a slug only where it may view the tenant's settings. Use the tenant's name or id; `cavelon tenant list` shows those your token reaches. |
 | `foreign_url` | 2 | A request would have gone to another host than the instance; `cavelon` never sends the token elsewhere. |
 | `usage` "Refusing to send a token over plain http" | 2 | Use `https://`. For a test instance on a private network, set `CAVELON_ALLOW_HTTP=1`; `localhost` is always allowed. |
 

@@ -376,7 +376,8 @@ op read op://dev/crm/token | cavelon secrets set crm_api_token
   or sends anything (exit 7, `secret_needs_a_person`, as the instance would
   answer). MCP offers only `secrets_list`; an agent tells the person the exact
   `cavelon secrets set <name>` command instead.
-- `--env <name>` acts in the tenant `env/<name>.yaml` names, like `apply`.
+- `--env <name>` acts in the tenant `env/<name>.yaml` names, like `apply`. A
+  name without its env file is refused (exit 2) before anything is sent.
 
 ### Long-running work
 

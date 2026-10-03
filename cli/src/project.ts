@@ -1,3 +1,4 @@
+import { promises as fs } from "node:fs";
 import path from "node:path";
 import { parse } from "yaml";
 import { readTextFile } from "./fsutil.js";
@@ -98,7 +99,6 @@ function refuseCredentials(file: string, map: Record<string, unknown>): void {
 export interface EnvFile {
   name: string;
   file: string;
-  exists: boolean;
   tenant?: string;
   harness?: string;
   mode?: "overwrite" | "replace";
@@ -108,18 +108,47 @@ export interface EnvFile {
 }
 
 export const ENV_DIR = "env";
+const ENV_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 
 export function envFilePath(project: ProjectConfig, name: string): string {
-  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(name)) {
+  if (!ENV_NAME.test(name)) {
     throw usageError(`"${name}" is not an environment name.`, "Use letters, digits, dashes and underscores, as in --env test.");
   }
   return path.join(project.root, ENV_DIR, `${name}.yaml`);
 }
 
+/** The environments the solution has an env file for, by name. */
+export async function envNames(project: ProjectConfig): Promise<string[]> {
+  let entries: string[];
+  try {
+    entries = await fs.readdir(path.join(project.root, ENV_DIR));
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((entry) => entry.endsWith(".yaml"))
+    .map((entry) => entry.slice(0, -".yaml".length))
+    .filter((name) => ENV_NAME.test(name))
+    .sort();
+}
+
+/**
+ * A missing env file is refused, never read as "no env file": a typo in
+ * `--env prod`, or a prod file nobody has written yet, would otherwise act in
+ * cavelon.yaml's tenant and report success.
+ */
 export async function readEnvFile(project: ProjectConfig, name: string): Promise<EnvFile> {
   const file = envFilePath(project, name);
   const text = await readTextFile(file);
-  if (text === undefined) return { name, file, exists: false, runtimeBindings: {}, raw: {} };
+  if (text === undefined) {
+    const known = await envNames(project);
+    throw usageError(
+      `No ${ENV_DIR}/${name}.yaml in this solution; nothing was sent.`,
+      known.length
+        ? `Its env files: ${known.join(", ")}. Pass one of them to --env, or write ${ENV_DIR}/${name}.yaml first.`
+        : "`cavelon init` writes env/test.yaml and env/prod.yaml.",
+    );
+  }
   let raw: unknown;
   try {
     raw = parse(text) ?? {};
@@ -164,7 +193,6 @@ export async function readEnvFile(project: ProjectConfig, name: string): Promise
   return {
     name,
     file,
-    exists: true,
     tenant: stringField(map.tenant, "id", "slug"),
     harness: stringField(map.harness, "slug", "id"),
     mode: mode as EnvFile["mode"],

@@ -51,7 +51,9 @@ for a public widget), **propose the change; the person decides.**
   without `confirm`). It changes nothing and shows the old and the new value,
   the operation it would send and the permissions it needs. Show that to the
   person with your reason (what fails or waits now), and wait for their answer.
-- Only after they agreed, run it again with `--confirm`. Never raise a limit on
+- Only after they agreed, run the confirm command it printed (the `confirm`
+  field in `--json`) as it stands: it keeps the `--env` and `--tenant` of the
+  preview, so it changes the limit the preview showed. Never raise a limit on
   your own, never pick a value higher than the need you named, and never change
   one without telling them.
 - The same goes for the tenant's monthly inference budget
@@ -206,8 +208,8 @@ schema has them: `cavelon validate` reports an unknown section):
   `variables_set` tool) when the value is not a credential and you know it;
   ask the person otherwise. `cavelon variables list` shows them.
 - **Secrets are set by a person, never by you.** Tell the person the exact
-  command `apply` printed, `cavelon secrets set <name>` (with `--env <name>`
-  when there is one), to run in their own terminal; it asks for the value
+  command `apply` printed, `cavelon secrets set <name>` (with the `--env` and
+  `--tenant` it printed), to run in their own terminal; it asks for the value
   without echoing it. Never ask for the value, never put it into a file,
   an argument or a message, and never put a credential into a variable.
   `cavelon secrets list` (the `secrets_list` tool) shows which are set,

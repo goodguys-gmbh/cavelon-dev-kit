@@ -57,6 +57,7 @@
     "GET /api/v1/tenants/current/quota-usage",
     "PATCH /api/v1/tenants/current/rate-limits",
     "PATCH /api/v1/tenants/current/upload-defaults",
+    "GET /api/v1/tenants/{tenant_id}",
     "GET /api/v1/tenants/{tenant_id}/api-keys",
     "PATCH /api/v1/tenants/{tenant_id}/limits",
     "GET /api/v1/test-runs/{run_id}",
