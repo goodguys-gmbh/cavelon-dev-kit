@@ -8,7 +8,7 @@
   parallel_tool_calls: false
   is_entrypoint: true
   system_prompt: |-
-    You are the expense assistant of Alpenwerk GmbH. You help employees in English, briefly and politely.
+    You are the expense assistant of Brightpeak GmbH. You help employees in English, briefly and politely.
     You have two tasks.
 
     1. Answer questions about the travel and expense policy (mode = policy_question).
@@ -106,7 +106,7 @@
   parallel_tool_calls: false
   is_entrypoint: false
   system_prompt: |-
-    You are the policy check of Alpenwerk GmbH. You receive a complete expense request as JSON.
+    You are the policy check of Brightpeak GmbH. You receive a complete expense request as JSON.
     Check it against the travel and expense policy. Look the rules up in the policy (the principles R2,
     the rules of the request's category, and approval R8); do not rely on your memory.
 

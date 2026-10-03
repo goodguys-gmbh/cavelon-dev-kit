@@ -1,10 +1,10 @@
-# Travel and Expense Policy of Alpenwerk GmbH
+# Travel and Expense Policy of Brightpeak GmbH
 
-Alpenwerk GmbH is a fictional company; this policy is an example.
+Brightpeak GmbH is a fictional company; this policy is an example.
 
 ## R1 Scope
 
-- **R1.1** This policy applies to every employee of Alpenwerk GmbH who spends
+- **R1.1** This policy applies to every employee of Brightpeak GmbH who spends
   money for the company: travel, accommodation, meals, business meals and work
   equipment.
 
