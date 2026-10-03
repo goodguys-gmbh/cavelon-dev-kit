@@ -315,8 +315,11 @@ these lessons:
   A copy pasted into a prompt drifts.
 - **Enforce an approval rule through who may decide.** A rule such as "nobody
   approves their own request" written only in the memo is a request to the
-  approver, not a control. Configure the approval step so the submitter cannot
-  decide it, and ask the agent to read the instance's docs on approvals for how.
+  approver, not a control. An approval step does not check today who submitted
+  the request: anyone who holds the permission to decide approvals can decide
+  any of them. Give that permission only to the people who approve, keep the
+  people who submit requests out of it, and let the memo name the rule so the
+  approver can check it.
 
 ## Claude Code, Codex and other agents
 
