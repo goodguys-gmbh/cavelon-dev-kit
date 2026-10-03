@@ -33,7 +33,9 @@ the built-in default.
 Below the limits, **tenant quotas** show what the tenant has used: knowledge
 bases, documents, storage, agents, tools, and the monthly inference and
 Processing Step budgets, each with its use and state. `cavelon status` names
-every quota at 80 % or more.
+every quota at 80 % or more. When the use cannot be read, `limits` still shows
+the limits and says why the quotas are missing (`--json`:
+`tenant_quotas.unavailable`).
 
 A limit the instance does not publish is never assumed. An older instance that
 publishes no limits gets a note from `limits`, and the other commands send
@@ -94,6 +96,9 @@ cavelon limits set rate_limit_chat_rpm none --confirm         # back to the plat
 cavelon limits set monthly_processing_step_cap none --confirm # a Tenant Owner removes the cap
 ```
 
+A Processing Step cap of `0` caps nothing, like `none`: with no cap set,
+either says it is already none and sends nothing.
+
 A value above an operator's ceiling (a rate limit above the platform's
 maximum, for example) is refused with `limit_above_platform_ceiling`, naming
 the ceiling and the setting the operator raises. `cavelon explain
@@ -106,7 +111,8 @@ limit_above_platform_ceiling` lists today's ceilings.
 | `limit_changed_by_operator` | 7 | only the operator changes this limit; the message names the setting and where |
 | `platform_role_required` | 7 | an operator's change needs a Platform-mode token of the role it names |
 | `forbidden` | 7 | your credential lacks the permission the change needs |
-| `request_invalid` | 3 | the value is outside the published bounds or the wrong kind |
+| `usage` | 2 | the value is not of the limit's kind: a word or a fraction for a whole number, a unit that is not the limit's, neither on nor off for a switch |
+| `request_invalid` | 3 | the value is outside the published bounds |
 | `operation_unavailable` | 1 | this instance does not publish how to change the limit (an older version); change it in the Admin |
 | `limit_not_found` | 1 | the instance publishes no such limit, or none you can change; `cavelon limits` lists them |
 

@@ -55,7 +55,11 @@ each call under your shell's time limit). `test run --wait --timeout 5m` does
 both in one call where your client allows long commands; when its wait ends
 first, its last line is the command that resumes, with the same timeout. Exit 1 after a run
 means a case failed, even though the run itself finished; the output names the
-cases that did not pass and why, and `cavelon trace <run>` shows each one.
+cases that did not pass and why, and `cavelon trace <run>` shows each one. Exit
+1 also means the run measured nothing comparable (steps not run, technical
+errors, no pass rate): it is no evidence the solution works, so do not go on to
+`activate`; find the cause and run again. Exit 5 means answers wait for a
+person's verdict or a value a case needs: tell the person.
 
 ## Reading what happened
 

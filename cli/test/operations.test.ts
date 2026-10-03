@@ -172,6 +172,23 @@ describe("kb upload", () => {
     }
   });
 
+  it("reports what was uploaded when the answer to a later batch breaks off", async () => {
+    const dir = path.join(sb.home, "many-cut");
+    mkdirSync(dir, { recursive: true });
+    for (let i = 0; i < 25; i++) writeFileSync(path.join(dir, `f-${String(i).padStart(2, "0")}.md`), "x");
+    server.state.interruptions = [{ method: "POST", path: /\/documents\/upload$/, mode: "cut", skip: 1 }];
+    try {
+      const result = await cli(sb, ["kb", "upload", dir, "--kb", "FAQ", "--json"]);
+      expect(result.code, result.stdout).toBe(8);
+      const data = result.json<{ operation_ids: string[]; not_uploaded: string[]; error: { code: string } }>();
+      expect(data.operation_ids).toHaveLength(20);
+      expect(data.not_uploaded).toHaveLength(5);
+      expect(data.error.code).toBe("network_error");
+    } finally {
+      server.state.interruptions = [];
+    }
+  });
+
   it("needs --kb and an existing knowledge base", async () => {
     expect((await cli(sb, ["kb", "upload", sb.home])).code).toBe(2);
     const missing = await cli(sb, ["kb", "upload", path.join(sb.home, "docs"), "--kb", "Nope", "--json"]);
@@ -215,6 +232,62 @@ describe("test run", () => {
     } finally {
       server.state.runSummary = { passed: 2, failed: 0, pass_rate: 1 };
     }
+  });
+
+  describe("a run that measured nothing comparable", () => {
+    afterAll(() => {
+      server.state.runSummary = { passed: 2, failed: 0, pass_rate: 1 };
+    });
+    const notRun = { passed: 0, failed: 0, errors: 0, not_run: 3, comparable: false, non_comparable_reasons: ["unrun_steps"], pass_rate: null };
+    const pendingReview = { passed: 0, failed: 0, errors: 0, pending_review: 2, comparable: false, pass_rate: null };
+
+    async function waitOn(summary: Record<string, unknown>) {
+      server.state.runSummary = summary;
+      const started = await cli(sb, ["test", "run", "--suite", "smoke", "--json"]);
+      expect(started.code, started.stdout).toBe(0);
+      const operationId = started.json<{ operation_ids: string[] }>().operation_ids[0]!;
+      return { testRun: await cli(sb, ["test", "run", "--suite", "smoke", "--wait"]), wait: await cli(sb, ["wait", operationId, "--json"]) };
+    }
+
+    it("exits 1 when steps were not run, from test run --wait and from wait, and names the count", async () => {
+      const { testRun, wait } = await waitOn(notRun);
+      expect(testRun.code, testRun.stdout).toBe(1);
+      expect(testRun.stdout).toMatch(/smoke: completed {2}passed 0 {2}failed 0 {2}errors 0 {2}3 not run {2}pass_rate null {2}not comparable \(unrun_steps\)/);
+      expect(testRun.stdout).toMatch(/finished, but cases did not pass: 3 not run/);
+      expect(wait.code, wait.stdout).toBe(1);
+      expect(wait.json<{ failed_results: Array<Record<string, unknown>> }>().failed_results[0]).toMatchObject({
+        counts: { not_run: 3 },
+        comparable: false,
+        non_comparable_reasons: ["unrun_steps"],
+        exit_code: 1,
+      });
+    });
+
+    it("exits 5 when answers wait for a manual verdict, from test run --wait and from wait", async () => {
+      const { testRun, wait } = await waitOn(pendingReview);
+      expect(testRun.code, testRun.stdout).toBe(5);
+      expect(testRun.stdout).toMatch(/finished, but answers wait for a person: 2 pending review/);
+      expect(wait.code, wait.stdout).toBe(5);
+      expect(wait.json<{ failed_results: Array<Record<string, unknown>> }>().failed_results[0]).toMatchObject({ counts: { pending_review: 2 }, exit_code: 5 });
+    });
+
+    it("exits 1 for a run the instance marks not comparable without a count, and for an older instance's null pass rate", async () => {
+      for (const summary of [
+        { passed: 0, failed: 0, errors: 0, comparable: false, non_comparable_reasons: ["no_behavior_verdict"], pass_rate: null },
+        { passed: 0, failed: 0, errors: 0, pass_rate: null },
+      ]) {
+        const { testRun, wait } = await waitOn(summary);
+        expect(testRun.code, testRun.stdout).toBe(1);
+        expect(testRun.stdout).toMatch(/it measured nothing comparable and has no pass rate/);
+        expect(wait.code, wait.stdout).toBe(1);
+      }
+    });
+
+    it("an older instance's summary without the newer counts still passes", async () => {
+      const { testRun, wait } = await waitOn({ passed: 2, failed: 0, errors: 0 });
+      expect(testRun.code, testRun.stdout).toBe(0);
+      expect(wait.code, wait.stdout).toBe(0);
+    });
   });
 
   it("--wait ends its output with the one command that resumes, with the same timeout (exit 6)", async () => {

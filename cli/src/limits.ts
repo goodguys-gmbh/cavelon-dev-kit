@@ -1,5 +1,6 @@
 import type { Context } from "./command.js";
 import { CavelonError, ExitCode, type ExitCodeValue } from "./errors.js";
+import type { ApiResponse } from "./http.js";
 import { cavelonCommand } from "./shell.js";
 
 /**
@@ -433,8 +434,15 @@ export async function readQuotas(ctx: Context, limits: PublishedLimits): Promise
   const link = limits.tenantQuotas;
   if (!link) return undefined;
   const client = await ctx.client();
-  const response = await client.get<Record<string, unknown>>(link.path, { allow: [400, 403, 404] });
   const base = { path: link.path, docs: link.docs ?? null };
+  let response: ApiResponse<Record<string, unknown>>;
+  try {
+    response = await client.get<Record<string, unknown>>(link.path, { allow: [400, 403, 404] });
+  } catch (error) {
+    // The quotas add to the limits already read; a failing quota route must not hide them.
+    if (!(error instanceof CavelonError)) throw error;
+    return { ...base, items: [], unavailable: `${link.path}: ${error.message}` };
+  }
   if (response.status !== 200 || !response.data || typeof response.data !== "object") {
     return { ...base, items: [], unavailable: `${link.path} answered ${response.status}.` };
   }

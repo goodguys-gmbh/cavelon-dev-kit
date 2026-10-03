@@ -497,10 +497,11 @@ function sameValue(a: unknown, b: unknown): boolean {
 async function previousValue(ctx: Context, published: PublishedLimits, target: Target): Promise<Value | undefined> {
   if (target.flag) return target.flag.enabled;
   if (target.kind === "quota") {
-    // The quota row that names this change holds the setting's current value.
+    // A quota published with its value says it; its use row reports no cap as 0, which the instance stores as none.
+    if (target.quota) return capValue(target.quota.value);
+    // Otherwise the quota row that names this change holds the setting's current value.
     const row = await quotaSetting(ctx, published, target.key).catch(() => undefined);
-    if (row && (typeof row.value === "number" || row.value === null)) return row.value;
-    return target.quota ? target.quota.value : undefined;
+    return row && (typeof row.value === "number" || row.value === null) ? row.value : undefined;
   }
   const limit = target.limit!;
   // One tenant's own cap: the entry's value when it is the tenant's, else it has none.
@@ -510,10 +511,18 @@ async function previousValue(ctx: Context, published: PublishedLimits, target: T
   return limit.value as Value;
 }
 
+/** A cap of 0 caps nothing: the same as none. */
+function capValue(value: Value): Value {
+  return typeof value === "number" && value <= 0 ? null : value;
+}
+
 /** Why the change would change nothing, or undefined. */
 function noChange(target: Target, previous: Value | undefined, value: Value, from: string): string | undefined {
   if (target.flag) return previous === value ? `${target.key} is already ${from} (${target.flag.setting})` : undefined;
-  if (target.kind === "quota") return previous !== undefined && sameValue(previous, value) ? `${target.key} is already ${from}` : undefined;
+  if (target.kind === "quota") {
+    const wanted = target.quota ? capValue(value) : value;
+    return previous !== undefined && sameValue(previous, wanted) ? `${target.key} is already ${from}` : undefined;
+  }
   const limit = target.limit!;
   if (target.scope === "one_tenant") {
     if (value === null && previous === null) return `${target.key} has no cap of this tenant's own to clear (source: ${limit.source})`;
@@ -554,6 +563,12 @@ function answeredValue(target: Target, data: unknown, sent: Value): { value: unk
   }
   const own = changed.find((c) => (c as { setting?: unknown })?.setting === target.limit?.setting) as { new?: unknown } | undefined;
   return { value: own && "new" in own ? own.new : sent, changed };
+}
+
+/** Whether the instance's list of changes changed anything; an answer without one is taken as a change. */
+function reportsChange(changes: unknown[]): boolean {
+  const pairs = changes.filter((c): c is { old: unknown; new: unknown } => typeof c === "object" && c !== null && "old" in c && "new" in c);
+  return pairs.length < changes.length || changes.length === 0 || pairs.some((c) => !sameValue(c.old, c.new));
 }
 
 /** Whether the person named the tenant on this command: then a limit's tenant_change applies. */
@@ -733,7 +748,7 @@ export const limitsSet: CommandSpec = {
         ...(answered.source ? { source: answered.source } : {}),
         ...(answered.origin ? { origin: answered.origin } : {}),
         changes: answered.changed,
-        changed: true,
+        changed: reportsChange(answered.changed),
         sent: true,
       },
       text: `Changed ${key}: ${from} → ${now}${where}.`,

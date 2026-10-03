@@ -4,7 +4,7 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildArchive } from "../src/tar.js";
 import { readTar, type FakeSandbox, type FakeTrigger, type LoopPlan } from "./fake-long-running.js";
-import { startFakeServer, type FakeServer } from "./fake-server.js";
+import { startFakeServer, traceFixture, type FakeServer } from "./fake-server.js";
 import { cli, login, sandbox, type CliResult, type Sandbox } from "./helpers.js";
 
 /**
@@ -146,6 +146,14 @@ describe("the counter loop (no Sandbox)", () => {
     operationId = data.operation_id;
   });
 
+  it("trace follows the operation loop start printed to its trigger run's traces", async () => {
+    const traceId = randomUUID();
+    server.state.traces.set(`trigger:${runId}`, [traceFixture(traceId, null)]);
+    const result = await cli(sb, ["trace", operationId, "--json"]);
+    expect(result.code, result.stdout).toBe(0);
+    expect(result.json()).toMatchObject({ kind: "trigger", traces: { items: [{ trace_id: traceId, spans_command: `cavelon trace ${runId} --kind trigger --trace ${traceId}` }] } });
+  });
+
   it("watches the iterations as a stream until the loop completes", async () => {
     const watched = await cli(sb, ["loop", "watch", runId, "--json", "--timeout", "30s"]);
     expect(watched.code, watched.stdout + watched.stderr).toBe(0);
@@ -182,6 +190,55 @@ describe("the counter loop (no Sandbox)", () => {
     expect(cancelled.json()).toMatchObject({ cancelled: true, run: { status: "cancelled" } });
     expect((await cli(sb, ["loop", "cancel", run, "--confirm", "--json"])).json()).toMatchObject({ cancelled: false });
     expect((await cli(sb, ["loop", "watch", run, "--json"])).code).toBe(1);
+  });
+});
+
+describe("loop start's Idempotency-Key", () => {
+  let trigger: FakeTrigger;
+  const runsOf = () => server.state.lr.runs.filter((r) => r.trigger.id === trigger.id);
+
+  beforeAll(() => {
+    trigger = addTrigger("keyed", addHarness("keyed-parent"));
+  });
+
+  it("always sends one, and says which in --json", async () => {
+    const started = await cli(sb, ["loop", "start", "keyed", "--json"]);
+    expect(started.code, started.stdout).toBe(0);
+    const key = started.json<{ idempotency_key: string }>().idempotency_key;
+    expect(key).toMatch(/^[0-9a-f-]{36}$/);
+    expect(requestsTo("POST", `/api/v1/triggers/${trigger.id}/run`).pop()!.headers["idempotency-key"]).toBe(key);
+  });
+
+  it("two starts with the same key create one run", async () => {
+    const key = randomUUID();
+    const before = runsOf().length;
+    const first = await cli(sb, ["loop", "start", "keyed", "--idempotency-key", key, "--json"]);
+    const second = await cli(sb, ["loop", "start", "keyed", "--idempotency-key", key, "--json"]);
+    expect([first.code, second.code]).toEqual([0, 0]);
+    expect(second.json<{ run_id: string }>().run_id).toBe(first.json<{ run_id: string }>().run_id);
+    expect(runsOf().length).toBe(before + 1);
+  });
+
+  it("a start that timed out names its key, and the retry with it starts no second run", async () => {
+    const before = runsOf().length;
+    server.state.interruptions = [{ method: "POST", path: new RegExp(`/api/v1/triggers/${trigger.id}/run$`), mode: "stall" }];
+    let timedOut: CliResult;
+    try {
+      timedOut = await cli(sb, ["loop", "start", "keyed", "--json"], { env: { CAVELON_HTTP_TIMEOUT_MS: "500" } });
+    } finally {
+      server.state.interruptions = [];
+    }
+    expect(timedOut.code, timedOut.stdout).toBe(8);
+    const error = timedOut.json<{ error: { code: string; hint: string; details: { idempotency_key: string } } }>().error;
+    expect(error.code).toBe("request_timeout");
+    const key = error.details.idempotency_key;
+    expect(error.hint).toBe(`Retry with --idempotency-key ${key}, so the instance does not do it twice. CAVELON_HTTP_TIMEOUT_MS raises the limit per request.`);
+    // The instance got the start.
+    expect(runsOf().length).toBe(before + 1);
+
+    const retried = await cli(sb, ["loop", "start", "keyed", "--idempotency-key", key, "--json"]);
+    expect(retried.code, retried.stdout).toBe(0);
+    expect(runsOf().length).toBe(before + 1);
   });
 });
 
@@ -381,6 +438,65 @@ describe("a customer VM", () => {
     expect(sent.headers["idempotency-key"]).toMatch(/^[0-9a-f-]{36}$/);
     // Its results come out with cat, its single allowed solution chosen without --harness.
     expect((await cli(sb, ["sandbox", "cat", "spec-vm", "spec.md"])).stdout).toBe("spec\n");
+  });
+});
+
+describe("an instance that does not serve its OpenAPI", () => {
+  const plain = sandbox();
+  let vm: FakeSandbox;
+  let containers: FakeSandbox;
+
+  beforeAll(async () => {
+    server.state.serveOpenapi = false;
+    await login(plain, server.url, token);
+    vm = addSandbox("plain-vm", "customer_vm", [addHarness("plain-vm-agent")]);
+    containers = addSandbox("plain-box", "isolated_container", [addHarness("plain-box-agent")], { "out/a.txt": "a\n" });
+    addTrigger("plain-loop", addHarness("plain-loop-parent"), { iterations: 50, sandboxId: containers.id });
+    mkdirSync(path.join(plain.home, "seed"), { recursive: true });
+    writeFileSync(path.join(plain.home, "seed", "in.txt"), "in\n");
+  });
+  afterAll(() => {
+    server.state.serveOpenapi = true;
+    plain.cleanup();
+  });
+
+  const lastTo = (method: string, fragment: string) => requestsTo(method, fragment).pop()!;
+
+  it("validates and refreshes a Sandbox with If-Match and the key as headers", async () => {
+    const validated = await cli(plain, ["sandbox", "validate", "plain-vm", "--json"]);
+    expect(validated.code, validated.stdout).toBe(0);
+    expect(validated.stderr).toMatch(/Arguments are not checked before sending/);
+    expect(lastTo("POST", `/sandboxes/${vm.id}/validate`).headers["if-match"]).toBe(`"${vm.config_version - 2}"`);
+
+    const refreshed = await cli(plain, ["sandbox", "refresh", "plain-vm", "--json"]);
+    expect(refreshed.code, refreshed.stdout).toBe(0);
+    const sent = lastTo("POST", `/sandboxes/${vm.id}/refresh-workspace`);
+    expect(sent.headers["if-match"]).toMatch(/^"\d+"$/);
+    expect(sent.headers["idempotency-key"]).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it("seeds a Sandbox and exports its artifacts with the key as a header", async () => {
+    const seeded = await cli(plain, ["sandbox", "seed", "plain-box", "seed", "--confirm", "--wait", "--json"]);
+    expect(seeded.code, seeded.stdout).toBe(0);
+    expect(lastTo("POST", `/sandboxes/${containers.id}/artifact-jobs`).headers["idempotency-key"]).toMatch(/^[0-9a-f-]{36}$/);
+
+    const exported = await cli(plain, ["artifacts", "export", "plain-box", "--wait", "--out", "plain.tar", "--json"]);
+    expect(exported.code, exported.stdout).toBe(0);
+    expect(lastTo("POST", `/sandboxes/${containers.id}/artifact-jobs`).headers["idempotency-key"]).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it("pauses and resumes a loop with the key as a header", async () => {
+    const started = await cli(plain, ["loop", "start", "plain-loop", "--json"]);
+    expect(started.code, started.stdout).toBe(0);
+    const runId = started.json<{ run_id: string }>().run_id;
+    const paused = await cli(plain, ["loop", "pause", runId, "--json"]);
+    expect(paused.code, paused.stdout).toBe(0);
+    expect(lastTo("POST", "/pause").headers["idempotency-key"]).toMatch(/^[0-9a-f-]{36}$/);
+    await cli(plain, ["wait", started.json<{ operation_id: string }>().operation_id]);
+    const resumed = await cli(plain, ["loop", "resume", runId, "--json"]);
+    expect(resumed.code, resumed.stdout).toBe(0);
+    expect(lastTo("POST", "/resume").headers["idempotency-key"]).toMatch(/^[0-9a-f-]{36}$/);
+    await cli(plain, ["loop", "cancel", runId, "--confirm"]);
   });
 });
 

@@ -13,13 +13,13 @@ import {
   type Context,
 } from "../command.js";
 import { capacityCodeIn, capacityHint, noteLines, runCapacityNote, type CapacityNote, type RunState } from "../capacity.js";
-import { CavelonError, ExitCode, usageError } from "../errors.js";
+import { CavelonError, ExitCode, usageError, type ExitCodeValue } from "../errors.js";
 import { confinedPath } from "../paths.js";
 import { clip, keyValues, moreHint, table } from "../format.js";
 import { callStable } from "../invoke.js";
 import { bindsNow, changedBy, limitError, limitsOrWarn, readLimits, type Limit, type PublishedLimits } from "../limits.js";
 import { getOperation } from "../operations.js";
-import { caseCounts, caseLabel, failedCase, NOT_PASSED, type TestResultState } from "../results.js";
+import { caseCounts, caseLabel, countsText, failedCase, NOT_PASSED, runVerdict, type TestResultState } from "../results.js";
 import { isUuid } from "../session.js";
 import { cavelonCommand, shellWord } from "../shell.js";
 import { readZipSummary, ZipError, type ZipSummary } from "../zip.js";
@@ -461,12 +461,17 @@ interface TestRun {
   operation_id?: string | null;
 }
 
-/** The counts of a test run's summary that it carries. */
+/** The counts of a test run's summary that it carries, and what kept it from passing. */
 function summaryText(summary: Record<string, unknown>): string {
-  return ["passed", "failed", "errors", "pass_rate"]
-    .filter((k) => k in summary)
-    .map((k) => k + " " + String(summary[k]))
-    .join("  ");
+  const verdict = runVerdict(summary);
+  const shown = ["passed", "failed", "errors"].filter((k) => k in summary).map((k) => k + " " + String(summary[k]));
+  const others = Object.fromEntries(Object.entries(verdict.counts).filter(([k]) => !["failed", "errors"].includes(k)));
+  if (Object.keys(others).length) shown.push(countsText(others));
+  if ("pass_rate" in summary) shown.push(`pass_rate ${String(summary.pass_rate)}`);
+  if (verdict.comparable === false) {
+    shown.push(`not comparable${verdict.non_comparable_reasons.length ? ` (${verdict.non_comparable_reasons.join(", ")})` : ""}`);
+  }
+  return shown.join("  ");
 }
 
 /** `cavelon wait` for the runs still going, with the caller's timeout so each call fits the same shell limit. */
@@ -479,7 +484,8 @@ export const testRun: CommandSpec = {
   summary: "Start test-suite runs; returns operation ids.",
   description:
     "Without --suite, runs every suite of the solution (--harness, or cavelon.yaml's harness).\n" +
-    "With --wait, exits 1 when a case failed, 5 when answers wait for a manual verdict.",
+    "With --wait, exits 1 when a case failed or a run measured nothing comparable (cases not run, technical errors),\n" +
+    "5 when answers wait for a manual verdict or a value a case needs.",
   readOnly: false,
   mcpTool: "test_run",
   options: {
@@ -542,14 +548,20 @@ export const testRun: CommandSpec = {
       // The operation says the run finished; the run's summary says whether its cases passed (the wait names them).
       const results = [];
       let failedCases = 0;
+      let verdictCode: ExitCodeValue = ExitCode.ok;
       for (const run of runs) {
         const latest = await callStable<TestRun>(ctx, "GET", "/api/v1/test-runs/{run_id}", "test runs", { params: { run_id: [run.id] } });
         const { failed, errors } = caseCounts(latest.summary);
         failedCases += failed + errors;
+        // A run that is still going has no verdict yet; the wait's own exit code says so.
+        if (!waited.pending.includes(run.operation_id ?? "")) {
+          const code = runVerdict(latest.summary).exit_code;
+          if (code === ExitCode.failure || (code === ExitCode.needsAction && verdictCode === ExitCode.ok)) verdictCode = code;
+        }
         results.push({ run_id: latest.id, suite: latest.suite_name ?? latest.suite_id, status: latest.status, summary: latest.summary ?? {} });
       }
       let exitCode = waited.exitCode;
-      if (exitCode === ExitCode.ok && failedCases > 0) exitCode = ExitCode.failure;
+      if (exitCode === ExitCode.ok) exitCode = verdictCode;
       // The bounded wait ended first: the last line is the one command that picks the runs up again.
       const resume = waited.pending.length ? resumeCommand(waited.pending, rawTimeout) : undefined;
       const text = [
@@ -808,15 +820,18 @@ export const trace: CommandSpec = {
     const cursor = stringOption(input, "cursor");
     if (id.startsWith("op_")) {
       const op = await getOperation(await ctx.client(), id);
-      if (!op.result_ref) throw new CavelonError(ExitCode.failure, { code: "no_result", message: `${id} has no result yet (${op.status}).` });
-      if (op.result_ref.type !== "test_run") {
+      const ref = op.result_ref;
+      if (!ref) throw new CavelonError(ExitCode.failure, { code: "no_result", message: `${id} has no result yet (${op.status}).` });
+      // A trigger run (what `loop start` starts) has traces of its own; a test run, its results'.
+      const triggerRun = ref.type === "agent_run" || Boolean(ref.href?.startsWith("/api/v1/triggers/runs/"));
+      if (ref.type !== "test_run" && !triggerRun) {
         throw new CavelonError(ExitCode.failure, {
           code: "no_trace",
-          message: `${id} is a ${op.kind}; its result is a ${op.result_ref.type}, which has no trace.`,
+          message: `${id} is a ${op.kind}; its result is a ${ref.type}, which has no trace.`,
         });
       }
-      id = op.result_ref.id;
-      kind = "test";
+      id = ref.id;
+      kind = triggerRun ? "trigger" : "test";
     }
     const traceId = stringOption(input, "trace");
     const spanId = stringOption(input, "span");

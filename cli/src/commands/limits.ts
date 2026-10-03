@@ -93,7 +93,7 @@ export const limits: CommandSpec = {
     if (!published.published) {
       ctx.warn("This instance does not publish its limits (it is older than the limits in /api/v1/meta/capabilities); none is assumed.");
       return {
-        data: { published: false, groups: [], tenant_quotas: null, near: [], branch_concurrency: null },
+        data: { published: false, groups: [], tenant_quotas: null, quota_values: [], near: [], branch_concurrency: null },
         text: "This instance does not publish its limits. Commands send as they are, and the instance answers for itself.",
       };
     }

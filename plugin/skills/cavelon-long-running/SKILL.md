@@ -62,7 +62,11 @@ cavelon wait <operation-id> --timeout 90s            # exit 0 done, 1 failed, 5 
 ```
 
 A loop started from `cavelon` runs **as the person whose token it is**, checked
-again on every iteration. Keep each `watch` or `wait` under your shell's time
+again on every iteration. If `loop start` exits 8 (a timeout, a cut
+connection), the run may have started: retry only with the
+`--idempotency-key <key>` its error names, never without it, or a second run
+starts and spends the budget again. `cavelon trace <operation-id>` reads the
+run's traces. Keep each `watch` or `wait` under your shell's time
 limit and run it again to resume (exit 6 means still running). Over MCP, use the
 `loop_iterations` and `operation_status` tools; they never block.
 

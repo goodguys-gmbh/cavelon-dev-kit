@@ -16,8 +16,9 @@ import {
 import type { OpenApiDoc } from "../contracts.js";
 import { CavelonError, ExitCode, usageError } from "../errors.js";
 import { confinedPath } from "../paths.js";
-import { idempotencyKey, instanceModes, requireFeature, stableKey, UUID_KEY_OPTION } from "../features.js";
+import { idempotencyKey, instanceModes, requireFeature, stableKey, UUID_KEY_OPTION, withRetryKey } from "../features.js";
 import { clip, keyValues, moreHint, table } from "../format.js";
+import { bodyBytes } from "../http.js";
 import { buildRequest, callStable, workflowOperation } from "../invoke.js";
 import { isUuid } from "../session.js";
 import { cavelonCommand } from "../shell.js";
@@ -236,7 +237,8 @@ export const sandboxValidate: CommandSpec = {
   async run(ctx, input) {
     const sandbox = await resolveSandbox(ctx, positional(input, "sandbox")!);
     const result = await callStable<Sandbox>(ctx, "POST", "/api/v1/sandboxes/{sandbox_id}/validate", "validating Sandboxes", {
-      params: { sandbox_id: [sandbox.id], "if-match": [`"${sandbox.config_version}"`] },
+      params: { sandbox_id: [sandbox.id] },
+      headers: { "If-Match": `"${sandbox.config_version}"` },
       timeoutMs: 90_000,
     });
     const checks = result.readiness?.checks ?? [];
@@ -502,9 +504,13 @@ export const sandboxRefresh: CommandSpec = {
   async run(ctx, input) {
     const sandbox = await resolveSandbox(ctx, positional(input, "sandbox")!);
     requireOffer(ctx, sandbox, "refresh", "sandbox refresh");
+    const key = idempotencyKey(input);
     const result = await callStable<Sandbox>(ctx, "POST", "/api/v1/sandboxes/{sandbox_id}/refresh-workspace", "refreshing Sandboxes", {
-      params: { sandbox_id: [sandbox.id], "idempotency-key": [idempotencyKey(input)], "if-match": [`"${sandbox.config_version}"`] },
+      params: { sandbox_id: [sandbox.id] },
+      headers: { "Idempotency-Key": key, "If-Match": `"${sandbox.config_version}"` },
       timeoutMs: 90_000,
+    }).catch((error: unknown) => {
+      throw withRetryKey(error, key);
     });
     return {
       data: { ...sandboxView(result), previous_revision: sandbox.observed_revision },
@@ -622,7 +628,8 @@ export const sandboxSeed: CommandSpec = {
     }
     const key = stringOption(input, "idempotency-key") !== undefined ? idempotencyKey(input) : stableKey(`seed:${sandbox.id}:${revision}:${archive.sha256}`);
     let job = await callStable<ArchiveJob>(ctx, "POST", "/api/v1/sandboxes/{sandbox_id}/artifact-jobs", "archive jobs", {
-      params: { sandbox_id: [sandbox.id], "idempotency-key": [key] },
+      params: { sandbox_id: [sandbox.id] },
+      headers: { "Idempotency-Key": key },
       body: { harness_id: harness, direction: "import", expected_workspace_revision: revision, sha256: archive.sha256, size_bytes: archive.bytes.length },
     });
     // The job takes the workspace first; the bytes go up once it waits for them.
@@ -659,12 +666,9 @@ async function upload(ctx: Context, sandboxId: string, jobId: string, bytes: Uin
   const client = await ctx.client();
   const { op } = await workflowOperation(ctx, "PUT", `${JOB_ROUTE}/content`, "archive uploads");
   const { path: target } = buildRequest(op, { params: { sandbox_id: [sandboxId], job_id: [jobId] }, bytes });
-  const response = await client.fetchRaw("PUT", target, {
-    bytes,
-    headers: { "Content-Type": "application/octet-stream" },
-    signal: AbortSignal.timeout(Number(ctx.io.env.CAVELON_HTTP_TIMEOUT_MS) || 120_000),
-  });
-  const text = await response.text();
+  const signal = AbortSignal.timeout(Number(ctx.io.env.CAVELON_HTTP_TIMEOUT_MS) || 120_000);
+  const response = await client.fetchRaw("PUT", target, { bytes, headers: { "Content-Type": "application/octet-stream" }, signal });
+  const text = new TextDecoder().decode(await bodyBytes(response, client.resolve(target), signal));
   let data: unknown = text;
   try {
     data = JSON.parse(text);
@@ -682,11 +686,9 @@ async function download(ctx: Context, sandbox: Sandbox, job: ArchiveJob, out: st
   const client = await ctx.client();
   const { op } = await workflowOperation(ctx, "GET", `${JOB_ROUTE}/content`, "archive downloads");
   const { path: target } = buildRequest(op, { params: { sandbox_id: [sandbox.id], job_id: [job.id] } });
-  const response = await client.fetchRaw("GET", target, {
-    accept: "application/x-tar",
-    signal: AbortSignal.timeout(Number(ctx.io.env.CAVELON_HTTP_TIMEOUT_MS) || 120_000),
-  });
-  const bytes = new Uint8Array(await response.arrayBuffer());
+  const signal = AbortSignal.timeout(Number(ctx.io.env.CAVELON_HTTP_TIMEOUT_MS) || 120_000);
+  const response = await client.fetchRaw("GET", target, { accept: "application/x-tar", signal });
+  const bytes = await bodyBytes(response, client.resolve(target), signal);
   if (!response.ok) {
     const text = new TextDecoder().decode(bytes);
     let data: unknown = text;
@@ -755,9 +757,13 @@ export const artifactsExport: CommandSpec = {
       const harness = await harnessFor(ctx, input, sandbox);
       const revision = await currentRevision(ctx, input, sandbox, harness);
       const paths = listOption(input, "path");
+      const key = idempotencyKey(input);
       job = await callStable<ArchiveJob>(ctx, "POST", "/api/v1/sandboxes/{sandbox_id}/artifact-jobs", "archive jobs", {
-        params: { sandbox_id: [sandbox.id], "idempotency-key": [idempotencyKey(input)] },
+        params: { sandbox_id: [sandbox.id] },
+        headers: { "Idempotency-Key": key },
         body: { harness_id: harness, direction: "export", expected_workspace_revision: revision, ...(paths.length ? { paths } : {}) },
+      }).catch((error: unknown) => {
+        throw withRetryKey(error, key);
       });
     }
     const later = cavelonCommand("artifacts", "export", sandbox.name, "--job", job.id, ...(out ? ["--out", out] : []));

@@ -80,6 +80,8 @@ export interface FakeRun {
   stages?: Array<Record<string, unknown>>;
   /** True while the worker holds the run back because every run slot is taken. */
   waiting_for_capacity?: boolean;
+  /** The Idempotency-Key it was started with: a start with the same key answers this run. */
+  idempotency_key?: string | null;
   /** As an older instance answers: the run has no waiting_for_capacity. */
   olderInstance?: boolean;
 }
@@ -267,7 +269,7 @@ function runView(run: FakeRun) {
     entrypoint_agent_name: null,
     acting_as: { kind: run.acting_as.kind, name: run.acting_as.name, key_prefix: null, user_id: null },
     entrypoint_node_ref: null,
-    external_idempotency_key: null,
+    external_idempotency_key: run.idempotency_key ?? null,
     payload: run.payload,
     result: null,
     error_summary: run.error_summary ?? (run.status === "failed" ? "The loop failed." : null),
@@ -764,7 +766,11 @@ function loopOperation(state: LongRunningState, loop: FakeLoop): (advance: boole
 
 function startRun(req: Request, trigger: FakeTrigger): boolean {
   const { state, rc, body } = req;
+  const key = req.header("idempotency-key") ?? null;
+  const replay = key ? state.runs.find((r) => r.tenant_id === rc.tenantId && r.trigger.id === trigger.id && r.idempotency_key === key) : undefined;
+  if (replay) return answer(rc, 202, runView(replay));
   const run: FakeRun = {
+    idempotency_key: key,
     id: randomUUID(),
     tenant_id: rc.tenantId,
     trigger,

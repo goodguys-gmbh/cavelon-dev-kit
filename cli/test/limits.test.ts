@@ -58,6 +58,7 @@ afterEach(() => {
   server.state.processingStepsUsed = 0;
   server.state.harnesses.length = 0;
   server.state.requests.length = 0;
+  server.state.failures = [];
 });
 afterAll(async () => {
   sb.cleanup();
@@ -202,13 +203,31 @@ describe("cavelon limits", () => {
     expect(licence.stdout).toMatch(/No published limit matches/);
   });
 
+  it("shows the limits it read when only the quota use cannot be read (exit 0)", async () => {
+    server.state.failures = [{ method: "GET", path: /\/quota-usage$/, status: 500 }];
+    const result = await cli(sb, ["limits", "--json"]);
+    expect(result.code, result.stdout).toBe(0);
+    const data = result.json<{ groups: unknown[]; tenant_quotas: { items: unknown[]; unavailable: string } }>();
+    expect(data.groups.length).toBeGreaterThan(0);
+    expect(data.tenant_quotas.items).toEqual([]);
+    expect(data.tenant_quotas.unavailable).toMatch(/quota-usage/);
+    const text = await cli(sb, ["limits"]);
+    expect(text.code).toBe(0);
+    expect(text.stdout).toMatch(/not readable: .*quota-usage/);
+  });
+
   it("on an instance without limits, says so and assumes none", async () => {
     server.state.capsPatch = { limits: undefined };
     const result = await cli(sb, ["limits", "--json"]);
     expect(result.code).toBe(0);
-    expect(result.json()).toMatchObject({ published: false, groups: [], tenant_quotas: null, near: [] });
+    expect(result.json()).toMatchObject({ published: false, groups: [], tenant_quotas: null, quota_values: [], near: [] });
     expect(result.stderr).toMatch(/does not publish its limits/);
     expect(server.state.requests.some((r) => r.path.endsWith("/quota-usage"))).toBe(false);
+    // The same keys as a current instance's answer, so a caller reads both alike.
+    server.state.capsPatch = {};
+    const current = await cli(sb, ["limits", "--json"]);
+    const keys = (data: Record<string, unknown>) => Object.keys(data).filter((k) => k !== "warnings").sort();
+    expect(keys(result.json())).toEqual(keys(current.json()));
   });
 });
 
