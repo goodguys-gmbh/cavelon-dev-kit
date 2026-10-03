@@ -1,0 +1,3745 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "/api/v1/meta/package-schema?version=v3",
+  "title": "AgentGraphPackage",
+  "description": "A Cavelon solution package, format v3. Optional sections and fields are added without a new major version; an instance accepts its current major and the two before it, and drops one only after 12 months' notice.",
+  "$defs": {
+    "PackageAgent": {
+      "properties": {
+        "slug": {
+          "title": "Slug",
+          "type": "string"
+        },
+        "harness_slug": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Harness Slug"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "handoff_description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Handoff Description"
+        },
+        "llm_model": {
+          "title": "Llm Model",
+          "type": "string"
+        },
+        "llm_provider": {
+          "title": "Llm Provider",
+          "type": "string"
+        },
+        "llm_base_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Llm Base Url"
+        },
+        "llm_api_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Llm Api Key"
+        },
+        "temperature": {
+          "title": "Temperature",
+          "type": "number"
+        },
+        "max_output_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Output Tokens"
+        },
+        "parallel_tool_calls": {
+          "title": "Parallel Tool Calls",
+          "type": "boolean"
+        },
+        "model_settings_extra": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model Settings Extra"
+        },
+        "system_prompt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "System Prompt"
+        },
+        "is_entrypoint": {
+          "default": false,
+          "title": "Is Entrypoint",
+          "type": "boolean"
+        },
+        "is_active": {
+          "default": true,
+          "title": "Is Active",
+          "type": "boolean"
+        },
+        "display_order": {
+          "default": 0,
+          "title": "Display Order",
+          "type": "integer"
+        },
+        "canvas_x": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Canvas X"
+        },
+        "canvas_y": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Canvas Y"
+        },
+        "memory_config": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Memory Config"
+        },
+        "state_config": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "State Config"
+        },
+        "attachment_config": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Attachment Config"
+        },
+        "history_token_budget": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "History Token Budget"
+        },
+        "working_window_tokens": {
+          "anyOf": [
+            {
+              "minimum": 1024,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Working Window Tokens"
+        },
+        "history_max_images": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "History Max Images"
+        },
+        "history_image_full_detail_turns": {
+          "anyOf": [
+            {
+              "maximum": 50,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "History Image Full Detail Turns"
+        },
+        "output_mode": {
+          "default": "text",
+          "enum": [
+            "text",
+            "structured_json"
+          ],
+          "title": "Output Mode",
+          "type": "string"
+        },
+        "output_schema": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Schema"
+        },
+        "skip_persona": {
+          "default": false,
+          "title": "Skip Persona",
+          "type": "boolean"
+        },
+        "trigger_inject_paths": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Trigger Inject Paths",
+          "type": "array"
+        },
+        "tool_assignments": {
+          "items": {
+            "$ref": "#/$defs/PackageAgentToolAssignment"
+          },
+          "title": "Tool Assignments",
+          "type": "array"
+        },
+        "skill_assignments": {
+          "items": {
+            "$ref": "#/$defs/PackageAgentSkillAssignment"
+          },
+          "title": "Skill Assignments",
+          "type": "array"
+        },
+        "guardrail_assignments": {
+          "items": {
+            "$ref": "#/$defs/PackageAgentGuardrailAssignment"
+          },
+          "title": "Guardrail Assignments",
+          "type": "array"
+        },
+        "handoffs": {
+          "items": {
+            "$ref": "#/$defs/PackageAgentHandoff"
+          },
+          "title": "Handoffs",
+          "type": "array"
+        }
+      },
+      "required": [
+        "slug",
+        "name",
+        "llm_model",
+        "llm_provider",
+        "temperature",
+        "parallel_tool_calls"
+      ],
+      "title": "PackageAgent",
+      "type": "object"
+    },
+    "PackageAgentGuardrailAssignment": {
+      "properties": {
+        "guardrail_slug": {
+          "title": "Guardrail Slug",
+          "type": "string"
+        },
+        "config_overrides": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Config Overrides"
+        },
+        "direction_override": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Direction Override"
+        },
+        "is_active": {
+          "default": true,
+          "title": "Is Active",
+          "type": "boolean"
+        },
+        "display_order": {
+          "default": 0,
+          "title": "Display Order",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "guardrail_slug"
+      ],
+      "title": "PackageAgentGuardrailAssignment",
+      "type": "object"
+    },
+    "PackageAgentHandoff": {
+      "properties": {
+        "to_agent_slug": {
+          "title": "To Agent Slug",
+          "type": "string"
+        },
+        "description_override": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description Override"
+        },
+        "is_active": {
+          "default": true,
+          "title": "Is Active",
+          "type": "boolean"
+        },
+        "display_order": {
+          "default": 0,
+          "title": "Display Order",
+          "type": "integer"
+        },
+        "edge_type": {
+          "default": "handoff",
+          "title": "Edge Type",
+          "type": "string"
+        },
+        "consult_max_turns": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Consult Max Turns"
+        },
+        "orchestration_config": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Orchestration Config"
+        },
+        "state_projection": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "State Projection"
+        },
+        "input_schema": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Schema"
+        }
+      },
+      "required": [
+        "to_agent_slug"
+      ],
+      "title": "PackageAgentHandoff",
+      "type": "object"
+    },
+    "PackageAgentSkillAssignment": {
+      "properties": {
+        "skill_slug": {
+          "title": "Skill Slug",
+          "type": "string"
+        },
+        "config_overrides": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Config Overrides"
+        },
+        "is_active": {
+          "default": true,
+          "title": "Is Active",
+          "type": "boolean"
+        },
+        "display_order": {
+          "default": 0,
+          "title": "Display Order",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "skill_slug"
+      ],
+      "title": "PackageAgentSkillAssignment",
+      "type": "object"
+    },
+    "PackageAgentToolAssignment": {
+      "properties": {
+        "tool_slug": {
+          "title": "Tool Slug",
+          "type": "string"
+        },
+        "config_overrides": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Config Overrides"
+        },
+        "is_active": {
+          "default": true,
+          "title": "Is Active",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "tool_slug"
+      ],
+      "title": "PackageAgentToolAssignment",
+      "type": "object"
+    },
+    "PackageCanvasNote": {
+      "properties": {
+        "harness_slug": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Harness Slug"
+        },
+        "content": {
+          "default": "",
+          "title": "Content",
+          "type": "string"
+        },
+        "color": {
+          "default": "amber",
+          "title": "Color",
+          "type": "string"
+        },
+        "keep_hover_opacity": {
+          "default": false,
+          "title": "Keep Hover Opacity",
+          "type": "boolean"
+        },
+        "canvas_x": {
+          "default": 0,
+          "title": "Canvas X",
+          "type": "number"
+        },
+        "canvas_y": {
+          "default": 0,
+          "title": "Canvas Y",
+          "type": "number"
+        },
+        "width": {
+          "default": 200,
+          "title": "Width",
+          "type": "number"
+        },
+        "height": {
+          "default": 150,
+          "title": "Height",
+          "type": "number"
+        }
+      },
+      "title": "PackageCanvasNote",
+      "type": "object"
+    },
+    "PackageGuardrail": {
+      "properties": {
+        "slug": {
+          "title": "Slug",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "guardrail_type": {
+          "enum": [
+            "llm_classifier",
+            "pattern_match",
+            "webhook"
+          ],
+          "title": "Guardrail Type",
+          "type": "string"
+        },
+        "direction": {
+          "enum": [
+            "input",
+            "output",
+            "both"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "builtin_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Builtin Key"
+        },
+        "config": {
+          "additionalProperties": true,
+          "title": "Config",
+          "type": "object"
+        },
+        "on_trigger": {
+          "default": "block",
+          "enum": [
+            "block",
+            "log",
+            "prepend"
+          ],
+          "title": "On Trigger",
+          "type": "string"
+        },
+        "rejection_message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rejection Message"
+        },
+        "is_active": {
+          "default": true,
+          "title": "Is Active",
+          "type": "boolean"
+        },
+        "scope": {
+          "enum": [
+            "platform_builtin",
+            "tenant_local"
+          ],
+          "title": "Scope",
+          "type": "string"
+        },
+        "display_order": {
+          "default": 0,
+          "title": "Display Order",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "slug",
+        "name",
+        "guardrail_type",
+        "direction",
+        "scope"
+      ],
+      "title": "PackageGuardrail",
+      "type": "object"
+    },
+    "PackageHarness": {
+      "properties": {
+        "slug": {
+          "title": "Slug",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "status": {
+          "default": "active",
+          "title": "Status",
+          "type": "string"
+        },
+        "is_default": {
+          "default": false,
+          "title": "Is Default",
+          "type": "boolean"
+        },
+        "harness_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "custom",
+          "title": "Harness Type"
+        },
+        "global_instructions": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Global Instructions"
+        },
+        "memory_config": {
+          "additionalProperties": true,
+          "title": "Memory Config",
+          "type": "object"
+        },
+        "settings": {
+          "additionalProperties": true,
+          "title": "Settings",
+          "type": "object"
+        },
+        "run_state_model_slug": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run State Model Slug"
+        }
+      },
+      "required": [
+        "slug",
+        "name"
+      ],
+      "title": "PackageHarness",
+      "type": "object"
+    },
+    "PackageKbOrderProfile": {
+      "description": "One knowledge-base order profile, by names that survive the move.\n\nThe tenant stores ids (``settings.kb_orders.profiles``); the package names the\ntemplate knowledge base by its name and the answering solution by its slug,\nand the import resolves both to the target tenant's own rows.",
+      "properties": {
+        "template_knowledge_base": {
+          "minLength": 1,
+          "title": "Template Knowledge Base",
+          "type": "string"
+        },
+        "answer_harness_slug": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Answer Harness Slug"
+        }
+      },
+      "required": [
+        "template_knowledge_base"
+      ],
+      "title": "PackageKbOrderProfile",
+      "type": "object"
+    },
+    "PackageKbOrderSettings": {
+      "description": "What this tenant's knowledge-base orders may select from.\n\nAbsent from a package means the target's configuration stays as it is;\npresent, it replaces it.",
+      "properties": {
+        "profiles": {
+          "additionalProperties": {
+            "$ref": "#/$defs/PackageKbOrderProfile"
+          },
+          "title": "Profiles",
+          "type": "object"
+        },
+        "default_profile": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Default Profile"
+        },
+        "default_answer_harness_slug": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Default Answer Harness Slug"
+        },
+        "retrieval_sources": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Retrieval Sources",
+          "type": "object"
+        },
+        "callback_targets": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Callback Targets",
+          "type": "object"
+        }
+      },
+      "title": "PackageKbOrderSettings",
+      "type": "object"
+    },
+    "PackageKnowledgeBase": {
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "chunking_config": {
+          "additionalProperties": true,
+          "title": "Chunking Config",
+          "type": "object"
+        },
+        "retrieval_config": {
+          "additionalProperties": true,
+          "title": "Retrieval Config",
+          "type": "object"
+        },
+        "scraping_config": {
+          "additionalProperties": true,
+          "title": "Scraping Config",
+          "type": "object"
+        },
+        "document_processing_config": {
+          "additionalProperties": true,
+          "title": "Document Processing Config",
+          "type": "object"
+        },
+        "upload_config": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Upload Config"
+        },
+        "kb_type": {
+          "default": "prose",
+          "title": "Kb Type",
+          "type": "string"
+        },
+        "status": {
+          "const": "active",
+          "default": "active",
+          "title": "Status",
+          "type": "string"
+        },
+        "sync_interval_hours": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sync Interval Hours"
+        },
+        "content_language": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Content Language"
+        },
+        "display_order": {
+          "default": 0,
+          "title": "Display Order",
+          "type": "integer"
+        },
+        "structured_config": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Structured Config"
+        },
+        "metadata_schema": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Metadata Schema"
+        },
+        "metadata_schema_version": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Metadata Schema Version"
+        },
+        "extractor_harness_slug": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Extractor Harness Slug"
+        },
+        "default_acl_groups": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Default Acl Groups"
+        },
+        "accepts_email_attachments": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Accepts Email Attachments"
+        },
+        "filing_access": {
+          "anyOf": [
+            {
+              "enum": [
+                "default_groups",
+                "kb_readers"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filing Access"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "PackageKnowledgeBase",
+      "type": "object"
+    },
+    "PackageManifest": {
+      "properties": {
+        "package_version": {
+          "const": "v3",
+          "title": "Package Version",
+          "description": "The package format's major version."
+        },
+        "exported_at": {
+          "title": "Exported At",
+          "type": "string"
+        },
+        "source_tenant_id": {
+          "title": "Source Tenant Id",
+          "type": "string"
+        },
+        "source_tenant_slug": {
+          "title": "Source Tenant Slug",
+          "type": "string"
+        },
+        "scope": {
+          "default": "agent_graph",
+          "enum": [
+            "agent_graph",
+            "full_config"
+          ],
+          "title": "Scope",
+          "type": "string"
+        },
+        "secrets_included": {
+          "default": false,
+          "title": "Secrets Included",
+          "type": "boolean"
+        },
+        "capabilities": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Capabilities",
+          "type": "array"
+        }
+      },
+      "required": [
+        "exported_at",
+        "package_version",
+        "source_tenant_id",
+        "source_tenant_slug"
+      ],
+      "title": "PackageManifest",
+      "type": "object"
+    },
+    "PackageModelRegistryEntry": {
+      "properties": {
+        "model_id": {
+          "title": "Model Id",
+          "type": "string"
+        },
+        "display_name": {
+          "title": "Display Name",
+          "type": "string"
+        },
+        "provider": {
+          "title": "Provider",
+          "type": "string"
+        },
+        "base_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Base Url"
+        },
+        "api_key_encrypted": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Api Key Encrypted"
+        },
+        "capabilities": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Capabilities",
+          "type": "array"
+        },
+        "context_window": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Context Window"
+        },
+        "max_output_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Output Tokens"
+        },
+        "reasoning_config": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reasoning Config"
+        },
+        "max_concurrent_requests": {
+          "anyOf": [
+            {
+              "maximum": 100000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Concurrent Requests"
+        },
+        "is_active": {
+          "default": true,
+          "title": "Is Active",
+          "type": "boolean"
+        },
+        "display_order": {
+          "default": 0,
+          "title": "Display Order",
+          "type": "integer"
+        },
+        "source": {
+          "default": "preset",
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "model_id",
+        "display_name",
+        "provider"
+      ],
+      "title": "PackageModelRegistryEntry",
+      "type": "object"
+    },
+    "PackageModelRoleDefault": {
+      "properties": {
+        "role_slug": {
+          "title": "Role Slug",
+          "type": "string"
+        },
+        "model_id": {
+          "title": "Model Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "role_slug",
+        "model_id"
+      ],
+      "title": "PackageModelRoleDefault",
+      "type": "object"
+    },
+    "PackagePersona": {
+      "properties": {
+        "bot_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bot Name"
+        },
+        "persona_prompt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Persona Prompt"
+        },
+        "greeting_message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Greeting Message"
+        },
+        "greeting_enabled": {
+          "default": true,
+          "title": "Greeting Enabled",
+          "type": "boolean"
+        },
+        "greeting_personalization_enabled": {
+          "default": false,
+          "title": "Greeting Personalization Enabled",
+          "type": "boolean"
+        },
+        "greeting_personalization_tone": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "personal",
+          "title": "Greeting Personalization Tone"
+        },
+        "language_hint": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Language Hint"
+        },
+        "response_style": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Response Style"
+        },
+        "fallback_message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fallback Message"
+        },
+        "fallback_message_enabled": {
+          "default": true,
+          "title": "Fallback Message Enabled",
+          "type": "boolean"
+        },
+        "source_citation_prompt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Citation Prompt"
+        },
+        "source_citation_enabled": {
+          "default": true,
+          "title": "Source Citation Enabled",
+          "type": "boolean"
+        },
+        "show_processing_steps": {
+          "default": false,
+          "title": "Show Processing Steps",
+          "type": "boolean"
+        },
+        "suggest_followups": {
+          "default": false,
+          "title": "Suggest Followups",
+          "type": "boolean"
+        },
+        "suggestions_count": {
+          "default": 3,
+          "title": "Suggestions Count",
+          "type": "integer"
+        },
+        "image_prompt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Image Prompt"
+        },
+        "image_prompt_enabled": {
+          "default": false,
+          "title": "Image Prompt Enabled",
+          "type": "boolean"
+        },
+        "action_buttons_enabled": {
+          "default": false,
+          "title": "Action Buttons Enabled",
+          "type": "boolean"
+        },
+        "action_buttons_prompt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Action Buttons Prompt"
+        },
+        "teaser_messages": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Teaser Messages",
+          "type": "array"
+        },
+        "teaser_display_count": {
+          "default": 3,
+          "title": "Teaser Display Count",
+          "type": "integer"
+        },
+        "widget_title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Widget Title"
+        },
+        "floating_button_teaser": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Floating Button Teaser"
+        },
+        "disclaimer": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Disclaimer"
+        },
+        "image_upload_enabled": {
+          "default": false,
+          "title": "Image Upload Enabled",
+          "type": "boolean"
+        },
+        "realtime_voice_enabled": {
+          "default": false,
+          "title": "Realtime Voice Enabled",
+          "type": "boolean"
+        },
+        "block_notice_enabled": {
+          "default": false,
+          "title": "Block Notice Enabled",
+          "type": "boolean"
+        },
+        "source_citation_widget_enabled": {
+          "default": false,
+          "title": "Source Citation Widget Enabled",
+          "type": "boolean"
+        },
+        "voice_recording_enabled": {
+          "default": false,
+          "title": "Voice Recording Enabled",
+          "type": "boolean"
+        },
+        "voice_answering_enabled": {
+          "default": false,
+          "title": "Voice Answering Enabled",
+          "type": "boolean"
+        },
+        "voice_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Voice Id"
+        },
+        "voice_instructions": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Voice Instructions"
+        },
+        "metadata": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Metadata"
+        },
+        "translations": {
+          "additionalProperties": true,
+          "title": "Translations",
+          "type": "object"
+        }
+      },
+      "title": "PackagePersona",
+      "type": "object"
+    },
+    "PackagePhoneNumber": {
+      "properties": {
+        "number": {
+          "title": "Number",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "is_active": {
+          "default": true,
+          "title": "Is Active",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "number"
+      ],
+      "title": "PackagePhoneNumber",
+      "type": "object"
+    },
+    "PackageRealtimeAgentConfig": {
+      "properties": {
+        "persona_prompt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Persona Prompt"
+        },
+        "instructions": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Instructions"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "voice": {
+          "default": "marin",
+          "title": "Voice",
+          "type": "string"
+        },
+        "speed": {
+          "default": 1,
+          "title": "Speed",
+          "type": "number"
+        },
+        "turn_detection_type": {
+          "default": "semantic_vad",
+          "title": "Turn Detection Type",
+          "type": "string"
+        },
+        "vad_eagerness": {
+          "default": "medium",
+          "title": "Vad Eagerness",
+          "type": "string"
+        },
+        "silence_duration_ms": {
+          "default": 500,
+          "title": "Silence Duration Ms",
+          "type": "integer"
+        },
+        "vad_threshold": {
+          "default": 0.5,
+          "title": "Vad Threshold",
+          "type": "number"
+        },
+        "noise_reduction": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "near_field",
+          "title": "Noise Reduction"
+        },
+        "transcription_model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Transcription Model"
+        },
+        "transcription_language": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Transcription Language"
+        },
+        "transcription_prompt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Transcription Prompt"
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Temperature"
+        },
+        "max_response_output_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Response Output Tokens"
+        },
+        "tool_choice": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tool Choice"
+        },
+        "greeting_message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Greeting Message"
+        },
+        "language_hint": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Language Hint"
+        },
+        "inject_current_datetime": {
+          "default": true,
+          "title": "Inject Current Datetime",
+          "type": "boolean"
+        },
+        "tenant_timezone": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tenant Timezone"
+        },
+        "voice_backend": {
+          "default": "openai_realtime",
+          "title": "Voice Backend",
+          "type": "string"
+        },
+        "self_hosted_voice": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Self Hosted Voice"
+        },
+        "self_hosted_tts_instructions": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Self Hosted Tts Instructions"
+        },
+        "self_hosted_llm_model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Self Hosted Llm Model"
+        },
+        "self_hosted_voice_guidance": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Self Hosted Voice Guidance"
+        },
+        "self_hosted_input_guardrails": {
+          "default": true,
+          "title": "Self Hosted Input Guardrails",
+          "type": "boolean"
+        },
+        "tracing_enabled": {
+          "default": true,
+          "title": "Tracing Enabled",
+          "type": "boolean"
+        },
+        "is_active": {
+          "default": false,
+          "title": "Is Active",
+          "type": "boolean"
+        },
+        "tool_assignments": {
+          "items": {
+            "$ref": "#/$defs/PackageRealtimeToolAssignment"
+          },
+          "title": "Tool Assignments",
+          "type": "array"
+        }
+      },
+      "title": "PackageRealtimeAgentConfig",
+      "type": "object"
+    },
+    "PackageRealtimeToolAssignment": {
+      "properties": {
+        "tool_slug": {
+          "title": "Tool Slug",
+          "type": "string"
+        },
+        "config_overrides": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Config Overrides"
+        },
+        "is_active": {
+          "default": true,
+          "title": "Is Active",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "tool_slug"
+      ],
+      "title": "PackageRealtimeToolAssignment",
+      "type": "object"
+    },
+    "PackageRequiredValue": {
+      "description": "A variable or secret the package's solutions need the target to set.\n\nA value never travels in a package; the name does, so the import preview can\nlist what the target still has to set, and the target's secrets list shows\nit as not set until someone does.",
+      "properties": {
+        "name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[\\w.\\-]+$",
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "PackageRequiredValue",
+      "type": "object"
+    },
+    "PackageSkill": {
+      "properties": {
+        "slug": {
+          "title": "Slug",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "skill_type": {
+          "default": "workflow",
+          "title": "Skill Type",
+          "type": "string"
+        },
+        "instructions": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Instructions"
+        },
+        "config": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Config"
+        },
+        "scope": {
+          "default": "tenant_local",
+          "title": "Scope",
+          "type": "string"
+        },
+        "is_active": {
+          "default": true,
+          "title": "Is Active",
+          "type": "boolean"
+        },
+        "display_order": {
+          "default": 0,
+          "title": "Display Order",
+          "type": "integer"
+        },
+        "setup_notes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Setup Notes"
+        },
+        "source_template_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Template Id"
+        },
+        "tool_assignments": {
+          "items": {
+            "$ref": "#/$defs/PackageSkillToolAssignment"
+          },
+          "title": "Tool Assignments",
+          "type": "array"
+        },
+        "knowledge_base_assignments": {
+          "items": {
+            "$ref": "#/$defs/PackageSkillKnowledgeBaseAssignment"
+          },
+          "title": "Knowledge Base Assignments",
+          "type": "array"
+        }
+      },
+      "required": [
+        "slug",
+        "name"
+      ],
+      "title": "PackageSkill",
+      "type": "object"
+    },
+    "PackageSkillKnowledgeBaseAssignment": {
+      "properties": {
+        "knowledge_base_name": {
+          "title": "Knowledge Base Name",
+          "type": "string"
+        },
+        "is_active": {
+          "default": true,
+          "title": "Is Active",
+          "type": "boolean"
+        },
+        "display_order": {
+          "default": 0,
+          "title": "Display Order",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "knowledge_base_name"
+      ],
+      "title": "PackageSkillKnowledgeBaseAssignment",
+      "type": "object"
+    },
+    "PackageSkillToolAssignment": {
+      "properties": {
+        "tool_slug": {
+          "title": "Tool Slug",
+          "type": "string"
+        },
+        "config_overrides": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Config Overrides"
+        },
+        "is_active": {
+          "default": true,
+          "title": "Is Active",
+          "type": "boolean"
+        },
+        "display_order": {
+          "default": 0,
+          "title": "Display Order",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "tool_slug"
+      ],
+      "title": "PackageSkillToolAssignment",
+      "type": "object"
+    },
+    "PackageSourceURL": {
+      "properties": {
+        "url": {
+          "title": "Url",
+          "type": "string"
+        },
+        "category": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Category"
+        },
+        "priority": {
+          "default": 0.5,
+          "title": "Priority",
+          "type": "number"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "active": {
+          "default": true,
+          "title": "Active",
+          "type": "boolean"
+        },
+        "status": {
+          "default": "discovered",
+          "title": "Status",
+          "type": "string"
+        },
+        "last_scraped_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Scraped At"
+        },
+        "content_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Content Hash"
+        },
+        "scrape_error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scrape Error"
+        },
+        "scrape_error_kind": {
+          "anyOf": [
+            {
+              "maxLength": 32,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scrape Error Kind"
+        },
+        "consecutive_failures": {
+          "default": 0,
+          "title": "Consecutive Failures",
+          "type": "integer"
+        },
+        "needs_review": {
+          "default": false,
+          "title": "Needs Review",
+          "type": "boolean"
+        },
+        "review_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Review Reason"
+        },
+        "etag": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Etag"
+        },
+        "last_modified_header": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Modified Header"
+        },
+        "skip_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Skip Reason"
+        },
+        "freshness_hours": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Freshness Hours"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "title": "PackageSourceURL",
+      "type": "object"
+    },
+    "PackageTelephonyConfig": {
+      "properties": {
+        "provider": {
+          "default": "twilio",
+          "title": "Provider",
+          "type": "string"
+        },
+        "is_active": {
+          "default": false,
+          "title": "Is Active",
+          "type": "boolean"
+        },
+        "config": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Config"
+        },
+        "credential_keys": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Credential Keys"
+        },
+        "phone_numbers": {
+          "items": {
+            "$ref": "#/$defs/PackagePhoneNumber"
+          },
+          "title": "Phone Numbers",
+          "type": "array"
+        },
+        "transfer_targets": {
+          "items": {
+            "$ref": "#/$defs/PackageTelephonyTransferTarget"
+          },
+          "title": "Transfer Targets",
+          "type": "array"
+        }
+      },
+      "title": "PackageTelephonyConfig",
+      "type": "object"
+    },
+    "PackageTelephonyTransferTarget": {
+      "properties": {
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "destination": {
+          "title": "Destination",
+          "type": "string"
+        },
+        "destination_type": {
+          "default": "external",
+          "title": "Destination Type",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "schedule": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Schedule"
+        },
+        "timezone": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "Europe/Vienna",
+          "title": "Timezone"
+        },
+        "is_active": {
+          "default": true,
+          "title": "Is Active",
+          "type": "boolean"
+        },
+        "sort_order": {
+          "default": 0,
+          "title": "Sort Order",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "title",
+        "destination"
+      ],
+      "title": "PackageTelephonyTransferTarget",
+      "type": "object"
+    },
+    "PackageTenantSettings": {
+      "properties": {
+        "inject_current_datetime": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Inject Current Datetime"
+        },
+        "tenant_timezone": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tenant Timezone"
+        },
+        "default_guardrail_slugs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Default Guardrail Slugs",
+          "type": "array"
+        },
+        "extra_settings": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Extra Settings"
+        }
+      },
+      "title": "PackageTenantSettings",
+      "type": "object"
+    },
+    "PackageTestCase": {
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "type": {
+          "default": "single",
+          "title": "Type",
+          "type": "string"
+        },
+        "sort_order": {
+          "default": 0,
+          "title": "Sort Order",
+          "type": "integer"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "required_skill_slugs": {
+          "anyOf": [
+            {
+              "items": {
+                "maxLength": 100,
+                "minLength": 1,
+                "pattern": "^[a-z0-9_-]+$",
+                "type": "string"
+              },
+              "maxItems": 50,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Required Skill Slugs"
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/PackageTestCaseStep"
+          },
+          "title": "Steps",
+          "type": "array"
+        },
+        "trigger": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TriggerCaseSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Trigger",
+          "description": "The spec of a case of type 'trigger'; absent on a chat case."
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "PackageTestCase",
+      "type": "object"
+    },
+    "PackageTestCaseStep": {
+      "properties": {
+        "step_order": {
+          "default": 1,
+          "title": "Step Order",
+          "type": "integer"
+        },
+        "user_message": {
+          "title": "User Message",
+          "type": "string"
+        },
+        "fixed_response": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fixed Response"
+        },
+        "reference_answer": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reference Answer"
+        },
+        "evaluation_criteria": {
+          "anyOf": [
+            {
+              "items": {},
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Evaluation Criteria"
+        },
+        "evaluate": {
+          "default": true,
+          "title": "Evaluate",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "user_message"
+      ],
+      "title": "PackageTestCaseStep",
+      "type": "object"
+    },
+    "PackageTestSuite": {
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "harness_slug": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Harness Slug"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "settings": {
+          "additionalProperties": true,
+          "title": "Settings",
+          "type": "object"
+        },
+        "test_cases": {
+          "items": {
+            "$ref": "#/$defs/PackageTestCase"
+          },
+          "title": "Test Cases",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "PackageTestSuite",
+      "type": "object"
+    },
+    "PackageTool": {
+      "properties": {
+        "slug": {
+          "title": "Slug",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "tool_type": {
+          "title": "Tool Type",
+          "type": "string"
+        },
+        "builtin_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Builtin Key"
+        },
+        "webhook_config": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Webhook Config"
+        },
+        "capabilities": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Capabilities"
+        },
+        "configuration_requirements": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Configuration Requirements"
+        },
+        "params_json_schema": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Params Json Schema"
+        },
+        "default_config": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Default Config"
+        },
+        "scope": {
+          "title": "Scope",
+          "type": "string"
+        },
+        "is_active": {
+          "default": true,
+          "title": "Is Active",
+          "type": "boolean"
+        },
+        "display_order": {
+          "default": 0,
+          "title": "Display Order",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "slug",
+        "name",
+        "tool_type",
+        "scope"
+      ],
+      "title": "PackageTool",
+      "type": "object"
+    },
+    "PackageToolBinding": {
+      "properties": {
+        "tool_slug": {
+          "title": "Tool Slug",
+          "type": "string"
+        },
+        "is_enabled": {
+          "default": true,
+          "title": "Is Enabled",
+          "type": "boolean"
+        },
+        "config_overrides": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Config Overrides"
+        },
+        "secret_refs": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Secret Refs",
+          "type": "object"
+        },
+        "params_schema_overrides": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Params Schema Overrides"
+        },
+        "rate_limit_per_minute": {
+          "anyOf": [
+            {
+              "maximum": 2147483647,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rate Limit Per Minute"
+        }
+      },
+      "required": [
+        "tool_slug"
+      ],
+      "title": "PackageToolBinding",
+      "type": "object"
+    },
+    "PackageWebSource": {
+      "properties": {
+        "knowledge_base_name": {
+          "title": "Knowledge Base Name",
+          "type": "string"
+        },
+        "source_type": {
+          "title": "Source Type",
+          "type": "string"
+        },
+        "status": {
+          "default": "active",
+          "title": "Status",
+          "type": "string"
+        },
+        "config": {
+          "additionalProperties": true,
+          "title": "Config",
+          "type": "object"
+        },
+        "source_urls": {
+          "items": {
+            "$ref": "#/$defs/PackageSourceURL"
+          },
+          "title": "Source Urls",
+          "type": "array"
+        }
+      },
+      "required": [
+        "knowledge_base_name",
+        "source_type"
+      ],
+      "title": "PackageWebSource",
+      "type": "object"
+    },
+    "RuntimeRequirement": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "pattern": "^(sandbox|harness)-[1-9][0-9]{0,2}$",
+          "title": "Key",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "sandbox",
+            "harness"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "profile_id": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Profile Id"
+        },
+        "validation_profile_ids": {
+          "items": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 100,
+          "title": "Validation Profile Ids",
+          "type": "array"
+        },
+        "harness_slugs": {
+          "items": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 100,
+          "title": "Harness Slugs",
+          "type": "array"
+        },
+        "runner_group": {
+          "anyOf": [
+            {
+              "pattern": "^runner-[1-9][0-9]{0,2}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Runner Group"
+        }
+      },
+      "required": [
+        "key",
+        "kind",
+        "label"
+      ],
+      "title": "RuntimeRequirement",
+      "type": "object"
+    },
+    "RuntimeRequirements": {
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "const": 1,
+          "default": 1,
+          "title": "Version",
+          "type": "integer"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/RuntimeRequirement"
+          },
+          "maxItems": 100,
+          "title": "Items",
+          "type": "array"
+        }
+      },
+      "title": "RuntimeRequirements",
+      "type": "object"
+    },
+    "TriggerCaseDocument": {
+      "additionalProperties": false,
+      "description": "A knowledge-base document the case hands to the run, named rather than by id.\n\nA shipped suite cannot know a tenant's document ids. The runner picks the\nnewest ready document of the named knowledge base, or the one with this\ntitle, and puts its id into the run's input as ``attached_documents``.",
+      "properties": {
+        "knowledge_base": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "Knowledge Base",
+          "type": "string"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        }
+      },
+      "required": [
+        "knowledge_base"
+      ],
+      "title": "TriggerCaseDocument",
+      "type": "object"
+    },
+    "TriggerFileCheck": {
+      "additionalProperties": false,
+      "description": "A check on one file in the bound Sandbox after the run.",
+      "properties": {
+        "json_path": {
+          "anyOf": [
+            {
+              "maxLength": 255,
+              "pattern": "^\\$(\\.[A-Za-z0-9_-]+|\\[\\d+\\])*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Json Path"
+        },
+        "equals": {
+          "default": null,
+          "title": "Equals"
+        },
+        "contains": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Contains"
+        },
+        "matches": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Matches"
+        },
+        "path": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "exists": {
+          "default": true,
+          "title": "Exists",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "TriggerFileCheck",
+      "type": "object"
+    },
+    "TriggerLoopExpectations": {
+      "additionalProperties": false,
+      "description": "What a Masterloop the run started may spend, and how it must end.",
+      "properties": {
+        "state": {
+          "anyOf": [
+            {
+              "enum": [
+                "completed",
+                "failed",
+                "stopped",
+                "cancelled"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "completed",
+          "title": "State"
+        },
+        "min_iterations": {
+          "anyOf": [
+            {
+              "maximum": 10000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min Iterations"
+        },
+        "max_iterations": {
+          "anyOf": [
+            {
+              "maximum": 10000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Iterations"
+        },
+        "max_model_requests": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Model Requests"
+        },
+        "max_input_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Input Tokens"
+        },
+        "max_output_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Output Tokens"
+        },
+        "max_seconds": {
+          "anyOf": [
+            {
+              "maximum": 86400,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Seconds"
+        }
+      },
+      "title": "TriggerLoopExpectations",
+      "type": "object"
+    },
+    "TriggerOutputCheck": {
+      "additionalProperties": false,
+      "description": "A check on the run's output; ``json_path`` reads into a structured output.",
+      "properties": {
+        "json_path": {
+          "anyOf": [
+            {
+              "maxLength": 255,
+              "pattern": "^\\$(\\.[A-Za-z0-9_-]+|\\[\\d+\\])*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Json Path"
+        },
+        "equals": {
+          "default": null,
+          "title": "Equals"
+        },
+        "contains": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Contains"
+        },
+        "matches": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Matches"
+        }
+      },
+      "title": "TriggerOutputCheck",
+      "type": "object"
+    },
+    "TriggerRuntimeRequirement": {
+      "additionalProperties": false,
+      "description": "The Sandbox a case needs, described, never named by id.\n\nThe same shape a package's runtime requirement has, so a suite stays\nportable: each target binds its own test Sandbox, and the runner checks the\none the run actually used against this.",
+      "properties": {
+        "kind": {
+          "const": "sandbox",
+          "default": "sandbox",
+          "title": "Kind",
+          "type": "string"
+        },
+        "profile_id": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Profile Id"
+        },
+        "validation_profile_ids": {
+          "items": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 10,
+          "title": "Validation Profile Ids",
+          "type": "array"
+        }
+      },
+      "title": "TriggerRuntimeRequirement",
+      "type": "object"
+    },
+    "TriggerCaseSpec": {
+      "additionalProperties": false,
+      "description": "Start a trigger of the suite's solution, wait for the run, check what it left.",
+      "properties": {
+        "trigger_slug": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Trigger Slug",
+          "type": "string"
+        },
+        "input": {
+          "additionalProperties": true,
+          "title": "Input",
+          "type": "object"
+        },
+        "documents": {
+          "description": "Knowledge-base documents to hand to the run, by knowledge base and optional title. Their ids reach the run's input as 'attached_documents'; a case whose document is missing fails and names it.",
+          "items": {
+            "$ref": "#/$defs/TriggerCaseDocument"
+          },
+          "maxItems": 5,
+          "title": "Documents",
+          "type": "array"
+        },
+        "timeout_seconds": {
+          "default": 600,
+          "maximum": 2400,
+          "minimum": 10,
+          "title": "Timeout Seconds",
+          "type": "integer"
+        },
+        "runtime_requirement": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TriggerRuntimeRequirement"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "expect_status": {
+          "default": "completed",
+          "description": "How the run must end. 'reaches_approval' passes when the run reaches an Approval node, its own or one in its Masterloop's iteration solution: a test run ends there, approves nothing and runs nothing after it, and the output checks read the content that waits for the decision.",
+          "enum": [
+            "completed",
+            "failed",
+            "reaches_approval"
+          ],
+          "title": "Expect Status",
+          "type": "string"
+        },
+        "approval_node": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "With 'reaches_approval': the slug of the Approval node the run must reach, in the workflow or its Masterloop's iteration; any one if absent.",
+          "title": "Approval Node"
+        },
+        "output": {
+          "items": {
+            "$ref": "#/$defs/TriggerOutputCheck"
+          },
+          "maxItems": 50,
+          "title": "Output",
+          "type": "array"
+        },
+        "loop": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TriggerLoopExpectations"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "files": {
+          "items": {
+            "$ref": "#/$defs/TriggerFileCheck"
+          },
+          "maxItems": 50,
+          "title": "Files",
+          "type": "array"
+        },
+        "validation_receipt": {
+          "default": false,
+          "title": "Validation Receipt",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "trigger_slug"
+      ],
+      "title": "TriggerCaseSpec",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "required_text_block_slugs": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 256,
+      "title": "Required Text Block Slugs",
+      "type": "array"
+    },
+    "required_variables": {
+      "items": {
+        "$ref": "#/$defs/PackageRequiredValue"
+      },
+      "maxItems": 256,
+      "title": "Required Variables",
+      "type": "array"
+    },
+    "required_secrets": {
+      "items": {
+        "$ref": "#/$defs/PackageRequiredValue"
+      },
+      "maxItems": 256,
+      "title": "Required Secrets",
+      "type": "array"
+    },
+    "manifest": {
+      "$ref": "#/$defs/PackageManifest"
+    },
+    "tenant_settings": {
+      "$ref": "#/$defs/PackageTenantSettings"
+    },
+    "persona": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PackagePersona"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "tools": {
+      "items": {
+        "$ref": "#/$defs/PackageTool"
+      },
+      "title": "Tools",
+      "type": "array"
+    },
+    "tool_bindings": {
+      "items": {
+        "$ref": "#/$defs/PackageToolBinding"
+      },
+      "title": "Tool Bindings",
+      "type": "array"
+    },
+    "guardrails": {
+      "items": {
+        "$ref": "#/$defs/PackageGuardrail"
+      },
+      "title": "Guardrails",
+      "type": "array"
+    },
+    "knowledge_bases": {
+      "items": {
+        "$ref": "#/$defs/PackageKnowledgeBase"
+      },
+      "title": "Knowledge Bases",
+      "type": "array"
+    },
+    "skills": {
+      "items": {
+        "$ref": "#/$defs/PackageSkill"
+      },
+      "title": "Skills",
+      "type": "array"
+    },
+    "harnesses": {
+      "items": {
+        "$ref": "#/$defs/PackageHarness"
+      },
+      "title": "Harnesses",
+      "type": "array"
+    },
+    "agents": {
+      "items": {
+        "$ref": "#/$defs/PackageAgent"
+      },
+      "title": "Agents",
+      "type": "array"
+    },
+    "canvas_notes": {
+      "items": {
+        "$ref": "#/$defs/PackageCanvasNote"
+      },
+      "title": "Canvas Notes",
+      "type": "array"
+    },
+    "test_suites": {
+      "items": {
+        "$ref": "#/$defs/PackageTestSuite"
+      },
+      "title": "Test Suites",
+      "type": "array"
+    },
+    "model_registry": {
+      "items": {
+        "$ref": "#/$defs/PackageModelRegistryEntry"
+      },
+      "title": "Model Registry",
+      "type": "array"
+    },
+    "model_role_defaults": {
+      "items": {
+        "$ref": "#/$defs/PackageModelRoleDefault"
+      },
+      "title": "Model Role Defaults",
+      "type": "array"
+    },
+    "realtime_config": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PackageRealtimeAgentConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "telephony_config": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PackageTelephonyConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "web_sources": {
+      "items": {
+        "$ref": "#/$defs/PackageWebSource"
+      },
+      "title": "Web Sources",
+      "type": "array"
+    },
+    "kb_orders": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PackageKbOrderSettings"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "registry_entities": {
+      "type": "object",
+      "title": "Registry Entities",
+      "description": "Sections generated from the snapshot registry, keyed by section. A section the package omits leaves the target's rows as they are.",
+      "properties": {
+        "run_state_models": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "title": "RunStateModel",
+            "properties": {
+              "slug": {
+                "type": "string",
+                "maxLength": 100
+              },
+              "name": {
+                "type": "string",
+                "maxLength": 255
+              },
+              "description": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "schema_json": {},
+              "persistence_scope": {
+                "type": "string",
+                "maxLength": 30
+              },
+              "is_active": {
+                "type": "boolean"
+              },
+              "harness_slug": {
+                "type": "string",
+                "description": "The solution this row belongs to, by slug; absent for a tenant-wide row."
+              }
+            },
+            "required": [
+              "slug"
+            ]
+          }
+        },
+        "orchestration_nodes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "title": "AgentOrchestrationNode",
+            "properties": {
+              "slug": {
+                "type": "string",
+                "maxLength": 100
+              },
+              "name": {
+                "type": "string",
+                "maxLength": 255
+              },
+              "node_type": {
+                "type": "string",
+                "maxLength": 30
+              },
+              "description": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "config": {},
+              "is_active": {
+                "type": "boolean"
+              },
+              "display_order": {
+                "type": "integer"
+              },
+              "canvas_x": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "canvas_y": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "harness_slug": {
+                "type": "string",
+                "description": "The solution this row belongs to, by slug; absent for a tenant-wide row."
+              }
+            },
+            "required": [
+              "slug"
+            ]
+          }
+        },
+        "graph_edges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "title": "AgentGraphEdge",
+            "properties": {
+              "from_node_ref": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "agent",
+                      "orchestration"
+                    ]
+                  },
+                  "slug": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "kind",
+                  "slug"
+                ]
+              },
+              "to_node_ref": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "agent",
+                      "orchestration"
+                    ]
+                  },
+                  "slug": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "kind",
+                  "slug"
+                ]
+              },
+              "edge_type": {
+                "type": "string",
+                "maxLength": 30
+              },
+              "config": {},
+              "is_active": {
+                "type": "boolean"
+              },
+              "display_order": {
+                "type": "integer"
+              },
+              "harness_slug": {
+                "type": "string",
+                "description": "The solution this row belongs to, by slug; absent for a tenant-wide row."
+              }
+            },
+            "required": [
+              "from_node_ref",
+              "to_node_ref",
+              "edge_type"
+            ]
+          }
+        },
+        "triggers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "title": "TriggerDefinition",
+            "properties": {
+              "slug": {
+                "type": "string",
+                "maxLength": 100
+              },
+              "name": {
+                "type": "string",
+                "maxLength": 255
+              },
+              "description": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "trigger_type": {
+                "type": "string",
+                "maxLength": 30
+              },
+              "output_mode": {
+                "type": "string",
+                "maxLength": 30
+              },
+              "is_active": {
+                "type": "boolean"
+              },
+              "config": {},
+              "entrypoint_agent_slug": {
+                "type": "string",
+                "minLength": 1
+              },
+              "harness_slug": {
+                "type": "string",
+                "description": "The solution this row belongs to, by slug; absent for a tenant-wide row."
+              }
+            },
+            "required": [
+              "slug"
+            ]
+          }
+        }
+      },
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      }
+    },
+    "runtime_requirements": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RuntimeRequirements"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "manifest"
+  ],
+  "type": "object",
+  "x-package-version": "v3",
+  "x-current-package-version": "v3",
+  "x-accepted-package-versions": [
+    "v1",
+    "v2",
+    "v3"
+  ]
+}

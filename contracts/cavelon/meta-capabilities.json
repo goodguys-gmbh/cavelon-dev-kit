@@ -1,0 +1,878 @@
+{
+  "instance": {
+    "version": "v0.0.0-dev",
+    "phase": "dev"
+  },
+  "contracts": {
+    "api_version": "v1",
+    "package_versions": {
+      "current": "v3",
+      "accepted": [
+        "v1",
+        "v2",
+        "v3"
+      ]
+    }
+  },
+  "features": {
+    "sandbox_feature_enabled": false,
+    "sandbox_outbound_enrollment_enabled": false,
+    "sandbox_isolated_container_enabled": false,
+    "masterloop_enabled": false,
+    "personal_access_tokens_enabled": false,
+    "operations_api_enabled": false
+  },
+  "sandbox": {
+    "execution_modes": []
+  },
+  "masterloop": {
+    "max_active_per_tenant": 10,
+    "max_deadline_seconds": 604800,
+    "default_limits": {
+      "max_iterations": 12,
+      "deadline_seconds": 14400,
+      "max_iteration_seconds": 900,
+      "max_model_requests": 400,
+      "max_input_tokens": 15000000,
+      "max_output_tokens": 400000,
+      "max_command_seconds": 300,
+      "max_no_progress_iterations": 3,
+      "max_iteration_turns": 100
+    }
+  },
+  "experimental_tools": [
+    {
+      "key": "spawn_subagents",
+      "enabled": true,
+      "setting": "AGENT_DYNAMIC_SUBAGENTS_ENABLED"
+    }
+  ],
+  "limits": {
+    "values": [
+      {
+        "key": "kb_upload_max_file_size_mb",
+        "value": 25,
+        "unit": "megabytes",
+        "source": "platform",
+        "changeable_by": "tenant_admin",
+        "setting": "upload_defaults.max_file_size_mb",
+        "docs": "/docs/reference/limits-and-quotas#upload-and-storage-quotas",
+        "scope": "tenant",
+        "description": "Largest file a knowledge base accepts; a knowledge base may set a lower one.",
+        "change": {
+          "operation": "update_upload_defaults_api_v1_tenants_current_upload_defaults_patch",
+          "method": "PATCH",
+          "path": "/api/v1/tenants/current/upload-defaults",
+          "field": "max_file_size_mb",
+          "permissions": [
+            "settings.uploads.manage",
+            "settings.manage"
+          ],
+          "minimum": 1,
+          "maximum": 100
+        }
+      },
+      {
+        "key": "kb_upload_allowed_extensions",
+        "value": [
+          "adoc",
+          "asc",
+          "asciidoc",
+          "bmp",
+          "csv",
+          "docm",
+          "docx",
+          "dotm",
+          "dotx",
+          "htm",
+          "html",
+          "jpeg",
+          "jpg",
+          "md",
+          "pdf",
+          "png",
+          "potm",
+          "potx",
+          "ppsm",
+          "ppsx",
+          "pptm",
+          "pptx",
+          "tif",
+          "tiff",
+          "txt",
+          "webp",
+          "xhtml",
+          "xlsm",
+          "xlsx"
+        ],
+        "unit": "file_extensions",
+        "source": "platform",
+        "changeable_by": "tenant_admin",
+        "setting": "upload_defaults.allowed_extensions",
+        "docs": "/docs/reference/limits-and-quotas#upload-and-storage-quotas",
+        "scope": "tenant",
+        "description": "File types a knowledge base accepts; a knowledge base may accept fewer.",
+        "change": {
+          "operation": "update_upload_defaults_api_v1_tenants_current_upload_defaults_patch",
+          "method": "PATCH",
+          "path": "/api/v1/tenants/current/upload-defaults",
+          "field": "allowed_extensions",
+          "permissions": [
+            "settings.uploads.manage",
+            "settings.manage"
+          ]
+        }
+      },
+      {
+        "key": "kb_upload_archive_enabled",
+        "value": false,
+        "unit": "boolean",
+        "source": "platform",
+        "changeable_by": "tenant_admin",
+        "setting": "upload_defaults.archive_uploads.enabled",
+        "docs": "/docs/reference/limits-and-quotas#archive-uploads",
+        "scope": "tenant",
+        "description": "Whether a knowledge-base upload expands an archive into its files.",
+        "change": {
+          "operation": "update_upload_defaults_api_v1_tenants_current_upload_defaults_patch",
+          "method": "PATCH",
+          "path": "/api/v1/tenants/current/upload-defaults",
+          "field": "archive_uploads.enabled",
+          "permissions": [
+            "settings.uploads.manage",
+            "settings.manage"
+          ]
+        }
+      },
+      {
+        "key": "kb_upload_archive_formats",
+        "value": [],
+        "unit": "file_extensions",
+        "source": "platform",
+        "changeable_by": "operator",
+        "setting": "upload_defaults.archive_uploads.formats",
+        "docs": "/docs/reference/limits-and-quotas#archive-uploads",
+        "scope": "tenant",
+        "description": "Archive types a knowledge-base upload expands into their files; empty while archive uploads are off. The platform fixes them; `kb_upload_archive_enabled` turns them on."
+      },
+      {
+        "key": "kb_upload_archive_max_entries",
+        "value": 50,
+        "unit": "count",
+        "source": "platform",
+        "changeable_by": "tenant_admin",
+        "setting": "upload_defaults.archive_uploads.max_entries",
+        "docs": "/docs/reference/limits-and-quotas#archive-uploads",
+        "scope": "tenant",
+        "description": "Files one archive may hold.",
+        "change": {
+          "operation": "update_upload_defaults_api_v1_tenants_current_upload_defaults_patch",
+          "method": "PATCH",
+          "path": "/api/v1/tenants/current/upload-defaults",
+          "field": "archive_uploads.max_entries",
+          "permissions": [
+            "settings.uploads.manage",
+            "settings.manage"
+          ],
+          "minimum": 1,
+          "maximum": 200
+        },
+        "binds_when": "kb_upload_archive_enabled"
+      },
+      {
+        "key": "kb_upload_archive_max_total_uncompressed_mb",
+        "value": 100,
+        "unit": "megabytes",
+        "source": "platform",
+        "changeable_by": "tenant_admin",
+        "setting": "upload_defaults.archive_uploads.max_total_uncompressed_mb",
+        "docs": "/docs/reference/limits-and-quotas#archive-uploads",
+        "scope": "tenant",
+        "description": "Size of an archive's files once unpacked.",
+        "change": {
+          "operation": "update_upload_defaults_api_v1_tenants_current_upload_defaults_patch",
+          "method": "PATCH",
+          "path": "/api/v1/tenants/current/upload-defaults",
+          "field": "archive_uploads.max_total_uncompressed_mb",
+          "permissions": [
+            "settings.uploads.manage",
+            "settings.manage"
+          ],
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "binds_when": "kb_upload_archive_enabled"
+      },
+      {
+        "key": "kb_upload_archive_max_compression_ratio",
+        "value": 100,
+        "unit": "count",
+        "source": "platform",
+        "changeable_by": "tenant_admin",
+        "setting": "upload_defaults.archive_uploads.max_compression_ratio",
+        "docs": "/docs/reference/limits-and-quotas#archive-uploads",
+        "scope": "tenant",
+        "description": "Largest unpacked-to-packed size ratio an archive may have.",
+        "change": {
+          "operation": "update_upload_defaults_api_v1_tenants_current_upload_defaults_patch",
+          "method": "PATCH",
+          "path": "/api/v1/tenants/current/upload-defaults",
+          "field": "archive_uploads.max_compression_ratio",
+          "permissions": [
+            "settings.uploads.manage",
+            "settings.manage"
+          ],
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "binds_when": "kb_upload_archive_enabled"
+      },
+      {
+        "key": "agent_max_turns",
+        "value": 25,
+        "unit": "count",
+        "source": "platform",
+        "changeable_by": "tenant_admin",
+        "setting": "agent_max_turns",
+        "docs": "/docs/administration/settings#runtime-defaults",
+        "scope": "tenant",
+        "description": "Model round-trips one agent run may take; an edge may set its own.",
+        "change": {
+          "operation": "update_agent_defaults_api_v1_tenants_current_agent_defaults_patch",
+          "method": "PATCH",
+          "path": "/api/v1/tenants/current/agent-defaults",
+          "field": "agent_max_turns",
+          "permissions": [
+            "settings.manage",
+            "settings.uploads.manage",
+            "settings.retention.manage"
+          ],
+          "minimum": 1,
+          "maximum": 100
+        }
+      },
+      {
+        "key": "rate_limit_chat_rpm",
+        "value": 200,
+        "unit": "requests_per_minute",
+        "source": "platform",
+        "changeable_by": "tenant_admin",
+        "setting": "rate_limits.chat",
+        "docs": "/docs/reference/configuration#concurrency-rate-limits-and-circuit-breaker",
+        "scope": "tenant",
+        "description": "Requests per minute this tenant may send to the chat endpoints; a tenant may lower it, only an operator raises the ceiling.",
+        "change": {
+          "operation": "update_rate_limits_api_v1_tenants_current_rate_limits_patch",
+          "method": "PATCH",
+          "path": "/api/v1/tenants/current/rate-limits",
+          "field": "chat",
+          "permissions": [
+            "settings.manage",
+            "settings.uploads.manage",
+            "settings.retention.manage"
+          ],
+          "minimum": 1,
+          "maximum": 200,
+          "maximum_setting": "RATE_LIMIT_CHAT_RPM"
+        }
+      },
+      {
+        "key": "rate_limit_read_rpm",
+        "value": 600,
+        "unit": "requests_per_minute",
+        "source": "platform",
+        "changeable_by": "tenant_admin",
+        "setting": "rate_limits.read",
+        "docs": "/docs/reference/configuration#concurrency-rate-limits-and-circuit-breaker",
+        "scope": "tenant",
+        "description": "Requests per minute this tenant may send to the read endpoints; a tenant may lower it, only an operator raises the ceiling.",
+        "change": {
+          "operation": "update_rate_limits_api_v1_tenants_current_rate_limits_patch",
+          "method": "PATCH",
+          "path": "/api/v1/tenants/current/rate-limits",
+          "field": "read",
+          "permissions": [
+            "settings.manage",
+            "settings.uploads.manage",
+            "settings.retention.manage"
+          ],
+          "minimum": 1,
+          "maximum": 600,
+          "maximum_setting": "RATE_LIMIT_READ_RPM"
+        }
+      },
+      {
+        "key": "rate_limit_admin_rpm",
+        "value": 120,
+        "unit": "requests_per_minute",
+        "source": "platform",
+        "changeable_by": "tenant_admin",
+        "setting": "rate_limits.admin",
+        "docs": "/docs/reference/configuration#concurrency-rate-limits-and-circuit-breaker",
+        "scope": "tenant",
+        "description": "Requests per minute this tenant may send to the admin endpoints; a tenant may lower it, only an operator raises the ceiling.",
+        "change": {
+          "operation": "update_rate_limits_api_v1_tenants_current_rate_limits_patch",
+          "method": "PATCH",
+          "path": "/api/v1/tenants/current/rate-limits",
+          "field": "admin",
+          "permissions": [
+            "settings.manage",
+            "settings.uploads.manage",
+            "settings.retention.manage"
+          ],
+          "minimum": 1,
+          "maximum": 120,
+          "maximum_setting": "RATE_LIMIT_ADMIN_RPM"
+        }
+      },
+      {
+        "key": "rate_limit_webhook_rpm",
+        "value": 120,
+        "unit": "requests_per_minute",
+        "source": "platform",
+        "changeable_by": "tenant_admin",
+        "setting": "rate_limits.webhook",
+        "docs": "/docs/reference/configuration#concurrency-rate-limits-and-circuit-breaker",
+        "scope": "tenant",
+        "description": "Requests per minute this tenant may send to the webhook endpoints; a tenant may lower it, only an operator raises the ceiling.",
+        "change": {
+          "operation": "update_rate_limits_api_v1_tenants_current_rate_limits_patch",
+          "method": "PATCH",
+          "path": "/api/v1/tenants/current/rate-limits",
+          "field": "webhook",
+          "permissions": [
+            "settings.manage",
+            "settings.uploads.manage",
+            "settings.retention.manage"
+          ],
+          "minimum": 1,
+          "maximum": 120,
+          "maximum_setting": "RATE_LIMIT_WEBHOOK_RPM"
+        }
+      },
+      {
+        "key": "rate_limit_widget_rpm",
+        "value": 120,
+        "unit": "requests_per_minute",
+        "source": "platform",
+        "changeable_by": "tenant_admin",
+        "setting": "rate_limits.widget",
+        "docs": "/docs/reference/configuration#concurrency-rate-limits-and-circuit-breaker",
+        "scope": "tenant",
+        "description": "Requests per minute this tenant may send to the widget endpoints; a tenant may lower it, only an operator raises the ceiling.",
+        "change": {
+          "operation": "update_rate_limits_api_v1_tenants_current_rate_limits_patch",
+          "method": "PATCH",
+          "path": "/api/v1/tenants/current/rate-limits",
+          "field": "widget",
+          "permissions": [
+            "settings.manage",
+            "settings.uploads.manage",
+            "settings.retention.manage"
+          ],
+          "minimum": 1,
+          "maximum": 120,
+          "maximum_setting": "RATE_LIMIT_WIDGET_RPM"
+        }
+      },
+      {
+        "key": "rate_limit_chat_visitor_rpm",
+        "value": 60,
+        "unit": "requests_per_minute",
+        "source": "platform",
+        "changeable_by": "tenant_admin",
+        "setting": "rate_limits.chat_per_visitor",
+        "docs": "/docs/reference/configuration#concurrency-rate-limits-and-circuit-breaker",
+        "scope": "tenant",
+        "description": "Requests per minute one visitor may send to the chat endpoints, inside the tenant's lane; a tenant may lower it, only an operator raises the ceiling.",
+        "change": {
+          "operation": "update_rate_limits_api_v1_tenants_current_rate_limits_patch",
+          "method": "PATCH",
+          "path": "/api/v1/tenants/current/rate-limits",
+          "field": "chat_per_visitor",
+          "permissions": [
+            "settings.manage",
+            "settings.uploads.manage",
+            "settings.retention.manage"
+          ],
+          "minimum": 1,
+          "maximum": 60,
+          "maximum_setting": "RATE_LIMIT_CHAT_VISITOR_RPM"
+        }
+      },
+      {
+        "key": "rate_limit_widget_visitor_rpm",
+        "value": 20,
+        "unit": "requests_per_minute",
+        "source": "platform",
+        "changeable_by": "tenant_admin",
+        "setting": "rate_limits.widget_per_visitor",
+        "docs": "/docs/reference/configuration#concurrency-rate-limits-and-circuit-breaker",
+        "scope": "tenant",
+        "description": "Requests per minute one visitor may send to the widget endpoints, inside the tenant's lane; a tenant may lower it, only an operator raises the ceiling.",
+        "change": {
+          "operation": "update_rate_limits_api_v1_tenants_current_rate_limits_patch",
+          "method": "PATCH",
+          "path": "/api/v1/tenants/current/rate-limits",
+          "field": "widget_per_visitor",
+          "permissions": [
+            "settings.manage",
+            "settings.uploads.manage",
+            "settings.retention.manage"
+          ],
+          "minimum": 1,
+          "maximum": 20,
+          "maximum_setting": "RATE_LIMIT_WIDGET_VISITOR_RPM"
+        }
+      },
+      {
+        "key": "structured_kb_max_file_size_mb",
+        "value": 100,
+        "unit": "megabytes",
+        "source": "platform",
+        "changeable_by": "operator",
+        "setting": "STRUCTURED_KB_MAX_FILE_SIZE_MB",
+        "docs": "/docs/reference/configuration#structured-knowledge-bases",
+        "scope": "tenant",
+        "description": "Largest CSV or spreadsheet a structured knowledge base accepts."
+      },
+      {
+        "key": "structured_kb_write_max_records",
+        "value": 500,
+        "unit": "count",
+        "source": "platform",
+        "changeable_by": "operator",
+        "setting": "STRUCTURED_KB_WRITE_MAX_RECORDS",
+        "docs": "/docs/reference/configuration#structured-knowledge-bases",
+        "scope": "tenant",
+        "description": "Most records one structured write node may carry."
+      },
+      {
+        "key": "structured_kb_write_max_payload_bytes",
+        "value": 2097152,
+        "unit": "bytes",
+        "source": "platform",
+        "changeable_by": "operator",
+        "setting": "STRUCTURED_KB_WRITE_MAX_PAYLOAD_BYTES",
+        "docs": "/docs/reference/configuration#structured-knowledge-bases",
+        "scope": "tenant",
+        "description": "Largest payload one structured write node may carry."
+      },
+      {
+        "key": "office_document_max_expanded_mb",
+        "value": 1024,
+        "unit": "megabytes",
+        "source": "platform",
+        "changeable_by": "operator",
+        "setting": "OFFICE_DOCUMENT_MAX_EXPANDED_MB",
+        "docs": "/docs/reference/configuration#chunking-and-ingestion",
+        "scope": "tenant",
+        "description": "Total unpacked size an Office document may declare before it is refused."
+      },
+      {
+        "key": "scrape_concurrency_per_tenant",
+        "value": 2,
+        "unit": "count",
+        "source": "platform",
+        "changeable_by": "operator",
+        "setting": "SCRAPE_TENANT_CONCURRENCY_LIMIT",
+        "docs": "/docs/reference/configuration#chunking-and-ingestion",
+        "scope": "tenant",
+        "description": "Scrapes of this tenant that run at once; more wait for a slot."
+      },
+      {
+        "key": "chat_message_max_length",
+        "value": 32000,
+        "unit": "characters",
+        "source": "platform",
+        "changeable_by": "operator",
+        "setting": "CHAT_MESSAGE_MAX_LENGTH",
+        "docs": "/docs/reference/configuration#chat-and-history",
+        "scope": "tenant",
+        "description": "Longest chat message the API accepts."
+      },
+      {
+        "key": "orchestration_max_stages",
+        "value": 500,
+        "unit": "count",
+        "source": "platform",
+        "changeable_by": "operator",
+        "setting": "ORCHESTRATION_MAX_STAGES",
+        "docs": "/docs/reference/configuration#agents-and-orchestration",
+        "scope": "tenant",
+        "description": "Pipeline stages one run may take."
+      },
+      {
+        "key": "orchestration_harness_call_max_depth",
+        "value": 5,
+        "unit": "count",
+        "source": "platform",
+        "changeable_by": "operator",
+        "setting": "ORCHESTRATION_HARNESS_CALL_MAX_DEPTH",
+        "docs": "/docs/reference/configuration#agents-and-orchestration",
+        "scope": "tenant",
+        "description": "How deep harness_call may nest one solution inside another."
+      },
+      {
+        "key": "read_document_max_chars",
+        "value": 20000,
+        "unit": "characters",
+        "source": "platform",
+        "changeable_by": "operator",
+        "setting": "READ_DOCUMENT_MAX_CHARS",
+        "docs": "/docs/reference/configuration#retrieval-and-reranking",
+        "scope": "tenant",
+        "description": "Most characters read_document returns from one document."
+      },
+      {
+        "key": "max_concurrent_agent_runs_per_tenant",
+        "value": 20,
+        "unit": "count",
+        "source": "platform",
+        "changeable_by": "operator",
+        "setting": "MAX_CONCURRENT_AGENT_RUNS_PER_TENANT",
+        "docs": "/docs/reference/configuration#concurrency-rate-limits-and-circuit-breaker",
+        "scope": "tenant",
+        "description": "Agent runs of this tenant that execute at once.",
+        "change": {
+          "operation": "patch_run_capacity_api_v1_platform_settings_runs_capacity_patch",
+          "method": "PATCH",
+          "path": "/api/v1/platform-settings/runs/capacity",
+          "field": "per_tenant",
+          "permissions": [],
+          "minimum": 1,
+          "maximum": 100000,
+          "requires_role": [
+            "superadmin"
+          ],
+          "mode": "platform"
+        },
+        "origin": "default",
+        "tenant_change": {
+          "operation": "update_tenant_limits_api_v1_tenants__tenant_id__limits_patch",
+          "method": "PATCH",
+          "path": "/api/v1/tenants/{tenant_id}/limits",
+          "field": "max_concurrent_agent_runs",
+          "permissions": [
+            "limits.manage"
+          ],
+          "minimum": 1,
+          "maximum": 100000,
+          "requires_role": [
+            "platform_admin",
+            "superadmin"
+          ],
+          "mode": "platform"
+        }
+      },
+      {
+        "key": "max_concurrent_agent_runs_global",
+        "value": 200,
+        "unit": "count",
+        "source": "platform",
+        "changeable_by": "operator",
+        "setting": "MAX_CONCURRENT_AGENT_RUNS_GLOBAL",
+        "docs": "/docs/reference/configuration#concurrency-rate-limits-and-circuit-breaker",
+        "scope": "instance",
+        "description": "Agent runs of all tenants that execute at once.",
+        "change": {
+          "operation": "patch_run_capacity_api_v1_platform_settings_runs_capacity_patch",
+          "method": "PATCH",
+          "path": "/api/v1/platform-settings/runs/capacity",
+          "field": "global",
+          "permissions": [],
+          "minimum": 1,
+          "maximum": 1000000,
+          "requires_role": [
+            "superadmin"
+          ],
+          "mode": "platform"
+        },
+        "origin": "default"
+      },
+      {
+        "key": "agent_run_slot_wait_seconds",
+        "value": 30,
+        "unit": "seconds",
+        "source": "platform",
+        "changeable_by": "operator",
+        "setting": "AGENT_RUN_SEMAPHORE_TIMEOUT",
+        "docs": "/docs/reference/configuration#concurrency-rate-limits-and-circuit-breaker",
+        "scope": "tenant",
+        "description": "How long a run waits for a free slot before it is refused.",
+        "change": {
+          "operation": "patch_run_capacity_api_v1_platform_settings_runs_capacity_patch",
+          "method": "PATCH",
+          "path": "/api/v1/platform-settings/runs/capacity",
+          "field": "wait_seconds",
+          "permissions": [],
+          "minimum": 0,
+          "maximum": 600,
+          "requires_role": [
+            "superadmin"
+          ],
+          "mode": "platform"
+        },
+        "origin": "default"
+      },
+      {
+        "key": "webhook_default_timeout_seconds",
+        "value": 30,
+        "unit": "seconds",
+        "source": "platform",
+        "changeable_by": "operator",
+        "setting": "WEBHOOK_DEFAULT_TIMEOUT_SECONDS",
+        "docs": "/docs/reference/configuration#webhook-tools",
+        "scope": "tenant",
+        "description": "Timeout of a webhook tool that sets none."
+      },
+      {
+        "key": "webhook_max_timeout_seconds",
+        "value": 120,
+        "unit": "seconds",
+        "source": "platform",
+        "changeable_by": "operator",
+        "setting": "WEBHOOK_MAX_TIMEOUT_SECONDS",
+        "docs": "/docs/reference/configuration#webhook-tools",
+        "scope": "tenant",
+        "description": "Highest timeout a webhook tool may set."
+      },
+      {
+        "key": "api_request_default_timeout_seconds",
+        "value": 30,
+        "unit": "seconds",
+        "source": "platform",
+        "changeable_by": "operator",
+        "setting": "API_REQUEST_DEFAULT_TIMEOUT_SECONDS",
+        "docs": "/docs/reference/configuration#agents-and-orchestration",
+        "scope": "tenant",
+        "description": "Timeout of an API Request node that sets none."
+      },
+      {
+        "key": "api_request_max_timeout_seconds",
+        "value": 120,
+        "unit": "seconds",
+        "source": "platform",
+        "changeable_by": "operator",
+        "setting": "API_REQUEST_MAX_TIMEOUT_SECONDS",
+        "docs": "/docs/reference/configuration#agents-and-orchestration",
+        "scope": "tenant",
+        "description": "Highest timeout per attempt an API Request node may set."
+      },
+      {
+        "key": "api_request_max_total_seconds",
+        "value": 600,
+        "unit": "seconds",
+        "source": "platform",
+        "changeable_by": "operator",
+        "setting": "API_REQUEST_MAX_TOTAL_SECONDS",
+        "docs": "/docs/reference/configuration#agents-and-orchestration",
+        "scope": "tenant",
+        "description": "Longest an API Request node may take over all its attempts."
+      },
+      {
+        "key": "api_request_max_response_bytes",
+        "value": 1048576,
+        "unit": "bytes",
+        "source": "platform",
+        "changeable_by": "operator",
+        "setting": "API_REQUEST_MAX_RESPONSE_BYTES",
+        "docs": "/docs/reference/configuration#agents-and-orchestration",
+        "scope": "tenant",
+        "description": "Largest response body an API Request node accepts."
+      },
+      {
+        "key": "mcp_discovery_timeout_seconds",
+        "value": 10,
+        "unit": "seconds",
+        "source": "platform",
+        "changeable_by": "operator",
+        "setting": "MCP_DISCOVERY_TIMEOUT",
+        "docs": "/docs/reference/configuration#mcp-servers",
+        "scope": "tenant",
+        "description": "How long the platform waits for an MCP server to list its tools."
+      },
+      {
+        "key": "mcp_max_tool_count",
+        "value": 512,
+        "unit": "count",
+        "source": "platform",
+        "changeable_by": "operator",
+        "setting": "MCP_MAX_TOOL_COUNT",
+        "docs": "/docs/reference/configuration#mcp-servers",
+        "scope": "tenant",
+        "description": "Most tools accepted from one MCP server."
+      },
+      {
+        "key": "mcp_max_tool_result_bytes",
+        "value": 4194304,
+        "unit": "bytes",
+        "source": "platform",
+        "changeable_by": "operator",
+        "setting": "MCP_MAX_TOOL_RESULT_BYTES",
+        "docs": "/docs/reference/configuration#mcp-servers",
+        "scope": "tenant",
+        "description": "Largest result of one MCP tool call; a larger one is refused, not cut."
+      },
+      {
+        "key": "llm_request_timeout_seconds",
+        "value": 180,
+        "unit": "seconds",
+        "source": "platform",
+        "changeable_by": "operator",
+        "setting": "LLM_REQUEST_TIMEOUT_SECONDS",
+        "docs": "/docs/reference/configuration#agents-and-orchestration",
+        "scope": "tenant",
+        "description": "How long one request to a model may take."
+      },
+      {
+        "key": "model_endpoint_slot_wait_seconds",
+        "value": 120,
+        "unit": "seconds",
+        "source": "platform",
+        "changeable_by": "operator",
+        "setting": "MODEL_ENDPOINT_SLOT_WAIT_SECONDS",
+        "docs": "/docs/reference/configuration#concurrency-rate-limits-and-circuit-breaker",
+        "scope": "tenant",
+        "description": "How long a request to a model endpoint with a concurrency limit waits for a free slot before it fails with model_endpoint_busy."
+      },
+      {
+        "key": "email_max_attachment_mb",
+        "value": 25,
+        "unit": "megabytes",
+        "source": "platform",
+        "changeable_by": "operator",
+        "setting": "EMAIL_MAX_ATTACHMENT_MB",
+        "docs": "/docs/reference/configuration#email-and-connections",
+        "scope": "tenant",
+        "description": "Largest attachment the send-email tool sends."
+      },
+      {
+        "key": "telephony_max_call_duration_seconds",
+        "value": 3600,
+        "unit": "seconds",
+        "source": "platform",
+        "changeable_by": "operator",
+        "setting": "TELEPHONY_MAX_CALL_DURATION",
+        "docs": "/docs/reference/configuration#voice-and-telephony",
+        "scope": "tenant",
+        "description": "Longest a phone call may last."
+      },
+      {
+        "key": "orchestration_max_branch_concurrency",
+        "value": 8,
+        "unit": "count",
+        "source": "platform",
+        "changeable_by": "operator",
+        "setting": "ORCHESTRATION_MAX_BRANCH_CONCURRENCY",
+        "docs": "/docs/concepts/capacity-and-concurrency#branch-concurrency",
+        "scope": "tenant",
+        "description": "Branches of one fan-out or Map loop node that run at once; a node's max_concurrency above it is capped."
+      },
+      {
+        "key": "orchestration_process_max_branch_inflight",
+        "value": 32,
+        "unit": "count",
+        "source": "platform",
+        "changeable_by": "operator",
+        "setting": "ORCHESTRATION_PROCESS_MAX_BRANCH_INFLIGHT",
+        "docs": "/docs/concepts/capacity-and-concurrency#branch-concurrency",
+        "scope": "instance",
+        "description": "Branches all runs in one worker or API process run at once; more wait for a slot."
+      },
+      {
+        "key": "orchestration_parallel_branches",
+        "value": true,
+        "unit": "boolean",
+        "source": "tenant",
+        "changeable_by": "operator",
+        "setting": "feature_flags.ORCHESTRATION_PARALLEL_FANOUT_ENABLED",
+        "docs": "/docs/concepts/capacity-and-concurrency#branch-concurrency",
+        "scope": "tenant",
+        "description": "Whether the branches of a fan-out and the items of a Map loop run concurrently; with either switch off they run one after another, with the same result.",
+        "change": {
+          "operation": "set_flag_api_v1_admin_feature_flags__tenant_id___flag_key__put",
+          "method": "PUT",
+          "path": "/api/v1/admin/feature-flags/{tenant_id}/ORCHESTRATION_PARALLEL_FANOUT_ENABLED",
+          "field": "enabled",
+          "permissions": [],
+          "requires_role": [
+            "platform_admin",
+            "superadmin"
+          ],
+          "mode": "platform"
+        },
+        "switches": [
+          {
+            "setting": "ORCHESTRATION_PARALLEL_FANOUT_ENABLED",
+            "source": "platform",
+            "enabled": true
+          },
+          {
+            "setting": "feature_flags.ORCHESTRATION_PARALLEL_FANOUT_ENABLED",
+            "source": "tenant",
+            "enabled": true
+          }
+        ]
+      }
+    ],
+    "tenant_quotas": {
+      "path": "/api/v1/tenants/current/quota-usage",
+      "docs": "/docs/reference/limits-and-quotas#tenant-resource-quotas",
+      "values": [
+        {
+          "key": "monthly_processing_step_cap",
+          "value": null,
+          "unit": "processing_steps",
+          "used": 0,
+          "state": "none",
+          "period": {
+            "key": "2026-10",
+            "start": "2026-10-01T00:00:00+00:00",
+            "resets_at": "2026-11-01T00:00:00+00:00"
+          },
+          "source": "tenant",
+          "changeable_by": "tenant_owner",
+          "setting": "monthly_processing_step_cap",
+          "docs": "/docs/reference/limits-and-quotas#your-monthly-processing-step-cap",
+          "description": "New work stops once this billing month's net Processing Steps reach the cap; started work finishes. None for no cap.",
+          "change": {
+            "operation": "update_processing_step_cap_api_v1_tenants_current_processing_step_cap_patch",
+            "method": "PATCH",
+            "path": "/api/v1/tenants/current/processing-step-cap",
+            "field": "monthly_processing_step_cap",
+            "permissions": [
+              "settings.manage"
+            ],
+            "minimum": 0
+          }
+        }
+      ],
+      "changes": [
+        {
+          "key": "monthly_inference_token_budget",
+          "operation": "update_tenant_limits_api_v1_tenants__tenant_id__limits_patch",
+          "method": "PATCH",
+          "path": "/api/v1/tenants/{tenant_id}/limits",
+          "field": "monthly_inference_token_budget",
+          "permissions": [
+            "limits.inference_budget.manage",
+            "limits.manage"
+          ]
+        },
+        {
+          "key": "monthly_processing_step_cap",
+          "operation": "update_processing_step_cap_api_v1_tenants_current_processing_step_cap_patch",
+          "method": "PATCH",
+          "path": "/api/v1/tenants/current/processing-step-cap",
+          "field": "monthly_processing_step_cap",
+          "permissions": [
+            "settings.manage"
+          ],
+          "minimum": 0
+        }
+      ]
+    }
+  }
+}

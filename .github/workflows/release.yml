@@ -1,0 +1,74 @@
+# Releases @cavelon/cli to npm, through npm's trusted publishing (OIDC): no token
+# is stored anywhere. npm accepts this workflow only as goodguys-gmbh/cavelon-dev-kit,
+# release.yml, environment "release", and only to *stage* a version. A maintainer
+# then approves the staged version on npmjs.com with 2FA before it is public.
+#
+# A release starts with a tag `vX.Y.Z` matching cli/package.json. Only repository
+# admins may create `v*` tags (ruleset "Release tags: admins only"), and the
+# "release" environment accepts only `v*` tags.
+#
+# PyPI (`cavelon`) has a trusted publisher configured for the same workflow and
+# environment; its job is added with the Python package.
+name: Release
+
+# Third-party actions are pinned to a commit and no cache is restored: this
+# workflow holds an OIDC token that can stage a release.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: verify the tagged CLI
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+      - name: The tag matches cli/package.json
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          test "v${version}" = "${GITHUB_REF_NAME}" || {
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match cli/package.json version ${version}"
+            exit 1
+          }
+      # Dependencies' install scripts never run where a release can be staged.
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+  stage-npm:
+    name: stage @cavelon/cli on npm
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: release
+    permissions:
+      contents: read
+      id-token: write # npm trusted publishing (OIDC) and provenance
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - name: npm with staged publishing
+        run: npm install -g --ignore-scripts npm@11.16.0
+      # Dependencies' install scripts never run where a release can be staged.
+      - run: npm ci --ignore-scripts
+      - name: Stage the package for a maintainer's approval
+        run: npm stage publish --access public

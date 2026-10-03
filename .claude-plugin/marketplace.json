@@ -1,0 +1,19 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "cavelon-dev-kit",
+  "description": "The Cavelon dev-kit: skills and the cavelon MCP server for building Cavelon solutions with a coding agent.",
+  "owner": {
+    "name": "goodguys GmbH",
+    "url": "https://github.com/goodguys-gmbh/cavelon-dev-kit"
+  },
+  "plugins": [
+    {
+      "name": "cavelon",
+      "source": "./plugin",
+      "description": "Build, seed, test and improve Cavelon solutions from a repository: the Cavelon skills and the cavelon MCP server.",
+      "version": "0.1.0",
+      "category": "development",
+      "license": "Apache-2.0"
+    }
+  ]
+}

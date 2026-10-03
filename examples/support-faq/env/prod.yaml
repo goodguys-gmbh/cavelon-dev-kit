@@ -1,0 +1,6 @@
+# Where `cavelon apply --env prod` goes. Never a token or a secret value.
+# tenant: <slug or id>        # default: the tenant in cavelon.yaml
+# harness: <slug>             # created as a draft when it does not exist yet
+# mode: overwrite             # or replace
+# runtime_bindings:           # the package's runtime requirement key -> this tenant's resource id
+#   <key>: <id>

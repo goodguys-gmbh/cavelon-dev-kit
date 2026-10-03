@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  cli:
+    name: cli (Node ${{ matrix.node }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        node: [20, 22, 24]
+        include:
+          - os: macos-latest
+            node: 22
+          - os: windows-latest
+            node: 22
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: cli/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+      - name: Smoke test the built binary
+        shell: bash
+        run: |
+          node dist/cli.js --version
+          node dist/cli.js commands --json > /dev/null
+          set +e
+          node dist/cli.js whoami --json < /dev/null
+          code=$?
+          set -e
+          test "$code" = 2   # no instance chosen: a usage error, never a prompt
+      - name: The package carries the skills for `init --agents` and the license
+        shell: bash
+        run: |
+          npm pack --dry-run 2>&1 | tee pack.txt
+          for skill in cavelon-loop cavelon-authoring cavelon-testing cavelon-long-running; do
+            grep -q "dist/skills/$skill/SKILL.md" pack.txt
+          done
+          grep -q "dist/LICENSE" pack.txt

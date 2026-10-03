@@ -1,0 +1,68 @@
+{
+  "manifest": {
+    "package_version": "v3",
+    "exported_at": "2026-10-02T09:00:00Z",
+    "source_tenant_id": "00000000-0000-4000-8000-0000000000aa",
+    "source_tenant_slug": "acme",
+    "scope": "agent_graph",
+    "secrets_included": false,
+    "capabilities": []
+  },
+  "tenant_settings": {},
+  "persona": null,
+  "tools": [
+    {
+      "slug": "crm",
+      "name": "CRM lookup",
+      "tool_type": "webhook",
+      "scope": "tenant_local",
+      "webhook_config": { "url": "https://crm.example.test/lookup", "headers": { "Authorization": "{{secret:crm_token}}" } }
+    }
+  ],
+  "tool_bindings": [],
+  "guardrails": [],
+  "knowledge_bases": [{ "name": "Handbook", "description": "Policies and opening hours" }],
+  "skills": [
+    { "slug": "faq", "name": "FAQ", "knowledge_base_assignments": [{ "knowledge_base_name": "Handbook" }] }
+  ],
+  "harnesses": [{ "slug": "support", "name": "Support", "status": "draft" }],
+  "agents": [
+    {
+      "slug": "helper",
+      "harness_slug": "support",
+      "name": "Helper",
+      "llm_model": "gpt-4.1",
+      "llm_provider": "openai",
+      "temperature": 0.2,
+      "parallel_tool_calls": false,
+      "is_entrypoint": true,
+      "system_prompt": "Answer from the handbook.\nSay when you do not know.",
+      "skill_assignments": [{ "skill_slug": "faq" }]
+    }
+  ],
+  "canvas_notes": [],
+  "test_suites": [
+    {
+      "name": "Smoke",
+      "harness_slug": "support",
+      "tags": [],
+      "settings": {},
+      "test_cases": [{ "name": "Opening hours", "steps": [{ "user_message": "When are you open?", "reference_answer": "9 to 5" }] }]
+    },
+    {
+      "name": "Refusals",
+      "harness_slug": "support",
+      "tags": [],
+      "settings": {},
+      "test_cases": [{ "name": "Out of scope", "steps": [{ "user_message": "Write me a poem." }] }]
+    }
+  ],
+  "model_registry": [],
+  "model_role_defaults": [],
+  "realtime_config": null,
+  "telephony_config": null,
+  "web_sources": [],
+  "kb_orders": null,
+  "registry_entities": {},
+  "runtime_requirements": null
+}

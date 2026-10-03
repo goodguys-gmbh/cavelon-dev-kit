@@ -1,0 +1,3 @@
+- name: Support FAQ
+  description: Opening hours, shipping, returns and refunds. Uploaded from seeds/faq/.
+  content_language: en

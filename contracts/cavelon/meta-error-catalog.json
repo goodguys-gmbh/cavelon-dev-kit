@@ -1,0 +1,3284 @@
+{
+  "rule_codes": [
+    {
+      "code": "agent_pipeline_fanout_unsupported",
+      "rule": "fanout_cardinality",
+      "message": "Branching one agent onto several agents is not supported — an agent's pipeline edge passes its output to exactly one agent.",
+      "explanation": "Enforce per-edge-type source-side cardinality.",
+      "hint": "Keep a single pipeline edge to the next agent and chain the others behind it, or fan out onto orchestration nodes and reconverge them in a Join node.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "api_request_timeout_exceeds_ceiling",
+      "rule": "api_request_timeout_within_ceiling",
+      "message": "Warn (don't block) when an api_request timeout exceeds the per-attempt ceiling — the value is reduced at runtime, so the graph does not say what it does. ERROR is the write gate's answer, not this one: see CONFIG_WRITE_ONLY_VALIDATORS for why stored graphs only get a warning.",
+      "explanation": "Warn (don't block) when an api_request timeout exceeds the per-attempt ceiling — the value is reduced at runtime, so the graph does not say what it does. ERROR is the write gate's answer, not this one: see CONFIG_WRITE_ONLY_VALIDATORS for why stored graphs only get a warning.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "approval_router_ignores_the_decision",
+      "rule": "approval_router_ignores_the_decision",
+      "message": "A router right after an approval that never reads the decision.",
+      "explanation": "A router right after an approval that never reads the decision.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "approval_wraps_a_text_payload",
+      "rule": "approval_after_a_text_payload_changes_its_kind",
+      "message": "An approval wraps a non-object payload instead of passing it through.",
+      "explanation": "An approval wraps a non-object payload instead of passing it through.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "chat_start_duplicate",
+      "rule": "chat_start_is_unique",
+      "message": "At most one active Chat Start node is allowed per harness.",
+      "explanation": "At most one active Chat Start node is allowed per harness.",
+      "hint": "Keep one Chat Start node, or deactivate the duplicate.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "chat_start_edge_drops_conversation_history",
+      "rule": "chat_start_edge_keeps_the_conversation",
+      "message": "The edge out of Chat Start should not switch the conversation history off.",
+      "explanation": "The edge out of Chat Start should not switch the conversation history off.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "chat_start_has_incoming_edge",
+      "rule": "chat_start_nodes_are_source_only",
+      "message": "Chat Start nodes begin a run and cannot have incoming edges.",
+      "explanation": "Chat Start nodes begin a run and cannot have incoming edges.",
+      "hint": "Remove the inbound edge; Chat Start nodes are graph entrypoints.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "condition_branch_priority_tie",
+      "rule": "condition_branches_must_not_tie_on_priority",
+      "message": "Two branches out of one node must not share a priority.",
+      "explanation": "Two branches out of one node must not share a priority.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "condition_cycle",
+      "rule": "cycles_respect_edge_policy",
+      "message": "Enforce each edge type's catalog `cycle_policy` via PER-TYPE DFS.",
+      "explanation": "Enforce each edge type's catalog `cycle_policy` via PER-TYPE DFS.",
+      "hint": "Break the cycle by removing one of the edges in it.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "condition_fanin_exceeded",
+      "rule": "fanin_cardinality",
+      "message": "Enforce per-edge-type target-side cardinality.",
+      "explanation": "Enforce per-edge-type target-side cardinality.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "condition_fanout_exceeded",
+      "rule": "fanout_cardinality",
+      "message": "Enforce per-edge-type source-side cardinality.",
+      "explanation": "Enforce per-edge-type source-side cardinality.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "condition_input_mismatch",
+      "rule": "state_update_required_sources_match_upstream_schema",
+      "message": "Deterministic node reads must be compatible with known runtime schemas.",
+      "explanation": "Deterministic node reads must be compatible with known runtime schemas.",
+      "hint": "Use a concrete Run State path like case.intent or items[0].id.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "condition_input_schema_unknown",
+      "rule": "state_update_required_sources_match_upstream_schema",
+      "message": "Deterministic node reads must be compatible with known runtime schemas.",
+      "explanation": "Deterministic node reads must be compatible with known runtime schemas.",
+      "hint": "Use a concrete Run State path like case.intent or items[0].id.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "condition_value_template_unresolved",
+      "rule": "router_condition_paths_match_known_schemas",
+      "message": "Router condition reads should be statically resolvable when schemas exist.",
+      "explanation": "Router condition reads should be statically resolvable when schemas exist.",
+      "hint": "Keep exactly one default branch.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "consult_cycle",
+      "rule": "cycles_respect_edge_policy",
+      "message": "Enforce each edge type's catalog `cycle_policy` via PER-TYPE DFS.",
+      "explanation": "Enforce each edge type's catalog `cycle_policy` via PER-TYPE DFS.",
+      "hint": "Break the cycle by removing one of the edges in it.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "consult_fanin_exceeded",
+      "rule": "fanin_cardinality",
+      "message": "Enforce per-edge-type target-side cardinality.",
+      "explanation": "Enforce per-edge-type target-side cardinality.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "consult_fanout_exceeded",
+      "rule": "fanout_cardinality",
+      "message": "Enforce per-edge-type source-side cardinality.",
+      "explanation": "Enforce per-edge-type source-side cardinality.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "consult_input_mismatch",
+      "rule": "state_update_required_sources_match_upstream_schema",
+      "message": "Deterministic node reads must be compatible with known runtime schemas.",
+      "explanation": "Deterministic node reads must be compatible with known runtime schemas.",
+      "hint": "Use a concrete Run State path like case.intent or items[0].id.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "consult_input_schema_unknown",
+      "rule": "state_update_required_sources_match_upstream_schema",
+      "message": "Deterministic node reads must be compatible with known runtime schemas.",
+      "explanation": "Deterministic node reads must be compatible with known runtime schemas.",
+      "hint": "Use a concrete Run State path like case.intent or items[0].id.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "default_branch_condition_never_read",
+      "rule": "default_branch_carries_no_dead_condition",
+      "message": "A `default` edge with a `condition` never evaluates the condition.",
+      "explanation": "A `default` edge with a `condition` never evaluates the condition.",
+      "hint": "Turn off `default` so the condition decides, or remove the condition.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "document_metadata_fixed_index_in_loop",
+      "rule": "document_metadata_in_loop_must_not_pin_a_lane_index",
+      "message": "A Write-Metadata sink INSIDE a for_each over the documents lane must not bind a FIXED lane index: `$.documents[0].id` would write document #0's metadata on every iteration (with each item's fields — last write wins). Bind `$.loop.item.id`, or leave the binding empty (the in-loop default).",
+      "explanation": "A Write-Metadata sink INSIDE a for_each over the documents lane must not bind a FIXED lane index: `$.documents[0].id` would write document #0's metadata on every iteration (with each item's fields — last write wins). Bind `$.loop.item.id`, or leave the binding empty (the in-loop default).",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "document_save_fixed_index_in_loop",
+      "rule": "document_metadata_in_loop_must_not_pin_a_lane_index",
+      "message": "A Write-Metadata sink INSIDE a for_each over the documents lane must not bind a FIXED lane index: `$.documents[0].id` would write document #0's metadata on every iteration (with each item's fields — last write wins). Bind `$.loop.item.id`, or leave the binding empty (the in-loop default).",
+      "explanation": "A Write-Metadata sink INSIDE a for_each over the documents lane must not bind a FIXED lane index: `$.documents[0].id` would write document #0's metadata on every iteration (with each item's fields — last write wins). Bind `$.loop.item.id`, or leave the binding empty (the in-loop default).",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "document_save_identity_without_overwrite_mode",
+      "rule": "document_save_identity_needs_an_overwrite_mode",
+      "message": "`identity` only takes effect with `on_existing: overwrite | skip`.",
+      "explanation": "`identity` only takes effect with `on_existing: overwrite | skip`.",
+      "hint": "Set on_existing to",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "document_save_would_store_the_approval_decision",
+      "rule": "document_save_after_an_approval_would_store_the_decision",
+      "message": "A `document_save` right after an approval stores the decision.",
+      "explanation": "A `document_save` right after an approval stores the decision.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "duplicate_edge",
+      "rule": "at_most_one_edge_per_ordered_pair",
+      "message": "These nodes are already connected by an edge — a deactivated one counts.",
+      "explanation": "Only one edge per ⟨source, target⟩ pair, regardless of edge type.",
+      "hint": "Reactivate or delete the existing edge instead of adding a second one. Each ordered pair can carry at most one edge.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "endpoint_missing",
+      "rule": "endpoints_must_match_role_constraints",
+      "message": "Source and target nodes must have roles the edge type allows.",
+      "explanation": "Source and target nodes must have roles the edge type allows.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "entry_is_pipeline_target",
+      "rule": "entry_cannot_be_pipeline_target",
+      "message": "Entry nodes start the run — they shouldn't sit downstream of a pipeline.",
+      "explanation": "Entry nodes start the run — they shouldn't sit downstream of a pipeline.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "entrypoint_leads_nowhere",
+      "rule": "an_entrypoint_must_lead_somewhere",
+      "message": "An entry node without an outgoing edge starts nothing.",
+      "explanation": "An entry node without an outgoing edge starts nothing.",
+      "hint": "Wire this node into the first step of the workflow, or remove it.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "error_cycle",
+      "rule": "cycles_respect_edge_policy",
+      "message": "Enforce each edge type's catalog `cycle_policy` via PER-TYPE DFS.",
+      "explanation": "Enforce each edge type's catalog `cycle_policy` via PER-TYPE DFS.",
+      "hint": "Break the cycle by removing one of the edges in it.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "error_fanin_exceeded",
+      "rule": "fanin_cardinality",
+      "message": "Enforce per-edge-type target-side cardinality.",
+      "explanation": "Enforce per-edge-type target-side cardinality.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "error_fanout_exceeded",
+      "rule": "fanout_cardinality",
+      "message": "Enforce per-edge-type source-side cardinality.",
+      "explanation": "Enforce per-edge-type source-side cardinality.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "error_filter_class_unknown",
+      "rule": "error_filter_names_a_real_class",
+      "message": "Warn about unknown filters and recognized terminal exceptions.",
+      "explanation": "Warn about unknown filters and recognized terminal exceptions.",
+      "hint": "Remove terminal exception names from the error filter.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "error_filter_class_unroutable",
+      "rule": "error_filter_names_a_real_class",
+      "message": "Warn about unknown filters and recognized terminal exceptions.",
+      "explanation": "Warn about unknown filters and recognized terminal exceptions.",
+      "hint": "Remove terminal exception names from the error filter.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "error_input_mismatch",
+      "rule": "state_update_required_sources_match_upstream_schema",
+      "message": "Deterministic node reads must be compatible with known runtime schemas.",
+      "explanation": "Deterministic node reads must be compatible with known runtime schemas.",
+      "hint": "Use a concrete Run State path like case.intent or items[0].id.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "error_input_schema_unknown",
+      "rule": "state_update_required_sources_match_upstream_schema",
+      "message": "Deterministic node reads must be compatible with known runtime schemas.",
+      "explanation": "Deterministic node reads must be compatible with known runtime schemas.",
+      "hint": "Use a concrete Run State path like case.intent or items[0].id.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "fail_capable_node_without_error_edge",
+      "rule": "fail_capable_nodes_should_have_error_edge",
+      "message": "Warn when a node that can FAIL on error has no outgoing error edge.",
+      "explanation": "Warn when a node that can FAIL on error has no outgoing error edge.",
+      "hint": "Add an Error edge to a recovery node, or set the node to continue on error.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "for_each_item_body_does_not_return",
+      "rule": "for_each_item_body_returns_to_the_loop",
+      "message": "A loop body has to come back, or the loop runs once and the run ends.",
+      "explanation": "A loop body has to come back, or the loop runs once and the run ends.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "for_each_item_missing_body_branch",
+      "rule": "for_each_item_has_body_and_done_branches",
+      "message": "For Each Item routes by condition edges and re-enters via pipeline.",
+      "explanation": "For Each Item routes by condition edges and re-enters via pipeline.",
+      "hint": "Add a condition edge with source previous_output, path __for_each_done, operator equals, value false.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "for_each_item_missing_branches",
+      "rule": "for_each_item_has_body_and_done_branches",
+      "message": "For Each Item routes by condition edges and re-enters via pipeline.",
+      "explanation": "For Each Item routes by condition edges and re-enters via pipeline.",
+      "hint": "Add a condition edge with source previous_output, path __for_each_done, operator equals, value false.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "for_each_item_missing_done_branch",
+      "rule": "for_each_item_has_body_and_done_branches",
+      "message": "For Each Item routes by condition edges and re-enters via pipeline.",
+      "explanation": "For Each Item routes by condition edges and re-enters via pipeline.",
+      "hint": "Add a condition edge with source previous_output, path __for_each_done, operator equals, value false.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "for_each_item_uses_pipeline_outgoing",
+      "rule": "for_each_item_has_body_and_done_branches",
+      "message": "For Each Item routes by condition edges and re-enters via pipeline.",
+      "explanation": "For Each Item routes by condition edges and re-enters via pipeline.",
+      "hint": "Add a condition edge with source previous_output, path __for_each_done, operator equals, value false.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "handoff_cycle",
+      "rule": "cycles_respect_edge_policy",
+      "message": "Enforce each edge type's catalog `cycle_policy` via PER-TYPE DFS.",
+      "explanation": "Enforce each edge type's catalog `cycle_policy` via PER-TYPE DFS.",
+      "hint": "Break the cycle by removing one of the edges in it.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "handoff_fanin_exceeded",
+      "rule": "fanin_cardinality",
+      "message": "Enforce per-edge-type target-side cardinality.",
+      "explanation": "Enforce per-edge-type target-side cardinality.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "handoff_fanout_exceeded",
+      "rule": "fanout_cardinality",
+      "message": "Enforce per-edge-type source-side cardinality.",
+      "explanation": "Enforce per-edge-type source-side cardinality.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "handoff_input_mismatch",
+      "rule": "state_update_required_sources_match_upstream_schema",
+      "message": "Deterministic node reads must be compatible with known runtime schemas.",
+      "explanation": "Deterministic node reads must be compatible with known runtime schemas.",
+      "hint": "Use a concrete Run State path like case.intent or items[0].id.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "handoff_input_schema_unknown",
+      "rule": "state_update_required_sources_match_upstream_schema",
+      "message": "Deterministic node reads must be compatible with known runtime schemas.",
+      "explanation": "Deterministic node reads must be compatible with known runtime schemas.",
+      "hint": "Use a concrete Run State path like case.intent or items[0].id.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "handoff_pipeline_source_conflict",
+      "rule": "handoff_and_pipeline_should_not_share_source",
+      "message": "An agent cannot both transfer control and continue a deterministic pipeline.",
+      "explanation": "An agent cannot both transfer control and continue a deterministic pipeline.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "harness_call_source_not_guaranteed",
+      "rule": "state_update_required_sources_match_upstream_schema",
+      "message": "Deterministic node reads must be compatible with known runtime schemas.",
+      "explanation": "Deterministic node reads must be compatible with known runtime schemas.",
+      "hint": "Use a concrete Run State path like case.intent or items[0].id.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "harness_call_source_not_guaranteed_multi_valued",
+      "rule": "state_update_required_sources_match_upstream_schema",
+      "message": "The multi-value variant of the rule below: the path is well-formed but returns several values where one is read. Use a transform node with an array op to work over the list.",
+      "explanation": "Deterministic node reads must be compatible with known runtime schemas.",
+      "hint": "Use a concrete Run State path like case.intent or items[0].id.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "harness_call_source_not_guaranteed_path_invalid",
+      "rule": "state_update_required_sources_match_upstream_schema",
+      "message": "The JSON-path-invalid variant of the rule below: the referenced path is malformed.",
+      "explanation": "Deterministic node reads must be compatible with known runtime schemas.",
+      "hint": "Use a concrete Run State path like case.intent or items[0].id.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "input_guardrail_never_runs",
+      "rule": "input_guardrail_never_runs",
+      "message": "An input guardrail only runs on the agent that STARTS a run.",
+      "explanation": "An input guardrail only runs on the agent that STARTS a run.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "invalid_agent_output_schema",
+      "rule": "structured_agent_schemas_compile",
+      "message": "Graph readiness must reject configurations the runtime cannot compile.",
+      "explanation": "Graph readiness must reject configurations the runtime cannot compile.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "invalid_condition_config",
+      "rule": "condition_edges_have_valid_config",
+      "message": "Condition edges must carry a well-formed condition object or be marked default (emits invalid_condition_config). A well-formed condition is EITHER a leaf {source, operator, value, optional path} OR a compound of conditions nested arbitrarily via exactly one of {all: [...]} (AND), {any: [...]} (OR), or {not: cond}; a compound node has no top-level source/operator/value.",
+      "explanation": "Condition edges must carry a well-formed condition object or be marked default (emits invalid_condition_config). A well-formed condition is EITHER a leaf {source, operator, value, optional path} OR a compound of conditions nested arbitrarily via exactly one of {all: [...]} (AND), {any: [...]} (OR), or {not: cond}; a compound node has no top-level source/operator/value.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "invalid_entry_role",
+      "rule": "entry_must_be_eligible_role",
+      "message": "Only nodes whose role allows it can be marked as entry.",
+      "explanation": "Only nodes whose role allows it can be marked as entry.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "invalid_node_config",
+      "rule": "deterministic_node_configs_are_valid",
+      "message": "Each deterministic node's config must satisfy its per-node contract (emits invalid_node_config). The exact field spec per node type is projected by node_config_schema.derive_config_schema.",
+      "explanation": "Each deterministic node's config must satisfy its per-node contract (emits invalid_node_config). The exact field spec per node type is projected by node_config_schema.derive_config_schema.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "invalid_source_role",
+      "rule": "endpoints_must_match_role_constraints",
+      "message": "Source and target nodes must have roles the edge type allows.",
+      "explanation": "Source and target nodes must have roles the edge type allows.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "invalid_target_role",
+      "rule": "endpoints_must_match_role_constraints",
+      "message": "Source and target nodes must have roles the edge type allows.",
+      "explanation": "Source and target nodes must have roles the edge type allows.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "join_fed_outside_fanout",
+      "rule": "join_nodes_must_reconverge_a_fanout",
+      "message": "A Join consumes a `{branches: {...}}` payload that ONLY a parallel fanout produces. A Join fed by a single ordinary pipeline edge passes the other rules but crashes the executor with 'join node requires a branch payload'.",
+      "explanation": "A Join consumes a `{branches: {...}}` payload that ONLY a parallel fanout produces. A Join fed by a single ordinary pipeline edge passes the other rules but crashes the executor with 'join node requires a branch payload'.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "join_not_fanout_fed",
+      "rule": "join_nodes_must_reconverge_a_fanout",
+      "message": "A Join consumes a `{branches: {...}}` payload that ONLY a parallel fanout produces. A Join fed by a single ordinary pipeline edge passes the other rules but crashes the executor with 'join node requires a branch payload'.",
+      "explanation": "A Join consumes a `{branches: {...}}` payload that ONLY a parallel fanout produces. A Join fed by a single ordinary pipeline edge passes the other rules but crashes the executor with 'join node requires a branch payload'.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "kb_order_corpus_tool_reads_nothing",
+      "rule": "order_harness_corpus_tool_reads_nothing",
+      "message": "A corpus tool pinned to nothing can answer nothing, ever.",
+      "explanation": "A corpus tool pinned to nothing can answer nothing, ever.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "kb_order_corpus_tool_unpinned",
+      "rule": "order_harness_corpus_tool_is_tenant_wide",
+      "message": "An unpinned corpus tool on an order-bound solution reaches everything.",
+      "explanation": "An unpinned corpus tool on an order-bound solution reaches everything.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "kb_order_extractor_needs_structured_output",
+      "rule": "order_extraction_entry_answers_structured",
+      "message": "An extractor's entry agent must produce structured output.",
+      "explanation": "An extractor's entry agent must produce structured output.",
+      "hint": "Set this agent",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "kb_order_extractor_schemas_disagree",
+      "rule": "order_extraction_handoffs_agree_on_their_schema",
+      "message": "Every agent that may answer last needs the same output schema.",
+      "explanation": "Every agent that may answer last needs the same output schema.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "kb_order_harness_pipeline_unreachable",
+      "rule": "order_bound_harness_never_runs_its_pipeline",
+      "message": "Orchestration nodes on an order-bound harness are unreachable.",
+      "explanation": "Orchestration nodes on an order-bound harness are unreachable.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "masterloop_parent_cycle",
+      "rule": "masterloop_parent_is_trigger_backed_single_visit",
+      "message": "Durable loops require a single trigger-backed acyclic parent execution.",
+      "explanation": "Durable loops require a single trigger-backed acyclic parent execution.",
+      "hint": "Finish wiring the trigger entry and remove legacy agent entrypoints or disconnected nodes.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "masterloop_parent_incomplete",
+      "rule": "masterloop_parent_is_trigger_backed_single_visit",
+      "message": "Durable loops require a single trigger-backed acyclic parent execution.",
+      "explanation": "Durable loops require a single trigger-backed acyclic parent execution.",
+      "hint": "Finish wiring the trigger entry and remove legacy agent entrypoints or disconnected nodes.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "masterloop_parent_unsupported",
+      "rule": "masterloop_parent_is_trigger_backed_single_visit",
+      "message": "Durable loops require a single trigger-backed acyclic parent execution.",
+      "explanation": "Durable loops require a single trigger-backed acyclic parent execution.",
+      "hint": "Finish wiring the trigger entry and remove legacy agent entrypoints or disconnected nodes.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "masterloop_source_not_guaranteed",
+      "rule": "state_update_required_sources_match_upstream_schema",
+      "message": "Deterministic node reads must be compatible with known runtime schemas.",
+      "explanation": "Deterministic node reads must be compatible with known runtime schemas.",
+      "hint": "Use a concrete Run State path like case.intent or items[0].id.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "masterloop_source_not_guaranteed_multi_valued",
+      "rule": "state_update_required_sources_match_upstream_schema",
+      "message": "The multi-value variant of the rule below: the path is well-formed but returns several values where one is read. Use a transform node with an array op to work over the list.",
+      "explanation": "Deterministic node reads must be compatible with known runtime schemas.",
+      "hint": "Use a concrete Run State path like case.intent or items[0].id.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "masterloop_source_not_guaranteed_path_invalid",
+      "rule": "state_update_required_sources_match_upstream_schema",
+      "message": "The JSON-path-invalid variant of the rule below: the referenced path is malformed.",
+      "explanation": "Deterministic node reads must be compatible with known runtime schemas.",
+      "hint": "Use a concrete Run State path like case.intent or items[0].id.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "mixed_pipeline_and_condition_edges",
+      "rule": "source_cannot_mix_pipeline_and_condition",
+      "message": "A node cannot have BOTH outgoing pipeline and outgoing condition edges.",
+      "explanation": "A node cannot have BOTH outgoing pipeline and outgoing condition edges.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "no_entrypoint",
+      "rule": "graph_should_have_at_least_one_entry",
+      "message": "Warn (don't block) when no chat, trigger, or legacy agent start exists.",
+      "explanation": "Warn (don't block) when no chat, trigger, or legacy agent start exists.",
+      "hint": "Add a Chat Start or Trigger Start node, or mark one agent as the legacy chat entrypoint.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "output_config_not_read",
+      "rule": "output_config_that_is_never_read_is_named",
+      "message": "A `mapping` or `template` that does not fit the chosen source.",
+      "explanation": "A `mapping` or `template` that does not fit the chosen source.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "output_email_recipient_unset",
+      "rule": "output_email_should_declare_recipient",
+      "message": "Warn (don't block) when an email Output node has no configured recipient.",
+      "explanation": "Warn (don't block) when an email Output node has no configured recipient.",
+      "hint": "Set email_to on the node, or ensure the run payload provides email_to at runtime.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "output_path_lane_differs_from_source",
+      "rule": "output_paths_name_the_lane_of_their_declared_source",
+      "message": "`response_path`/`run_state_path` read the WHOLE envelope.",
+      "explanation": "`response_path`/`run_state_path` read the WHOLE envelope.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "output_source_not_guaranteed",
+      "rule": "state_update_required_sources_match_upstream_schema",
+      "message": "Deterministic node reads must be compatible with known runtime schemas.",
+      "explanation": "Deterministic node reads must be compatible with known runtime schemas.",
+      "hint": "Use a concrete Run State path like case.intent or items[0].id.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "output_source_not_guaranteed_multi_valued",
+      "rule": "state_update_required_sources_match_upstream_schema",
+      "message": "The multi-value variant of the rule below: the path is well-formed but returns several values where one is read. Use a transform node with an array op to work over the list.",
+      "explanation": "Deterministic node reads must be compatible with known runtime schemas.",
+      "hint": "Use a concrete Run State path like case.intent or items[0].id.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "output_source_not_guaranteed_path_invalid",
+      "rule": "state_update_required_sources_match_upstream_schema",
+      "message": "The JSON-path-invalid variant of the rule below: the referenced path is malformed.",
+      "explanation": "Deterministic node reads must be compatible with known runtime schemas.",
+      "hint": "Use a concrete Run State path like case.intent or items[0].id.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "parallel_fanout_invalid_failure_policy",
+      "rule": "parallel_pipeline_fanout_config_is_consistent",
+      "message": "Parallel-fanout edges from one source must use the same supported failure_policy; route_errors branches should each define an error edge.",
+      "explanation": "Parallel-fanout edges from one source must use the same supported failure_policy; route_errors branches should each define an error edge.",
+      "hint": "Set one failure_policy on every parallel edge from this source.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "parallel_fanout_missing_join",
+      "rule": "parallel_pipeline_fanout_requires_join",
+      "message": "Parallel fanout is only valid when every branch immediately joins.",
+      "explanation": "Parallel fanout is only valid when every branch immediately joins.",
+      "hint": "Connect every fanout branch to the same Join node.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "parallel_fanout_mixed_failure_policy",
+      "rule": "parallel_pipeline_fanout_config_is_consistent",
+      "message": "Parallel-fanout edges from one source must use the same supported failure_policy; route_errors branches should each define an error edge.",
+      "explanation": "Parallel-fanout edges from one source must use the same supported failure_policy; route_errors branches should each define an error edge.",
+      "hint": "Set one failure_policy on every parallel edge from this source.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "parallel_fanout_mixed_max_concurrency",
+      "rule": "parallel_pipeline_fanout_width_is_agreed",
+      "message": "Fanout branches from one source must agree on `max_concurrency`.",
+      "explanation": "Fanout branches from one source must agree on `max_concurrency`.",
+      "hint": "Set the same max_concurrency on every parallel edge from this source.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "parallel_fanout_route_errors_missing_error_edge",
+      "rule": "parallel_pipeline_fanout_config_is_consistent",
+      "message": "Parallel-fanout edges from one source must use the same supported failure_policy; route_errors branches should each define an error edge.",
+      "explanation": "Parallel-fanout edges from one source must use the same supported failure_policy; route_errors branches should each define an error edge.",
+      "hint": "Set one failure_policy on every parallel edge from this source.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "parallel_fanout_split_join",
+      "rule": "parallel_pipeline_fanout_requires_join",
+      "message": "Parallel fanout is only valid when every branch immediately joins.",
+      "explanation": "Parallel fanout is only valid when every branch immediately joins.",
+      "hint": "Connect every fanout branch to the same Join node.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "path_source_loop_without_loop_node",
+      "rule": "condition_source_loop_without_loop_node",
+      "message": "A condition that names `loop` as its source needs a For Each node.",
+      "explanation": "A condition that names `loop` as its source needs a For Each node.",
+      "hint": "Add a For Each Item node, or read a lane this graph actually carries.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "pause_node_in_fanout_branch",
+      "rule": "pause_nodes_cannot_be_fanout_branches",
+      "message": "Wait/approval/poll_until inside a parallel fanout branch cannot pause the run — the runtime rejects them loudly (an approval would otherwise auto-pass with zero human review). Catch the topology at save time.",
+      "explanation": "Wait/approval/poll_until inside a parallel fanout branch cannot pause the run — the runtime rejects them loudly (an approval would otherwise auto-pass with zero human review). Catch the topology at save time.",
+      "hint": "Move the wait/approval before the fanout or after the Join.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "pipeline_cycle",
+      "rule": "cycles_respect_edge_policy",
+      "message": "Enforce each edge type's catalog `cycle_policy` via PER-TYPE DFS.",
+      "explanation": "Enforce each edge type's catalog `cycle_policy` via PER-TYPE DFS.",
+      "hint": "Break the cycle by removing one of the edges in it.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "pipeline_fanin_exceeded",
+      "rule": "fanin_cardinality",
+      "message": "This agent already receives a pipeline edge — a pipeline step has exactly one predecessor.",
+      "explanation": "Enforce per-edge-type target-side cardinality.",
+      "hint": "Reconverge the incoming paths in a Join node instead.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "pipeline_fanout_exceeded",
+      "rule": "fanout_cardinality",
+      "message": "Enforce per-edge-type source-side cardinality.",
+      "explanation": "Enforce per-edge-type source-side cardinality.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "pipeline_input_mismatch",
+      "rule": "state_update_required_sources_match_upstream_schema",
+      "message": "Deterministic node reads must be compatible with known runtime schemas.",
+      "explanation": "Deterministic node reads must be compatible with known runtime schemas.",
+      "hint": "Use a concrete Run State path like case.intent or items[0].id.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "pipeline_input_schema_unknown",
+      "rule": "state_update_required_sources_match_upstream_schema",
+      "message": "Deterministic node reads must be compatible with known runtime schemas.",
+      "explanation": "Deterministic node reads must be compatible with known runtime schemas.",
+      "hint": "Use a concrete Run State path like case.intent or items[0].id.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "pipeline_source_not_structured",
+      "rule": "pipeline_structured_io_must_match",
+      "message": "When a pipeline carries structured JSON FROM AN AGENT, the source agent must actually be in structured_json output mode.",
+      "explanation": "When a pipeline carries structured JSON FROM AN AGENT, the source agent must actually be in structured_json output mode.",
+      "hint": "Set the source agent",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "pipeline_target_requires_structured_source",
+      "rule": "pipeline_structured_io_must_match",
+      "message": "When a pipeline carries structured JSON FROM AN AGENT, the source agent must actually be in structured_json output mode.",
+      "explanation": "When a pipeline carries structured JSON FROM AN AGENT, the source agent must actually be in structured_json output mode.",
+      "hint": "Set the source agent",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "router_default_branch_config_contradicts_edges",
+      "rule": "router_default_branch_config_must_match_the_edges",
+      "message": "A Router's `config.default_branch` must not contradict its edges.",
+      "explanation": "A Router's `config.default_branch` must not contradict its edges.",
+      "hint": "Mark the fallback edge as the default branch (the config field has no runtime effect).",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "router_missing_branches",
+      "rule": "router_must_have_outgoing_branches",
+      "message": "A Router with zero outgoing condition edges is a dead-end: the runtime finds no branch and the run terminates at the router. Warn (don't block) — it doesn't crash and a branchless router can be a deliberate end-state / work-in-progress, consistent with `router_missing_default_branch`.",
+      "explanation": "A Router with zero outgoing condition edges is a dead-end: the runtime finds no branch and the run terminates at the router. Warn (don't block) — it doesn't crash and a branchless router can be a deliberate end-state / work-in-progress, consistent with `router_missing_default_branch`.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "router_missing_default_branch",
+      "rule": "router_condition_paths_match_known_schemas",
+      "message": "Router condition reads should be statically resolvable when schemas exist.",
+      "explanation": "Router condition reads should be statically resolvable when schemas exist.",
+      "hint": "Keep exactly one default branch.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "router_multiple_default_branches",
+      "rule": "router_condition_paths_match_known_schemas",
+      "message": "Router condition reads should be statically resolvable when schemas exist.",
+      "explanation": "Router condition reads should be statically resolvable when schemas exist.",
+      "hint": "Keep exactly one default branch.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "self_loop",
+      "rule": "no_self_loops",
+      "message": "An edge cannot connect a node to itself unless its spec allows it.",
+      "explanation": "An edge cannot connect a node to itself unless its spec allows it.",
+      "hint": "Pick a different target node.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "state_update_agent_optional_source_is_null",
+      "rule": "state_update_required_sources_match_upstream_schema",
+      "message": "Deterministic node reads must be compatible with known runtime schemas.",
+      "explanation": "Deterministic node reads must be compatible with known runtime schemas.",
+      "hint": "Use a concrete Run State path like case.intent or items[0].id.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "state_update_append_to_non_array",
+      "rule": "state_update_required_sources_match_upstream_schema",
+      "message": "Deterministic node reads must be compatible with known runtime schemas.",
+      "explanation": "Deterministic node reads must be compatible with known runtime schemas.",
+      "hint": "Use a concrete Run State path like case.intent or items[0].id.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "state_update_path_invalid",
+      "rule": "state_update_required_sources_match_upstream_schema",
+      "message": "Deterministic node reads must be compatible with known runtime schemas.",
+      "explanation": "Deterministic node reads must be compatible with known runtime schemas.",
+      "hint": "Use a concrete Run State path like case.intent or items[0].id.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "state_update_path_not_declared",
+      "rule": "state_update_required_sources_match_upstream_schema",
+      "message": "Deterministic node reads must be compatible with known runtime schemas.",
+      "explanation": "Deterministic node reads must be compatible with known runtime schemas.",
+      "hint": "Use a concrete Run State path like case.intent or items[0].id.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "state_update_reads_own_write",
+      "rule": "state_update_reads_its_own_writes_within_one_node",
+      "message": "A later write reading a path an earlier write in the SAME node sets.",
+      "explanation": "A later write reading a path an earlier write in the SAME node sets.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "state_update_source_not_guaranteed",
+      "rule": "state_update_required_sources_match_upstream_schema",
+      "message": "Deterministic node reads must be compatible with known runtime schemas.",
+      "explanation": "Deterministic node reads must be compatible with known runtime schemas.",
+      "hint": "Use a concrete Run State path like case.intent or items[0].id.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "state_update_source_not_guaranteed_multi_valued",
+      "rule": "state_update_required_sources_match_upstream_schema",
+      "message": "The multi-value variant of the rule below: the path is well-formed but returns several values where one is read. Use a transform node with an array op to work over the list.",
+      "explanation": "Deterministic node reads must be compatible with known runtime schemas.",
+      "hint": "Use a concrete Run State path like case.intent or items[0].id.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "state_update_source_not_guaranteed_path_invalid",
+      "rule": "state_update_required_sources_match_upstream_schema",
+      "message": "The JSON-path-invalid variant of the rule below: the referenced path is malformed.",
+      "explanation": "Deterministic node reads must be compatible with known runtime schemas.",
+      "hint": "Use a concrete Run State path like case.intent or items[0].id.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "state_update_without_run_state_model",
+      "rule": "nodes_that_touch_run_state_need_a_bound_model",
+      "message": "A node that touches Run State in a graph with no model always dies mid-run.",
+      "explanation": "A node that touches Run State in a graph with no model always dies mid-run.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "state_update_write_has_several_value_sources",
+      "rule": "state_update_writes_name_one_value_source",
+      "message": "Two value sources on one write, silently decided by rank.",
+      "explanation": "Two value sources on one write, silently decided by rank.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "structured_save_allow_empty_ignored",
+      "rule": "structured_save_allow_empty_says_what_it_does",
+      "message": "Warn (don't block) when a stored structured_save carries an ``allow_empty`` the runtime does not honour: a non-boolean value, which leaves an empty replacement refused, or the flag on a mode that refuses an empty batch anyway. ERROR is the write gate's answer; see CONFIG_WRITE_ONLY_VALIDATORS.",
+      "explanation": "Warn (don't block) when a stored structured_save carries an ``allow_empty`` the runtime does not honour: a non-boolean value, which leaves an empty replacement refused, or the flag on a mode that refuses an empty batch anyway. ERROR is the write gate's answer; see CONFIG_WRITE_ONLY_VALIDATORS.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "terminal_node_has_outgoing_edge",
+      "rule": "terminal_nodes_have_no_outgoing_edges",
+      "message": "Output (and any future terminal node type) cannot be a source.",
+      "explanation": "Output (and any future terminal node type) cannot be a source.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "transform_source_not_guaranteed",
+      "rule": "state_update_required_sources_match_upstream_schema",
+      "message": "Deterministic node reads must be compatible with known runtime schemas.",
+      "explanation": "Deterministic node reads must be compatible with known runtime schemas.",
+      "hint": "Use a concrete Run State path like case.intent or items[0].id.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "transform_source_not_guaranteed_multi_valued",
+      "rule": "state_update_required_sources_match_upstream_schema",
+      "message": "The multi-value variant of the rule below: the path is well-formed but returns several values where one is read. Use a transform node with an array op to work over the list.",
+      "explanation": "Deterministic node reads must be compatible with known runtime schemas.",
+      "hint": "Use a concrete Run State path like case.intent or items[0].id.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "transform_source_not_guaranteed_path_invalid",
+      "rule": "state_update_required_sources_match_upstream_schema",
+      "message": "The JSON-path-invalid variant of the rule below: the referenced path is malformed.",
+      "explanation": "Deterministic node reads must be compatible with known runtime schemas.",
+      "hint": "Use a concrete Run State path like case.intent or items[0].id.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "trigger_start_duplicate_trigger",
+      "rule": "trigger_start_nodes_have_trigger_selection",
+      "message": "Each Trigger Start must bind a trigger that exists in this harness, and no two Trigger Start nodes may bind the same trigger.",
+      "explanation": "Each Trigger Start must bind a trigger that exists in this harness, and no two Trigger Start nodes may bind the same trigger.",
+      "hint": "Choose a trigger in the node inspector.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "trigger_start_has_incoming_edge",
+      "rule": "trigger_start_nodes_are_source_only",
+      "message": "Trigger Start nodes start runs and cannot sit downstream of another node.",
+      "explanation": "Trigger Start nodes start runs and cannot sit downstream of another node.",
+      "hint": "Remove the inbound edge; Trigger Start nodes are graph entrypoints.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "trigger_start_missing_trigger",
+      "rule": "trigger_start_nodes_have_trigger_selection",
+      "message": "Each Trigger Start must bind a trigger that exists in this harness, and no two Trigger Start nodes may bind the same trigger.",
+      "explanation": "Each Trigger Start must bind a trigger that exists in this harness, and no two Trigger Start nodes may bind the same trigger.",
+      "hint": "Choose a trigger in the node inspector.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "trigger_start_targets_join",
+      "rule": "start_nodes_cannot_target_join",
+      "message": "Trigger Start / Chat Start cannot connect directly to a Join — a Join consumes a parallel-fanout branch payload, which a start node never produces.",
+      "explanation": "Trigger Start / Chat Start cannot connect directly to a Join — a Join consumes a parallel-fanout branch payload, which a start node never produces.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "trigger_start_trigger_not_in_harness",
+      "rule": "trigger_start_nodes_have_trigger_selection",
+      "message": "Each Trigger Start must bind a trigger that exists in this harness, and no two Trigger Start nodes may bind the same trigger.",
+      "explanation": "Each Trigger Start must bind a trigger that exists in this harness, and no two Trigger Start nodes may bind the same trigger.",
+      "hint": "Choose a trigger in the node inspector.",
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "unbounded_runtime_cycle",
+      "rule": "runtime_cycles_without_a_bound_are_flagged",
+      "message": "A loop the runtime can follow but no per-type rule can see.",
+      "explanation": "A loop the runtime can follow but no per-type rule can see.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "unknown_edge_type",
+      "rule": "edge_type_must_be_known",
+      "message": "Every edge must reference a registered edge type.",
+      "explanation": "Every edge must reference a registered edge type.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    },
+    {
+      "code": "unknown_node_role",
+      "rule": "node_role_must_be_known",
+      "message": "Every orchestration node must map to a registered ``NodeRole``.",
+      "explanation": "Every orchestration node must map to a registered ``NodeRole``.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
+    }
+  ],
+  "api_error_codes": [
+    {
+      "code": "harness_unavailable",
+      "area": "masterloop",
+      "message": "The iteration solution does not exist in this workspace or is archived.",
+      "hint": "Choose another iteration solution.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "iteration_node_dynamic_reference_unsupported",
+      "area": "masterloop",
+      "message": "The node uses templates, text blocks, secrets or Run State, which an iteration cannot resolve.",
+      "hint": "Use plain values and $.paths instead of {{…}} templates, text blocks, secrets or Run State.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "iteration_node_unsupported",
+      "area": "masterloop",
+      "message": "This node type cannot run inside an iteration.",
+      "hint": "Remove the node. Allowed: Transform, Router, Output, Wait and Approval (and the one agent).",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "iteration_output_copy_unsupported",
+      "area": "masterloop",
+      "message": "The Output node asks for a copy type other than Structured copy or Text copy.",
+      "hint": "Keep only Structured copy and Text copy.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "iteration_output_dependency_unsupported",
+      "area": "masterloop",
+      "message": "The Output node validates against an output schema, which an iteration does not support.",
+      "hint": "Remove the output schema.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "iteration_output_must_be_log_only",
+      "area": "masterloop",
+      "message": "The Output node delivers its result; an iteration only records it.",
+      "hint": "Choose Log only.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "iteration_transform_unsupported",
+      "area": "masterloop",
+      "message": "The Transform uses a mode or operation an iteration does not support.",
+      "hint": "Use JSON mapping with paths, literals and add, subtract, multiply or divide.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "loop_payload_byte_limit",
+      "area": "masterloop",
+      "message": "A text value is too long.",
+      "hint": "Shorten the goal or the task input.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "loop_payload_invalid_or_too_large",
+      "area": "masterloop",
+      "message": "The configuration is too large.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "loop_payload_structure_limit",
+      "area": "masterloop",
+      "message": "The configuration is nested too deeply or too large.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "masterloop_deployment_deadline_exceeded",
+      "area": "masterloop",
+      "message": "The overall deadline exceeds this deployment's maximum.",
+      "hint": "Lower the overall deadline.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "masterloop_feature_disabled",
+      "area": "masterloop",
+      "message": "Masterloop is disabled on this deployment.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "masterloop_goal_expression_invalid",
+      "area": "masterloop",
+      "message": "The goal expression is not a valid expression.",
+      "hint": "Fix the goal expression or turn it off.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "masterloop_inherited_candidate_required",
+      "area": "masterloop",
+      "message": "An inherited Sandbox binding needs a preview candidate to check.",
+      "hint": "Choose the Sandbox the parent run will hold.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "masterloop_inherited_candidate_unavailable",
+      "area": "masterloop",
+      "message": "No ready Sandbox allows both this solution and the iteration solution, so the inherited binding has no Sandbox to receive.",
+      "hint": "Allow both solutions in the Sandbox the workflow's runs hold, or choose a fixed Sandbox.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "masterloop_initial_input_and_mapping_are_exclusive",
+      "area": "masterloop",
+      "message": "Initial task input and an input mapping are both set.",
+      "hint": "Use either the literal initial input or Map initial input, not both.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "masterloop_isolated_container_disabled",
+      "area": "masterloop",
+      "message": "Runner validation needs an isolated container Sandbox, which this deployment does not offer.",
+      "hint": "Choose a customer VM Sandbox; its agent reports completion.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "masterloop_iteration_harness_draft",
+      "area": "masterloop",
+      "message": "The iteration solution is a draft; a Masterloop only starts when it is active.",
+      "hint": "Activate the iteration solution first; this passed compatibility check counts as its test evidence.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "masterloop_mapping_expression_invalid",
+      "area": "masterloop",
+      "message": "A mapping value is not a valid expression; a path must start with $ and name one source.",
+      "hint": "Pick the source lane for the path, for example Previous output text for an agent's text answer.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "masterloop_mapping_key_invalid",
+      "area": "masterloop",
+      "message": "A mapping field name is empty or longer than 100 characters.",
+      "hint": "Give every mapping field a short name.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "masterloop_node_configuration_invalid",
+      "area": "masterloop",
+      "message": "The Masterloop configuration is incomplete or has a value out of range.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "masterloop_parent_harness_unavailable",
+      "area": "masterloop",
+      "message": "This solution is archived or no longer exists.",
+      "hint": "Reopen the Masterloop from an active, paused or draft solution.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "masterloop_preflight_requires_repeatable_read",
+      "area": "masterloop",
+      "message": "The check could not take a consistent snapshot.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "masterloop_preflight_timeout",
+      "area": "masterloop",
+      "message": "The compatibility check did not finish in time.",
+      "hint": "Try again; if it keeps timing out, open the Masterloop and choose Check compatibility.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "masterloop_recursive_harness",
+      "area": "masterloop",
+      "message": "A Masterloop cannot iterate over its own solution.",
+      "hint": "Choose a different solution.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "masterloop_reserved_input_key",
+      "area": "masterloop",
+      "message": "A task input field uses a name the loop context reserves.",
+      "hint": "Rename that field.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "masterloop_sandbox_capability_unavailable",
+      "area": "masterloop",
+      "message": "The Sandbox policy lacks a permission the loop needs (read and write; for containers also execute and export).",
+      "hint": "Allow those actions in the Sandbox policy.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "masterloop_sandbox_harness_unavailable",
+      "area": "masterloop",
+      "message": "The Sandbox is not ready, or does not allow both this solution and the iteration solution.",
+      "hint": "Allow both solutions in the Sandbox's settings and make it ready.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "masterloop_sandbox_mode_mismatch",
+      "area": "masterloop",
+      "message": "The completion policy does not match the Sandbox mode: a customer VM reports completion by the agent, an isolated container validates.",
+      "hint": "Pick a Sandbox whose mode matches, or change the Sandbox.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "masterloop_unexpected_inherited_candidate",
+      "area": "masterloop",
+      "message": "A preview candidate is only used with an inherited binding.",
+      "hint": "Clear the preview candidate or choose Inherit.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_agent_credentials_unsupported",
+      "area": "masterloop",
+      "message": "The agent uses its own API key or base URL instead of the model registry.",
+      "hint": "Clear the agent's own API key and base URL and use a registry model.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_agent_memory_unsupported",
+      "area": "masterloop",
+      "message": "The agent has memory turned on; iterations run without memory.",
+      "hint": "Turn off Memory enabled, or set Memory scope to None.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_agent_state_unsupported",
+      "area": "masterloop",
+      "message": "The agent has Run State access turned on; iterations run without Run State.",
+      "hint": "Turn off Run State access for this agent.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_attachments_unsupported",
+      "area": "masterloop",
+      "message": "The agent may receive images or document cards; an iteration passes neither.",
+      "hint": "Set both Images and Document cards to Never.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_cycle",
+      "area": "masterloop",
+      "message": "The graph contains a cycle.",
+      "hint": "Remove the edge that closes the cycle.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_delegation_unsupported",
+      "area": "masterloop",
+      "message": "The agent hands off to or receives handoffs from another agent.",
+      "hint": "Remove the handoffs to and from this agent.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_direct_tool_unsupported",
+      "area": "masterloop",
+      "message": "The agent has tools other than the Sandbox runner, or overrides its configuration.",
+      "hint": "Keep only the Sandbox runner tool, without overrides.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_dynamic_text",
+      "area": "masterloop",
+      "message": "The text contains template expressions ({{…}}, {%…%} or text blocks) that an iteration cannot resolve; only workspace variables ({{var:name}}) are resolved.",
+      "hint": "Replace the template expressions with plain text or a workspace variable.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_edge_invalid",
+      "area": "masterloop",
+      "message": "An edge points at a node outside this solution.",
+      "hint": "Remove the dangling edge.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_edge_unsupported",
+      "area": "masterloop",
+      "message": "An edge uses templates, Run State, memory, retries or a non-pipeline type.",
+      "hint": "Use a plain pipeline, condition or error edge without input template, memory, Run State or retry.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_entrypoint_required",
+      "area": "masterloop",
+      "message": "The agent must be the only start of the graph, marked as entrypoint.",
+      "hint": "Turn on Entrypoint for the agent and give every other node an incoming edge.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_explicit_instructions_required",
+      "area": "masterloop",
+      "message": "The agent has no instructions of its own.",
+      "hint": "Write the agent's instructions.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_explicit_output_required",
+      "area": "masterloop",
+      "message": "The Output node delivers its result; an iteration only records it.",
+      "hint": "Choose Log only.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_graph_invalid",
+      "area": "masterloop",
+      "message": "The iteration solution's graph check reports errors.",
+      "hint": "Open the iteration solution and fix the errors the graph check lists.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_guardrail_type_unsupported",
+      "area": "masterloop",
+      "message": "The guardrail has a type the platform cannot run, so an iteration would run unprotected.",
+      "hint": "Use an LLM classifier, pattern match, webhook or built-in guardrail instead.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_guardrail_unavailable",
+      "area": "masterloop",
+      "message": "The agent is assigned a guardrail from outside this workspace.",
+      "hint": "Remove the assignment and assign one of this workspace's guardrails.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_handoff_description_unsupported",
+      "area": "masterloop",
+      "message": "The agent has a handoff description; an iteration agent cannot hand off.",
+      "hint": "Clear the handoff description.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_history_images_unsupported",
+      "area": "masterloop",
+      "message": "The agent keeps images from history; an iteration has no image history.",
+      "hint": "Set both to 0.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_invalid_configuration",
+      "area": "masterloop",
+      "message": "A stored configuration value of the iteration solution cannot be read.",
+      "hint": "Open the iteration solution and save its agent and nodes again.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_json_invalid",
+      "area": "masterloop",
+      "message": "A stored configuration value is not bounded JSON.",
+      "hint": "Save the named item again or simplify its configuration.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_max_output_tokens_required",
+      "area": "masterloop",
+      "message": "The agent inherits its output token limit; an iteration needs an explicit value.",
+      "hint": "Set Max output tokens explicitly.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_memory_unsupported",
+      "area": "masterloop",
+      "message": "The iteration solution has solution-level memory configured; iterations run without memory.",
+      "hint": "Remove the solution's memory configuration.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_model_capabilities_required",
+      "area": "masterloop",
+      "message": "The agent's model lacks a capability the iteration needs (chat, or structured output for JSON).",
+      "hint": "Choose a model with those capabilities in the registry.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_model_settings_unsupported",
+      "area": "masterloop",
+      "message": "The agent's advanced model settings include values an iteration does not support.",
+      "hint": "Keep only reasoning effort, verbosity, top_p and tool choice auto, required or none.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_native_responses_required",
+      "area": "masterloop",
+      "message": "The agent's model is not an active OpenAI model from this workspace's registry.",
+      "hint": "Choose an active OpenAI registry model without a custom base URL.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_one_agent_required",
+      "area": "masterloop",
+      "message": "The iteration solution must contain exactly one active agent.",
+      "hint": "Keep one active agent and deactivate or remove the others.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_output_required",
+      "area": "masterloop",
+      "message": "Every path must end in a Log only Output node.",
+      "hint": "Connect the agent, and every node after it, to an Output node set to Log only.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_output_schema_required",
+      "area": "masterloop",
+      "message": "Structured JSON output needs a schema.",
+      "hint": "Add an output schema, or switch the agent to text output.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_persona_unsupported",
+      "area": "masterloop",
+      "message": "The agent uses the workspace persona, which an iteration does not apply.",
+      "hint": "Turn on Skip persona.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_profile_required",
+      "area": "masterloop",
+      "message": "With a Sandbox, completion must be agent reported or validated by the runner.",
+      "hint": "Choose a Sandbox so the completion policy follows its mode.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_reasoning_config_unsupported",
+      "area": "masterloop",
+      "message": "The registry entry's reasoning configuration is not an OpenAI effort configuration.",
+      "hint": "Use OpenAI effort levels for this model.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_run_state_unsupported",
+      "area": "masterloop",
+      "message": "The iteration solution has a Run State model; iterations run without Run State.",
+      "hint": "Remove the solution's Run State model.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_sandbox_assignment_required",
+      "area": "masterloop",
+      "message": "The agent cannot reach the Sandbox: the runner tool is not assigned.",
+      "hint": "Add the Sandbox's runner tool to the agent or one of its skills.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_sandbox_connection_changed",
+      "area": "masterloop",
+      "message": "The runner connection changed after the Sandbox was approved.",
+      "hint": "Validate the Sandbox again.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_sandbox_connection_invalid",
+      "area": "masterloop",
+      "message": "The Sandbox's runner connection is not a valid runner connection.",
+      "hint": "Reconnect the Sandbox's runner.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_sandbox_tool_required",
+      "area": "masterloop",
+      "message": "The Sandbox's runner connection is missing, inactive or not a tenant-local MCP connection.",
+      "hint": "Reconnect the Sandbox's runner.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_sandbox_unavailable",
+      "area": "masterloop",
+      "message": "The Sandbox is not ready or does not allow the iteration solution.",
+      "hint": "Make the Sandbox ready and allow the iteration solution in its settings.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_settings_unsupported",
+      "area": "masterloop",
+      "message": "The iteration solution carries solution-level execution settings, which an iteration does not apply.",
+      "hint": "Use a solution without its own execution settings, for example a new solution.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_size_limit",
+      "area": "masterloop",
+      "message": "The iteration solution has more than 100 nodes or 200 edges.",
+      "hint": "Make the graph smaller.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_skill_config_unsupported",
+      "area": "masterloop",
+      "message": "A skill's configuration is not a plain skill specification.",
+      "hint": "Remove that skill.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_skill_dependency_unsupported",
+      "area": "masterloop",
+      "message": "A skill overrides more than its instructions or searches a knowledge base.",
+      "hint": "Remove the skill's knowledge bases and overrides other than instructions.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_skill_order_ambiguous",
+      "area": "masterloop",
+      "message": "Two skills share a position, or more than 20 skills are assigned.",
+      "hint": "Give each skill its own position and keep at most 20.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_skill_requirements_unsupported",
+      "area": "masterloop",
+      "message": "A skill requires agent settings the agent does not have.",
+      "hint": "Change the agent to meet the skill's required settings, or remove the skill.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_skill_tool_unsupported",
+      "area": "masterloop",
+      "message": "A skill uses a tool other than the Sandbox runner, or overrides its configuration.",
+      "hint": "Let skills use only the Sandbox runner tool, without overrides.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_skill_unavailable",
+      "area": "masterloop",
+      "message": "A skill is inactive, from another workspace, or not a workflow skill.",
+      "hint": "Remove that skill or use an active workflow skill of this workspace.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_trigger_paths_unsupported",
+      "area": "masterloop",
+      "message": "The agent injects trigger payload fields; an iteration receives only its loop context.",
+      "hint": "Remove the injected trigger payload fields.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_unavailable",
+      "area": "masterloop",
+      "message": "The iteration solution does not exist in this workspace or is archived.",
+      "hint": "Choose another iteration solution.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_variable_missing",
+      "area": "masterloop",
+      "message": "The text references a workspace variable that has no value.",
+      "hint": "Give the variable a value, or remove the reference.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_variable_unsupported",
+      "area": "masterloop",
+      "message": "A referenced workspace variable holds a structured value or a template expression, which an iteration cannot place into its prompt.",
+      "hint": "Give the variable a plain-text value.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_harness_working_window_required",
+      "area": "masterloop",
+      "message": "The agent inherits its working window; an iteration needs an explicit value.",
+      "hint": "Set the Working window explicitly.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_snapshot_requires_repeatable_read",
+      "area": "masterloop",
+      "message": "The check could not take a consistent snapshot.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "native_validation_profile_unavailable",
+      "area": "masterloop",
+      "message": "The selected validation profile is not approved on the Sandbox.",
+      "hint": "Choose an approved profile.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "pure_harness_contains_agent",
+      "area": "masterloop",
+      "message": "Without a Sandbox the iteration solution must be deterministic: it contains an agent.",
+      "hint": "Remove the agent, or bind a Sandbox to run an agent iteration.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "pure_harness_cycle",
+      "area": "masterloop",
+      "message": "The graph contains a cycle.",
+      "hint": "Remove the edge that closes the cycle.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "pure_harness_disconnected",
+      "area": "masterloop",
+      "message": "Some nodes are not reachable from the start node.",
+      "hint": "Connect or remove the unreachable nodes.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "pure_harness_edge_invalid",
+      "area": "masterloop",
+      "message": "An edge is not a plain pipeline, condition or error edge between nodes.",
+      "hint": "Remove or replace the edge.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "pure_harness_edge_unsupported",
+      "area": "masterloop",
+      "message": "An edge uses a regular-expression condition or oversized configuration.",
+      "hint": "Use a plain condition.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "pure_harness_entrypoint_ambiguous",
+      "area": "masterloop",
+      "message": "The graph must have exactly one start node.",
+      "hint": "Connect all nodes after a single first node.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "pure_harness_graph_invalid",
+      "area": "masterloop",
+      "message": "The iteration solution's graph check reports errors.",
+      "hint": "Open the iteration solution and fix the errors the graph check lists.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "pure_harness_profile_required",
+      "area": "masterloop",
+      "message": "Without a Sandbox, completion must use structured checks.",
+      "hint": "Add structured completion checks, or bind a Sandbox.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "pure_harness_settings_unsupported",
+      "area": "masterloop",
+      "message": "The iteration solution carries solution-level settings, memory or a Run State model.",
+      "hint": "Use a solution without its own execution settings, memory or Run State model.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "pure_harness_size_limit",
+      "area": "masterloop",
+      "message": "A deterministic iteration solution needs 1 to 100 nodes and at most 200 edges.",
+      "hint": "Add a node or make the graph smaller.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_feature_disabled",
+      "area": "masterloop",
+      "message": "Sandboxes are disabled on this deployment.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "approval_required",
+      "area": "masterloop",
+      "message": "A policy requires an approval before the loop may continue.",
+      "hint": "Decide the pending approval, then resume.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "budget_exhausted",
+      "area": "masterloop",
+      "message": "The loop has used its model budget.",
+      "hint": "Start a new run of the trigger, with a larger budget on the Masterloop node if the task needs it.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "child_result_unavailable",
+      "area": "masterloop",
+      "message": "The iteration run ended without a result: it failed, was cancelled or ran out of time.",
+      "hint": "Open the iteration's run to see why it ended and fix the cause, then resume. The next iteration starts from the last accepted state.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "child_scope_unavailable",
+      "area": "masterloop",
+      "message": "The iteration run could not be matched to this loop.",
+      "hint": "Resume to check again. If it keeps failing, start a new run of the trigger.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "completion_evidence_rejected",
+      "area": "masterloop",
+      "message": "The last iteration reported the task done, but the completion check did not confirm it.",
+      "hint": "Check the validation or evidence of the last iteration and fix what failed, then resume with this reason as `reviewed_reason`. Completion is checked again first; if it still fails, the next iteration continues the task.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "configuration_changed",
+      "area": "masterloop",
+      "message": "The Masterloop node, its solution or its Sandbox binding changed after this run started, so the configuration the run pinned no longer matches.",
+      "hint": "Restore the configuration and resume, or start a new run of the trigger to use the changed one.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "feature_disabled",
+      "area": "masterloop",
+      "message": "Masterloop or Sandboxes are switched off on this platform.",
+      "hint": "Resume once an administrator has switched them on again.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "guardrail_blocked",
+      "area": "masterloop",
+      "message": "A guardrail stopped the iteration before it finished.",
+      "hint": "Review the iteration's input and output, adjust the guardrail or the task, then resume.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "inference_allowance_exhausted",
+      "area": "masterloop",
+      "message": "This workspace has used its monthly inference allowance, so the loop paused before starting another iteration. Nothing it already did is lost.",
+      "hint": "Raise the allowance under Settings → Limits (or ask the workspace owner to), or wait until it resets on the first of the next month (UTC), then resume. A resume is refused while it is still used up.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "invalid_continuation",
+      "area": "masterloop",
+      "message": "The last iteration returned a result that does not match the continuation contract, or that names an operation, result or checkpoint this loop does not own, so it was not accepted. The iteration's result names the field.",
+      "hint": "Open the iteration's run to see what it returned and check the iteration solution's instructions, then resume with this reason as `reviewed_reason`. The next iteration starts from the last accepted continuation.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "loop_already_paused",
+      "area": "masterloop",
+      "message": "The loop is already paused.",
+      "hint": "Nothing to do; resume it when you are ready.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "loop_control_busy",
+      "area": "masterloop",
+      "message": "The loop is being changed by its controller or another request right now.",
+      "hint": "Retry the same request with the same `Idempotency-Key` in a moment.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "loop_control_invalid",
+      "area": "masterloop",
+      "message": "The control request is malformed: the action, the expected version, or a `reviewed_reason` that is not the reason of a pause that takes a review.",
+      "hint": "Send `reviewed_reason` only on a resume whose loop has `resume: review_required`, set to the loop's `reason`; resume any other pause without it.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "loop_control_permission_denied",
+      "area": "masterloop",
+      "message": "The run's original identity, or the caller, no longer holds a permission the loop needs.",
+      "hint": "Restore the permission of the trigger's execution identity, then try again.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "loop_control_temporarily_unavailable",
+      "area": "masterloop",
+      "message": "The control could not reach a service it needs.",
+      "hint": "Retry the same request with the same `Idempotency-Key`.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "loop_control_unavailable",
+      "area": "masterloop",
+      "message": "The loop cannot be paused or resumed: it ended, is being stopped or cleaned up, its deadline passed, or its run no longer waits on it.",
+      "hint": "Nothing can continue this loop. Cancel the run if it still runs, fix the cause and start a new run of the trigger.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "loop_evidence_scope_invalid",
+      "area": "masterloop",
+      "message": "The evidence returned belongs to another loop or Sandbox.",
+      "hint": "Resume to check again. If it keeps failing, start a new run of the trigger.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "loop_history_page_invalid",
+      "area": "masterloop",
+      "message": "The page size of the loop list is out of range.",
+      "hint": "Ask for at most 20 loops per page.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "loop_history_timeout",
+      "area": "masterloop",
+      "message": "Reading the loop took too long.",
+      "hint": "Try again in a moment.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "loop_inference_allowance_exhausted",
+      "area": "masterloop",
+      "message": "The workspace's monthly inference allowance is still used up, so the loop cannot continue yet.",
+      "hint": "Raise the allowance under Settings → Limits (or ask the workspace owner to), or wait until it resets, then resume.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "loop_model_credential_source_unsupported",
+      "area": "masterloop",
+      "message": "The iteration solution's model uses a kind of key Masterloop cannot use.",
+      "hint": "Give the iteration solution a model with a platform or tenant key, then start a new run of the trigger.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "loop_model_credential_unavailable",
+      "area": "masterloop",
+      "message": "The model key the iteration solution uses is missing or not usable.",
+      "hint": "Fix the key of the iteration solution's model, then resume.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "loop_operation_unknown",
+      "area": "masterloop",
+      "message": "A Sandbox operation of this loop has an unknown outcome, so a resume could repeat it.",
+      "hint": "Wait until the operation is reconciled (the loop's `operation_counts` lists no `unknown`), then resume.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "loop_request_key_invalid",
+      "area": "masterloop",
+      "message": "The control request has no valid `Idempotency-Key`.",
+      "hint": "Send a fresh UUID as `Idempotency-Key`, and the same one when you retry the same request.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "loop_resume_configuration_unavailable",
+      "area": "masterloop",
+      "message": "The configuration this run pinned can no longer be loaded, so the loop cannot continue.",
+      "hint": "Cancel the run and start a new run of the trigger.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "loop_resume_reason_not_allowed",
+      "area": "masterloop",
+      "message": "Only a paused loop can be resumed; this one is not paused.",
+      "hint": "Read the loop again: a running or waiting loop needs no resume.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "loop_resume_review_required",
+      "area": "masterloop",
+      "message": "The pause is a verdict on the task, so a resume must state that the cause was reviewed.",
+      "hint": "Check and fix the cause, then resume with the loop's `reason` as `reviewed_reason`.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "loop_review_reason_mismatch",
+      "area": "masterloop",
+      "message": "The `reviewed_reason` is not the loop's current pause reason.",
+      "hint": "Read the loop again and send its current `reason` as `reviewed_reason`.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "loop_run_unavailable",
+      "area": "masterloop",
+      "message": "The run does not exist in this workspace.",
+      "hint": "Check the run id and the selected workspace.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "loop_unavailable",
+      "area": "masterloop",
+      "message": "The loop does not exist on this run, or this credential may not see it.",
+      "hint": "Check the run and loop ids, and that the credential may use the run's solution.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "loop_version_conflict",
+      "area": "masterloop",
+      "message": "The loop changed since you read it; `expected_version` is not its current version.",
+      "hint": "Read the loop again and send the control with its current `version`.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "loop_workspace_unavailable",
+      "area": "masterloop",
+      "message": "The loop could not get its Sandbox workspace: another run or step still holds the Sandbox's writer, or the Sandbox is not ready.",
+      "hint": "Wait for or stop the run that holds the Sandbox's writer, then resume.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "operation_unknown",
+      "area": "masterloop",
+      "message": "The outcome of a Sandbox command is unknown, so repeating it could apply it twice.",
+      "hint": "Wait until the operation is reconciled, or check it in the Sandbox's activity. A resume is accepted once no operation is unknown.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "parent_cancellation_pending",
+      "area": "masterloop",
+      "message": "The run is being stopped.",
+      "hint": "Nothing to do: the loop ends once its owned work has stopped.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "permission_denied",
+      "area": "masterloop",
+      "message": "The identity this run executes as no longer holds a permission the loop needs.",
+      "hint": "Restore the permission of the trigger's execution identity, then resume.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "runtime_evidence_invalid",
+      "area": "masterloop",
+      "message": "The platform could not read or verify the loop's runtime facts: its workspace, operations or evidence.",
+      "hint": "Check that the Sandbox and its runner are ready, then resume; the facts are checked again first. If the pause comes back, start a new run of the trigger.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "runtime_evidence_scope_mismatch",
+      "area": "masterloop",
+      "message": "The evidence returned belongs to another loop or Sandbox.",
+      "hint": "Resume to check again. If it keeps failing, start a new run of the trigger.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "task_blocked",
+      "area": "masterloop",
+      "message": "The last iteration reported that it cannot go on with the task.",
+      "hint": "Fix what blocked it (a limit, the instructions, the Sandbox or the repository), then resume with this reason as `reviewed_reason`. The next iteration starts from the last accepted state.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "user_paused",
+      "area": "masterloop",
+      "message": "A person paused the loop; the iteration that was running finished first.",
+      "hint": "Resume the loop when you are ready. The deadline keeps running while it is paused.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "validation_profile_mismatch",
+      "area": "masterloop",
+      "message": "The Sandbox's trusted validation profile changed since the loop started.",
+      "hint": "Approve the validation profile on the Sandbox again, then resume.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "validation_reference_unavailable",
+      "area": "masterloop",
+      "message": "The iteration named a validation operation that does not exist or does not belong to this loop.",
+      "hint": "Resume to check again, and tell the iteration solution to leave validation_operation_id empty unless it ran a trusted validation.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "validation_source_mismatch",
+      "area": "masterloop",
+      "message": "The validation ran on a different source revision than the workspace holds.",
+      "hint": "Check the workspace on the Sandbox, then resume; the validation runs again.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "validation_source_unavailable",
+      "area": "masterloop",
+      "message": "The source revision the validation should run on is missing from the workspace.",
+      "hint": "Check the workspace on the Sandbox, then resume.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "workspace_scope_unavailable",
+      "area": "masterloop",
+      "message": "The Sandbox workspace no longer matches the one this loop was assigned.",
+      "hint": "Check that the Sandbox is ready and still bound to this workflow, then resume. If it keeps failing, start a new run of the trigger.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "package_version_unsupported",
+      "area": "package",
+      "message": "This instance does not accept that package version.",
+      "hint": "Read contracts.package_versions.accepted from /meta/capabilities and ask for one of those.",
+      "docs": "/docs/reference/api-endpoints"
+    },
+    {
+      "code": "import_preview_stale",
+      "area": "package",
+      "message": "The target changed since the preview whose id this import names; nothing was imported.",
+      "hint": "Preview again, show the new result, and import with the new preview_id.",
+      "docs": "/docs/reference/api-endpoints"
+    },
+    {
+      "code": "runtime_binding_check_limit",
+      "area": "package",
+      "message": "The package binds more loop and Sandbox pairs than one check may compare (100).",
+      "hint": "Split the package.",
+      "docs": "/docs/reference/api-endpoints"
+    },
+    {
+      "code": "runtime_binding_requires_repeatable_read",
+      "area": "package",
+      "message": "The binding check needs a repeatable-read transaction.",
+      "hint": "Retry the preview; this is a server fault if it repeats.",
+      "docs": "/docs/reference/api-endpoints"
+    },
+    {
+      "code": "runtime_draft_iteration_needs_draft_parent",
+      "area": "package",
+      "message": "The bound iteration solution is a draft, and the parent this import writes is active or paused.",
+      "hint": "Activate the iteration solution first, or import into a draft parent.",
+      "docs": "/docs/reference/api-endpoints"
+    },
+    {
+      "code": "runtime_external_iteration_harness_unavailable",
+      "area": "package",
+      "message": "The bound iteration solution is not a draft or active solution of this tenant, or it is a solution this import writes.",
+      "hint": "Apply the iteration solution first, then bind its id; a draft is enough while the parent is a draft.",
+      "docs": "/docs/reference/api-endpoints"
+    },
+    {
+      "code": "runtime_import_target_unavailable",
+      "area": "package",
+      "message": "The solution this import targets is not a solution of this tenant.",
+      "hint": "Target an existing solution, or import without a target.",
+      "docs": "/docs/reference/api-endpoints"
+    },
+    {
+      "code": "runtime_native_completion_policy_required",
+      "area": "package",
+      "message": "A loop with a Sandbox needs the runner_validation or agent_reported completion policy.",
+      "hint": "Set the loop's completion policy to fit its Sandbox.",
+      "docs": "/docs/reference/api-endpoints"
+    },
+    {
+      "code": "runtime_pure_completion_policy_required",
+      "area": "package",
+      "message": "A loop without a Sandbox needs the structured_contract completion policy.",
+      "hint": "Set the loop's completion policy to structured_contract, or bind a Sandbox.",
+      "docs": "/docs/reference/api-endpoints"
+    },
+    {
+      "code": "runtime_requirement_unavailable",
+      "area": "package",
+      "message": "The package declares no runtime requirement with that key.",
+      "hint": "Use a key from the package's runtime_requirements.",
+      "docs": "/docs/reference/api-endpoints"
+    },
+    {
+      "code": "runtime_runner_binding_unavailable",
+      "area": "package",
+      "message": "This tenant has not enabled the bound Sandbox's runner tool.",
+      "hint": "Enable the runner tool for this tenant, or choose another Sandbox.",
+      "docs": "/docs/reference/api-endpoints"
+    },
+    {
+      "code": "runtime_runner_connection_unavailable",
+      "area": "package",
+      "message": "The bound Sandbox's runner connection is missing or inactive.",
+      "hint": "Repair the Sandbox's runner connection, or choose another Sandbox.",
+      "docs": "/docs/reference/api-endpoints"
+    },
+    {
+      "code": "runtime_runner_identity_mismatch",
+      "area": "package",
+      "message": "The bound Sandbox's runner connection names another runner.",
+      "hint": "Refresh the Sandbox's runner connection, or choose another Sandbox.",
+      "docs": "/docs/reference/api-endpoints"
+    },
+    {
+      "code": "runtime_sandbox_capability_unavailable",
+      "area": "package",
+      "message": "The bound Sandbox does not allow every action the loop needs (read, write, execute, and export on an isolated container).",
+      "hint": "Allow those actions on the Sandbox, or choose another Sandbox.",
+      "docs": "/docs/reference/api-endpoints"
+    },
+    {
+      "code": "runtime_sandbox_mode_mismatch",
+      "area": "package",
+      "message": "The bound Sandbox's mode does not fit the loop's completion policy: runner_validation needs an isolated container, agent_reported a customer VM.",
+      "hint": "Choose a Sandbox in the mode the completion policy needs.",
+      "docs": "/docs/reference/api-endpoints"
+    },
+    {
+      "code": "runtime_sandbox_unavailable",
+      "area": "package",
+      "message": "The bound Sandbox is not a ready Sandbox of this tenant with the profile the package needs.",
+      "hint": "Choose a ready Sandbox with that profile.",
+      "docs": "/docs/reference/api-endpoints"
+    },
+    {
+      "code": "runtime_selection_invalid",
+      "area": "package",
+      "message": "A runtime binding is not a resource id.",
+      "hint": "Map each requirement key to the UUID of a solution or Sandbox of this tenant.",
+      "docs": "/docs/reference/api-endpoints"
+    },
+    {
+      "code": "runtime_selections_incomplete_or_unknown",
+      "area": "package",
+      "message": "Bind every runtime requirement of the package, and only those.",
+      "hint": "Map each key of runtime_requirements to a resource id (runtime_bindings).",
+      "docs": "/docs/reference/api-endpoints"
+    },
+    {
+      "code": "runtime_validation_profile_unavailable",
+      "area": "package",
+      "message": "The bound Sandbox does not allow the validation profile the package needs.",
+      "hint": "Allow that validation profile on the Sandbox, or choose another Sandbox.",
+      "docs": "/docs/reference/api-endpoints"
+    },
+    {
+      "code": "INGESTION_BUDGET_EXCEEDED",
+      "area": "knowledge_base",
+      "message": "Monthly ingestion token budget exhausted.",
+      "hint": "Wait until the budget resets (Retry-After), or ask for a larger plan.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "PROCESSING_STEP_CAP_REACHED",
+      "area": "capacity",
+      "message": "The workspace has reached its monthly Processing Step cap; new work is not started.",
+      "hint": "Wait for the billing month to reset (`resets_at`), or a Tenant Owner raises or removes `monthly_processing_step_cap` (PATCH /api/v1/tenants/current/processing-step-cap).",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "approval_needs_a_person",
+      "area": "approval",
+      "message": "This API key cannot decide or cancel an approval.",
+      "hint": "A person decides, in the Admin or with their personal access token, or a key the tenant owner issued with the `approvals.decide` scope; `admin` does not include it.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "conflict",
+      "area": "request",
+      "message": "The request conflicts with the current state of the resource.",
+      "hint": "Read the resource again and retry against its current state.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "document_limit_exceeded",
+      "area": "knowledge_base",
+      "message": "The upload exceeds the knowledge base's document limit.",
+      "hint": "Delete unused documents of the knowledge base or ask for a larger plan.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "forbidden",
+      "area": "auth",
+      "message": "This credential may not perform the operation.",
+      "hint": "Ask a tenant administrator for the permission, or use a credential whose role grants it.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "idempotency_conflict",
+      "area": "idempotency",
+      "message": "This Idempotency-Key was already used with a different request.",
+      "hint": "Use a new key for a new request; reuse a key only to retry the identical request.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "idempotency_key_invalid",
+      "area": "idempotency",
+      "message": "The Idempotency-Key header is not usable.",
+      "hint": "Send 1 to 200 printable ASCII characters without surrounding spaces, unique per operation.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "idempotency_request_in_progress",
+      "area": "idempotency",
+      "message": "A request with this Idempotency-Key is still running.",
+      "hint": "Wait for the Retry-After seconds and retry with the same key to receive its result.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "import_apply_failed",
+      "area": "package",
+      "message": "Applying the import failed; the transaction was rolled back.",
+      "hint": "Nothing was written; fix what the message names and import again.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "knowledge_base_cleanup_in_progress",
+      "area": "knowledge_base",
+      "message": "The knowledge base is being cleaned up and accepts no writes.",
+      "hint": "Wait until the cleanup finishes, or use another knowledge base.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "knowledge_base_not_found",
+      "area": "knowledge_base",
+      "message": "No knowledge base with this id exists in the selected tenant.",
+      "hint": "List the knowledge bases and use one of their ids.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "knowledge_base_order_managed",
+      "area": "knowledge_base",
+      "message": "A source system maintains this knowledge base through orders; it takes no manual writes.",
+      "hint": "Change the content in the source system, or upload into another knowledge base.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "license_limit_reached",
+      "area": "license",
+      "message": "The instance's license does not allow creating this.",
+      "hint": "Archive what is unused, or install a license with a higher limit.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "limit_above_platform_ceiling",
+      "area": "limits",
+      "message": "The value is above the platform's ceiling for this limit; a tenant may only lower it.",
+      "hint": "Send at most `maximum`. Only an operator raises the ceiling, through `maximum_setting`.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "model_endpoint_busy",
+      "area": "capacity",
+      "message": "The model endpoint was at its limit of concurrent requests and no slot freed in time.",
+      "hint": "Retry later, or raise the model's Max concurrent requests if the endpoint can serve more. The wait is MODEL_ENDPOINT_SLOT_WAIT_SECONDS.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "not_found",
+      "area": "request",
+      "message": "The addressed resource does not exist in this tenant.",
+      "hint": "Check the id and the selected tenant (`cavelon use <tenant>`).",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "package_import_blocked",
+      "area": "package",
+      "message": "The import preview has blockers.",
+      "hint": "Resolve every entry of `detail.blockers` (secrets, bindings, rules) and import again.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "package_rejected",
+      "area": "package",
+      "message": "A rule refused the package.",
+      "hint": "Read the message, which names the rule, and fix the package.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "package_requirements_changed",
+      "area": "package",
+      "message": "The import's requirements changed since the preview; nothing was saved.",
+      "hint": "Preview the import again, then apply it. `blockers` names what changed since the preview.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "package_schema_invalid",
+      "area": "package",
+      "message": "The package fails schema validation.",
+      "hint": "Fix the fields `detail.errors` names; GET /api/v1/meta/package-schema has the schema.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "payload_too_large",
+      "area": "request",
+      "message": "The request is larger than this operation accepts.",
+      "hint": "Send less data per request.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "rate_limited",
+      "area": "request",
+      "message": "Too many requests or an exhausted allowance.",
+      "hint": "Wait for the Retry-After seconds, then retry.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "request_invalid",
+      "area": "request",
+      "message": "The request is malformed or fails validation.",
+      "hint": "Fix the fields `detail` names and send the request again.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "run_capacity_busy",
+      "area": "capacity",
+      "message": "Every run slot of this tenant or the platform was in use.",
+      "hint": "Retry later. The run caps are under Platform › Operations › Rate limits; a run started by a trigger waits for a free slot on its own.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "run_dispatch_unknown",
+      "area": "trigger",
+      "message": "The run was accepted but its dispatch could not be confirmed.",
+      "hint": "Read the run by its `run_id` before starting another one.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "secret_needs_a_person",
+      "area": "secrets",
+      "message": "A tenant API key cannot set or delete a secret value.",
+      "hint": "A person sets it: in the Admin under Settings › Secrets, or with a personal access token.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "server_error",
+      "area": "request",
+      "message": "The server failed to complete the request.",
+      "hint": "Retry later; if it persists, report the time and the operation.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "service_unavailable",
+      "area": "request",
+      "message": "A service the operation needs is temporarily unavailable.",
+      "hint": "Retry after a short wait; with an Idempotency-Key the retry cannot run the operation twice.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "solution_activation_refused",
+      "area": "solution",
+      "message": "The solution cannot be activated in its current state.",
+      "hint": "Read the message: an archived solution needs a draft variant, a full plan needs another solution paused.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "solution_already_active",
+      "area": "solution",
+      "message": "The solution is already active.",
+      "hint": "Nothing to do: a retried activation lands here once the first one went through.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "solution_clone_conflict",
+      "area": "solution",
+      "message": "The clone collides with existing configuration of this tenant.",
+      "hint": "Choose another slug or element slug suffix for the clone.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "solution_entitlement_exceeded",
+      "area": "solution",
+      "message": "The tenant's plan does not allow this many elements.",
+      "hint": "Remove unused elements or ask for a larger plan.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "solution_not_found",
+      "area": "solution",
+      "message": "No solution with this id exists in the selected tenant.",
+      "hint": "List the solutions (`cavelon solutions`) and use one of their ids.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "solution_not_ready",
+      "area": "solution",
+      "message": "Resolve the required readiness actions before activating this solution.",
+      "hint": "Read `detail.readiness.blockers`, fix each one, then activate again.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "solution_slug_taken",
+      "area": "solution",
+      "message": "Another solution of this tenant already uses this slug.",
+      "hint": "Choose another slug, or address the existing solution by its slug.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "storage_limit_exceeded",
+      "area": "knowledge_base",
+      "message": "The upload exceeds the tenant's storage allowance.",
+      "hint": "Delete unused documents or ask for a larger plan.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "storage_size_unknown",
+      "area": "knowledge_base",
+      "message": "The tenant's storage usage cannot be verified right now.",
+      "hint": "Retry later; a retained source is still being measured.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "tenant_not_selected",
+      "area": "auth",
+      "message": "The request names no tenant.",
+      "hint": "Choose a tenant with `cavelon use <tenant>`, --tenant or CAVELON_TENANT (the X-Tenant-Id header).",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "test_execution_allowance_exhausted",
+      "area": "testing",
+      "message": "The monthly test-execution allowance is exhausted.",
+      "hint": "Wait for the next period or upgrade the plan.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "test_run_dispatch_unknown",
+      "area": "testing",
+      "message": "The test run was accepted but its dispatch could not be confirmed.",
+      "hint": "Retry with the same Idempotency-Key; the run executes at most once.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "token_activation_refused",
+      "area": "auth",
+      "message": "This personal access token may not activate solutions, or not with force.",
+      "hint": "Create a token with activation allowed, or resolve the readiness checks instead of forcing.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "trigger_not_found",
+      "area": "trigger",
+      "message": "No trigger with this id exists in the selected tenant.",
+      "hint": "List the triggers and use one of their ids.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "unauthenticated",
+      "area": "auth",
+      "message": "The request carries no valid credential.",
+      "hint": "Log in again (`cavelon login`) or send a valid token.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "upload_file_too_large",
+      "area": "knowledge_base",
+      "message": "A file exceeds the knowledge base's maximum file size.",
+      "hint": "Split the file, or raise the knowledge base's upload limit.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "upload_file_type_unsupported",
+      "area": "knowledge_base",
+      "message": "A file type is not allowed in this knowledge base.",
+      "hint": "Convert the file to an allowed type, or allow the type in the knowledge base's upload settings.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "upload_policy_changed",
+      "area": "knowledge_base",
+      "message": "The upload policy or the knowledge base changed during the upload.",
+      "hint": "Retry the upload.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "web_source_inactive",
+      "area": "knowledge_base",
+      "message": "Every URL belongs to a removed web source and was skipped.",
+      "hint": "Import the URLs into a web source again to take the pages over.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "path_access_denied",
+      "area": "sandbox",
+      "message": "The runner's account on the VM may not open this path; the directory's permissions deny it.",
+      "hint": "Use a path the runner can read and write, or ask the VM operator to grant the runner's account access.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "path_already_exists",
+      "area": "sandbox",
+      "message": "Something already exists at this path.",
+      "hint": "List the directory with list_files, then use the existing entry or choose another name.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "path_invalid",
+      "area": "sandbox",
+      "message": "The runner could not use this path. Usually its parent directory does not exist; a path is also refused when a part of it is a symbolic link or not a directory, or when the target is not a regular file.",
+      "hint": "List the parent directory with list_files. File tools create no directories: create a missing one first (start_command with mkdir -p, where commands are offered) or write into a directory that exists.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "path_is_a_directory",
+      "area": "sandbox",
+      "message": "The path names a directory where the call needs a file.",
+      "hint": "List the directory with list_files and name a file inside it.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "path_missing_parent",
+      "area": "sandbox",
+      "message": "A directory on the way to this path does not exist.",
+      "hint": "List the parent directory with list_files. File tools create no directories: create the missing one first (start_command with mkdir -p, where commands are offered) or write into a directory that exists.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "path_name_refused",
+      "area": "sandbox",
+      "message": "The path is empty, has an empty or '.' part, or contains a backslash or a control character.",
+      "hint": "Separate parts with a single '/', without a trailing '/', and use printable characters only.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "path_not_a_directory",
+      "area": "sandbox",
+      "message": "A part of the path that must be a directory is a file.",
+      "hint": "List the parent directory with list_files and choose a path whose directories are directories.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "path_not_a_regular_file",
+      "area": "sandbox",
+      "message": "The target is not an ordinary file: it is a FIFO, socket or device, or a file with several hard links.",
+      "hint": "File tools read and write only ordinary files with a single link. Leave this one alone, or work on a copy made with a command, where commands are offered.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "path_not_found",
+      "area": "sandbox",
+      "message": "Nothing exists at this path: the file or directory the call names is missing.",
+      "hint": "List its directory with list_files to find the name. To create a new file, call write_file with create_only=true and expected_digest=null.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "path_outside_workspace",
+      "area": "sandbox",
+      "message": "The path leaves the workspace: it starts with '/' or has a '..' part.",
+      "hint": "Name the path relative to the workspace root, such as work/out.txt.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "path_symlink_refused",
+      "area": "sandbox",
+      "message": "A part of the path, or its target, is a symbolic link; file tools never follow one.",
+      "hint": "Use the path the link points to, if it is inside the workspace. list_files shows a link as kind symlink.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "path_too_long",
+      "area": "sandbox",
+      "message": "The path, or one name in it, is longer or nested deeper than the runner accepts.",
+      "hint": "Use shorter names or fewer nested directories.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "revision_conflict",
+      "area": "sandbox",
+      "message": "The workspace or the file no longer matches the workspace_revision or expected_digest this call names.",
+      "hint": "Read the file again and repeat the call with its current digest and the latest workspace_revision.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_activity_cursor_invalid",
+      "area": "sandbox",
+      "message": "Sandbox activity cursor invalid.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_actor_source_unsupported",
+      "area": "sandbox",
+      "message": "Sandbox actor source unsupported.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_archive_required_before_delete",
+      "area": "sandbox",
+      "message": "Sandbox archive required before delete.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_artifact_expired",
+      "area": "sandbox",
+      "message": "Sandbox artifact expired.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_artifact_job_active",
+      "area": "sandbox",
+      "message": "Sandbox artifact job active.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_artifact_job_unavailable",
+      "area": "sandbox",
+      "message": "Sandbox artifact job unavailable.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_artifact_limit_exceeded",
+      "area": "sandbox",
+      "message": "Sandbox artifact limit exceeded.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_artifact_manifest_invalid",
+      "area": "sandbox",
+      "message": "Sandbox artifact manifest invalid.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_artifact_not_ready",
+      "area": "sandbox",
+      "message": "Sandbox artifact not ready.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_artifact_page_invalid",
+      "area": "sandbox",
+      "message": "Sandbox artifact page invalid.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_artifact_phase_invalid",
+      "area": "sandbox",
+      "message": "Sandbox artifact phase invalid.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_artifact_storage_mismatch",
+      "area": "sandbox",
+      "message": "Sandbox artifact storage mismatch.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_artifact_storage_unavailable",
+      "area": "sandbox",
+      "message": "Sandbox artifact storage unavailable.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_artifact_temporarily_unavailable",
+      "area": "sandbox",
+      "message": "Sandbox artifact temporarily unavailable.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_artifact_unavailable",
+      "area": "sandbox",
+      "message": "Sandbox artifact unavailable.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_artifact_upload_headers_invalid",
+      "area": "sandbox",
+      "message": "Sandbox artifact upload headers invalid.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_artifact_upload_not_ready",
+      "area": "sandbox",
+      "message": "Sandbox artifact upload not ready.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_authenticated_principal_required",
+      "area": "sandbox",
+      "message": "Sandbox authenticated principal required.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_authority_admission_conflict",
+      "area": "sandbox",
+      "message": "Sandbox authority admission conflict.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_authority_requires_root",
+      "area": "sandbox",
+      "message": "Sandbox authority requires root.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_capability_unavailable",
+      "area": "sandbox",
+      "message": "Sandbox capability unavailable.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_cleanup_action_denied",
+      "area": "sandbox",
+      "message": "Sandbox cleanup action denied.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_command_limit",
+      "area": "sandbox",
+      "message": "Sandbox command limit.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_config_version_changed",
+      "area": "sandbox",
+      "message": "Sandbox config version changed.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_configuration_invalid",
+      "area": "sandbox",
+      "message": "Sandbox configuration invalid.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_connection_changed",
+      "area": "sandbox",
+      "message": "Sandbox connection changed.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_connection_credential_unavailable",
+      "area": "sandbox",
+      "message": "Sandbox connection credential unavailable.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_connection_invalid",
+      "area": "sandbox",
+      "message": "Sandbox connection invalid.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_content_not_utf8_use_base64",
+      "area": "sandbox",
+      "message": "Sandbox content not utf8 use base64.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_dispatch_identity_invalid",
+      "area": "sandbox",
+      "message": "Sandbox dispatch identity invalid.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_enrollment_claimed",
+      "area": "sandbox",
+      "message": "Sandbox enrollment claimed.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_enrollment_invalid",
+      "area": "sandbox",
+      "message": "Sandbox enrollment invalid.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_enrollment_unavailable",
+      "area": "sandbox",
+      "message": "Sandbox enrollment unavailable.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_execution_mode_mismatch",
+      "area": "sandbox",
+      "message": "Sandbox execution mode mismatch.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_execution_unavailable",
+      "area": "sandbox",
+      "message": "Sandbox execution unavailable.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_harness_ceiling_too_large",
+      "area": "sandbox",
+      "message": "Sandbox harness ceiling too large.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_harness_not_allowed",
+      "area": "sandbox",
+      "message": "Sandbox harness not allowed.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_idempotency_conflict",
+      "area": "sandbox",
+      "message": "Sandbox idempotency conflict.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_idempotency_key_invalid",
+      "area": "sandbox",
+      "message": "Sandbox idempotency key invalid.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_inline_source_invalid",
+      "area": "sandbox",
+      "message": "Sandbox inline source invalid.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_inline_source_loop_unsupported",
+      "area": "sandbox",
+      "message": "Sandbox inline source loop unsupported.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_lifecycle_invalid",
+      "area": "sandbox",
+      "message": "Sandbox lifecycle invalid.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_limits_exceed_runner",
+      "area": "sandbox",
+      "message": "Sandbox limits exceed runner.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_log_snapshot_required",
+      "area": "sandbox",
+      "message": "Sandbox log snapshot required.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_loop_acquisition_exists",
+      "area": "sandbox",
+      "message": "Sandbox loop acquisition exists.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_loop_controller_required",
+      "area": "sandbox",
+      "message": "Sandbox loop controller required.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_loop_iteration_inactive",
+      "area": "sandbox",
+      "message": "Sandbox loop iteration inactive.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_loop_not_active",
+      "area": "sandbox",
+      "message": "Sandbox loop not active.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_loop_ownership_ambiguous",
+      "area": "sandbox",
+      "message": "Sandbox loop ownership ambiguous.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_loop_ownership_required",
+      "area": "sandbox",
+      "message": "Sandbox loop ownership required.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_loop_paused",
+      "area": "sandbox",
+      "message": "Sandbox loop paused.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_loop_scope_invalid",
+      "area": "sandbox",
+      "message": "Sandbox loop scope invalid.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_loop_writer_retained",
+      "area": "sandbox",
+      "message": "Sandbox loop writer retained.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_loop_writer_unassociated",
+      "area": "sandbox",
+      "message": "Sandbox loop writer unassociated.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_not_found",
+      "area": "sandbox",
+      "message": "Sandbox not found.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_not_ready",
+      "area": "sandbox",
+      "message": "Sandbox not ready.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_operation_content_unavailable",
+      "area": "sandbox",
+      "message": "Sandbox operation content unavailable.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_operation_unavailable",
+      "area": "sandbox",
+      "message": "Sandbox operation unavailable.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_operation_unresolved",
+      "area": "sandbox",
+      "message": "Sandbox operation unresolved.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_path_protected",
+      "area": "sandbox",
+      "message": "Sandbox path protected.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_permission_denied",
+      "area": "sandbox",
+      "message": "Sandbox permission denied.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_persisted_request_mismatch",
+      "area": "sandbox",
+      "message": "Sandbox persisted request mismatch.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_policy_invalid",
+      "area": "sandbox",
+      "message": "Sandbox policy invalid.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_profile_capabilities_unavailable",
+      "area": "sandbox",
+      "message": "Sandbox profile capabilities unavailable.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_prompt_unavailable",
+      "area": "sandbox",
+      "message": "Sandbox prompt unavailable.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_registration_or_reference_conflict",
+      "area": "sandbox",
+      "message": "Sandbox registration or reference conflict.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_registration_retention_active",
+      "area": "sandbox",
+      "message": "Sandbox registration retention active.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_relay_invalid",
+      "area": "sandbox",
+      "message": "Sandbox relay invalid.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_relay_output_limit",
+      "area": "sandbox",
+      "message": "Sandbox relay output limit.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_request_invalid",
+      "area": "sandbox",
+      "message": "The tool call's arguments do not fit the tool; nothing was sent to the Sandbox.",
+      "hint": "Correct the argument the message names and call the tool again.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_reservation_pending",
+      "area": "sandbox",
+      "message": "Sandbox reservation pending.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_reserved_argument",
+      "area": "sandbox",
+      "message": "Sandbox reserved argument.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_resource_ceiling_invalid",
+      "area": "sandbox",
+      "message": "Sandbox resource ceiling invalid.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_resource_retired",
+      "area": "sandbox",
+      "message": "Sandbox resource retired.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_revision_changed",
+      "area": "sandbox",
+      "message": "The workspace changed since the workspace_revision this call names.",
+      "hint": "Read or list again and repeat the call with the workspace_revision just returned.",
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_revision_conflict",
+      "area": "sandbox",
+      "message": "Sandbox revision conflict.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_run_authority_missing",
+      "area": "sandbox",
+      "message": "Sandbox run authority missing.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_run_not_active",
+      "area": "sandbox",
+      "message": "Sandbox run not active.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_runner_binding_unavailable",
+      "area": "sandbox",
+      "message": "Sandbox runner binding unavailable.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_runner_connection_unavailable",
+      "area": "sandbox",
+      "message": "Sandbox runner connection unavailable.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_runner_identity_changed",
+      "area": "sandbox",
+      "message": "Sandbox runner identity changed.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_runner_identity_invalid",
+      "area": "sandbox",
+      "message": "Sandbox runner identity invalid.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_runner_identity_or_manifest_invalid",
+      "area": "sandbox",
+      "message": "Sandbox runner identity or manifest invalid.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_runner_response_changed",
+      "area": "sandbox",
+      "message": "Sandbox runner response changed.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_runner_response_invalid",
+      "area": "sandbox",
+      "message": "Sandbox runner response invalid.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_runner_terminal_changed",
+      "area": "sandbox",
+      "message": "Sandbox runner terminal changed.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_runner_timeout",
+      "area": "sandbox",
+      "message": "Sandbox runner timeout.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_runner_unavailable",
+      "area": "sandbox",
+      "message": "Sandbox runner unavailable.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_runtime_context_required",
+      "area": "sandbox",
+      "message": "Sandbox runtime context required.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_runtime_image_unverified",
+      "area": "sandbox",
+      "message": "Sandbox runtime image unverified.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_signing_key_unavailable",
+      "area": "sandbox",
+      "message": "Sandbox signing key unavailable.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_slot_retired",
+      "area": "sandbox",
+      "message": "Sandbox slot retired.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_tool_call_identity_required",
+      "area": "sandbox",
+      "message": "Sandbox tool call identity required.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_tool_call_not_recorded",
+      "area": "sandbox",
+      "message": "Sandbox tool call not recorded.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_tool_unavailable",
+      "area": "sandbox",
+      "message": "Sandbox tool unavailable.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_transfer_operation_not_ready",
+      "area": "sandbox",
+      "message": "Sandbox transfer operation not ready.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_transfer_range_invalid",
+      "area": "sandbox",
+      "message": "Sandbox transfer range invalid.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_transfer_response_invalid",
+      "area": "sandbox",
+      "message": "Sandbox transfer response invalid.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_transfer_size_limit",
+      "area": "sandbox",
+      "message": "Sandbox transfer size limit.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_transfer_source_invalid",
+      "area": "sandbox",
+      "message": "Sandbox transfer source invalid.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_transfer_source_mismatch",
+      "area": "sandbox",
+      "message": "Sandbox transfer source mismatch.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_transfer_source_required",
+      "area": "sandbox",
+      "message": "Sandbox transfer source required.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_transfer_unavailable",
+      "area": "sandbox",
+      "message": "Sandbox transfer unavailable.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_validation_evidence_unavailable",
+      "area": "sandbox",
+      "message": "Sandbox validation evidence unavailable.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_validation_in_progress",
+      "area": "sandbox",
+      "message": "Sandbox validation in progress.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_validation_profile_unavailable",
+      "area": "sandbox",
+      "message": "Sandbox validation profile unavailable.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_validation_receipt_unavailable",
+      "area": "sandbox",
+      "message": "Sandbox validation receipt unavailable.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_validation_requires_registration",
+      "area": "sandbox",
+      "message": "Sandbox validation requires registration.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_workspace_refresh_unavailable",
+      "area": "sandbox",
+      "message": "Sandbox workspace refresh unavailable.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_write_limit",
+      "area": "sandbox",
+      "message": "Sandbox write limit.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_writer_required",
+      "area": "sandbox",
+      "message": "Sandbox writer required.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "sandbox_writer_unresolved",
+      "area": "sandbox",
+      "message": "Sandbox writer unresolved.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "scope_invalid",
+      "area": "sandbox",
+      "message": "Scope invalid.",
+      "hint": null,
+      "docs": "/docs/reference/nodes-and-edges#masterloop"
+    }
+  ]
+}

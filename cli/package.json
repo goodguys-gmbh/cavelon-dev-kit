@@ -1,0 +1,48 @@
+{
+  "name": "@cavelon/cli",
+  "version": "0.1.0",
+  "description": "The cavelon binary: CLI and local MCP server for building Cavelon solutions with a coding agent.",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/goodguys-gmbh/cavelon-dev-kit",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/goodguys-gmbh/cavelon-dev-kit.git",
+    "directory": "cli"
+  },
+  "type": "module",
+  "bin": {
+    "cavelon": "dist/cli.js"
+  },
+  "files": [
+    "dist/",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20.3"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-skills.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "docs:commands": "vitest run test/commands-doc.test.ts --update",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.31.0",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "yaml": "^2.9.1"
+  },
+  "optionalDependencies": {
+    "@napi-rs/keyring": "^2.1.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.0",
+    "@types/node": "^20.19.0",
+    "eslint": "^9.39.0",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.71.0",
+    "vitest": "^4.0.0"
+  }
+}

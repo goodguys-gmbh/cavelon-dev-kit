@@ -1,0 +1,9 @@
+- slug: answer-from-faq
+  name: Answer from the FAQ
+  description: Look the question up in the support FAQ before answering.
+  instructions: |-
+    Search the Support FAQ for every question about opening hours, shipping,
+    returns or refunds, and answer only from what it says.
+    Quote numbers (days, amounts, times) exactly as the FAQ gives them.
+  knowledge_base_assignments:
+    - knowledge_base_name: Support FAQ

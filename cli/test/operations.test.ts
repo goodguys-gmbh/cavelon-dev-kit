@@ -1,0 +1,284 @@
+import { mkdirSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { startFakeServer, traceFixture, type FakeServer } from "./fake-server.js";
+import { cli, login, sandbox, type Sandbox } from "./helpers.js";
+
+let server: FakeServer;
+let sb: Sandbox;
+let tenant: string;
+
+beforeAll(async () => {
+  server = await startFakeServer();
+  tenant = server.addTenant("acme", "Acme");
+  sb = sandbox();
+  await login(sb, server.url, server.addToken({ kind: "pat", tenantIds: [tenant], defaultTenant: tenant }));
+});
+afterAll(async () => {
+  sb.cleanup();
+  await server.close();
+});
+beforeEach(() => {
+  server.state.defaultSteps = ["queued", "running", "succeeded"];
+  server.state.serveOperations = true;
+  server.state.serveSse = true;
+});
+
+type WaitOutput = { operations: Array<{ id: string; status: string }>; settled: boolean; timed_out: boolean; resume?: string };
+
+describe("wait", () => {
+  it("returns when the operation succeeds (exit 0)", async () => {
+    const op = server.addOperation("document_ingestion", tenant, ["queued", "running", "succeeded"]);
+    const result = await cli(sb, ["wait", op.id, "--json"]);
+    expect(result.code).toBe(0);
+    expect(result.json<WaitOutput>()).toMatchObject({ settled: true, timed_out: false, operations: [{ id: op.id, status: "succeeded" }] });
+  });
+
+  it("stops at the timeout with the current state, and the next wait resumes (exit 6, then 0)", async () => {
+    const op = server.addOperation("test_run", tenant, ["running", "running", "running", "running", "running", "running", "running", "running", "succeeded"]);
+    const first = await cli(sb, ["wait", op.id, "--timeout", "100ms", "--json"]);
+    expect(first.code).toBe(6);
+    const state = first.json<WaitOutput>();
+    expect(state).toMatchObject({ settled: false, timed_out: true, resume: `cavelon wait ${op.id}` });
+    expect(state.operations[0]!.status).toBe("running");
+
+    const text = await cli(sb, ["wait", op.id, "--timeout", "0"]);
+    expect(text.code).toBe(6);
+    expect(text.stdout).toMatch(new RegExp(`Wait with: cavelon wait ${op.id}`));
+
+    const second = await cli(sb, ["wait", op.id, "--timeout", "30s", "--json"]);
+    expect(second.code).toBe(0);
+    expect(second.json<WaitOutput>().operations[0]!.status).toBe("succeeded");
+  });
+
+  it("returns on needs_action with the reason and the Admin link (exit 5)", async () => {
+    const op = server.addOperation("test_run", tenant, ["running", "needs_action"], {
+      action: { reason: "2 answers wait for a manual verdict.", admin_url: "https://admin.example/test-suites/runs/1" },
+    });
+    const result = await cli(sb, ["wait", op.id]);
+    expect(result.code).toBe(5);
+    expect(result.stdout).toMatch(/needs a person: 2 answers wait for a manual verdict/);
+    expect(result.stdout).toMatch(/https:\/\/admin\.example\/test-suites\/runs\/1/);
+  });
+
+  it("reports a failure with the server's code (exit 1)", async () => {
+    const op = server.addOperation("document_ingestion", tenant, ["failed"], { error: { code: "document_ingestion_failed", message: "Unreadable PDF" } });
+    const result = await cli(sb, ["wait", op.id, "--json"]);
+    expect(result.code).toBe(1);
+    expect(result.json<{ operations: Array<{ error: { code: string } }> }>().operations[0]!.error.code).toBe("document_ingestion_failed");
+  });
+
+  it("waits for several at once and exits with the most urgent code", async () => {
+    const ok = server.addOperation("document_ingestion", tenant, ["succeeded"]);
+    const stuck = server.addOperation("document_ingestion", tenant, ["needs_action"]);
+    expect((await cli(sb, ["wait", ok.id, stuck.id])).code).toBe(5);
+  });
+
+  it("explains unknown ids and a missing operations API", async () => {
+    expect((await cli(sb, ["wait", "not-an-op"])).code).toBe(2);
+    const unknown = await cli(sb, ["wait", "op_test_run_00000000000000000000000000000000", "--json"]);
+    expect(unknown.code).toBe(1);
+    expect(unknown.json<{ error: { code: string } }>().error.code).toBe("operation_not_found");
+    server.state.serveOperations = false;
+    const off = await cli(sb, ["wait", "op_test_run_00000000000000000000000000000000", "--json"]);
+    expect(off.json<{ error: { code: string } }>().error.code).toBe("operations_unavailable");
+  });
+
+  it("rejects a malformed timeout (exit 2)", async () => {
+    expect((await cli(sb, ["wait", "op_x", "--timeout", "soon"])).code).toBe(2);
+  });
+});
+
+describe("watch", () => {
+  it("streams changes until the operation ends", async () => {
+    const op = server.addOperation("scrape", tenant, ["queued", "running", "succeeded"]);
+    const result = await cli(sb, ["watch", op.id, "--json"]);
+    expect(result.code).toBe(0);
+    const lines = result.stdout.trim().split("\n").map((l) => JSON.parse(l) as { operation: { status: string } });
+    expect(lines.map((l) => l.operation.status)).toEqual(["queued", "running", "succeeded"]);
+  });
+
+  it("reconnects when the connection drops mid-stream", async () => {
+    server.state.dropStreams = 2;
+    const op = server.addOperation("scrape", tenant, ["queued", "running", "running", "succeeded"]);
+    const result = await cli(sb, ["watch", op.id, "--json"]);
+    expect(result.code, result.stderr + result.stdout).toBe(0);
+    const statuses = result.stdout.trim().split("\n").map((l) => (JSON.parse(l) as { operation: { status: string } }).operation.status);
+    expect(statuses.at(-1)).toBe("succeeded");
+    expect(server.state.dropStreams).toBe(0);
+  });
+
+  it("falls back to polling when the instance has no event stream", async () => {
+    server.state.serveSse = false;
+    const op = server.addOperation("scrape", tenant, ["running", "failed"]);
+    const result = await cli(sb, ["watch", op.id]);
+    expect(result.code).toBe(1);
+    expect(result.stdout).toMatch(/running[\s\S]*failed/);
+  });
+});
+
+describe("kb upload", () => {
+  it("uploads a folder in batches and returns one operation id per document", async () => {
+    const kbId = "4c1b9a3e-0000-4000-8000-00000000c0de";
+    server.state.kbs.push({ id: kbId, tenant_id: tenant, name: "FAQ" });
+    const dir = path.join(sb.home, "docs");
+    mkdirSync(path.join(dir, "sub"), { recursive: true });
+    for (let i = 0; i < 23; i++) writeFileSync(path.join(dir, `doc-${i}.md`), `# Doc ${i}\n`);
+    writeFileSync(path.join(dir, ".hidden.md"), "secret");
+    writeFileSync(path.join(dir, "sub", "nested.pdf"), "%PDF");
+
+    const dry = await cli(sb, ["kb", "upload", dir, "--kb", "FAQ", "--dry-run", "--json"]);
+    expect(dry.json<{ count: number }>().count).toBe(23);
+
+    server.state.requests.length = 0;
+    const result = await cli(sb, ["kb", "upload", dir, "--kb", "FAQ", "-r", "--json"]);
+    expect(result.code, result.stderr).toBe(0);
+    const data = result.json<{ documents: unknown[]; operation_ids: string[] }>();
+    expect(data.documents).toHaveLength(24);
+    expect(data.operation_ids).toHaveLength(24);
+    expect(data.operation_ids.every((id) => id.startsWith("op_document_ingestion_"))).toBe(true);
+    const uploads = server.state.requests.filter((r) => r.path.endsWith("/documents/upload"));
+    expect(uploads).toHaveLength(2);
+
+    const waited = await cli(sb, ["wait", ...data.operation_ids.slice(0, 3), "--json"]);
+    expect(waited.code).toBe(0);
+  });
+
+  it("waits when asked, and filters by extension", async () => {
+    const dir = path.join(sb.home, "mixed");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(path.join(dir, "a.pdf"), "%PDF");
+    writeFileSync(path.join(dir, "b.txt"), "text");
+    const result = await cli(sb, ["kb", "upload", dir, "--kb", "4c1b9a3e-0000-4000-8000-00000000c0de", "--ext", "pdf", "--wait", "--json"]);
+    expect(result.code).toBe(0);
+    expect(result.json<{ documents: unknown[]; settled: boolean }>()).toMatchObject({ settled: true });
+    expect(result.json<{ documents: unknown[] }>().documents).toHaveLength(1);
+  });
+
+  it("reports what was uploaded when a later batch fails", async () => {
+    const dir = path.join(sb.home, "many");
+    mkdirSync(dir, { recursive: true });
+    for (let i = 0; i < 25; i++) writeFileSync(path.join(dir, `f-${String(i).padStart(2, "0")}.md`), "x");
+    server.state.uploadsBeforeFailure = 1;
+    try {
+      const result = await cli(sb, ["kb", "upload", dir, "--kb", "FAQ", "--json"]);
+      expect(result.code).toBe(8);
+      const data = result.json<{ operation_ids: string[]; not_uploaded: string[]; error: { code: string } }>();
+      expect(data.operation_ids).toHaveLength(20);
+      expect(data.not_uploaded).toHaveLength(5);
+      expect(data.error.code).toBe("server_error");
+    } finally {
+      server.state.uploadsBeforeFailure = Infinity;
+    }
+  });
+
+  it("needs --kb and an existing knowledge base", async () => {
+    expect((await cli(sb, ["kb", "upload", sb.home])).code).toBe(2);
+    const missing = await cli(sb, ["kb", "upload", path.join(sb.home, "docs"), "--kb", "Nope", "--json"]);
+    expect(missing.code).toBe(1);
+    expect(missing.json<{ error: { code: string } }>().error.code).toBe("kb_not_found");
+  });
+});
+
+describe("test run", () => {
+  it("starts every suite of a harness and returns operation ids", async () => {
+    const created = await cli(sb, ["harness", "new", "support", "--json"]);
+    const harnessId = created.json<{ id: string }>().id;
+    server.state.suites.push(
+      { id: "5a17e000-0000-4000-8000-000000000001", tenant_id: tenant, name: "smoke", harness_id: harnessId, archived_at: null },
+      { id: "5a17e000-0000-4000-8000-000000000002", tenant_id: tenant, name: "regression", harness_id: harnessId, archived_at: null },
+      { id: "5a17e000-0000-4000-8000-000000000003", tenant_id: tenant, name: "old", harness_id: harnessId, archived_at: "2026-01-01T00:00:00Z" },
+    );
+    const result = await cli(sb, ["test", "run", "--harness", "support", "--json"]);
+    expect(result.code, result.stderr).toBe(0);
+    const data = result.json<{ runs: Array<{ suite: string; operation_id: string }>; operation_ids: string[] }>();
+    expect(data.runs.map((r) => r.suite)).toEqual(["smoke", "regression"]);
+    expect(data.operation_ids).toHaveLength(2);
+    const start = server.state.requests.filter((r) => r.method === "POST" && r.path.endsWith("/runs")).pop()!;
+    expect(start.body).toEqual({ harness_id: harnessId });
+  });
+
+  it("runs one suite and waits for its result", async () => {
+    const result = await cli(sb, ["test", "run", "--suite", "smoke", "--wait", "--json"]);
+    expect(result.code, result.stderr + result.stdout).toBe(0);
+    const data = result.json<{ runs: Array<{ summary: { passed: number } }>; failed_cases: number; settled: boolean }>();
+    expect(data).toMatchObject({ failed_cases: 0, settled: true });
+    expect(data.runs[0]!.summary.passed).toBe(2);
+  });
+
+  it("exits 1 when a case failed, though the run itself finished", async () => {
+    server.state.runSummary = { passed: 1, failed: 1, pass_rate: 0.5 };
+    try {
+      const result = await cli(sb, ["test", "run", "--suite", "smoke", "--wait", "--json"]);
+      expect(result.code).toBe(1);
+      expect(result.json<{ failed_cases: number }>().failed_cases).toBe(1);
+    } finally {
+      server.state.runSummary = { passed: 2, failed: 0, pass_rate: 1 };
+    }
+  });
+
+  it("names a suite that does not exist", async () => {
+    const result = await cli(sb, ["test", "run", "--suite", "ghost", "--json"]);
+    expect(result.code).toBe(1);
+    expect(result.json<{ error: { code: string } }>().error.code).toBe("suite_not_found");
+  });
+});
+
+describe("trace", () => {
+  it("summarises a trigger run's traces, its spans, and one span in full", async () => {
+    const runId = "7aace000-0000-4000-8000-000000000001";
+    const traceId = "7aace000-0000-4000-8000-0000000000aa";
+    server.state.traces.set(`trigger:${runId}`, [traceFixture(traceId, null)]);
+    const list = await cli(sb, ["trace", runId, "--json"]);
+    expect(list.code, list.stderr).toBe(0);
+    expect(list.json<{ kind: string; traces: { items: Array<{ trace_id: string; spans: number }> } }>()).toMatchObject({
+      kind: "trigger",
+      traces: { items: [{ trace_id: traceId, spans: 3 }] },
+    });
+
+    const spans = await cli(sb, ["trace", runId, "--trace", traceId, "--json"]);
+    const items = spans.json<{ spans: { items: Array<{ name: string; status: string; error: string | null }> } }>().spans.items;
+    expect(items.map((s) => s.name)).toEqual(["Main", "generate", "search_documents"]);
+    expect(items[2]).toMatchObject({ status: "error", error: expect.stringMatching(/tool exploded/) });
+
+    const span = await cli(sb, ["trace", runId, "--trace", traceId, "--span", `${traceId}-span-2`, "--json"]);
+    const detail = span.json<{ input: string; output: unknown }>();
+    expect(typeof detail.input).toBe("string");
+    expect(detail.input).toMatch(/more characters/);
+    const full = await cli(sb, ["trace", runId, "--trace", traceId, "--span", `${traceId}-span-2`, "--full", "--json"]);
+    expect(full.json<{ input: { prompt: string } }>().input.prompt).toHaveLength(5000);
+
+    const text = await cli(sb, ["trace", runId]);
+    expect(text.stdout).toMatch(/Spans of one: cavelon trace/);
+  });
+
+  it("follows an operation id to its test run's results", async () => {
+    const started = await cli(sb, ["test", "run", "--suite", "smoke", "--json"]);
+    const opId = started.json<{ operation_ids: string[] }>().operation_ids[0]!;
+    const result = await cli(sb, ["trace", opId, "--json"]);
+    expect(result.code, result.stderr).toBe(0);
+    const data = result.json<{ kind: string; results: { items: Array<{ case: string; conversation_id: string | null }> } }>();
+    expect(data.kind).toBe("test");
+    expect(data.results.items.map((r) => r.case)).toEqual(["Greets", "Answers"]);
+  });
+
+  it("reads a conversation's traces", async () => {
+    const conversation = "11111111-1111-4111-8111-111111111111";
+    server.state.traces.set(`conversation:${conversation}`, [traceFixture("c0000000-0000-4000-8000-000000000001", conversation)]);
+    // Guessed: the trigger and test routes answer nothing useful, the conversation does.
+    const result = await cli(sb, ["trace", conversation, "--json"]);
+    expect(result.code).toBe(0);
+    expect(result.json<{ kind: string }>().kind).toBe("conversation");
+    const named = await cli(sb, ["trace", conversation, "--kind", "conversation", "--json"]);
+    expect(named.json<{ kind: string }>().kind).toBe("conversation");
+    // Named, an empty kind is shown as empty rather than skipped.
+    const empty = await cli(sb, ["trace", conversation, "--kind", "test", "--json"]);
+    expect(empty.json<{ kind: string; results: { items: unknown[] } }>()).toMatchObject({ kind: "test", results: { items: [] } });
+  });
+
+  it("says when nothing has that id", async () => {
+    const result = await cli(sb, ["trace", "99999999-9999-4999-8999-999999999999", "--json"]);
+    expect(result.code).toBe(1);
+    expect(result.json<{ error: { code: string } }>().error.code).toBe("run_not_found");
+  });
+});

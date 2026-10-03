@@ -1,0 +1,209 @@
+{
+  "manifest": {
+    "package_version": "v3",
+    "exported_at": "2026-09-10T00:00:00Z",
+    "source_tenant_id": "00000000-0000-0000-0000-000000000000",
+    "source_tenant_slug": "cavelon-blueprints",
+    "scope": "agent_graph",
+    "secrets_included": false
+  },
+  "harnesses": [
+    {
+      "slug": "blueprint-counter",
+      "name": "Blueprint: sandbox-free counter",
+      "status": "draft",
+      "description": "Offline Sandbox/Masterloop MVP blueprint. Imported as draft; activate after checking setup."
+    }
+  ],
+  "registry_entities": {
+    "orchestration_nodes": [
+      {
+        "slug": "start",
+        "name": "start",
+        "harness_slug": "blueprint-counter",
+        "node_type": "trigger_start",
+        "canvas_x": 0,
+        "canvas_y": 0,
+        "config": {
+          "trigger_slug": "run-counter"
+        }
+      },
+      {
+        "slug": "count",
+        "name": "count",
+        "harness_slug": "blueprint-counter",
+        "node_type": "masterloop",
+        "canvas_x": 360,
+        "canvas_y": 0,
+        "config": {
+          "version": "masterloop.v1",
+          "iteration_harness_id": "{{runtime:harness-1}}",
+          "goal": "Increment count until it reaches three.",
+          "sandbox_binding": null,
+          "initial_input": {
+            "count": 0
+          },
+          "completion_policy": {
+            "kind": "structured_contract",
+            "checks": [
+              {
+                "path": "$.next_input.count",
+                "operator": "gte",
+                "expected": 3
+              }
+            ]
+          },
+          "limits": {
+            "max_iterations": 3,
+            "deadline_seconds": 300,
+            "max_iteration_seconds": 30,
+            "max_model_requests": 0,
+            "max_input_tokens": 0,
+            "max_output_tokens": 0,
+            "max_command_seconds": 1,
+            "max_no_progress_iterations": 3
+          }
+        }
+      },
+      {
+        "slug": "result",
+        "name": "result",
+        "harness_slug": "blueprint-counter",
+        "node_type": "output",
+        "canvas_x": 720,
+        "canvas_y": 0,
+        "config": {
+          "mode": "log_only",
+          "result_source": "payload"
+        }
+      },
+      {
+        "slug": "failure",
+        "name": "failure",
+        "harness_slug": "blueprint-counter",
+        "node_type": "output",
+        "canvas_x": 720,
+        "canvas_y": 220,
+        "config": {
+          "mode": "log_only",
+          "result_source": "payload"
+        }
+      }
+    ],
+    "graph_edges": [
+      {
+        "harness_slug": "blueprint-counter",
+        "edge_type": "pipeline",
+        "config": {
+          "payload_mode": "structured_json"
+        },
+        "is_active": true,
+        "from_node_ref": {
+          "kind": "orchestration",
+          "slug": "start"
+        },
+        "to_node_ref": {
+          "kind": "orchestration",
+          "slug": "count"
+        }
+      },
+      {
+        "harness_slug": "blueprint-counter",
+        "edge_type": "pipeline",
+        "config": {
+          "payload_mode": "structured_json"
+        },
+        "is_active": true,
+        "from_node_ref": {
+          "kind": "orchestration",
+          "slug": "count"
+        },
+        "to_node_ref": {
+          "kind": "orchestration",
+          "slug": "result"
+        }
+      },
+      {
+        "harness_slug": "blueprint-counter",
+        "edge_type": "error",
+        "config": {},
+        "is_active": true,
+        "from_node_ref": {
+          "kind": "orchestration",
+          "slug": "count"
+        },
+        "to_node_ref": {
+          "kind": "orchestration",
+          "slug": "failure"
+        }
+      }
+    ],
+    "triggers": [
+      {
+        "slug": "run-counter",
+        "name": "Run blueprint counter",
+        "harness_slug": "blueprint-counter",
+        "trigger_type": "webhook",
+        "config": {},
+        "is_active": false
+      }
+    ]
+  },
+  "runtime_requirements": {
+    "version": 1,
+    "items": [
+      {
+        "key": "harness-1",
+        "kind": "harness",
+        "label": "Blueprint: counter iteration"
+      }
+    ]
+  },
+  "test_suites": [
+    {
+      "name": "Counter loop",
+      "harness_slug": "blueprint-counter",
+      "description": "Starts the run-counter trigger and checks that the loop counts to three, spending no model budget.",
+      "tags": [
+        "masterloop"
+      ],
+      "settings": {},
+      "test_cases": [
+        {
+          "name": "Counts to three in three iterations",
+          "type": "trigger",
+          "sort_order": 1,
+          "tags": [],
+          "trigger": {
+            "trigger_slug": "run-counter",
+            "input": {},
+            "timeout_seconds": 300,
+            "loop": {
+              "state": "completed",
+              "min_iterations": 3,
+              "max_iterations": 3,
+              "max_model_requests": 0,
+              "max_input_tokens": 0,
+              "max_output_tokens": 0,
+              "max_seconds": 300
+            },
+            "output": [
+              {
+                "json_path": "$.ok",
+                "equals": true
+              },
+              {
+                "json_path": "$.continuation.outcome",
+                "equals": "done"
+              },
+              {
+                "json_path": "$.continuation.next_input.count",
+                "equals": 3
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

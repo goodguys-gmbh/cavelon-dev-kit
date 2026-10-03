@@ -1,0 +1,27 @@
+{
+  "name": "cavelon",
+  "version": "0.1.0",
+  "description": "Build, seed, test and improve Cavelon solutions from a repository: the Cavelon skills and the cavelon MCP server.",
+  "author": {
+    "name": "goodguys GmbH",
+    "url": "https://github.com/goodguys-gmbh/cavelon-dev-kit"
+  },
+  "homepage": "https://github.com/goodguys-gmbh/cavelon-dev-kit",
+  "repository": "https://github.com/goodguys-gmbh/cavelon-dev-kit",
+  "license": "Apache-2.0",
+  "keywords": ["cavelon", "agents", "mcp", "solution-as-code"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Cavelon",
+    "shortDescription": "Build Cavelon solutions",
+    "longDescription": "Build, seed, test and improve Cavelon solutions from a git repository instead of the Admin. The skills carry the development loop (validate, apply, seed, test, trace), package authoring, testing and long-running work; the cavelon MCP server runs the cavelon CLI's commands as tools against your instance, with your own login.",
+    "developerName": "goodguys GmbH",
+    "category": "Developer Tools",
+    "capabilities": ["Interactive", "Write"],
+    "websiteURL": "https://github.com/goodguys-gmbh/cavelon-dev-kit",
+    "defaultPrompt": [
+      "Build a Cavelon solution in this folder that answers support questions from our FAQ"
+    ]
+  }
+}

@@ -1,0 +1,4 @@
+- slug: support-faq
+  name: Support FAQ
+  description: Answers customers' questions from the support FAQ and says when it does not know.
+  status: draft

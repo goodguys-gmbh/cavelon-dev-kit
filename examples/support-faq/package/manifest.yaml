@@ -1,0 +1,7 @@
+package_version: v3
+exported_at: 2026-10-03T09:00:00Z
+source_tenant_id: 00000000-0000-4000-8000-0000000000aa
+source_tenant_slug: acme
+scope: agent_graph
+secrets_included: false
+capabilities: []

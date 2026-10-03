@@ -1,0 +1,107 @@
+# Contributing
+
+Thank you for helping with the Cavelon dev-kit. This guide covers how the
+repository is laid out, how to build and test it, and what a change needs
+before it is merged.
+
+Report a vulnerability as [SECURITY.md](SECURITY.md) says, never in a public
+issue.
+
+## Layout
+
+| Path | What |
+|---|---|
+| `cli/` | the `cavelon` CLI and MCP server: TypeScript on Node.js 20.3 or newer |
+| `cli/src/commands/` | one file per command group; each command declares its options, help text and whether it is read-only |
+| `cli/test/` | the tests, and the fake server that serves the contract snapshots |
+| `cli/scripts/` | build helpers: copying the skills into the package, trimming and cleaning the contract snapshots, generating `docs/commands.md` |
+| `plugin/` | the Cavelon plugin: `skills/` (the one source of the skills), `.mcp.json`, and a manifest each for Claude Code and Codex |
+| `.claude-plugin/`, `.agents/plugins/` | the marketplaces of Claude Code and Codex, naming `plugin/` |
+| `contracts/` | snapshots of what an instance publishes, and the list of operations the kit uses |
+| `examples/support-faq/` | a small solution repository; the tests validate it |
+| `docs/` | the user documentation |
+
+## Build and test
+
+```bash
+cd cli
+npm ci --ignore-scripts      # dependencies' install scripts never run
+npm run typecheck
+npm run lint
+npm test
+npm run build && node dist/cli.js --help
+```
+
+Use the clone's build from anywhere with `npm install -g .` in `cli/` (it links
+to the clone, so keep the folder), and give your agent an MCP server of its
+own to try it: `claude mcp add cavelon-dev -- cavelon mcp`.
+
+CI runs the same steps on Linux (Node.js 20, 22 and 24), macOS and Windows, and
+checks that the packed package carries the skills and the license.
+
+## How the kit is built
+
+- **Published contracts only.** The kit talks to an instance only through what
+  the instance publishes: its OpenAPI, `/api/v1/meta/capabilities`,
+  `/api/v1/meta/error-catalog`, the package schema and the docs. It never
+  hard-codes an entity type or a field the published schema or OpenAPI can
+  tell it, so one kit release works with many instance versions.
+- **Built for agents.** Every command works without a prompt, offers `--json`,
+  uses the [documented exit codes](docs/troubleshooting.md#exit-codes), bounds
+  its waits and its output, and is marked read-only or changing (which also
+  sets the MCP tool's annotations).
+- **Older instances.** A field a recent instance added is read with a fallback
+  for an instance that does not publish it. The fake server can play both, and
+  a test covers both.
+- **Secrets stay with people.** A token or secret value is never a
+  command-line argument, never logged and never written to a repository. Only
+  `login` and `secrets set` read one, from a terminal or stdin.
+- **Customers' files.** The kit never overwrites a file it did not create; in a
+  customer's `AGENTS.md`, `CLAUDE.md`, `.gitignore` or git hook it changes only
+  the block between its markers.
+
+## Tests
+
+Tests run without a real instance. `cli/test/fake-server.ts` serves the
+snapshots in `contracts/cavelon/` and answers the routes the commands use, and
+`contract.test.ts` checks that its answers match the snapshot's OpenAPI, so the
+other tests prove something.
+
+- A command that calls a new operation adds it to
+  `contracts/kit-operations.json`; `contracts/README.md` says how to refresh and
+  trim the snapshot. The contract test fails when the snapshot and the list
+  disagree.
+- `docs/commands.md` is generated from the commands' own help:
+  `npm run docs:commands` in `cli/`. A test fails while it is out of date.
+- A test against a live instance is opt-in and never runs in CI.
+
+### Checking against a live instance
+
+Before a release, run the [getting-started tutorial](docs/getting-started.md)
+against a test instance with personal access tokens and the operations API on,
+using a token for a test tenant. Check that each step's output matches what the
+documentation shows, and that `--json` output parses. Never use a production
+tenant or a token with **May activate** for this unless you mean to activate.
+
+## Code style
+
+- TypeScript, strict; ESLint as configured in `cli/eslint.config.js`.
+- No `console` in `cli/src`: commands write through their context, so `--json`
+  and MCP output stay clean.
+- Regular expressions: no quantified group anchored at the end (such as
+  `/(\r?\n)+$/` or `/^[-.]+|[-.]+$/`); trim with a loop instead. Build file
+  paths only from validated names.
+- English in code, comments, docs, commits and pull requests. Comments say why,
+  not what.
+
+## Pull requests
+
+- Branch from `main`, one change per pull request; pull requests are squash
+  merged.
+- CI must pass: typecheck, lint and tests on Linux, macOS and Windows.
+- A user-visible change gets a line in `CHANGELOG.md` under **Unreleased**, and
+  the docs in `docs/` change with it.
+- Releases follow [RELEASING.md](RELEASING.md).
+
+By contributing, you agree that your contribution is licensed under the
+[Apache License 2.0](LICENSE).

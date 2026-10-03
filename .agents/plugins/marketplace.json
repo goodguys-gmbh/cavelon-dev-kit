@@ -1,0 +1,20 @@
+{
+  "name": "cavelon-dev-kit",
+  "interface": {
+    "displayName": "Cavelon dev-kit"
+  },
+  "plugins": [
+    {
+      "name": "cavelon",
+      "source": {
+        "source": "local",
+        "path": "./plugin"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

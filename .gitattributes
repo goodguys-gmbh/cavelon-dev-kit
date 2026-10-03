@@ -1,0 +1,7 @@
+# The skills and the example are copied byte for byte into customers' repositories,
+# and the clients read the manifests on every platform: LF everywhere.
+plugin/** text eol=lf
+examples/** text eol=lf
+.claude-plugin/** text eol=lf
+.agents/** text eol=lf
+docs/** text eol=lf
