@@ -1,6 +1,6 @@
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import { COMMANDS } from "../src/commands/index.js";
 import { startFakeServer, type FakeServer } from "./fake-server.js";
@@ -103,6 +103,26 @@ describe("cavelon variables", () => {
     expect(name.code).toBe(3);
     expect(name.json<{ error: { message: string } }>().error.message).toMatch(/not a name this instance accepts: must match pattern/);
     expect(server.state.requests.some((r) => r.method === "PUT")).toBe(false);
+  });
+});
+
+describe("an answer that breaks off", () => {
+  afterEach(() => {
+    server.state.interruptions = [];
+  });
+
+  it("after part of its body is a network error (exit 8), not an internal one", async () => {
+    server.state.interruptions = [{ method: "GET", path: /^\/api\/v1\/variables$/, mode: "cut" }];
+    const result = await cli(sb, ["variables", "list", "--json"]);
+    expect(result.code, result.stdout).toBe(8);
+    expect(result.json<{ error: { code: string } }>().error.code).toBe("network_error");
+  });
+
+  it("that stalls is a timeout (exit 8)", async () => {
+    server.state.interruptions = [{ method: "GET", path: /^\/api\/v1\/variables$/, mode: "stall" }];
+    const result = await cli(sb, ["variables", "list", "--json"], { env: { CAVELON_HTTP_TIMEOUT_MS: "500" } });
+    expect(result.code, result.stdout).toBe(8);
+    expect(result.json<{ error: { code: string; hint: string } }>().error).toMatchObject({ code: "request_timeout", hint: expect.stringMatching(/^Retry/) });
   });
 });
 

@@ -3,7 +3,7 @@ import path from "node:path";
 import type { Context } from "./command.js";
 import type { OpenApiDoc } from "./contracts.js";
 import { CavelonError, ExitCode, validationError } from "./errors.js";
-import type { ApiClient, QueryValue } from "./http.js";
+import { bodyBytes, type ApiClient, type QueryValue } from "./http.js";
 import { coerceParameter, isArrayParameter, operationAt, validateBody, type Operation } from "./openapi.js";
 
 /**
@@ -51,13 +51,14 @@ export function buildRequest(op: Operation, args: CallArguments): { path: string
   const given = { ...(args.params ?? {}) };
   const query: Record<string, QueryValue> = {};
   const headers: Record<string, string> = { ...(args.headers ?? {}) };
+  const sentHeaders = new Set(Object.keys(headers).map((h) => h.toLowerCase()));
   let filled = op.path;
   const missing: string[] = [];
   for (const param of op.parameters) {
     const values = given[param.name];
     delete given[param.name];
     if (!values || values.length === 0) {
-      if (param.required) missing.push(`${param.name} (${param.in})`);
+      if (param.required && !(param.in === "header" && sentHeaders.has(param.name.toLowerCase()))) missing.push(`${param.name} (${param.in})`);
       continue;
     }
     if (param.in === "path") {
@@ -122,16 +123,10 @@ export async function callOperation(ctx: Context, client: ApiClient, doc: OpenAp
     if (doc) validateBody(doc, op, args.body);
     json = args.body;
   }
-  const response = await client.fetchRaw(op.method, target, {
-    query,
-    headers,
-    json,
-    form,
-    sendTenant: args.sendTenant,
-    signal: AbortSignal.timeout(args.timeoutMs ?? (Number(ctx.io.env.CAVELON_HTTP_TIMEOUT_MS) || 30_000)),
-  });
+  const signal = AbortSignal.timeout(args.timeoutMs ?? (Number(ctx.io.env.CAVELON_HTTP_TIMEOUT_MS) || 30_000));
+  const response = await client.fetchRaw(op.method, target, { query, headers, json, form, sendTenant: args.sendTenant, signal });
   const contentType = response.headers.get("content-type") ?? "";
-  const bytes = new Uint8Array(await response.arrayBuffer());
+  const bytes = await bodyBytes(response, client.resolve(target), signal);
   const isText = /json|text|xml|yaml|markdown|event-stream/.test(contentType) || bytes.length === 0;
   const text = isText ? new TextDecoder().decode(bytes) : "";
   let data: unknown = text;

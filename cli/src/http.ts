@@ -232,6 +232,18 @@ function parseBody(text: string, contentType: string | null): unknown {
   return text;
 }
 
+/**
+ * A response body read to the end. A body that stalls or breaks off is a
+ * network failure (exit 8, retry), as a request that got no answer is.
+ */
+export async function bodyBytes(response: Response, url: URL, signal?: AbortSignal): Promise<Uint8Array> {
+  try {
+    return new Uint8Array(await response.arrayBuffer());
+  } catch (error) {
+    throw networkError(error, url, signal);
+  }
+}
+
 function networkError(error: unknown, url: URL, signal?: AbortSignal): CavelonError {
   const reason = signal?.reason as { name?: string } | undefined;
   if (reason?.name === "TimeoutError" || (error as { name?: string })?.name === "TimeoutError") {

@@ -411,7 +411,7 @@ Start test-suite runs; returns operation ids.
 cavelon test run [options]
 ```
 
-Without --suite, runs every suite of the solution (--harness, or cavelon.yaml's harness). With --wait, exits 1 when a case failed, 5 when answers wait for a manual verdict.
+Without --suite, runs every suite of the solution (--harness, or cavelon.yaml's harness). With --wait, exits 1 when a case failed or a run measured nothing comparable (cases not run, technical errors), 5 when answers wait for a manual verdict or a value a case needs.
 
 | Option | Description | MCP |
 |---|---|---|
@@ -836,6 +836,7 @@ Calls the trigger's run-now route. The run (and its loop) acts as the caller: wi
 | `--input <json|@file|->` | The run's payload: JSON, @file.json or - for stdin. | yes |
 | `--wait` | Wait for the run to finish (see `cavelon wait`). | CLI only |
 | `--timeout <duration>` | Stop waiting after this long (90s, 5m; default 90s). The work goes on; run wait again to resume. | yes |
+| `--idempotency-key <uuid>` | The Idempotency-Key to send (a UUID), so a retry of the same call does nothing twice. | yes |
 
 Examples:
 

@@ -172,6 +172,23 @@ describe("kb upload", () => {
     }
   });
 
+  it("reports what was uploaded when the answer to a later batch breaks off", async () => {
+    const dir = path.join(sb.home, "many-cut");
+    mkdirSync(dir, { recursive: true });
+    for (let i = 0; i < 25; i++) writeFileSync(path.join(dir, `f-${String(i).padStart(2, "0")}.md`), "x");
+    server.state.interruptions = [{ method: "POST", path: /\/documents\/upload$/, mode: "cut", skip: 1 }];
+    try {
+      const result = await cli(sb, ["kb", "upload", dir, "--kb", "FAQ", "--json"]);
+      expect(result.code, result.stdout).toBe(8);
+      const data = result.json<{ operation_ids: string[]; not_uploaded: string[]; error: { code: string } }>();
+      expect(data.operation_ids).toHaveLength(20);
+      expect(data.not_uploaded).toHaveLength(5);
+      expect(data.error.code).toBe("network_error");
+    } finally {
+      server.state.interruptions = [];
+    }
+  });
+
   it("needs --kb and an existing knowledge base", async () => {
     expect((await cli(sb, ["kb", "upload", sb.home])).code).toBe(2);
     const missing = await cli(sb, ["kb", "upload", path.join(sb.home, "docs"), "--kb", "Nope", "--json"]);

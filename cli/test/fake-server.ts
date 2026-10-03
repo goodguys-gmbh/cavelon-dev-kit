@@ -127,6 +127,15 @@ export interface FakeState {
    * /api paths reach the API.
    */
   rootPathsReachApi: boolean;
+  /** False answers 404 for the OpenAPI at both paths, as an instance that does not serve it. */
+  serveOpenapi: boolean;
+  /**
+   * Answers that break off after the status and part of the body, as a proxy
+   * or a dropped connection leaves them: "cut" closes the connection, "stall"
+   * sends nothing more. The request is handled first. `skip` lets that many
+   * matching requests through whole.
+   */
+  interruptions: Array<{ method: string; path: RegExp; mode: "cut" | "stall"; skip?: number }>;
   /** Uploads after this many succeed answer 500 (for partial failures). */
   uploadsBeforeFailure: number;
   /** Event streams to cut off after their first frame. */
@@ -370,6 +379,8 @@ export async function startFakeServer(): Promise<FakeServer> {
     runSummary: { passed: 2, failed: 0, pass_rate: 1 },
     runResults: null,
     rootPathsReachApi: true,
+    serveOpenapi: true,
+    interruptions: [],
     uploadsBeforeFailure: Infinity,
     dropStreams: 0,
     configs: new Map(),
@@ -427,7 +438,19 @@ export async function startFakeServer(): Promise<FakeServer> {
     const method = req.method ?? "GET";
     const body = method === "GET" ? { raw: Buffer.alloc(0) } : await readBody(req);
     state.requests.push({ method, path: p, query: url.searchParams, headers: req.headers, body: body.json ?? (body.form ? "multipart" : undefined) });
+    const interruption = state.interruptions.find((i) => i.method === method && i.path.test(p));
+    if (interruption && (interruption.skip ?? 0) > 0) interruption.skip!--;
+    else if (interruption) {
+      res.end = ((chunk?: unknown) => {
+        const whole = chunk === undefined || typeof chunk === "function" ? "" : String(chunk);
+        res.write(whole.slice(0, Math.max(1, Math.floor(whole.length / 2))), () => {
+          if (interruption.mode === "cut") res.destroy();
+        });
+        return res;
+      }) as typeof res.end;
+    }
 
+    if (!state.serveOpenapi && (p === "/openapi.json" || p === "/api/v1/openapi.json")) return send(res, 404, { detail: "Not Found" });
     if (!state.rootPathsReachApi && (p === "/openapi.json" || p === "/llms.txt")) {
       if (p === "/openapi.json") {
         res.writeHead(307, { location: "/login" });

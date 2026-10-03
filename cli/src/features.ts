@@ -45,6 +45,23 @@ export function idempotencyKey(input: Input): string {
   return given.toLowerCase();
 }
 
+/**
+ * An error that leaves open whether the instance got the request (a timeout,
+ * a cut connection, a 5xx), with the key a retry must send again: a new key
+ * would start the work a second time.
+ */
+export function withRetryKey(error: unknown, key: string): unknown {
+  if (!(error instanceof CavelonError) || error.exitCode !== ExitCode.server) return error;
+  return new CavelonError(error.exitCode, {
+    code: error.code,
+    message: error.message,
+    hint: `Retry with --idempotency-key ${key}, so the instance does not do it twice.`,
+    docs: error.docs,
+    status: error.status,
+    details: { idempotency_key: key },
+  });
+}
+
 /** A UUID that depends only on `seed`: the same request gets the same key. */
 export function stableKey(seed: string): string {
   const hex = createHash("sha256").update(seed).digest("hex");

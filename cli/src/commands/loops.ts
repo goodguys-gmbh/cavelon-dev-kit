@@ -10,7 +10,7 @@ import {
   type Context,
 } from "../command.js";
 import { CavelonError, ExitCode, usageError, type ExitCodeValue } from "../errors.js";
-import { idempotencyKey, requireFeature, UUID_KEY_OPTION } from "../features.js";
+import { idempotencyKey, requireFeature, UUID_KEY_OPTION, withRetryKey } from "../features.js";
 import { clip, keyValues, moreHint, table } from "../format.js";
 import type { ErrorCatalog } from "../contracts.js";
 import { callStable } from "../invoke.js";
@@ -316,6 +316,7 @@ export const loopStart: CommandSpec = {
     input: { type: "string", value: "<json|@file|->", description: "The run's payload: JSON, @file.json or - for stdin." },
     wait: WAIT_OPTION,
     timeout: TIMEOUT_OPTION,
+    "idempotency-key": UUID_KEY_OPTION,
   },
   examples: ["cavelon loop start counter", "cavelon loop start orders --input @orders-request.json --json"],
   async run(ctx, input) {
@@ -324,12 +325,17 @@ export const loopStart: CommandSpec = {
     const raw = stringOption(input, "input");
     const payload = raw === undefined ? {} : await readBody(ctx, raw);
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw usageError("--input must be a JSON object.");
+    // Always keyed: a start that timed out may have started the run, and a retry with the same key does not start another.
+    const key = idempotencyKey(input);
     const run = await callStable<AgentRun>(ctx, "POST", "/api/v1/triggers/{trigger_id}/run", "starting triggers", {
       params: { trigger_id: [trigger.id] },
+      headers: { "Idempotency-Key": key },
       body: { payload },
+    }).catch((error: unknown) => {
+      throw withRetryKey(error, key);
     });
     if (!trigger.is_active) ctx.warn(`Trigger "${trigger.slug}" is not active: its schedule and webhook start no runs, though this manual start did.`);
-    const started = { trigger: { id: trigger.id, slug: trigger.slug }, ...runSummary(run) };
+    const started = { trigger: { id: trigger.id, slug: trigger.slug }, ...runSummary(run), idempotency_key: key };
     if (boolOption(input, "wait") && ctx.mode === "cli" && run.operation_id) {
       const waited = await waitAndReport(ctx, [run.operation_id], timeoutMs(ctx, stringOption(input, "timeout")));
       const text = `Started run ${run.id} of ${trigger.slug}.\n${waited.text}`;
@@ -842,11 +848,13 @@ function controlCommand(action: "pause" | "resume"): CommandSpec {
       let receipt: ControlReceipt;
       try {
         receipt = await callStable<ControlReceipt>(ctx, "POST", `/api/v1/triggers/runs/{run_id}/loops/{loop_id}/${action}`, `${action} loops`, {
-          params: { run_id: [loop.owner_run_id], loop_id: [loop.id], "Idempotency-Key": [key] },
+          params: { run_id: [loop.owner_run_id], loop_id: [loop.id] },
+          // A header, not a parameter: without a served OpenAPI the kit knows only the path's parameters.
+          headers: { "Idempotency-Key": key },
           body: { expected_version: loop.version, ...(reason ? { reviewed_reason: reason } : {}) },
         });
       } catch (error) {
-        if (pausing || !(error instanceof CavelonError)) throw error;
+        if (pausing || !(error instanceof CavelonError) || error.exitCode === ExitCode.server) throw withRetryKey(error, key);
         throw await resumeRefused(ctx, error, loop, reason);
       }
       const text = pausing
