@@ -23,7 +23,7 @@ use it when you parse the result.
 - **Secrets are set by a person.** When a preview or `cavelon secrets list`
   names a secret that is not set, tell the person the exact command to run in
   their terminal, `cavelon secrets set <name>` (as `apply` prints it, with its
-  `--env`). Never ask for the value, never pipe or pass one yourself; there is
+  `--env` and `--tenant`). Never ask for the value, never pipe or pass one yourself; there is
   no MCP tool for it. Plain-text variables you may set with `cavelon variables
   set <name> <value>` when the value is not a credential.
 - **Read the limits before you plan a solution:** `cavelon limits` (the
@@ -60,7 +60,7 @@ use it when you parse the result.
    secrets with the command that sets each, OAuth grants, runtime bindings,
    trigger identities), loop budgets, and what the instance ignores.
 5. **Confirm** exactly that preview: `cavelon apply --confirm <preview-id>`
-   (with the same `--env`). Exit 4 means the target changed since the preview:
+   (the line `apply` printed, with the same `--env` and `--tenant`). Exit 4 means the target changed since the preview:
    preview again and confirm the new id. When the error lists `blockers`, the
    import's own check found them as it applied: fix what each names (the hint
    says how for a code the kit knows), then preview again.

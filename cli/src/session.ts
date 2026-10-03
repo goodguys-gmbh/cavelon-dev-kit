@@ -87,6 +87,16 @@ export function normalizeUrl(input: string, env: Env = {}): string {
   return `${url.protocol}//${url.host.toLowerCase()}${pathname}`;
 }
 
+/** Whether `input` names the instance `url`; an unusable input names none. */
+function sameUrl(input: string | undefined, url: string, env: Env): boolean {
+  if (!input) return false;
+  try {
+    return normalizeUrl(input, env) === url;
+  } catch {
+    return false;
+  }
+}
+
 export async function resolveSession(env: Env, cwd: string, globals: GlobalOptions): Promise<Session> {
   const project = await findProject(cwd);
   const config = await loadUserConfig(env);
@@ -98,11 +108,12 @@ export async function resolveSession(env: Env, cwd: string, globals: GlobalOptio
     envFile = await readEnvFile(project, globals.solutionEnv);
   }
 
+  // A source is normalised (and refused) only where it is the one chosen: an
+  // unusable CAVELON_URL or cavelon.yaml instance never blocks --instance.
   let url: string | undefined;
   let urlSource: Source | undefined;
-  const envUrl = env.CAVELON_URL ? normalizeUrl(env.CAVELON_URL, env) : undefined;
   if (globals.instance) [url, urlSource] = [normalizeUrl(globals.instance, env), "option"];
-  else if (envUrl) [url, urlSource] = [envUrl, "CAVELON_URL"];
+  else if (env.CAVELON_URL) [url, urlSource] = [normalizeUrl(env.CAVELON_URL, env), "CAVELON_URL"];
   else if (project?.instance) [url, urlSource] = [normalizeUrl(project.instance, env), "cavelon.yaml"];
   else if (config.current_instance) [url, urlSource] = [config.current_instance, "login"];
 
@@ -112,8 +123,8 @@ export async function resolveSession(env: Env, cwd: string, globals: GlobalOptio
 
   // CAVELON_TOKEN belongs to CAVELON_URL and is used only with it: it is never
   // sent to an instance that an option or a (possibly foreign) cavelon.yaml names.
-  if (env.CAVELON_TOKEN && !envUrl) session.ignoredEnvToken = true;
-  if (env.CAVELON_TOKEN && envUrl === url) {
+  if (env.CAVELON_TOKEN && !env.CAVELON_URL) session.ignoredEnvToken = true;
+  if (env.CAVELON_TOKEN && sameUrl(env.CAVELON_URL, url, env)) {
     session.token = env.CAVELON_TOKEN.trim();
     session.tokenSource = "CAVELON_TOKEN";
   } else {
@@ -126,7 +137,7 @@ export async function resolveSession(env: Env, cwd: string, globals: GlobalOptio
   }
   if (session.token) session.tokenKind = tokenKind(session.token);
 
-  const projectMatches = project && (!project.instance || normalizeUrl(project.instance, env) === url);
+  const projectMatches = project && (!project.instance || sameUrl(project.instance, url, env));
   if (globals.tenant) [session.tenant, session.tenantSource] = [globals.tenant, "option"];
   else if (env.CAVELON_TENANT) [session.tenant, session.tenantSource] = [env.CAVELON_TENANT.trim(), "CAVELON_TENANT"];
   else if (projectMatches && envFile?.tenant) [session.tenant, session.tenantSource] = [envFile.tenant, `env/${envFile.name}.yaml`];
@@ -170,19 +181,37 @@ interface TenantPage {
   items?: Array<{ id: string; slug: string; name: string }>;
 }
 
+interface TenantDetail {
+  id?: string;
+  slug?: string;
+  name?: string;
+}
+
+/** At most this many of a person's tenants are asked for their slug, so a lookup stays bounded. */
+const MAX_SLUG_LOOKUPS = 25;
+
+/** Said wherever a slug was not found: a member's token finds a slug only where it may read the tenant's settings. */
+export const TENANT_REF_HINT =
+  "Use the tenant's name or id instead: a member's token finds a tenant by its slug only where it may view the tenant's settings. `cavelon tenant list` shows the names and ids.";
+
 /**
  * The id behind a tenant slug or name, from what the credential may read:
- * the person's own memberships, then the platform's tenant list.
+ * the person's own memberships (by name), the platform's tenant list, then
+ * each membership's own detail. Memberships carry no slug and the platform
+ * list is an operator's, so for a member the detail is the only published
+ * place that names a slug; it needs settings.view in that tenant.
  */
 export async function lookupTenantId(client: ApiClient, ref: string): Promise<{ id: string; name?: string } | undefined> {
   if (isUuid(ref)) return { id: ref };
   const wanted = ref.toLowerCase();
+  const memberships = new Map<string, string>();
   if (client.target.token?.startsWith("cvpat_")) {
     const me = await client.get<MeResponse>("/api/v1/auth/me", { sendTenant: false, allow: [403, 404] });
     if (me.status === 200 && me.data) {
       const tenants = [...(me.data.memberships ?? []), ...(me.data.accessible_tenants ?? [])];
       const hit = tenants.find((t) => t.tenant_name?.toLowerCase() === wanted || t.tenant_id === ref);
       if (hit) return { id: hit.tenant_id, name: hit.tenant_name };
+      for (const t of tenants) if (isUuid(t.tenant_id)) memberships.set(t.tenant_id, t.tenant_name);
     }
   }
   const page = await client.get<TenantPage>("/api/v1/tenants", {
@@ -193,6 +222,15 @@ export async function lookupTenantId(client: ApiClient, ref: string): Promise<{ 
   if (page.status === 200) {
     const hit = page.data?.items?.find((t) => t.slug?.toLowerCase() === wanted || t.name?.toLowerCase() === wanted);
     if (hit) return { id: hit.id, name: hit.name };
+  }
+  for (const [id, name] of [...memberships].slice(0, MAX_SLUG_LOOKUPS)) {
+    // An instance without the route, or a member without settings.view there, answers 403 or 404: not this one.
+    const detail = await client.get<TenantDetail>(`/api/v1/tenants/${id}`, {
+      sendTenant: false,
+      headers: { "X-Tenant-Id": id },
+      allow: [400, 403, 404, 422],
+    });
+    if (detail.status === 200 && detail.data?.slug?.toLowerCase() === wanted) return { id, name: detail.data.name ?? name };
   }
   return undefined;
 }
@@ -210,7 +248,7 @@ export async function resolveTenantId(env: Env, session: Session, client: ApiCli
     throw new CavelonError(ExitCode.failure, {
       code: "tenant_not_found",
       message: `No tenant "${session.tenant}" that this token can see (from ${session.tenantSource}).`,
-      hint: "Use the tenant's id instead; `cavelon tenant list` shows the ids.",
+      hint: TENANT_REF_HINT,
     });
   }
   const url = session.url;

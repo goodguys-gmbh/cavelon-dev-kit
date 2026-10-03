@@ -45,6 +45,14 @@ A personal access token that reaches one tenant uses it by default. With
 several, choose one with `cavelon use`; `cavelon tenant list` shows those you
 can see. `cavelon whoami` says which tenant a command would use and why.
 
+A tenant is named by its slug, its name or its id. A token in Platform mode
+finds any slug; a member's token finds the slug of a tenant whose settings it
+may view (`settings.view`), and otherwise needs the name or the id.
+
+A command that prints the next command to run (a `--confirm` line, the
+`secrets set` lines of `apply`) prints it with the `--instance`, `--env` and
+`--tenant` you gave, so it acts where the first one did.
+
 ## Solution (harness)
 
 A **solution** is what answers your users: its agents and their prompts and
@@ -108,7 +116,9 @@ runtime_bindings:          # the package's runtime requirement -> this tenant's 
   crm_connection: 6f1c…
 ```
 
-`init` creates `env/test.yaml` and `env/prod.yaml`. A typical flow applies to
+`init` creates `env/test.yaml` and `env/prod.yaml`. A `--env <name>` without
+its `env/<name>.yaml` is refused (exit 2) before anything is sent, by every
+command that takes `--env`. A typical flow applies to
 `test`, runs the tests, then applies the same files to `prod`. Environment
 files never hold a token or a secret value; a secret is set in each tenant with
 `cavelon secrets set`.

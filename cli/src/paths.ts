@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -31,11 +32,18 @@ export function cacheDir(env: Env): string {
   return path.join(home(env), ".cache", "cavelon");
 }
 
-/** A file-system-safe name for an instance URL: host, port and path. */
+/**
+ * A file-system-safe name for an instance URL: its host, port and path to read,
+ * then a hash of the whole URL. The readable part folds `:` and `/` into `_` and
+ * drops the scheme, so without the hash `host:8443` and `host/8443`, or http and
+ * https, would share one cache, and a release's copies are kept until its version
+ * changes.
+ */
 export function instanceKey(url: string): string {
   const parsed = new URL(url);
   const parts = [parsed.hostname, parsed.port, parsed.pathname.replace(/^\/+|\/+$/g, "")].filter(Boolean);
-  return parts.join("_").replace(/[^A-Za-z0-9._-]+/g, "_");
+  const readable = parts.join("_").replace(/[^A-Za-z0-9._-]+/g, "_");
+  return `${readable}-${createHash("sha256").update(url).digest("hex").slice(0, 8)}`;
 }
 
 /**

@@ -7,6 +7,42 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Fixed
+
+- A command run with `--env <name> --tenant <tenant>` acted in the `--tenant`
+  tenant, but the commands it printed (the `--confirm` line of `limits set`,
+  `models set-limit` and `apply`, `apply`'s `secrets set` and `variables set`
+  lines, the `confirm` field in `--json` and over MCP) carried only `--env`, so
+  running them acted in the env file's tenant, and an operator's one-tenant
+  run cap became the platform's cap for every tenant. A printed command now
+  keeps `--env`, `--tenant` and `--instance` as given.
+- `--env <name>` without its `env/<name>.yaml` acted in `cavelon.yaml`'s tenant
+  and reported success in every command but `apply` (`variables`, `secrets`,
+  `models`, `limits set`, `activate`). Every command that takes `--env` now
+  refuses it before anything is sent (exit 2) and names the env files the
+  solution has.
+- A member's personal access token could not use a tenant's slug when the
+  tenant's name differed from it (`init --tenant acme`, `use acme`,
+  `cavelon.yaml`'s `tenant: acme` failed with `tenant_not_found`): only the
+  names in the memberships were compared. The slug is now read from the
+  tenant's own detail (`GET /api/v1/tenants/{tenant_id}`), which a member who
+  may view the tenant's settings reads; otherwise the error says to use the
+  name or the id.
+- `--instance` did not override an unusable `CAVELON_URL` or `cavelon.yaml`
+  instance (plain http to a remote host, for example): every command,
+  `login` and `logout` included, failed on the URL it was not going to use. A
+  URL is now checked only where it is the one chosen.
+- On an instance older than the `/api/v1/meta` routes, which answers them 404
+  before it checks the caller, `login` stored a wrong API key as a successful
+  login. It now checks such a key with one authenticated read and refuses it
+  on a 401.
+- The contract cache kept instances apart by host, port and path only, folded
+  together: `host:8443` and `host/8443`, `/team/a` and `/team_a`, and http and
+  https shared one cache, so one instance's OpenAPI could be used against the
+  other. Each instance's folder now ends in a hash of its URL; the old folders
+  are no longer read (the next online command fills the new one) and can be
+  deleted.
+
 ## [0.1.2] - 2026-10-03
 
 A security release: upgrade if your coding agent uses `cavelon mcp`.
