@@ -1,7 +1,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { parse, stringify } from "yaml";
 import { CONTRACTS, startFakeServer, type FakeServer } from "./fake-server.js";
 import { cli, login, sandbox, type Sandbox } from "./helpers.js";
@@ -604,6 +604,106 @@ describe("validate", () => {
     } finally {
       fresh.cleanup();
     }
+  });
+});
+
+describe("validate on an instance whose schema changes under one version", () => {
+  /** The section a development build gains while it keeps reporting v0.0.0-dev. */
+  const gainNotes = (schema: { properties: Record<string, unknown> }) => {
+    schema.properties.deployment_notes = { type: "object", additionalProperties: true };
+  };
+  const later = (minutes: number) => () => new Date(Date.now() + minutes * 60_000);
+  let own: Sandbox;
+
+  type Validated = { warnings: number; findings: Array<{ code: string }>; schema: { source: string; instance_version: string; fetched_at: string; etag: string | null; sha256: string; stale: boolean } };
+
+  async function solutionIn(box: Sandbox): Promise<string> {
+    await login(box, server.url, token);
+    const dir = path.join(box.home, "solution");
+    mkdirSync(dir);
+    const init = await cli(box, ["init", "--instance", server.url, "--tenant", tenant, "--harness", "support"], { cwd: dir });
+    expect(init.code, init.stderr + init.stdout).toBe(0);
+    expect((await cli(box, ["pull"], { cwd: dir })).code).toBe(0);
+    writeFileSync(path.join(dir, "package", "deployment_notes.yaml"), "owner: ops\n");
+    return dir;
+  }
+
+  beforeEach(() => {
+    own = sandbox();
+  });
+  afterEach(() => {
+    server.state.packageSchemaEdit = null;
+    server.state.packageSchemaEtag = false;
+    server.state.capsPatch = {};
+    own.cleanup();
+  });
+
+  it("reads a development build's schema again once its copy is a minute old, and says which copy it used", async () => {
+    const dir = await solutionIn(own);
+    const before = await cli(own, ["validate", "--json"], { cwd: dir });
+    const first = before.json<Validated>();
+    expect(first.findings).toEqual([expect.objectContaining({ code: "package_section_unknown" })]);
+    expect(first.schema).toMatchObject({ source: "cache", instance_version: "v0.0.0-dev", etag: null, stale: false });
+
+    server.state.packageSchemaEdit = gainNotes;
+    // Within the time-to-live the cached copy is trusted, and the instance is not asked.
+    server.state.requests.length = 0;
+    expect((await cli(own, ["validate", "--json"], { cwd: dir })).json<Validated>()).toMatchObject({ warnings: 1, schema: { source: "cache", sha256: first.schema.sha256 } });
+    expect(server.state.requests.filter((r) => r.path === "/api/v1/meta/package-schema")).toEqual([]);
+
+    // Offline, an old copy is used and said to be old.
+    const offline = (await cli(own, ["validate", "--offline", "--json"], { cwd: dir, now: later(2) })).json<Validated>();
+    expect(offline).toMatchObject({ warnings: 1, schema: { source: "cache", stale: true } });
+
+    const after = await cli(own, ["validate", "--json", "--verbose"], { cwd: dir, now: later(2) });
+    expect(after.code, after.stdout).toBe(0);
+    const second = after.json<Validated>();
+    expect(second).toMatchObject({ warnings: 0, findings: [], schema: { source: "instance", instance_version: "v0.0.0-dev", stale: false } });
+    expect(second.schema.sha256).not.toBe(first.schema.sha256);
+
+    // From here on the new copy is the cached one, offline as well.
+    const text = await cli(own, ["validate", "--offline", "--verbose"], { cwd: dir, now: later(2) });
+    expect(text.stdout).toMatch(new RegExp(`^Schema: package format v3, cached at \\S+, instance v0\\.0\\.0-dev \\(sha256 ${second.schema.sha256}\\); a development build: read again after 60 s\\.$`, "m"));
+    expect(text.stdout).not.toMatch(/package_section_unknown/);
+  });
+
+  it("checks a cached schema with the ETag the instance sent, and takes the new one when it changed", async () => {
+    server.state.packageSchemaEtag = true;
+    const dir = await solutionIn(own);
+    const first = (await cli(own, ["validate", "--json"], { cwd: dir })).json<Validated>();
+    expect(first.schema.etag).toMatch(/^"[0-9a-f]+"$/);
+
+    // Unchanged: the instance answers 304 and the copy is kept, now checked.
+    server.state.requests.length = 0;
+    const same = (await cli(own, ["validate", "--json"], { cwd: dir, now: later(2) })).json<Validated>();
+    expect(same).toMatchObject({ warnings: 1, schema: { source: "instance", etag: first.schema.etag, sha256: first.schema.sha256 } });
+    const asked = server.state.requests.filter((r) => r.path === "/api/v1/meta/package-schema");
+    expect(asked.map((r) => r.headers["if-none-match"])).toEqual([first.schema.etag]);
+
+    server.state.packageSchemaEdit = gainNotes;
+    const changed = (await cli(own, ["validate", "--json"], { cwd: dir, now: later(4) })).json<Validated>();
+    expect(changed).toMatchObject({ warnings: 0, schema: { source: "instance" } });
+    expect(changed.schema.etag).not.toBe(first.schema.etag);
+  });
+
+  it("keeps a release's cached schema: its version changes with its schema", async () => {
+    server.state.capsPatch = { instance: { version: "v1.4.0", phase: "ga" } };
+    const dir = await solutionIn(own);
+    server.state.packageSchemaEdit = gainNotes;
+    const result = (await cli(own, ["validate", "--json"], { cwd: dir, now: later(30) })).json<Validated>();
+    expect(result).toMatchObject({ warnings: 1, schema: { source: "cache", instance_version: "v1.4.0", stale: false } });
+  });
+
+  it("uses a development build's old copy, with a warning, when the instance cannot be read", async () => {
+    const dir = await solutionIn(own);
+    server.state.packageSchemaEdit = () => {
+      throw new Error("schema store unavailable");
+    };
+    const result = await cli(own, ["validate", "--json"], { cwd: dir, now: later(2) });
+    expect(result.code, result.stdout).toBe(0);
+    const data = result.json<Validated & { warnings: unknown }>();
+    expect(data).toMatchObject({ findings: [expect.objectContaining({ code: "package_section_unknown" })], schema: { source: "cache", stale: true } });
+    expect(result.stdout + result.stderr).toMatch(/Could not read the package schema again from the instance \(.+\); using the copy cached at \S+ for development build v0\.0\.0-dev\./);
   });
 });
 

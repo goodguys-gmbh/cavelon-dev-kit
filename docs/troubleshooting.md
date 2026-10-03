@@ -130,6 +130,13 @@ A finding with a code of the instance's rules (such as a graph rule) is
 explained by `cavelon explain <code>`. Warnings never fail `validate`;
 errors exit 3.
 
+On a development build of the instance, `validate` may report a field or
+section the instance has just gained as unknown: the build keeps its version
+while its schema changes, and `validate` reads the schema again only once its
+cached copy is a minute old (`CAVELON_CONTRACT_TTL_SECONDS`), or when the
+instance's ETag says it changed. `cavelon validate --verbose` names the copy it
+used: cached or read now, when, and its hash.
+
 ## Preview and apply
 
 | Code | Exit | Cause and fix |

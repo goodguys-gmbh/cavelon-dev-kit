@@ -153,6 +153,10 @@ export interface FakeState {
   readinessWithoutChecks?: boolean;
   servePrincipal: boolean;
   servePackageSchema: boolean;
+  /** Changes the package schema snapshot before it is served, as a development build gains fields under one version. */
+  packageSchemaEdit: ((schema: { properties: Record<string, unknown> }) => void) | null;
+  /** Whether the package schema is sent with an ETag and answers a matching If-None-Match with 304; off, as instances do today. */
+  packageSchemaEtag: boolean;
   /** Triggers, runs, loops, Sandboxes, archive jobs, API keys. */
   lr: LongRunningState;
   /** Each tenant's variables and secrets. */
@@ -349,6 +353,8 @@ export async function startFakeServer(): Promise<FakeServer> {
     ready: true,
     servePrincipal: true,
     servePackageSchema: true,
+    packageSchemaEdit: null,
+    packageSchemaEtag: false,
     lr: longRunningState(),
     values: new Map(),
     models: [],
@@ -465,7 +471,17 @@ export async function startFakeServer(): Promise<FakeServer> {
     if (p === "/api/v1/meta/package-schema" && state.servePackageSchema) {
       const version = url.searchParams.get("version") ?? "v3";
       if (version !== "v3") return send(res, 404, { detail: "package_version_unsupported" });
-      return send(res, 200, JSON.parse(readContract("meta-package-schema-v3.json")));
+      const schema = JSON.parse(readContract("meta-package-schema-v3.json")) as { properties: Record<string, unknown> };
+      state.packageSchemaEdit?.(schema);
+      if (!state.packageSchemaEtag) return send(res, 200, schema);
+      const text = JSON.stringify(schema);
+      const etag = `"${createHash("sha256").update(text).digest("hex").slice(0, 16)}"`;
+      if (req.headers["if-none-match"] === etag) {
+        res.writeHead(304, { etag });
+        return res.end();
+      }
+      res.writeHead(200, { "content-type": "application/json", etag });
+      return res.end(text);
     }
     if (p === "/api/v1/meta/principal" && state.servePrincipal) {
       const prefix = token!.slice(0, 12);

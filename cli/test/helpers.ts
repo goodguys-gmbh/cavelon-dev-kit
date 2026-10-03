@@ -40,6 +40,8 @@ export interface RunOptions {
   stdin?: string;
   cwd?: string;
   tty?: boolean;
+  /** The clock the CLI reads, to age its cache without waiting. */
+  now?: () => Date;
 }
 
 export async function cli(sb: Sandbox, args: string[], options: RunOptions = {}): Promise<CliResult> {
@@ -53,7 +55,7 @@ export async function cli(sb: Sandbox, args: string[], options: RunOptions = {})
     stdin,
     env: { ...sb.env, ...options.env },
     cwd: options.cwd ?? sb.home,
-    now: () => new Date(),
+    now: options.now ?? (() => new Date()),
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
   };
   const code = await run(args, io);

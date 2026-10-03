@@ -2,7 +2,7 @@ import path from "node:path";
 import { parseDocument } from "yaml";
 import { CAPACITY_CONCEPT_PAGE, CAPACITY_TUTORIAL_PAGE, capacityCodeIn, capacityHint, MODEL_ENDPOINT_BUSY } from "../capacity.js";
 import { boolOption, intOption, positional, stringOption, type CommandSpec, type Context } from "../command.js";
-import { Contracts, type ErrorCatalog, type PackageSchema } from "../contracts.js";
+import { Contracts, type CachedContract, type ErrorCatalog, type PackageSchema } from "../contracts.js";
 import { CavelonError, ExitCode, usageError } from "../errors.js";
 import { clip, keyValues } from "../format.js";
 import { readTextFile, writeFileAtomic } from "../fsutil.js";
@@ -94,43 +94,106 @@ function harnessNotFound(ref: string, source?: string): CavelonError {
   });
 }
 
-/** The package schema for a version: cached, else from the instance unless offline. */
-export async function schemaFor(ctx: Context, version: string | undefined, offline: boolean): Promise<{ schema: PackageSchema | null; source: "cache" | "instance" | "none" }> {
-  const contracts = await ctx.contracts();
-  const wanted = version ?? (await contracts.cachedOnly<{ contracts?: { package_versions?: { current?: string } } }>("capabilities.json"))?.value?.contracts?.package_versions?.current;
-  if (wanted) {
-    const cached = await contracts.cachedOnly<PackageSchema>(Contracts.packageSchemaFile(wanted));
-    if (cached) return { schema: cached.value, source: "cache" };
+/** Which copy of the package schema a command checked against. */
+export interface SchemaUsed {
+  /** The package format the schema describes. */
+  package_version: string | null;
+  source: "cache" | "instance" | "none";
+  /** The instance version the copy was cached under. */
+  instance_version: string | null;
+  fetched_at: string | null;
+  etag: string | null;
+  sha256: string | null;
+  /** A development build's copy past its time-to-live, used because the instance was not asked or could not answer. */
+  stale: boolean;
+}
+
+type CapsShape = { contracts?: { package_versions?: { current?: string; accepted?: string[] } } };
+
+/**
+ * A contract file as `validate` reads it: the cached copy while it is trusted
+ * (a release's, or a development build's within its time-to-live), else the
+ * instance's, else the stale copy with a warning. Never the network when
+ * offline.
+ */
+async function cachedFirst<T>(
+  ctx: Context,
+  what: string,
+  cached: CachedContract<T> | undefined,
+  offline: boolean,
+  fetch: () => Promise<T | null>,
+): Promise<{ value: T | null; source: "cache" | "instance" | "none" }> {
+  if (cached && (offline || !cached.stale)) return { value: cached.value, source: "cache" };
+  if (offline) return { value: null, source: "none" };
+  try {
+    const value = await fetch();
+    // An instance that publishes nothing now (or not without a tenant) leaves the copy it published before.
+    if (value === null && cached) return { value: cached.value, source: "cache" };
+    return { value, source: "instance" };
+  } catch (error) {
+    if (!cached) throw error;
+    ctx.warn(
+      `Could not read the ${what} again from the instance (${error instanceof Error ? error.message : String(error)}); ` +
+        `using the copy cached at ${cached.fetched_at ?? "an unknown time"} for development build ${cached.version}.`,
+    );
+    return { value: cached.value, source: "cache" };
   }
-  if (offline) return { schema: null, source: "none" };
-  return { schema: await contracts.packageSchema(wanted), source: "instance" };
+}
+
+/**
+ * The package schema for a version: cached, else from the instance unless
+ * offline. A development build keeps its version while its schema changes, so
+ * its copy is read again once past the time-to-live.
+ */
+export async function schemaFor(ctx: Context, version: string | undefined, offline: boolean): Promise<{ schema: PackageSchema | null; used: SchemaUsed }> {
+  const contracts = await ctx.contracts();
+  let wanted = version ?? (await contracts.cachedOnly<CapsShape>("capabilities.json"))?.value?.contracts?.package_versions?.current;
+  const cached = wanted ? await contracts.cachedOnly<PackageSchema>(Contracts.packageSchemaFile(wanted)) : undefined;
+  const { value: schema, source } = await cachedFirst(ctx, "package schema", cached, offline, async () => {
+    wanted ??= (await contracts.capabilities())?.contracts?.package_versions?.current;
+    return contracts.packageSchema(wanted);
+  });
+  const copy = source === "instance" && schema ? await contracts.cachedOnly<PackageSchema>(Contracts.packageSchemaFile(wanted ?? "current")) : source === "cache" ? cached : undefined;
+  return {
+    schema,
+    used: {
+      package_version: schema?.["x-package-version"] ?? wanted ?? null,
+      source: schema ? source : "none",
+      instance_version: copy?.version ?? null,
+      fetched_at: copy?.fetched_at ?? null,
+      etag: copy?.etag ?? null,
+      sha256: copy?.sha256 ?? null,
+      stale: copy?.stale ?? false,
+    },
+  };
 }
 
 /** The instance's error catalog: the cached one first, else fetched; null when it publishes none. */
 export async function catalogFor(ctx: Context, offline: boolean): Promise<ErrorCatalog | null> {
   const contracts = await ctx.contracts();
   const cached = await contracts.cachedOnly<ErrorCatalog>("error-catalog.json");
-  if (cached || offline) return cached?.value ?? null;
-  return contracts.errorCatalog().catch(() => null);
+  return (await cachedFirst(ctx, "error catalog", cached, offline, () => contracts.errorCatalog()).catch(() => ({ value: null }))).value;
+}
+
+/** The capabilities the instance last published: the cached ones first, else read now (never offline). */
+async function capabilitiesFor(ctx: Context, offline: boolean): Promise<Record<string, unknown> | null> {
+  const contracts = await ctx.contracts();
+  const cached = await contracts.cachedOnly<Record<string, unknown>>("capabilities.json");
+  const read = () => contracts.capabilities() as Promise<Record<string, unknown> | null>;
+  return (await cachedFirst(ctx, "capabilities", cached, offline, read).catch(() => ({ value: null }))).value;
 }
 
 /**
  * The limits the instance last published, for validate's branch concurrency
- * warnings: the cached capabilities first, fetched only when none is cached
- * (never offline). Undefined when nothing is known; then nothing is checked.
+ * warnings. Undefined when nothing is known; then nothing is checked.
  */
 async function limitsFor(ctx: Context, offline: boolean): Promise<PublishedLimits | undefined> {
-  const contracts = await ctx.contracts();
-  const cached = await contracts.cachedOnly<Record<string, unknown>>("capabilities.json");
-  if (cached || offline) return cached ? parseLimits(cached.value) : undefined;
-  const live = await contracts.capabilities().catch(() => null);
-  return live ? parseLimits(live as Record<string, unknown>) : undefined;
+  const caps = await capabilitiesFor(ctx, offline);
+  return caps ? parseLimits(caps) : undefined;
 }
 
-async function acceptedVersions(ctx: Context): Promise<string[] | undefined> {
-  const contracts = await ctx.contracts();
-  const cached = await contracts.cachedOnly<{ contracts?: { package_versions?: { accepted?: string[] } } }>("capabilities.json");
-  return cached?.value?.contracts?.package_versions?.accepted;
+async function acceptedVersions(ctx: Context, offline: boolean): Promise<string[] | undefined> {
+  return ((await capabilitiesFor(ctx, offline)) as CapsShape | null)?.contracts?.package_versions?.accepted;
 }
 
 function findingLine(f: Finding): string {
@@ -241,10 +304,10 @@ export const pull: CommandSpec = {
 // validate
 // ---------------------------------------------------------------------------
 
-async function validatePackage(ctx: Context, project: ProjectConfig, offline: boolean): Promise<{ disk: PackageOnDisk; findings: Finding[]; schemaVersion: string | null }> {
+async function validatePackage(ctx: Context, project: ProjectConfig, offline: boolean): Promise<{ disk: PackageOnDisk; findings: Finding[]; schemaVersion: string | null; used: SchemaUsed }> {
   const disk = await readPackage(project.root, project.layout);
   const version = packageVersionOf(disk.package) ?? project.packageVersion;
-  const { schema } = await schemaFor(ctx, version, offline);
+  const { schema, used } = await schemaFor(ctx, version, offline);
   if (!schema) {
     throw new CavelonError(ExitCode.failure, {
       code: "package_schema_unavailable",
@@ -257,17 +320,35 @@ async function validatePackage(ctx: Context, project: ProjectConfig, offline: bo
   const findings = checkPackage(disk, {
     schema,
     catalog: await catalogFor(ctx, offline),
-    accepted: await acceptedVersions(ctx),
+    accepted: await acceptedVersions(ctx, offline),
     limits: await limitsFor(ctx, offline),
   });
-  return { disk, findings, schemaVersion: schema["x-package-version"] ?? version ?? null };
+  return { disk, findings, schemaVersion: schema["x-package-version"] ?? version ?? null, used };
+}
+
+/** For --verbose: which copy of the schema validate checked against. */
+function schemaUsedLine(used: SchemaUsed, ttlSeconds: (version: string) => number): string {
+  const from = used.source === "instance" ? "read from the instance now" : `cached at ${used.fetched_at ?? "an unknown time"}`;
+  const instance = used.instance_version ? `, instance ${used.instance_version}` : "";
+  const id = [used.sha256 ? `sha256 ${used.sha256}` : "", used.etag ? `ETag ${used.etag}` : ""].filter(Boolean).join(", ");
+  const kept =
+    used.instance_version && Contracts.isDevelopment(used.instance_version)
+      ? used.etag
+        ? `; a development build: checked with its ETag after ${ttlSeconds(used.instance_version)} s`
+        : `; a development build: read again after ${ttlSeconds(used.instance_version)} s`
+      : "";
+  const stale = used.stale ? " (past its time-to-live; the instance was not read)" : "";
+  return `Schema: package format ${used.package_version ?? "?"}, ${from}${instance}${id ? ` (${id})` : ""}${kept}${stale}.`;
 }
 
 export const validate: CommandSpec = {
   name: "validate",
   summary: "Check the package files against the instance's package schema, offline.",
   description:
-    "Uses the schema and error catalog cached by init, pull or apply; fetches them only when none is cached (never with --offline).\n" +
+    "Uses the schema and error catalog cached by init, pull or apply; fetches them only when none is cached or a development\n" +
+    "build's copy is past its time-to-live, and never with --offline. A development build keeps one version while its schema\n" +
+    "changes, so its copy is read again after a minute (CAVELON_CONTRACT_TTL_SECONDS), or checked with the ETag the instance\n" +
+    "sent with it; --verbose says which copy was used.\n" +
     "Warns (never fails) when a fan-out or Map loop's max_concurrency is above the instance's branch width, and when the\n" +
     "tenant runs fan-outs and Map loops in sequence, from the limits the instance last published.\n" +
     "Each finding carries a code: `cavelon explain <code>` says more. The import preview checks everything again on the server.",
@@ -277,13 +358,14 @@ export const validate: CommandSpec = {
   options: {
     offline: { type: "boolean", description: "Never contact the instance, even when nothing is cached." },
     limit: { type: "string", value: "<n>", description: "Print at most n findings (default 50)." },
+    verbose: { type: "boolean", description: "Also say which copy of the package schema was used: cached or read now, when, and its hash." },
   },
   async run(ctx, input) {
     const session = await ctx.session();
     const project = requireSolution(session);
     requireInstance(session);
     const limit = intOption(input, "limit", { min: 1, max: 1000, fallback: 50 })!;
-    const { disk, findings, schemaVersion } = await validatePackage(ctx, project, boolOption(input, "offline"));
+    const { disk, findings, schemaVersion, used } = await validatePackage(ctx, project, boolOption(input, "offline"));
     const errors = findings.filter((f) => f.severity === "error");
     const warnings = findings.filter((f) => f.severity === "warning");
     if (disk.empty) ctx.warn(`No package files in ${project.layout.package}/ yet; \`cavelon pull\` brings an existing solution.`);
@@ -291,13 +373,16 @@ export const validate: CommandSpec = {
     const data = {
       valid: errors.length === 0,
       schema_version: schemaVersion,
+      schema: used,
       sections: Object.keys(disk.package).length,
       errors: errors.length,
       warnings: warnings.length,
       findings: shown,
       more: Math.max(0, findings.length - shown.length),
     };
+    const contracts = await ctx.contracts();
     const text = [
+      ...(boolOption(input, "verbose") ? [schemaUsedLine(used, (v) => contracts.ttlSeconds(v))] : []),
       ...shown.map(findingLine),
       ...(data.more ? [`… and ${data.more} more (--limit).`] : []),
       errors.length
