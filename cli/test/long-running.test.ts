@@ -232,7 +232,7 @@ describe("loop start's Idempotency-Key", () => {
     const error = timedOut.json<{ error: { code: string; hint: string; details: { idempotency_key: string } } }>().error;
     expect(error.code).toBe("request_timeout");
     const key = error.details.idempotency_key;
-    expect(error.hint).toContain(`--idempotency-key ${key}`);
+    expect(error.hint).toBe(`Retry with --idempotency-key ${key}, so the instance does not do it twice. CAVELON_HTTP_TIMEOUT_MS raises the limit per request.`);
     // The instance got the start.
     expect(runsOf().length).toBe(before + 1);
 
