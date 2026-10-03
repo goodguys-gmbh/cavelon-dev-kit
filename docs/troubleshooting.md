@@ -30,11 +30,11 @@ meaning.
 | Code | Meaning | What to do |
 |---|---|---|
 | 0 | ok | |
-| 1 | anything else: not found, an operation failed or was cancelled, a test case failed | read the message; for a test run, `cavelon trace <run>` |
+| 1 | anything else: not found, an operation failed or was cancelled, a test case failed, a test run measured nothing comparable | read the message; for a test run, `cavelon trace <run>` |
 | 2 | usage: unknown command or option, a missing argument, no instance chosen | `cavelon <command> --help` |
 | 3 | validation failed: the arguments, files or body do not match the instance's schema, or the instance refused them (400, 422) | fix what the findings name; `cavelon explain <code>` |
 | 4 | conflict or stale preview (409, 412) | preview or read again, then repeat |
-| 5 | needs a person (`needs_action`): an approval, a review | the message gives the reason and the Admin link |
+| 5 | needs a person (`needs_action`): an approval, a review, test answers that wait for a manual verdict | the message gives the reason and the Admin link |
 | 6 | timed out; the work goes on | run the printed `cavelon wait …` again to resume |
 | 7 | not authorised: no token, or the instance refused it (401, 403) | see [Logging in and permissions](#logging-in-and-permissions) |
 | 8 | server or network error (5xx, 429, unreachable, request timeout) | retry; see [Network](#network) |
@@ -155,11 +155,16 @@ used: cached or read now, when, and its hash.
 
 | Code | Exit | Cause and fix |
 |---|---|---|
-| `network_error` | 8 | The instance could not be reached. Check the URL, your VPN and proxy. |
-| `request_timeout` | 8 | A request took longer than 30 seconds. Retry; `CAVELON_HTTP_TIMEOUT_MS` raises the limit. |
+| `network_error` | 8 | The instance could not be reached, or its answer broke off. Check the URL, your VPN and proxy. |
+| `request_timeout` | 8 | A request, or reading its answer, took longer than 30 seconds. Retry; `CAVELON_HTTP_TIMEOUT_MS` raises the limit. |
 | `rate_limited` (429) | 8 | Too many requests; wait a moment and retry. |
 | `server_error` (5xx) | 8 | The instance failed. Retry; if it persists, tell its operator. |
 | `unexpected_redirect` | 8 | The instance answered with a redirect, often a sign-in page in front of it or a wrong URL. Check the URL `cavelon whoami` uses. |
+
+A command that starts work (`loop start`, `loop pause`, `loop resume`,
+`sandbox refresh`, `artifacts export`) may have reached the instance before
+the error. Its hint names the `Idempotency-Key` it sent: retry with
+`--idempotency-key <key>`, and the instance does not do it twice.
 
 Behind a proxy or a TLS-inspecting firewall, see
 [Installation](installation.md#behind-a-proxy).

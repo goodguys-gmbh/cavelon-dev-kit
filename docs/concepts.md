@@ -198,7 +198,10 @@ test_cases:
 
 `apply` sends the suites with the rest of the package. `cavelon test run`
 starts them on the instance, where a judge scores each answer. With `--wait`,
-a run whose cases failed exits 1 and names them. `cavelon trace <run>` shows
+a run whose cases failed exits 1 and names them. So does a run that measured
+nothing comparable (steps not run, technical errors, no pass rate): it says
+nothing about the solution. A run whose answers wait for a manual verdict
+exits 5. `cavelon trace <run>` shows
 each case with its score, error and the judge's reasoning (for a pass too, when
 the instance sends it), and leads to the conversation behind it, span by span,
 with each command carrying the id its route needs. The package schema also allows cases

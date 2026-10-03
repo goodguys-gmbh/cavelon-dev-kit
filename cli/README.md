@@ -391,10 +391,13 @@ cavelon wait op_test_run_… --timeout 5m
 `wait` returns when every operation has finished or needs a person, or when the
 timeout passes. It prints the state in every case; when time ran out, the work
 goes on, and the same `wait` again resumes it. `watch` streams each change.
-An operation only says that the work finished: for a test run, `wait` and
-`watch` also read the run's summary, and a run whose cases failed or errored
-exits 1 with those cases and the reason the instance recorded (`--json`:
-`failed_results`). `trace <test run>` lists every case that did not pass with
+An operation only says that the work finished: for a test run, `wait`,
+`watch` and `test run --wait` also read the run's summary. A run whose cases
+failed or errored, or that measured nothing comparable (steps not run,
+technical errors, missing results, or no pass rate), exits 1 with the counts,
+the failed cases and the reason the instance recorded; a run whose answers
+wait for a manual verdict or for a value a case needs exits 5 (`--json`:
+`failed_results`, each with `counts`, `comparable` and `exit_code`). `trace <test run>` lists every case that did not pass with
 its error, the judge's reasoning and the command that opens its traces (by its
 conversation id, or for a trigger case by the run it started), and the judge's
 reasoning for each scored pass the instance sent it for. `test run --wait` ends,
@@ -446,7 +449,12 @@ cavelon artifacts export orders-test --path output --wait --out results.tar
 
 - **`loop start`** calls the trigger's run-now route; the run acts as you (with
   a personal access token, the person). It returns the run id and the run's
-  operation id, so `wait` and `watch` follow it; a paused loop makes `wait` exit 5.
+  operation id, so `wait` and `watch` follow it (and `trace <operation>` reads
+  the run's traces); a paused loop makes `wait` exit 5. It sends an
+  `Idempotency-Key` (`--idempotency-key`, a new UUID by default; `--json`:
+  `idempotency_key`). When the start ends in exit 8 (a timeout, a cut
+  connection, a 5xx), the run may have started: the error's hint names the key,
+  and the same command with `--idempotency-key <key>` starts no second run.
   With `--wait`, a run that ended without starting a loop exits 1 and names the
   stage that recorded an error.
 - **`loop watch`** prints each iteration once the loop decided on it: accepted
@@ -469,7 +477,8 @@ cavelon artifacts export orders-test --path output --wait --out results.tar
   the stage that recorded an error. `loop iterations` reads the same a page at
   a time; `trace <child_run_id>` reads one iteration's run.
 - **`loop pause`**, **`loop resume`** send the loop's version and an
-  `Idempotency-Key` (`--idempotency-key` makes a retry safe); a loop that
+  `Idempotency-Key` (`--idempotency-key` makes a retry safe; an exit-8 error
+  names the key it sent); a loop that
   changed in between answers 409 (exit 4). `loop resume --reason` must be the
   loop's pause reason (exit 2 otherwise, before anything is sent). A pause that
   needs a review and has none exits 5 (`loop_resume_review_required`) with the

@@ -33,7 +33,9 @@ the built-in default.
 Below the limits, **tenant quotas** show what the tenant has used: knowledge
 bases, documents, storage, agents, tools, and the monthly inference and
 Processing Step budgets, each with its use and state. `cavelon status` names
-every quota at 80 % or more.
+every quota at 80 % or more. When the use cannot be read, `limits` still shows
+the limits and says why the quotas are missing (`--json`:
+`tenant_quotas.unavailable`).
 
 A limit the instance does not publish is never assumed. An older instance that
 publishes no limits gets a note from `limits`, and the other commands send
@@ -93,6 +95,9 @@ cavelon limits set kb_upload_archive_enabled true --confirm   # turn archive upl
 cavelon limits set rate_limit_chat_rpm none --confirm         # back to the platform's value
 cavelon limits set monthly_processing_step_cap none --confirm # a Tenant Owner removes the cap
 ```
+
+A Processing Step cap of `0` caps nothing, like `none`: with no cap set,
+either says it is already none and sends nothing.
 
 A value above an operator's ceiling (a rate limit above the platform's
 maximum, for example) is refused with `limit_above_platform_ceiling`, naming

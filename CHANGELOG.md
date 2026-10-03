@@ -42,6 +42,39 @@ CLI, the skills and the plugin.
   other. Each instance's folder now ends in a hash of its URL; the old folders
   are no longer read (the next online command fills the new one) and can be
   deleted.
+- `cavelon wait`, `watch` and `test run --wait` passed a test run that measured
+  nothing: they read only the failed and errored counts. They now read every
+  count the run's summary carries. Steps or cases not run, technical errors,
+  missing results, and a run the instance marks not comparable (or, on an older
+  instance, one without a pass rate) exit 1 with the counts named; answers that
+  wait for a manual verdict or a value a case needs exit 5. `failed_results`
+  carries `counts`, `comparable`, `non_comparable_reasons` and `exit_code`.
+- `cavelon loop start` sent no `Idempotency-Key`, so the retry its timeout
+  asked for started a second run. It now always sends one
+  (`--idempotency-key`, a new UUID by default; `--json`: `idempotency_key`),
+  and an exit-8 error of `loop start`, `loop pause`, `loop resume`,
+  `sandbox refresh` and `artifacts export` names the key to retry with.
+- On an instance that does not serve its OpenAPI, `loop pause`, `loop resume`,
+  `sandbox validate`, `sandbox refresh`, `sandbox seed` and `artifacts export`
+  failed with exit 3: their `Idempotency-Key` and `If-Match` are now sent as
+  headers.
+- A response whose body stalled or broke off gave `internal_error` (exit 1);
+  it is now `request_timeout` or `network_error` (exit 8), and `kb upload`
+  reports the batches it had uploaded.
+- `cavelon limits` (and the MCP tool) failed with exit 8 when only the quota
+  use could not be read; it now shows the limits, with
+  `tenant_quotas.unavailable` saying why the quotas are missing.
+- `cavelon limits --json` on an instance older than the limits had no
+  `quota_values`; it now has the same keys as on a current instance.
+- `cavelon limits set monthly_processing_step_cap` with no cap set previewed
+  `0 → none` and reported a change it did not make. It reads the published
+  value, takes a cap of 0 as none, and says it is already none; `changed` now
+  follows what the instance reports.
+- `docs/limits.md` gave `request_invalid` (exit 3) for a value of the wrong
+  kind; such a value is a usage error (exit 2), and only a value out of bounds
+  is `request_invalid`.
+- `cavelon trace <operation>` refused the operation `loop start` prints; it now
+  reads the trigger run's traces.
 
 ## [0.1.2] - 2026-10-03
 
