@@ -65,6 +65,9 @@ came from. The order is in [Concepts](concepts.md#tenant).
 | `api_key_cannot_create_tenants` | 7 | Creating a tenant needs a personal access token in Platform mode. |
 | `platform_role_required` | 7 | An operator's change needs a personal access token that allows Platform mode, of the role the change names. See [Limits](limits.md#operators-changes). |
 | `limit_changed_by_operator` | 7 | Only the instance operator changes this limit; the message names the setting. |
+| `operation_for_a_person` | 2 | Over MCP, `api` does not send an operation that changes a secret, creates or revokes a credential or decides an approval, even with `confirm`. A person does it: `cavelon secrets set <name>` in their terminal, or in Cavelon. |
+| `path_outside_solution` | 2 | Over MCP, a tool reads and writes files only inside the solution folder (the folder of `cavelon.yaml`, or the one the server started in), after following symlinks. Move the file into the folder, or run the command in your terminal. |
+| `path_in_kit_directory` | 2 | Over MCP, no tool reads or writes in `cavelon`'s own config or cache directory, which hold the stored token and the instance's contracts. |
 
 `CAVELON_TOKEN` is used only together with `CAVELON_URL`, and only for that
 instance. If you set `CAVELON_TOKEN` without `CAVELON_URL`, `cavelon` ignores it

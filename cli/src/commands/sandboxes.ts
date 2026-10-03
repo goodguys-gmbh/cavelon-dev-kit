@@ -15,6 +15,7 @@ import {
 } from "../command.js";
 import type { OpenApiDoc } from "../contracts.js";
 import { CavelonError, ExitCode, usageError } from "../errors.js";
+import { confinedPath } from "../paths.js";
 import { idempotencyKey, instanceModes, requireFeature, stableKey, UUID_KEY_OPTION } from "../features.js";
 import { clip, keyValues, moreHint, table } from "../format.js";
 import { buildRequest, callStable, workflowOperation } from "../invoke.js";
@@ -595,7 +596,7 @@ export const sandboxSeed: CommandSpec = {
   async run(ctx, input) {
     const sandbox = await resolveSandbox(ctx, positional(input, "sandbox")!);
     requireOffer(ctx, sandbox, "archive", "sandbox seed");
-    const source = path.resolve(ctx.io.cwd, positional(input, "source")!);
+    const source = await confinedPath(ctx, positional(input, "source")!, "The source");
     const archive = await archiveFrom(source, await maxArchiveBytes(ctx));
     const harness = await harnessFor(ctx, input, sandbox);
     const revision = await currentRevision(ctx, input, sandbox, harness);
@@ -677,7 +678,7 @@ async function upload(ctx: Context, sandboxId: string, jobId: string, bytes: Uin
 /** The export's tar into a file of the caller's choosing, or sandbox-<job>.tar; never over an existing file. */
 async function download(ctx: Context, sandbox: Sandbox, job: ArchiveJob, out: string | undefined) {
   if (!isUuid(job.id)) throw new CavelonError(ExitCode.failure, { code: "invalid_job_id", message: `The instance returned an unexpected job id.` });
-  const file = path.resolve(ctx.io.cwd, out ?? `sandbox-${job.id}.tar`);
+  const file = await confinedPath(ctx, out ?? `sandbox-${job.id}.tar`, "The archive file");
   const client = await ctx.client();
   const { op } = await workflowOperation(ctx, "GET", `${JOB_ROUTE}/content`, "archive downloads");
   const { path: target } = buildRequest(op, { params: { sandbox_id: [sandbox.id], job_id: [job.id] } });

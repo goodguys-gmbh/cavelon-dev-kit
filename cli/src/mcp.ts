@@ -17,8 +17,14 @@ const INSTRUCTIONS =
   "Tools for one Cavelon instance, acting with the token a person stored with `cavelon login` " +
   "(or CAVELON_TOKEN). You never see or pass the token. Tools that start work (kb_upload, test_run, " +
   "loop_start, sandbox_seed, artifacts_export) return operation ids at once; read them with operation_status, " +
-  "and follow a loop with loop_iterations. Tools marked destructive change nothing without confirm: true; " +
-  "show the person what they would do first. Read limits before planning a solution: it lists what the " +
+  "and follow a loop with loop_iterations. What needs confirmation: apply imports only with confirm set to a preview's id; " +
+  "limits_set, models_set_limit, loop_cancel, sandbox_seed, trigger_identity, and api for an operation that is not read-only, " +
+  "return what they would do and change nothing without confirm: true; show the person that first. " +
+  "init and pull write files in the solution folder without confirm (pull refuses to replace package files with uncommitted changes unless force), " +
+  "and the other changing tools act at once. api refuses, even with confirm, an operation that changes a secret, " +
+  "creates or revokes a credential (tokens, API keys, sign-in) or decides an approval. Tools read and write files only " +
+  "inside the solution folder (the folder of cavelon.yaml, or the one the server started in), never in cavelon's own " +
+  "config or cache directory. Read limits before planning a solution: it lists what the " +
   "instance allows this tenant (upload sizes and types, run and tool limits, timeouts, quotas) and who changes each. " +
   "Never change a limit on your own: propose the old and new value (limits_set for a limit a tenant admin changes, " +
   "models_set_limit for an endpoint's max_concurrent_requests) and let the person decide; an operator's limit goes to the operator. " +

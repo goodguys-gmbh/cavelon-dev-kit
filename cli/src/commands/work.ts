@@ -14,6 +14,7 @@ import {
 } from "../command.js";
 import { capacityCodeIn, capacityHint, noteLines, runCapacityNote, type CapacityNote, type RunState } from "../capacity.js";
 import { CavelonError, ExitCode, usageError } from "../errors.js";
+import { confinedPath } from "../paths.js";
 import { clip, keyValues, moreHint, table } from "../format.js";
 import { callStable } from "../invoke.js";
 import { bindsNow, changedBy, limitError, limitsOrWarn, readLimits, type Limit, type PublishedLimits } from "../limits.js";
@@ -355,7 +356,7 @@ export const kbUpload: CommandSpec = {
   },
   examples: ["cavelon kb upload ./docs --kb FAQ", "cavelon kb upload ./manuals --kb FAQ -r --ext pdf --wait --timeout 5m"],
   async run(ctx, input) {
-    const dir = path.resolve(ctx.io.cwd, positional(input, "dir")!);
+    const dir = await confinedPath(ctx, positional(input, "dir")!, "The folder");
     const kbRef = stringOption(input, "kb");
     if (!kbRef) throw usageError("Which knowledge base?", "Pass --kb <name-or-id>.");
     const extensions = listOption(input, "ext").flatMap((e) => e.split(",")).map((e) => e.replace(/^\./, "").toLowerCase()).filter(Boolean);
