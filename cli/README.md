@@ -38,6 +38,9 @@ This page is a compact reference.
    cavelon login --instance https://cavelon.example.com
    ```
 
+   `https://cavelon.example.com` stands for your instance's address, the URL you
+   open Cavelon at in the browser.
+
    It asks for the token without echoing it. `--token-stdin` reads it from
    standard input instead. **`cavelon` never takes a token as an argument**, so it
    stays out of shell history. Run it in a terminal of your own: an agent's

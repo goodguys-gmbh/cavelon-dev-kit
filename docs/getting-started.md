@@ -39,7 +39,9 @@ In a terminal of your own (not in the agent's chat), run:
 cavelon login --instance https://cavelon.example.com
 ```
 
-`login` asks for the token without showing what you type, checks it against the
+Use the address of your Cavelon instance, the URL you open Cavelon at in the
+browser, in place of `https://cavelon.example.com`; the docs use that
+placeholder throughout. `login` asks for the token without showing what you type, checks it against the
 instance, and stores it in your system's credential store:
 
 ```text
