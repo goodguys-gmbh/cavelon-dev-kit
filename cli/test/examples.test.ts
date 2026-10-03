@@ -84,13 +84,13 @@ describe.each(["support-faq", "expense-approval"])("examples/%s", (example) => {
     cpSync(path.join(EXAMPLES, example), dir, { recursive: true });
     const online = await cli(sb, ["validate", "--instance", server.url, "--json"], { cwd: dir });
     expect(online.code, online.stdout + online.stderr).toBe(0);
-    expect(online.json()).toMatchObject({ valid: true, schema_version: "v3", errors: 0, warnings: 0, findings: [] });
+    expect(online.json()).toMatchObject({ valid: true, schema_version: "v3", error_count: 0, errors: 0, warning_count: 0, warnings: [], findings: [] });
     expect(online.json<{ sections: number }>().sections).toBeGreaterThanOrEqual(5);
 
     server.state.requests.length = 0;
     const offline = await cli(sb, ["validate", "--offline", "--instance", server.url, "--json"], { cwd: dir });
     expect(offline.code, offline.stdout + offline.stderr).toBe(0);
-    expect(offline.json()).toMatchObject({ valid: true, errors: 0, warnings: 0 });
+    expect(offline.json()).toMatchObject({ valid: true, error_count: 0, warning_count: 0, warnings: [] });
     expect(server.state.requests).toEqual([]);
   });
 

@@ -300,7 +300,7 @@ describe("init --from", () => {
     server.state.requests.length = 0;
     const valid = await cli(sb, ["validate", "--offline", "--json"], { cwd: dir });
     expect(valid.code, valid.stdout).toBe(0);
-    expect(valid.json()).toMatchObject({ valid: true, schema_version: "v3", errors: 0, warnings: 0, sections: 5 });
+    expect(valid.json()).toMatchObject({ valid: true, schema_version: "v3", errors: 0, warning_count: 0, warnings: [], sections: 5 });
     expect(server.state.requests).toEqual([]);
 
     // The same file again changes nothing.
@@ -550,7 +550,7 @@ describe("validate", () => {
     const agentsFile = path.join(dir, "package", "agents.yaml");
     const skills = parse(read(skillsFile)) as Array<Record<string, unknown>>;
     expect(skills[0]).toMatchObject({ slug: "faq", tool_assignments: [{ tool_slug: "search_documents" }] });
-    expect((await cli(sb, ["validate", "--offline", "--json"], { cwd: dir })).json()).toMatchObject({ warnings: 0 });
+    expect((await cli(sb, ["validate", "--offline", "--json"], { cwd: dir })).json()).toMatchObject({ warning_count: 0, warnings: [] });
 
     // The shape a copied skill often has: knowledge bases, and no tool to search them.
     delete skills[0]!.tool_assignments;
@@ -573,7 +573,7 @@ describe("validate", () => {
     const agents = parse(read(agentsFile)) as Array<Record<string, unknown>>;
     agents[0]!.tool_assignments = [{ tool_slug: "search_documents" }];
     writeFileSync(agentsFile, stringify(agents));
-    expect((await cli(sb, ["validate", "--offline", "--json"], { cwd: dir })).json()).toMatchObject({ warnings: 0, findings: [] });
+    expect((await cli(sb, ["validate", "--offline", "--json"], { cwd: dir })).json()).toMatchObject({ warning_count: 0, warnings: [], findings: [] });
 
     // An agent's tool assignment that names knowledge bases on another tool is no search either.
     agents[0]!.tool_assignments = [{ tool_slug: "crm", config_overrides: { knowledge_base_names: ["Handbook"] } }];
@@ -587,7 +587,7 @@ describe("validate", () => {
     // A skill this package does not carry may bring the tool: no warning.
     agents[0]!.skill_assignments = [{ skill_slug: "tenant-wide-search" }];
     writeFileSync(agentsFile, stringify(agents));
-    expect((await cli(sb, ["validate", "--offline", "--json"], { cwd: dir })).json()).toMatchObject({ warnings: 0 });
+    expect((await cli(sb, ["validate", "--offline", "--json"], { cwd: dir })).json()).toMatchObject({ warning_count: 0, warnings: [] });
 
     const explained = await cli(sb, ["explain", "knowledge_base_without_search_tool", "--json"], { cwd: dir });
     expect(explained.json()).toMatchObject({ code: "knowledge_base_without_search_tool", kind: "kit" });
@@ -615,7 +615,7 @@ describe("validate on an instance whose schema changes under one version", () =>
   const later = (minutes: number) => () => new Date(Date.now() + minutes * 60_000);
   let own: Sandbox;
 
-  type Validated = { warnings: number; findings: Array<{ code: string }>; schema: { source: string; instance_version: string; fetched_at: string; etag: string | null; sha256: string; stale: boolean } };
+  type Validated = { warning_count: number; warnings: Array<{ code: string | null; message: string }>; findings: Array<{ code: string; message: string }>; schema: { source: string; instance_version: string; fetched_at: string; etag: string | null; sha256: string; stale: boolean } };
 
   async function solutionIn(box: Sandbox): Promise<string> {
     await login(box, server.url, token);
@@ -648,17 +648,17 @@ describe("validate on an instance whose schema changes under one version", () =>
     server.state.packageSchemaEdit = gainNotes;
     // Within the time-to-live the cached copy is trusted, and the instance is not asked.
     server.state.requests.length = 0;
-    expect((await cli(own, ["validate", "--json"], { cwd: dir })).json<Validated>()).toMatchObject({ warnings: 1, schema: { source: "cache", sha256: first.schema.sha256 } });
+    expect((await cli(own, ["validate", "--json"], { cwd: dir })).json<Validated>()).toMatchObject({ warning_count: 1, schema: { source: "cache", sha256: first.schema.sha256 } });
     expect(server.state.requests.filter((r) => r.path === "/api/v1/meta/package-schema")).toEqual([]);
 
     // Offline, an old copy is used and said to be old.
     const offline = (await cli(own, ["validate", "--offline", "--json"], { cwd: dir, now: later(2) })).json<Validated>();
-    expect(offline).toMatchObject({ warnings: 1, schema: { source: "cache", stale: true } });
+    expect(offline).toMatchObject({ warning_count: 1, schema: { source: "cache", stale: true } });
 
     const after = await cli(own, ["validate", "--json", "--verbose"], { cwd: dir, now: later(2) });
     expect(after.code, after.stdout).toBe(0);
     const second = after.json<Validated>();
-    expect(second).toMatchObject({ warnings: 0, findings: [], schema: { source: "instance", instance_version: "v0.0.0-dev", stale: false } });
+    expect(second).toMatchObject({ warning_count: 0, warnings: [], findings: [], schema: { source: "instance", instance_version: "v0.0.0-dev", stale: false } });
     expect(second.schema.sha256).not.toBe(first.schema.sha256);
 
     // From here on the new copy is the cached one, offline as well.
@@ -676,13 +676,13 @@ describe("validate on an instance whose schema changes under one version", () =>
     // Unchanged: the instance answers 304 and the copy is kept, now checked.
     server.state.requests.length = 0;
     const same = (await cli(own, ["validate", "--json"], { cwd: dir, now: later(2) })).json<Validated>();
-    expect(same).toMatchObject({ warnings: 1, schema: { source: "instance", etag: first.schema.etag, sha256: first.schema.sha256 } });
+    expect(same).toMatchObject({ warning_count: 1, schema: { source: "instance", etag: first.schema.etag, sha256: first.schema.sha256 } });
     const asked = server.state.requests.filter((r) => r.path === "/api/v1/meta/package-schema");
     expect(asked.map((r) => r.headers["if-none-match"])).toEqual([first.schema.etag]);
 
     server.state.packageSchemaEdit = gainNotes;
     const changed = (await cli(own, ["validate", "--json"], { cwd: dir, now: later(4) })).json<Validated>();
-    expect(changed).toMatchObject({ warnings: 0, schema: { source: "instance" } });
+    expect(changed).toMatchObject({ warning_count: 0, warnings: [], schema: { source: "instance" } });
     expect(changed.schema.etag).not.toBe(first.schema.etag);
   });
 
@@ -691,7 +691,7 @@ describe("validate on an instance whose schema changes under one version", () =>
     const dir = await solutionIn(own);
     server.state.packageSchemaEdit = gainNotes;
     const result = (await cli(own, ["validate", "--json"], { cwd: dir, now: later(30) })).json<Validated>();
-    expect(result).toMatchObject({ warnings: 1, schema: { source: "cache", instance_version: "v1.4.0", stale: false } });
+    expect(result).toMatchObject({ warning_count: 1, schema: { source: "cache", instance_version: "v1.4.0", stale: false } });
   });
 
   it("uses a development build's old copy, with a warning, when the instance cannot be read", async () => {
@@ -701,9 +701,35 @@ describe("validate on an instance whose schema changes under one version", () =>
     };
     const result = await cli(own, ["validate", "--json"], { cwd: dir, now: later(2) });
     expect(result.code, result.stdout).toBe(0);
-    const data = result.json<Validated & { warnings: unknown }>();
+    const data = result.json<Validated>();
     expect(data).toMatchObject({ findings: [expect.objectContaining({ code: "package_section_unknown" })], schema: { source: "cache", stale: true } });
-    expect(result.stdout + result.stderr).toMatch(/Could not read the package schema again from the instance \(.+\); using the copy cached at \S+ for development build v0\.0\.0-dev\./);
+    expect(result.stderr).toMatch(/Could not read the package schema again from the instance \(.+\); using the copy cached at \S+ for development build v0\.0\.0-dev\./);
+  });
+
+  it("reports warnings in one shape, with and without a warning about the run", async () => {
+    const dir = await solutionIn(own);
+    const without = (await cli(own, ["validate", "--json"], { cwd: dir })).json<Validated & Record<string, unknown>>();
+    expect(without).toMatchObject({ error_count: 0, errors: 0, warning_count: 1 });
+    expect(without.warnings).toEqual([{ code: "package_section_unknown", message: without.findings[0]!.message }]);
+
+    // The instance cannot be read, so the old copy is used with a warning about the run: listed after the package's, code null.
+    server.state.packageSchemaEdit = () => {
+      throw new Error("schema store unavailable");
+    };
+    const run = await cli(own, ["validate", "--json"], { cwd: dir, now: later(2) });
+    expect(run.code, run.stdout).toBe(0);
+    const withRun = run.json<Validated & Record<string, unknown>>();
+    expect(withRun).toMatchObject({ error_count: 0, errors: 0, warning_count: 2 });
+    expect(withRun.warnings).toEqual([
+      { code: "package_section_unknown", message: without.findings[0]!.message },
+      { code: null, message: expect.stringMatching(/^Could not read the package schema again from the instance/) },
+    ]);
+    expect(Object.keys(withRun).sort()).toEqual(Object.keys(without).sort());
+
+    // --limit bounds the package's warnings; the count still says how many there are.
+    const limited = (await cli(own, ["validate", "--json", "--limit", "1"], { cwd: dir, now: later(2) })).json<Validated>();
+    expect(limited.warning_count).toBe(2);
+    expect(limited.warnings.map((w) => w.code)).toEqual(["package_section_unknown", null]);
   });
 });
 

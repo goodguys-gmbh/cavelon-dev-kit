@@ -2,6 +2,7 @@ import path from "node:path";
 import { parseDocument } from "yaml";
 import { CAPACITY_CONCEPT_PAGE, CAPACITY_TUTORIAL_PAGE, capacityCodeIn, capacityHint, MODEL_ENDPOINT_BUSY } from "../capacity.js";
 import { boolOption, intOption, positional, stringOption, type CommandSpec, type Context } from "../command.js";
+import type { WarningEntry } from "../context.js";
 import { Contracts, type CachedContract, type ErrorCatalog, type PackageSchema } from "../contracts.js";
 import { CavelonError, ExitCode, usageError } from "../errors.js";
 import { clip, keyValues } from "../format.js";
@@ -351,7 +352,10 @@ export const validate: CommandSpec = {
     "sent with it; --verbose says which copy was used.\n" +
     "Warns (never fails) when a fan-out or Map loop's max_concurrency is above the instance's branch width, and when the\n" +
     "tenant runs fan-outs and Map loops in sequence, from the limits the instance last published.\n" +
-    "Each finding carries a code: `cavelon explain <code>` says more. The import preview checks everything again on the server.",
+    "Each finding carries a code: `cavelon explain <code>` says more. The import preview checks everything again on the server.\n\n" +
+    "With --json, `warnings` is always a list of `{code, message}` objects: the warning findings (at most --limit), then the\n" +
+    "warnings about the run, such as a stale copy of the schema, with code null. `warning_count` counts them all and\n" +
+    "`error_count` the errors (`errors` is the same number); `findings` has each finding's file, line and hint.",
   readOnly: true,
   idempotent: true,
   mcpTool: "validate",
@@ -369,18 +373,26 @@ export const validate: CommandSpec = {
     const errors = findings.filter((f) => f.severity === "error");
     const warnings = findings.filter((f) => f.severity === "warning");
     if (disk.empty) ctx.warn(`No package files in ${project.layout.package}/ yet; \`cavelon pull\` brings an existing solution.`);
+    const contracts = await ctx.contracts();
     const shown = findings.slice(0, limit);
+    // One shape whether or not a warning about the run fires: the package's warnings with their codes, then the run's.
+    const listed: WarningEntry[] = [
+      ...warnings.slice(0, limit).map((f) => ({ code: f.code, message: f.message })),
+      ...ctx.warnings.map((message) => ({ code: null, message })),
+    ];
     const data = {
       valid: errors.length === 0,
       schema_version: schemaVersion,
       schema: used,
       sections: Object.keys(disk.package).length,
+      error_count: errors.length,
+      warning_count: warnings.length + ctx.warnings.length,
+      // Kept for readers written before error_count.
       errors: errors.length,
-      warnings: warnings.length,
+      warnings: listed,
       findings: shown,
       more: Math.max(0, findings.length - shown.length),
     };
-    const contracts = await ctx.contracts();
     const text = [
       ...(boolOption(input, "verbose") ? [schemaUsedLine(used, (v) => contracts.ttlSeconds(v))] : []),
       ...shown.map(findingLine),

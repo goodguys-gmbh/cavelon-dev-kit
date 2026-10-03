@@ -8,6 +8,9 @@ nothing) or **changing**; a changing command that may delete or overwrite someth
 commands are tools of the [MCP server](mcp.md), named in each section. `cavelon <command> --help` prints the same
 help in the terminal.
 
+In a `--json` document, `warnings` is always a list, never a count, and carries the warnings printed on stderr:
+messages, or for `validate` objects with `code` and `message`.
+
 ## Global options
 
 Every command takes these:
@@ -190,6 +193,8 @@ cavelon validate [options]
 ```
 
 Uses the schema and error catalog cached by init, pull or apply; fetches them only when none is cached or a development build's copy is past its time-to-live, and never with --offline. A development build keeps one version while its schema changes, so its copy is read again after a minute (CAVELON_CONTRACT_TTL_SECONDS), or checked with the ETag the instance sent with it; --verbose says which copy was used. Warns (never fails) when a fan-out or Map loop's max_concurrency is above the instance's branch width, and when the tenant runs fan-outs and Map loops in sequence, from the limits the instance last published. Each finding carries a code: `cavelon explain <code>` says more. The import preview checks everything again on the server.
+
+With --json, `warnings` is always a list of `{code, message}` objects: the warning findings (at most --limit), then the warnings about the run, such as a stale copy of the schema, with code null. `warning_count` counts them all and `error_count` the errors (`errors` is the same number); `findings` has each finding's file, line and hint.
 
 | Option | Description | MCP |
 |---|---|---|

@@ -234,7 +234,7 @@ describe("cavelon mcp", () => {
     const init = payload(await client.callTool({ name: "init", arguments: { harness: "support", tenant: "acme" } }));
     expect(init.files.find((f: { file: string }) => f.file === "cavelon.yaml").action).toBe("created");
     expect(payload(await client.callTool({ name: "pull", arguments: {} })).harness.slug).toBe("support");
-    expect(payload(await client.callTool({ name: "validate", arguments: { offline: true } }))).toMatchObject({ valid: true });
+    expect(payload(await client.callTool({ name: "validate", arguments: { offline: true } }))).toMatchObject({ valid: true, warning_count: 0, warnings: [] });
     const preview = payload(await client.callTool({ name: "apply", arguments: { env: "test" } }));
     expect(preview).toMatchObject({ previewed: true, env: "test", harness: { slug: "support" } });
     const applied = payload(await client.callTool({ name: "apply", arguments: { confirm: preview.preview_id } }));
