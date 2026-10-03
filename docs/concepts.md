@@ -100,6 +100,18 @@ with. `pull` writes a file only when its content changed, so `git diff` shows
 exactly what changed on the instance. `validate` checks every file against the
 schema, offline once the schema is cached.
 
+`pull` never loses your work silently. In a git repository it refuses to
+overwrite package files with uncommitted changes; outside one, it refuses to
+overwrite or remove a package file that changed since the last pull (an edit,
+or a test suite you have not applied yet). `--force` discards them.
+
+A package file may be a symlink to a file elsewhere in the solution folder:
+`validate` and `apply` read the file it leads to, and `pull` writes through the
+link. A link that leads out of the solution folder is an error, so a cloned
+repository cannot have `apply` send a file from elsewhere on your machine.
+Files saved with a UTF-8 byte-order mark, as Windows PowerShell 5.1 writes
+them, read like any other.
+
 `cavelon init --from <file>` turns a package file you already have, such as an
 export or a blueprint, into this layout.
 

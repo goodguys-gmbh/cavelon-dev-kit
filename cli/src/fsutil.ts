@@ -22,6 +22,15 @@ export async function readTextFile(file: string): Promise<string | undefined> {
 }
 
 /**
+ * `text` without the UTF-8 byte-order mark that Windows PowerShell 5.1 and older
+ * Notepad put first: the YAML parser takes it only before a mapping, JSON never.
+ * Only for text the kit parses; a customer's file it rewrites keeps its bytes.
+ */
+export function withoutBom(text: string): string {
+  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+}
+
+/**
  * Write a file in one step (temp file, then rename), so a crash never leaves
  * half a file. `mode` applies before any content is written. Permissions only
  * ever narrow: a new file gets `mode` less the umask, and a file that is

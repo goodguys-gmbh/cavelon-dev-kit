@@ -97,7 +97,7 @@ the files and `apply` them; `pull` again shows any change made in the Admin as a
 on the instance after your preview, the import is refused (exit 4) and nothing
 is imported; preview again to see the current difference. To bring the Admin's
 changes into your files, run `pull` (it refuses to overwrite uncommitted
-changes).
+changes, and outside a git repository files changed since the last pull).
 
 ### Can `apply` delete things?
 

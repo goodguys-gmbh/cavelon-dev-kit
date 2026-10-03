@@ -79,7 +79,7 @@ export async function confinedPath(ctx: Context, raw: string, what: string): Pro
 }
 
 /** The real path of a file, or of its nearest existing folder plus the rest, for a file still to be written. */
-async function realPath(file: string): Promise<string> {
+export async function realPath(file: string): Promise<string> {
   const rest: string[] = [];
   let current = file;
   for (;;) {
@@ -99,7 +99,7 @@ async function realPath(file: string): Promise<string> {
  * systems of Windows and macOS do; it only ever widens a refusal, never what a
  * tool may reach, since a case-sensitive volume can hold both spellings.
  */
-function within(dir: string, file: string, fold = false): boolean {
+export function within(dir: string, file: string, fold = false): boolean {
   const norm = (p: string) => (fold && (process.platform === "win32" || process.platform === "darwin") ? p.toLowerCase() : p);
   const rel = path.relative(norm(dir), norm(file));
   return rel === "" || (rel !== ".." && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel));

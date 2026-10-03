@@ -2,7 +2,8 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { LineCounter, parseDocument, stringify, type Document } from "yaml";
 import type { PackageSchema } from "./contracts.js";
-import { readTextFile, writeFileAtomic } from "./fsutil.js";
+import { CavelonError, ExitCode } from "./errors.js";
+import { readTextFile, withoutBom, writeFileAtomic } from "./fsutil.js";
 
 /**
  * A solution package as files in the repository, split along the top-level
@@ -95,17 +96,57 @@ function rel(root: string, file: string): string {
   return path.relative(root, file).split(path.sep).join("/");
 }
 
+/**
+ * The package files in a folder. A symlink counts as the file it leads to, so
+ * a section kept elsewhere in the solution is neither dropped from validate
+ * nor from apply; a link to a folder is not a file.
+ */
 async function listFiles(dir: string): Promise<string[]> {
   try {
     const entries = await fs.readdir(dir, { withFileTypes: true });
-    return entries
-      .filter((e) => e.isFile() && !e.name.startsWith(".") && PACKAGE_FILE.test(e.name))
-      .map((e) => e.name)
-      .sort((a, b) => a.localeCompare(b, "en"));
+    const names: string[] = [];
+    for (const e of entries) {
+      if (e.name.startsWith(".") || !PACKAGE_FILE.test(e.name)) continue;
+      if (e.isFile()) names.push(e.name);
+      else if (e.isSymbolicLink() && !(await fs.stat(path.join(dir, e.name)).then((st) => st.isDirectory(), () => false))) names.push(e.name);
+    }
+    return names.sort((a, b) => a.localeCompare(b, "en"));
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw error;
   }
+}
+
+/**
+ * Where a package file's content is: the file itself, or the file a symlink
+ * leads to when that is inside the solution. Undefined for a link out of it:
+ * a cloned repository's link could otherwise send any file of the machine to
+ * the instance with apply, or have pull write over it.
+ */
+export async function contentPath(root: string, file: string): Promise<string | undefined> {
+  let real: string;
+  try {
+    real = await fs.realpath(file);
+  } catch {
+    return file;
+  }
+  const relative = path.relative(await fs.realpath(root).catch(() => root), real);
+  return relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative) ? real : undefined;
+}
+
+/** A package file's text through its link, or the finding that it cannot be read. */
+async function readSource(root: string, file: string): Promise<{ text: string } | { finding: Finding }> {
+  const relative = rel(root, file);
+  const target = await contentPath(root, file);
+  const invalid = (message: string, hint: string): { finding: Finding } => ({
+    finding: { code: "package_file_invalid", severity: "error", file: relative, message, hint },
+  });
+  if (target === undefined) {
+    return invalid("It is a link to a file outside the solution folder.", "Move the file into the solution folder and link to it there, or copy it in.");
+  }
+  const text = await readTextFile(target);
+  if (text === undefined) return invalid("It is a link to a file that does not exist.", "Point the link at an existing file, or remove it.");
+  return { text: withoutBom(text) };
 }
 
 async function exists(dir: string): Promise<boolean> {
@@ -166,7 +207,13 @@ export async function readPackage(root: string, layout: Layout): Promise<Package
       });
       continue;
     }
-    const parsed = parseFile(root, file, (await readTextFile(file)) ?? "");
+    const read = await readSource(root, file);
+    if ("finding" in read) {
+      sources[section] = { file: rel(root, file) };
+      findings.push(read.finding);
+      continue;
+    }
+    const parsed = parseFile(root, file, read.text);
     sources[section] = parsed.source;
     if (parsed.finding) findings.push(parsed.finding);
     else pkg[section] = parsed.value;
@@ -174,7 +221,10 @@ export async function readPackage(root: string, layout: Layout): Promise<Package
   for (const [section, folder] of Object.entries(layout.items)) {
     const itemDir = path.join(root, folder);
     if (!(await exists(itemDir))) continue;
-    empty = false;
+    const names = await listFiles(itemDir);
+    // `init` makes the folder; it holds the section once it holds a file.
+    if (names.length) empty = false;
+    else if (section in sources) continue;
     if (section in sources) {
       findings.push({
         code: "package_file_duplicate",
@@ -186,9 +236,15 @@ export async function readPackage(root: string, layout: Layout): Promise<Package
     }
     const items: unknown[] = [];
     const itemSources: Source[] = [];
-    for (const name of await listFiles(itemDir)) {
+    for (const name of names) {
       const file = path.join(itemDir, name);
-      const parsed = parseFile(root, file, (await readTextFile(file)) ?? "");
+      const read = await readSource(root, file);
+      if ("finding" in read) {
+        itemSources.push({ file: rel(root, file) });
+        findings.push(read.finding);
+        continue;
+      }
+      const parsed = parseFile(root, file, read.text);
       itemSources.push(parsed.source);
       if (parsed.finding) findings.push(parsed.finding);
       else items.push(parsed.value);
@@ -269,14 +325,16 @@ export function toYaml(value: unknown): string {
   return stringify(value, { lineWidth: 0, aliasDuplicateObjects: false });
 }
 
-async function readValue(file: string): Promise<{ text?: string; value?: unknown; ok: boolean }> {
-  const text = await readTextFile(file);
+async function readValue(root: string, file: string): Promise<{ value?: unknown; ok: boolean }> {
+  const target = await contentPath(root, file);
+  const text = target === undefined ? undefined : await readTextFile(target);
   if (text === undefined) return { ok: false };
   try {
-    const value = /\.json$/i.test(file) ? JSON.parse(text) : parseDocument(text, { uniqueKeys: true }).toJS({ maxAliasCount: 1000 });
-    return { text, value, ok: true };
+    const plain = withoutBom(text);
+    const value = /\.json$/i.test(file) ? JSON.parse(plain) : parseDocument(plain, { uniqueKeys: true }).toJS({ maxAliasCount: 1000 });
+    return { value, ok: true };
   } catch {
-    return { text, ok: false };
+    return { ok: false };
   }
 }
 
@@ -324,6 +382,8 @@ export async function writePackage(
   // export time) is rewritten only when anything else changed.
   const plans: Array<{ file: string; content: string; section: string }> = [];
   const same: Array<{ file: string; section: string }> = [];
+  // Removing a link removes the link only; it never reaches the file behind it.
+  const removals: string[] = [];
   for (const [section, value] of Object.entries(pkg)) {
     if (section in layout.items && Array.isArray(value)) continue;
     // The export's keys come from the instance; none of them may name a path.
@@ -333,7 +393,7 @@ export async function writePackage(
     }
     const current = existing.get(section);
     const file = path.join(dir, current ?? `${section}.yaml`);
-    const old = await readValue(file);
+    const old = await readValue(root, file);
     if (old.ok && canonical(old.value) === canonical(value)) same.push({ file, section });
     else plans.push({ file, section, content: /\.json$/i.test(file) ? JSON.stringify(value, null, 2) + "\n" : toYaml(value) });
   }
@@ -344,7 +404,7 @@ export async function writePackage(
     const itemDir = path.join(root, folder);
     const before = new Map<string, unknown>();
     for (const name of await listFiles(itemDir)) {
-      const old = await readValue(path.join(itemDir, name));
+      const old = await readValue(root, path.join(itemDir, name));
       if (old.ok) before.set(name, old.value);
     }
     const taken = new Set<string>();
@@ -368,36 +428,48 @@ export async function writePackage(
       }
       plans.push({ file: path.join(itemDir, itemFileName(item, index, taken)), section, content: toYaml(item) });
     });
-    for (const name of before.keys()) {
-      if (!taken.has(name)) {
-        if (!dryRun) await fs.rm(path.join(itemDir, name), { force: true });
-        report.removed.push(rel(root, path.join(itemDir, name)));
-      }
-    }
+    for (const name of before.keys()) if (!taken.has(name)) removals.push(path.join(itemDir, name));
     if (!dryRun) await fs.mkdir(itemDir, { recursive: true });
   }
 
+  for (const [section, name] of existing) {
+    if (section in pkg) continue;
+    const file = path.join(dir, name);
+    if (known.has(section)) removals.push(file);
+    else report.kept.push(rel(root, file));
+  }
+
   const othersChanged = plans.some((p) => !required.has(p.section));
+  const writes: Array<{ file: string; target: string; content: string }> = [];
+  const outside: string[] = [];
   for (const plan of plans) {
     if (required.has(plan.section) && !othersChanged && existing.has(plan.section)) {
       same.push({ file: plan.file, section: plan.section });
       continue;
     }
-    if (!dryRun) await writeFileAtomic(plan.file, plan.content);
-    report.written.push(rel(root, plan.file));
+    // A file kept behind a link is written there, so the link stays a link.
+    const target = await contentPath(root, plan.file);
+    if (target === undefined) outside.push(rel(root, plan.file));
+    else writes.push({ file: plan.file, target, content: plan.content });
+  }
+  if (outside.length) {
+    throw new CavelonError(ExitCode.conflict, {
+      code: "package_file_outside",
+      message: `${outside.join(", ")} ${outside.length === 1 ? "is a link" : "are links"} to a file outside the solution folder; nothing was written.`,
+      hint: "Move the file into the solution folder and link to it there, or replace the link with the file.",
+      details: { files: outside },
+    });
+  }
+  for (const write of writes) {
+    if (!dryRun) await writeFileAtomic(write.target, write.content);
+    report.written.push(rel(root, write.file));
+  }
+  for (const file of removals) {
+    if (!dryRun) await fs.rm(file, { force: true });
+    report.removed.push(rel(root, file));
   }
   report.unchanged.push(...same.map((s) => rel(root, s.file)));
 
-  for (const [section, name] of existing) {
-    if (section in pkg) continue;
-    const file = path.join(dir, name);
-    if (known.has(section)) {
-      if (!dryRun) await fs.rm(file, { force: true });
-      report.removed.push(rel(root, file));
-    } else {
-      report.kept.push(rel(root, file));
-    }
-  }
   for (const list of Object.values(report)) list.sort();
   return report;
 }

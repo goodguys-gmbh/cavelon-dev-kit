@@ -1,3 +1,4 @@
+import path from "node:path";
 import { parseDocument } from "yaml";
 import { CAPACITY_CONCEPT_PAGE, CAPACITY_TUTORIAL_PAGE, capacityCodeIn, capacityHint, MODEL_ENDPOINT_BUSY } from "../capacity.js";
 import { boolOption, intOption, positional, stringOption, type CommandSpec, type Context } from "../command.js";
@@ -12,9 +13,12 @@ import { ceilingHint, LIMIT_ABOVE_CEILING, parseLimits, readLimits, type Publish
 import {
   deletePreview,
   digest,
+  fileDigest,
   listPreviews,
   loadPreview,
+  readPulledFiles,
   savePreview,
+  writePulledFiles,
   writeState,
   type ImportRequest,
   type PullRecord,
@@ -215,20 +219,46 @@ export async function setProjectKey(project: ProjectConfig, key: string, value: 
   await writeFileAtomic(project.file, doc.toString({ lineWidth: 0 }));
 }
 
+function uncommittedChanges(files: string[], what: string): CavelonError {
+  return new CavelonError(ExitCode.conflict, {
+    code: "uncommitted_changes",
+    message: `${what}: ${files.slice(0, 5).join(", ")}${files.length > 5 ? ` and ${files.length - 5} more` : ""}.`,
+    hint: "Commit them first (then resolve the difference in git), apply them with `cavelon apply`, or pass --force to discard them.",
+    details: { files },
+  });
+}
+
+/**
+ * Outside git, the package files pull would change or remove whose bytes are
+ * not what the last pull left: a local edit, or a file no pull wrote (a suite
+ * not applied yet). With no record of a pull, that is every such file.
+ */
+async function editedSincePull(project: ProjectConfig, pkg: Record<string, unknown>, schema: PackageSchema | null): Promise<string[]> {
+  const planned = await writePackage(project.root, project.layout, pkg, schema, { dryRun: true });
+  const pulled = await readPulledFiles(project.root);
+  const edited: string[] = [];
+  for (const file of [...planned.written, ...planned.removed]) {
+    const current = await fileDigest(path.join(project.root, file));
+    if (current !== undefined && current !== pulled[file]) edited.push(file);
+  }
+  return edited.sort((a, b) => a.localeCompare(b, "en"));
+}
+
 export const pull: CommandSpec = {
   name: "pull",
   summary: "Write the instance's package into package/ (split along the schema's sections) and the inventory into .cavelon/.",
   description:
     "With a solution (--harness, or cavelon.yaml's harness), exports that solution; without one, the tenant's full configuration.\n" +
     "A file whose content did not change keeps its bytes, so `git diff` shows what changed on the instance. Files of sections\n" +
-    "the schema does not know are kept byte for byte. Refuses when package files have uncommitted changes, unless --force.",
+    "the schema does not know are kept byte for byte. Refuses when package files have uncommitted changes, unless --force;\n" +
+    "outside a git repository, when a file it would overwrite or remove changed since the last pull.",
   readOnly: false,
   destructive: true,
   idempotent: true,
   mcpTool: "pull",
   options: {
     harness: { type: "string", value: "<slug>", description: "The solution to export; recorded in cavelon.yaml when it names none." },
-    force: { type: "boolean", description: "Overwrite package files that have uncommitted changes." },
+    force: { type: "boolean", description: "Overwrite package files that have uncommitted changes (outside git: changes since the last pull)." },
   },
   examples: ["cavelon pull --harness support", "cavelon pull && git diff -- package tests"],
   async run(ctx, input) {
@@ -236,18 +266,10 @@ export const pull: CommandSpec = {
     const project = requireSolution(session);
     const url = requireInstance(session);
     const layoutDirs = [project.layout.package, ...Object.values(project.layout.items)];
-    if (!boolOption(input, "force")) {
-      // Only package files count; an untracked .gitkeep loses nothing.
-      const dirty = (await uncommitted(project.root, layoutDirs))?.filter((f) => /\.(ya?ml|json)"?$/i.test(f));
-      if (dirty?.length) {
-        throw new CavelonError(ExitCode.conflict, {
-          code: "uncommitted_changes",
-          message: `pull would overwrite uncommitted changes: ${dirty.slice(0, 5).join(", ")}${dirty.length > 5 ? ` and ${dirty.length - 5} more` : ""}.`,
-          hint: "Commit them first (then resolve the difference in git), or pass --force to discard them.",
-          details: { files: dirty },
-        });
-      }
-    }
+    const force = boolOption(input, "force");
+    // Only package files count; an untracked .gitkeep loses nothing. Undefined outside git.
+    const dirty = force ? [] : (await uncommitted(project.root, layoutDirs))?.filter((f) => /\.(ya?ml|json)"?$/i.test(f));
+    if (dirty?.length) throw uncommittedChanges(dirty, "pull would overwrite uncommitted changes");
     const { ref } = harnessRef(session, input);
     let harness: Harness | undefined;
     if (ref) {
@@ -265,7 +287,14 @@ export const pull: CommandSpec = {
     const version = packageVersionOf(exported);
     const { schema } = await schemaFor(ctx, version, false);
     if (!schema) ctx.warn("The instance does not publish its package schema; every top-level key became a file of its own.");
+    if (dirty === undefined) {
+      const edited = await editedSincePull(project, exported, schema);
+      if (edited.length) {
+        throw uncommittedChanges(edited, "This folder is not in a git repository, and pull would overwrite or remove files that changed since the last pull");
+      }
+    }
     const report = await writePackage(project.root, project.layout, exported, schema);
+    await writePulledFiles(project.root, [...report.written, ...report.unchanged]);
 
     if (harness && !project.harness) await setProjectKey(project, "harness", harness.slug);
     if (version && project.packageVersion !== version) await setProjectKey(project, "package_version", version);

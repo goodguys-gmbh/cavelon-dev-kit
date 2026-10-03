@@ -137,7 +137,11 @@ In a solution folder, only `init`, `pull` and `apply` write files, plus
 `.cavelon/` holds the inventory and the stored previews (the exact import
 request, which never contains a secret value); it is ignored by git. `init`
 never overwrites a file it did not create, and changes only the block between
-its markers in your `AGENTS.md`, `CLAUDE.md`, `.gitignore` or git hook.
+its markers in your `AGENTS.md`, `CLAUDE.md`, `.gitignore` or git hook. It
+leaves a hooks folder outside the repository alone, such as one a global
+`core.hooksPath` names, since every repository of yours runs it. `validate`,
+`apply` and `pull` follow a symlinked package file only inside the solution
+folder.
 
 ## Reporting a vulnerability
 

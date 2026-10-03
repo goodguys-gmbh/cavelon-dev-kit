@@ -144,7 +144,7 @@ Never overwrites a file it did not create. AGENTS.md, .gitignore and an existing
 |---|---|---|
 | `--harness <slug>` | The solution (harness) this folder holds; pull and apply use it. | yes |
 | `--agents <list>` | Write the fallback for these agents: claude, codex, cursor, copilot, gemini, kiro, pi, other or all (comma-separated). Repeatable. | yes |
-| `--hook` | Add a git pre-commit hook that runs `cavelon validate`. | yes |
+| `--hook` | Add a git pre-commit hook that runs `cavelon validate`; never in a hooks folder outside the repository. | yes |
 | `--update` | Only bring the marked blocks and fallback files to this version. | yes |
 | `--from <file>` | Write this package file (a JSON or YAML export) into package/ and tests/. | yes |
 | `--force` | With --from: replace package files that hold something else. | yes |
@@ -168,12 +168,12 @@ Write the instance's package into package/ (split along the schema's sections) a
 cavelon pull [options]
 ```
 
-With a solution (--harness, or cavelon.yaml's harness), exports that solution; without one, the tenant's full configuration. A file whose content did not change keeps its bytes, so `git diff` shows what changed on the instance. Files of sections the schema does not know are kept byte for byte. Refuses when package files have uncommitted changes, unless --force.
+With a solution (--harness, or cavelon.yaml's harness), exports that solution; without one, the tenant's full configuration. A file whose content did not change keeps its bytes, so `git diff` shows what changed on the instance. Files of sections the schema does not know are kept byte for byte. Refuses when package files have uncommitted changes, unless --force; outside a git repository, when a file it would overwrite or remove changed since the last pull.
 
 | Option | Description | MCP |
 |---|---|---|
 | `--harness <slug>` | The solution to export; recorded in cavelon.yaml when it names none. | yes |
-| `--force` | Overwrite package files that have uncommitted changes. | yes |
+| `--force` | Overwrite package files that have uncommitted changes (outside git: changes since the last pull). | yes |
 
 Examples:
 
