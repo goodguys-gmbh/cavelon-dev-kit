@@ -151,7 +151,9 @@ rules mean while you work with the agent.
 
 A tool returns the command's `--json` document, plus `warnings` when there are
 any and `exit_code` when the command would have exited non-zero without
-failing (a test run with failed cases, for example). A failed call is an MCP
+failing (a test run with failed cases, for example). `warnings` is always a
+list: of messages, or for `validate` of `{code, message}` objects, as the
+[command reference](commands.md) says. A failed call is an MCP
 error whose text is `{"error": {"code", "message", "hint", "exit_code", …}}`,
 the same shape as the CLI's `--json` errors; the codes are explained in
 [Troubleshooting](troubleshooting.md).

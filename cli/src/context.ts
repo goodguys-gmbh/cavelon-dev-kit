@@ -53,8 +53,23 @@ export function createContext(io: Io, globals: GlobalOptions, mode: "cli" | "mcp
   return ctx;
 }
 
-/** A command that reports warnings of its own keeps them; the context's are added after. */
+/** A warning as `validate --json` lists it; `code` is null for one about the run rather than the package. */
+export interface WarningEntry {
+  code: string | null;
+  message: string;
+}
+
+/**
+ * A command that reports warnings of its own keeps them; the context's are
+ * added after, in the same form as the command's own entries (messages, or
+ * `{code, message}` objects), so `warnings` keeps one shape whether or not a
+ * context warning fires.
+ */
 export function withWarnings(data: Record<string, unknown>, warnings: string[]): Record<string, unknown> {
   const own = Array.isArray(data.warnings) ? (data.warnings as unknown[]) : [];
-  return { ...data, warnings: [...own, ...warnings.filter((w) => !own.includes(w))] };
+  const messageOf = (entry: unknown) => (entry && typeof entry === "object" ? (entry as { message?: unknown }).message : entry);
+  const seen = new Set(own.map(messageOf));
+  const objects = own.some((entry) => entry && typeof entry === "object");
+  const added = warnings.filter((w) => !seen.has(w)).map((message): unknown => (objects ? ({ code: null, message } satisfies WarningEntry) : message));
+  return { ...data, warnings: [...own, ...added] };
 }

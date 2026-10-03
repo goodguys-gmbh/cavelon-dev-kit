@@ -45,6 +45,15 @@ CLI, the skills and the plugin.
   other cached contracts of a development build (OpenAPI, docs index) follow
   the same minute; `CAVELON_CONTRACT_TTL_SECONDS` sets it. A release's copies
   are kept as before.
+- `cavelon validate --json` reported `warnings` as the number of warning
+  findings, but as the list of messages when a warning about the run fired
+  (a stale or missing copy of the schema, for example), so a program could not
+  rely on its type. `warnings` is now always a list of `{code, message}`
+  objects: the warning findings, then the warnings about the run with `code`
+  null. The count moved to the new `warning_count`, which counts both;
+  `error_count` joins it, and `errors` keeps its number. The MCP tool
+  `validate` returns the same. Every other command's `warnings` was already a
+  list of messages; the command reference now says so.
 
 ## [0.1.1] - 2026-10-03
 
