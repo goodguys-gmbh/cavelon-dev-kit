@@ -820,15 +820,18 @@ export const trace: CommandSpec = {
     const cursor = stringOption(input, "cursor");
     if (id.startsWith("op_")) {
       const op = await getOperation(await ctx.client(), id);
-      if (!op.result_ref) throw new CavelonError(ExitCode.failure, { code: "no_result", message: `${id} has no result yet (${op.status}).` });
-      if (op.result_ref.type !== "test_run") {
+      const ref = op.result_ref;
+      if (!ref) throw new CavelonError(ExitCode.failure, { code: "no_result", message: `${id} has no result yet (${op.status}).` });
+      // A trigger run (what `loop start` starts) has traces of its own; a test run, its results'.
+      const triggerRun = ref.type === "agent_run" || Boolean(ref.href?.startsWith("/api/v1/triggers/runs/"));
+      if (ref.type !== "test_run" && !triggerRun) {
         throw new CavelonError(ExitCode.failure, {
           code: "no_trace",
-          message: `${id} is a ${op.kind}; its result is a ${op.result_ref.type}, which has no trace.`,
+          message: `${id} is a ${op.kind}; its result is a ${ref.type}, which has no trace.`,
         });
       }
-      id = op.result_ref.id;
-      kind = "test";
+      id = ref.id;
+      kind = triggerRun ? "trigger" : "test";
     }
     const traceId = stringOption(input, "trace");
     const spanId = stringOption(input, "span");

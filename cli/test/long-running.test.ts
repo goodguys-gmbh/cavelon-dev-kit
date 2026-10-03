@@ -4,7 +4,7 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildArchive } from "../src/tar.js";
 import { readTar, type FakeSandbox, type FakeTrigger, type LoopPlan } from "./fake-long-running.js";
-import { startFakeServer, type FakeServer } from "./fake-server.js";
+import { startFakeServer, traceFixture, type FakeServer } from "./fake-server.js";
 import { cli, login, sandbox, type CliResult, type Sandbox } from "./helpers.js";
 
 /**
@@ -144,6 +144,14 @@ describe("the counter loop (no Sandbox)", () => {
     expect(requestsTo("POST", `/api/v1/triggers/${trigger.id}/run`)[0]!.body).toEqual({ payload: { start: 0 } });
     runId = data.run_id;
     operationId = data.operation_id;
+  });
+
+  it("trace follows the operation loop start printed to its trigger run's traces", async () => {
+    const traceId = randomUUID();
+    server.state.traces.set(`trigger:${runId}`, [traceFixture(traceId, null)]);
+    const result = await cli(sb, ["trace", operationId, "--json"]);
+    expect(result.code, result.stdout).toBe(0);
+    expect(result.json()).toMatchObject({ kind: "trigger", traces: { items: [{ trace_id: traceId, spans_command: `cavelon trace ${runId} --kind trigger --trace ${traceId}` }] } });
   });
 
   it("watches the iterations as a stream until the loop completes", async () => {
