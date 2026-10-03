@@ -75,6 +75,35 @@ CLI, the skills and the plugin.
   is `request_invalid`.
 - `cavelon trace <operation>` refused the operation `loop start` prints; it now
   reads the trigger run's traces.
+- `pull` outside a git repository overwrote local edits and deleted test
+  suites that were never applied, without a word: its check for uncommitted
+  changes needs git. Outside git it now refuses (exit 4,
+  `uncommitted_changes`) to overwrite or remove a package file that changed
+  since the last pull, unless `--force`; a file no pull wrote counts as
+  changed. `pull` records each file's digest in `.cavelon/` for this.
+- A symlinked package or suite file was silently left out of `validate` and
+  `apply` (with `--mode replace`, the import then deleted its section), and
+  `pull` replaced the link with a file. A link inside the solution folder is
+  now read as its file and `pull` writes through it; a link out of the
+  solution folder is a `package_file_invalid` error, and `pull` and
+  `init --from` refuse to write through one (`package_file_outside`).
+- A package file saved with a UTF-8 byte-order mark (Windows PowerShell 5.1,
+  older Notepad) failed `validate` and `apply` as invalid YAML or JSON. The
+  mark is now ignored when the file is read, also by `init --from`.
+- After `init`, `validate` and `apply` did not say that the solution has no
+  package files yet (the empty `tests/` folder counted as one); `apply` failed
+  with a schema error instead of exit 2 and the hint to `pull`. A folder of the
+  layout now counts once it holds a package file, and an empty `tests/` no
+  longer clashes with a `package/test_suites.yaml`.
+- `init --hook` wrote into the folder a global `core.hooksPath` names, so
+  every repository of the user ran the solution's check. It now leaves a
+  hooks folder outside the repository alone and says why; one inside it (as
+  husky sets) is used as before.
+- On native Windows, the MCP entry `init --agents` writes started `npx`
+  directly, which an agent that starts servers without a shell cannot run.
+  Run on Windows, it now writes `cmd /c npx …`, and `init --update` keeps an
+  entry written on another system. The installation guide shows how to add
+  the server on Windows when the plugin's `npx` entry cannot start.
 
 ## [0.1.2] - 2026-10-03
 

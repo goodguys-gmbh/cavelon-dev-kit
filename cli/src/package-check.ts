@@ -55,7 +55,7 @@ export const KIT_CODES: CatalogEntry[] = [
   {
     code: "package_file_invalid",
     area: "package",
-    message: "A package file is not valid YAML or JSON.",
+    message: "A package file is not valid YAML or JSON, or is a link to a file outside the solution or to none.",
     hint: "Fix the syntax at the line the finding names.",
     docs: PACKAGE_DOCS,
   },

@@ -43,6 +43,17 @@ function folder(name = "solution"): string {
   return dir;
 }
 
+/** Run as if on another operating system: the MCP entry `init --agents` writes depends on it. */
+async function onPlatform<T>(platform: NodeJS.Platform, run: () => Promise<T>): Promise<T> {
+  const original = Object.getOwnPropertyDescriptor(process, "platform")!;
+  Object.defineProperty(process, "platform", { ...original, value: platform });
+  try {
+    return await run();
+  } finally {
+    Object.defineProperty(process, "platform", original);
+  }
+}
+
 async function initSolution(extra: string[] = []): Promise<string> {
   const dir = folder();
   const result = await cli(sb, ["init", "--instance", server.url, "--tenant", tenant, "--harness", "support", ...extra], { cwd: dir });
@@ -154,7 +165,9 @@ describe("init", () => {
     mkdirSync(path.join(dir, ".claude", "skills", "cavelon-loop"), { recursive: true });
     writeFileSync(path.join(dir, ".claude", "skills", "cavelon-loop", "SKILL.md"), "our own loop skill\n");
 
-    const result = await cli(sb, ["init", "--instance", server.url, "--tenant", tenant, "--agents", "claude,codex,cursor", "--agents", "copilot", "--json"], { cwd: dir });
+    const result = await onPlatform("linux", () =>
+      cli(sb, ["init", "--instance", server.url, "--tenant", tenant, "--agents", "claude,codex,cursor", "--agents", "copilot", "--json"], { cwd: dir }),
+    );
     expect(result.code, result.stdout).toBe(0);
     for (const root of [".agents/skills", ".claude/skills"]) {
       for (const skill of ["cavelon-loop", "cavelon-authoring", "cavelon-testing", "cavelon-long-running"]) {
@@ -242,6 +255,47 @@ describe("init", () => {
     const plain = folder("plain");
     const offered = await cli(sb, ["init", "--instance", server.url, "--tenant", tenant], { cwd: plain });
     expect(offered.stdout).toMatch(/cavelon init --hook/);
+  });
+
+  it.runIf(gitAvailable())("--hook leaves a hooks folder outside the repository alone, and uses one inside it", async () => {
+    const shared = folder("shared-hooks");
+    const repo = folder("repo");
+    gitIn(repo, "init", "-q");
+    // As a global core.hooksPath would: every repository of the user runs these hooks.
+    gitIn(repo, "config", "core.hooksPath", shared);
+    const result = await cli(sb, ["init", "--instance", server.url, "--tenant", tenant, "--hook", "--json"], { cwd: repo });
+    expect(result.code, result.stderr).toBe(0);
+    const hook = result.json<{ files: Array<{ file: string; action: string; reason?: string }> }>().files.find((f) => f.file.endsWith("pre-commit"));
+    expect(hook).toMatchObject({ action: "skipped" });
+    expect(hook!.reason).toMatch(/core\.hooksPath .* outside this repository/);
+    expect(readdirSync(shared)).toEqual([]);
+
+    // A hooks folder kept in the repository (as husky sets it) is the repository's own.
+    gitIn(repo, "config", "core.hooksPath", ".githooks");
+    const inside = await cli(sb, ["init", "--hook", "--json"], { cwd: repo });
+    expect(inside.code, inside.stderr).toBe(0);
+    expect(inside.json<{ files: Array<{ file: string; action: string }> }>().files).toContainEqual({ file: ".githooks/pre-commit", action: "created" });
+    expect(read(path.join(repo, ".githooks", "pre-commit"))).toMatch(/^#!\/bin\/sh\n# cavelon:begin\n/);
+  });
+
+  it("--agents on native Windows starts npx through cmd /c, and --update keeps the other system's form", async () => {
+    const dir = folder();
+    const result = await onPlatform("win32", () => cli(sb, ["init", "--instance", server.url, "--tenant", tenant, "--agents", "claude,codex", "--json"], { cwd: dir }));
+    expect(result.code, result.stdout).toBe(0);
+    const windows = { command: "cmd", args: ["/c", "npx", "-y", "@cavelon/cli@0.1", "mcp"] };
+    expect(JSON.parse(read(path.join(dir, ".mcp.json")))).toEqual({ mcpServers: { cavelon: windows } });
+    expect(read(path.join(dir, ".codex", "config.toml"))).toContain('command = "cmd"\nargs = ["/c", "npx", "-y", "@cavelon/cli@0.1", "mcp"]');
+
+    // Whoever is on the other system does not rewrite the entry someone wrote on theirs.
+    const posix = `${JSON.stringify({ mcpServers: { cavelon: { command: "npx", args: ["-y", "@cavelon/cli@0.1", "mcp"] } } }, null, 2)}\n`;
+    writeFileSync(path.join(dir, ".mcp.json"), posix);
+    const toml = read(path.join(dir, ".codex", "config.toml"));
+    const updated = await onPlatform("win32", () => cli(sb, ["init", "--update", "--json"], { cwd: dir }));
+    expect(updated.code, updated.stdout).toBe(0);
+    expect(read(path.join(dir, ".mcp.json"))).toBe(posix);
+    const onLinux = await onPlatform("linux", () => cli(sb, ["init", "--update", "--json"], { cwd: dir }));
+    expect(onLinux.code, onLinux.stdout).toBe(0);
+    expect(read(path.join(dir, ".codex", "config.toml"))).toBe(toml);
   });
 
   it("needs an instance and a login, and never prompts", async () => {
@@ -441,6 +495,90 @@ describe("pull", () => {
     expect(read(path.join(dir, "package", "agents.yaml"))).toContain("0.9");
   });
 
+  it("outside git, refuses to overwrite a local edit or remove a file the last pull did not write, unless --force", async () => {
+    const dir = await initSolution();
+    const agentsFile = path.join(dir, "package", "agents.yaml");
+    const draft = path.join(dir, "tests", "draft.yaml");
+    expect((await cli(sb, ["pull"], { cwd: dir })).code).toBe(0);
+    const setTemperature = (value: number) =>
+      server.editConfig(tenant, (pkg) => {
+        (pkg.agents as Array<Record<string, unknown>>)[0]!.temperature = value;
+      });
+
+    // Files as the last pull left them: an Admin edit comes in without --force.
+    setTemperature(0.7);
+    const taken = await cli(sb, ["pull"], { cwd: dir });
+    expect(taken.code, taken.stderr).toBe(0);
+    expect(read(agentsFile)).toContain("temperature: 0.7");
+
+    // A local edit and a suite that was never applied are not lost silently.
+    writeFileSync(agentsFile, read(agentsFile).replace("0.7", "0.9"));
+    writeFileSync(draft, stringify({ name: "Draft", cases: [] }));
+    setTemperature(0.5);
+    const refused = await cli(sb, ["pull", "--json"], { cwd: dir });
+    expect(refused.code).toBe(4);
+    const error = refused.json<{ error: { code: string; message: string; details: { files: string[] } } }>().error;
+    expect(error).toMatchObject({ code: "uncommitted_changes", details: { files: ["package/agents.yaml", "tests/draft.yaml"] } });
+    expect(error.message).toMatch(/not in a git repository/);
+    expect(read(agentsFile)).toContain("temperature: 0.9");
+    expect(existsSync(draft)).toBe(true);
+
+    const forced = await cli(sb, ["pull", "--force"], { cwd: dir });
+    expect(forced.code, forced.stderr).toBe(0);
+    expect(read(agentsFile)).toContain("temperature: 0.5");
+    expect(existsSync(draft)).toBe(false);
+  });
+
+  it("refuses to overwrite package files outside git when no earlier pull recorded them", async () => {
+    const dir = await initSolution();
+    expect((await cli(sb, ["pull"], { cwd: dir })).code).toBe(0);
+    // An older kit's pull recorded which files it wrote, not their content.
+    rmSync(path.join(dir, ".cavelon", "pulled-files.json"));
+    server.editConfig(tenant, (pkg) => {
+      (pkg.agents as Array<Record<string, unknown>>)[0]!.temperature = 0.4;
+    });
+    const refused = await cli(sb, ["pull", "--json"], { cwd: dir });
+    expect(refused.code).toBe(4);
+    // The manifest, rewritten with any change, counts as well: nothing tells it from an edit.
+    expect(refused.json<{ error: { details: { files: string[] } } }>().error.details.files).toEqual(["package/agents.yaml", "package/manifest.yaml"]);
+  });
+
+  it.skipIf(process.platform === "win32")("reads a symlinked package file and writes through the link; a link out of the solution is an error", async () => {
+    const dir = await initSolution();
+    expect((await cli(sb, ["pull"], { cwd: dir })).code).toBe(0);
+    const { sections } = (await cli(sb, ["validate", "--offline", "--json"], { cwd: dir })).json<{ sections: number }>();
+    const shared = path.join(dir, "shared");
+    mkdirSync(shared);
+    const agentsFile = path.join(dir, "package", "agents.yaml");
+    copyFileSync(agentsFile, path.join(shared, "agents.yaml"));
+    rmSync(agentsFile);
+    symlinkSync(path.join("..", "shared", "agents.yaml"), agentsFile);
+
+    const valid = await cli(sb, ["validate", "--offline", "--json"], { cwd: dir });
+    expect(valid.code, valid.stdout).toBe(0);
+    expect(valid.json()).toMatchObject({ valid: true, sections });
+    const applied = await cli(sb, ["apply", "--env", "test", "--json"], { cwd: dir });
+    expect(applied.code, applied.stdout).toBe(0);
+    const preview = server.state.requests.filter((r) => r.path === "/api/v1/agent-graph/import/preview").pop()!;
+    expect(Object.keys((preview.body as { package: Record<string, unknown> }).package)).toContain("agents");
+
+    server.editConfig(tenant, (pkg) => {
+      (pkg.agents as Array<Record<string, unknown>>)[0]!.temperature = 0.6;
+    });
+    expect((await cli(sb, ["pull"], { cwd: dir })).code).toBe(0);
+    expect(lstatSync(agentsFile).isSymbolicLink()).toBe(true);
+    expect(read(path.join(shared, "agents.yaml"))).toContain("temperature: 0.6");
+
+    // A link that leads out of the solution is neither read nor sent.
+    const outside = path.join(sb.home, `outside-${dirCount}.yaml`);
+    writeFileSync(outside, "- name: elsewhere\n");
+    symlinkSync(outside, path.join(dir, "tests", "elsewhere.yaml"));
+    const refused = await cli(sb, ["validate", "--offline", "--json"], { cwd: dir });
+    expect(refused.code).toBe(3);
+    const findings = refused.json<{ findings: Array<{ code: string; file: string; message: string }> }>().findings;
+    expect(findings).toContainEqual(expect.objectContaining({ code: "package_file_invalid", file: "tests/elsewhere.yaml" }));
+  });
+
   it("never writes outside package/ whatever section names the instance sends", async () => {
     const dir = await initSolution();
     server.editConfig(tenant, (pkg) => {
@@ -485,6 +623,41 @@ describe("validate", () => {
 
     const text = await cli(sb, ["validate", "--offline"], { cwd: dir });
     expect(text.stdout).toMatch(/error package_schema_invalid {2}package\/agents\.yaml:\d+ agents\[0\]\.temperature: must be number/);
+  });
+
+  it("reads package files saved with a byte-order mark and CRLF line ends", async () => {
+    const dir = await initSolution();
+    await cli(sb, ["pull"], { cwd: dir });
+    const { sections } = (await cli(sb, ["validate", "--offline", "--json"], { cwd: dir })).json<{ sections: number }>();
+    const agentsFile = path.join(dir, "package", "agents.yaml");
+    writeFileSync(agentsFile, `\uFEFF${read(agentsFile).replace(/\n/g, "\r\n")}`);
+    const harnessesFile = path.join(dir, "package", "harnesses.yaml");
+    writeFileSync(path.join(dir, "package", "harnesses.json"), `\uFEFF${JSON.stringify(parse(read(harnessesFile)), null, 2)}\n`);
+    rmSync(harnessesFile);
+    const result = await cli(sb, ["validate", "--offline", "--json"], { cwd: dir });
+    expect(result.code, result.stdout).toBe(0);
+    expect(result.json()).toMatchObject({ valid: true, sections });
+
+    // pull sees the same values and leaves the bytes as they are.
+    const before = read(agentsFile);
+    const pulled = await cli(sb, ["pull", "--json"], { cwd: dir });
+    expect(pulled.code, pulled.stdout).toBe(0);
+    expect(pulled.json<{ files: { written: string[] } }>().files.written).toEqual([]);
+    expect(read(agentsFile)).toBe(before);
+  });
+
+  it("warns about a solution with no package files yet, and apply asks for a pull", async () => {
+    const dir = await initSolution();
+    const validated = await cli(sb, ["validate", "--offline"], { cwd: dir });
+    expect(validated.stderr).toMatch(/No package files in package\/ yet; `cavelon pull`/);
+    const applied = await cli(sb, ["apply", "--env", "test", "--json"], { cwd: dir });
+    expect(applied.code).toBe(2);
+    expect(applied.json<{ error: { message: string; hint: string } }>().error).toMatchObject({ message: "No package files in package/." });
+
+    // The empty tests/ init made does not clash with suites kept in package/.
+    writeFileSync(path.join(dir, "package", "test_suites.yaml"), "[]\n");
+    const kept = await cli(sb, ["validate", "--offline", "--json"], { cwd: dir });
+    expect(kept.json<{ findings: Array<{ code: string }> }>().findings.map((f) => f.code)).not.toContain("package_file_duplicate");
   });
 
   it("warns about a section the schema does not know, and refuses a version the instance does not accept", async () => {

@@ -16,9 +16,18 @@ import { KIT_VERSION } from "./version.js";
 // reach a solution's MCP entry unannounced. A release of a new minor moves both.
 export const MCP_COMMAND = { command: "npx", args: ["-y", "@cavelon/cli@0.1", "mcp"] };
 
+/**
+ * How an agent on `platform` starts the MCP server. On native Windows `npx` is
+ * `npx.cmd`, which an agent that starts its servers without a shell cannot run,
+ * so it goes through `cmd /c`.
+ */
+export function mcpCommand(platform: NodeJS.Platform = process.platform): { command: string; args: string[] } {
+  return platform === "win32" ? { command: "cmd", args: ["/c", MCP_COMMAND.command, ...MCP_COMMAND.args] } : MCP_COMMAND;
+}
+
 export type McpTarget =
-  | { file: string; format: "json"; keys: string[]; entry: Record<string, unknown> }
-  | { file: string; format: "toml"; block: string };
+  | { file: string; format: "json"; keys: string[]; entry: Record<string, unknown>; others: Array<Record<string, unknown>> }
+  | { file: string; format: "toml"; block: string; others: string[] };
 
 export interface AgentTarget {
   name: string;
@@ -26,31 +35,49 @@ export interface AgentTarget {
   mcp?: McpTarget;
 }
 
+// A solution's MCP files are shared through git, and one person's system must
+// not rewrite another's working entry: the other system's form counts as current.
+const PLATFORMS: NodeJS.Platform[] = ["win32", "linux"];
+const otherPlatforms = () => PLATFORMS.filter((p) => (p === "win32") !== (process.platform === "win32"));
+
 const jsonServer = (file: string, key = "mcpServers", extra: Record<string, unknown> = {}): McpTarget => ({
   file,
   format: "json",
   keys: [key, "cavelon"],
-  entry: { ...extra, ...MCP_COMMAND },
+  entry: { ...extra, ...mcpCommand() },
+  others: otherPlatforms().map((p) => ({ ...extra, ...mcpCommand(p) })),
 });
 
-export const AGENTS: AgentTarget[] = [
-  { name: "claude", label: "Claude Code", mcp: jsonServer(".mcp.json") },
-  {
-    name: "codex",
-    label: "Codex",
-    mcp: {
-      file: ".codex/config.toml",
-      format: "toml",
-      block: ["[mcp_servers.cavelon]", `command = "${MCP_COMMAND.command}"`, `args = [${MCP_COMMAND.args.map((a) => `"${a}"`).join(", ")}]`].join("\n"),
+const tomlServer = (file: string): McpTarget => {
+  const block = (platform: NodeJS.Platform) => {
+    const { command, args } = mcpCommand(platform);
+    return ["[mcp_servers.cavelon]", `command = "${command}"`, `args = [${args.map((a) => `"${a}"`).join(", ")}]`].join("\n");
+  };
+  return { file, format: "toml", block: block(process.platform), others: otherPlatforms().map(block) };
+};
+
+/** An agent whose MCP entry is made when it is written, for the system the command runs on. */
+function agent(name: string, label: string, mcp?: () => McpTarget): AgentTarget {
+  if (!mcp) return { name, label };
+  return {
+    name,
+    label,
+    get mcp() {
+      return mcp();
     },
-  },
-  { name: "cursor", label: "Cursor", mcp: jsonServer(".cursor/mcp.json") },
-  { name: "copilot", label: "GitHub Copilot in VS Code", mcp: jsonServer(".vscode/mcp.json", "servers", { type: "stdio" }) },
-  { name: "gemini", label: "Gemini CLI", mcp: jsonServer(".gemini/settings.json") },
-  { name: "kiro", label: "Kiro", mcp: jsonServer(".kiro/settings/mcp.json") },
+  };
+}
+
+export const AGENTS: AgentTarget[] = [
+  agent("claude", "Claude Code", () => jsonServer(".mcp.json")),
+  agent("codex", "Codex", () => tomlServer(".codex/config.toml")),
+  agent("cursor", "Cursor", () => jsonServer(".cursor/mcp.json")),
+  agent("copilot", "GitHub Copilot in VS Code", () => jsonServer(".vscode/mcp.json", "servers", { type: "stdio" })),
+  agent("gemini", "Gemini CLI", () => jsonServer(".gemini/settings.json")),
+  agent("kiro", "Kiro", () => jsonServer(".kiro/settings/mcp.json")),
   // Agents that read AGENTS.md and run shell commands, with no MCP entry to write.
-  { name: "pi", label: "Pi" },
-  { name: "other", label: "any other agent with a shell" },
+  agent("pi", "Pi"),
+  agent("other", "any other agent with a shell"),
 ];
 
 const ALIASES: Record<string, string> = { "claude-code": "claude", vscode: "copilot", "gemini-cli": "gemini" };

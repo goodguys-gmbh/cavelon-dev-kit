@@ -64,6 +64,32 @@ export async function readPull(root: string): Promise<PullRecord | undefined> {
   return readJsonFile<PullRecord>(path.join(stateDir(root), "pull.json"));
 }
 
+const PULLED_FILES = "pulled-files.json";
+
+/** The SHA-256 of a file's bytes, through a symlink; undefined when there is no file. */
+export async function fileDigest(file: string): Promise<string | undefined> {
+  const bytes = await fs.readFile(file).catch(() => undefined);
+  return bytes && createHash("sha256").update(bytes).digest("hex");
+}
+
+/**
+ * The package files as the last pull left them, by digest. Outside git it is
+ * the only way to tell a local edit from what the instance sent.
+ */
+export async function writePulledFiles(root: string, files: string[]): Promise<void> {
+  const digests: Record<string, string> = {};
+  for (const file of files) {
+    const value = await fileDigest(path.join(root, file));
+    if (value) digests[file] = value;
+  }
+  await writeState(root, PULLED_FILES, JSON.stringify({ digests }, null, 2));
+}
+
+export async function readPulledFiles(root: string): Promise<Record<string, string>> {
+  const stored = await readJsonFile<{ digests?: Record<string, string> }>(path.join(stateDir(root), PULLED_FILES));
+  return stored?.digests && typeof stored.digests === "object" ? stored.digests : {};
+}
+
 export function digest(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }

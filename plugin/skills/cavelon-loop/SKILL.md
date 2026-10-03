@@ -48,7 +48,8 @@ use it when you parse the result.
 ## The loop
 
 1. **Pull** what is live: `cavelon pull`. It refuses when `package/` has
-   uncommitted changes; commit first. `git diff` then shows what someone changed
+   uncommitted changes (outside git: files changed since the last pull);
+   commit or apply them first. `git diff` then shows what someone changed
    in the Admin.
 2. **Edit** the files in `package/` (one file per schema section) and `tests/`
    (one file per test suite). See the cavelon-authoring skill.

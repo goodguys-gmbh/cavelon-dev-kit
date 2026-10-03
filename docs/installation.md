@@ -194,6 +194,23 @@ also delete the configuration and cache folders listed in
   `CAVELON_SHELL` to `powershell`, `cmd` or `posix`.
 - In PowerShell, quote arguments that contain spaces with single quotes:
   `cavelon kb upload seeds/faq --kb 'Support FAQ'`.
+- An agent starts its MCP servers without a shell, and on native Windows
+  `npx` is `npx.cmd`, which runs only through one. `cavelon init --agents` run
+  on Windows therefore writes the entry as
+  `cmd /c npx -y @cavelon/cli@0.1 mcp`. In a repository people also use on
+  macOS or Linux, the entry stays in the form it was first written in, and
+  `init --update` keeps it: whoever is on the other system adds the server
+  for themselves (below).
+- The plugin's MCP server is started with plain `npx`, so on native Windows
+  add the server yourself; the plugin's skills work as they are:
+
+  ```powershell
+  claude mcp add --scope user cavelon -- cmd /c npx -y @cavelon/cli@0.1 mcp
+  codex mcp add cavelon -- cmd /c npx -y @cavelon/cli@0.1 mcp
+  ```
+
+  With `cavelon` installed globally, `cavelon mcp` works as the command too.
+  In WSL, everything works as on Linux.
 
 ### macOS
 

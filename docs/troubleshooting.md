@@ -124,6 +124,7 @@ who may decide before you test, read the node's `approvers` in
 | `package_schema_invalid` | 3 | A package file does not match the instance's package schema. Each finding names the file, line and path. |
 | `package_version_unsupported` | 3 | The instance does not accept the package version in `cavelon.yaml` and `package/manifest.yaml`. `cavelon status --json` lists the accepted versions; `cavelon pull` writes a current package. |
 | `knowledge_base_without_search_tool` | 0 (a warning) | An agent is given a knowledge base, by a skill or on a tool assignment, but no search tool reaches it, so it answers without it. Add `- tool_slug: search_documents` to the `tool_assignments` of that skill or of the agent. |
+| `package_file_invalid` | 3 | A package file is not valid YAML or JSON (the finding names the line), or it is a symlink to a file outside the solution folder or to no file. A link inside the solution folder is read as the file it leads to. |
 | `project_file_invalid`, `env_file_invalid` | 3 | `cavelon.yaml` or `env/<name>.yaml` is not valid YAML or has a wrong value. |
 | `project_file_has_secret` | 3 | `cavelon.yaml` contains something that looks like a token. Remove it, revoke the token, and use `cavelon login` or `CAVELON_TOKEN`. |
 | `no_solution` | 2 | The command needs a solution folder: run it in a folder with `cavelon.yaml`, or `cavelon init` first. |
@@ -148,7 +149,8 @@ used: cached or read now, when, and its hash.
 | `package_requirements_changed` | 4 | The import's own check found something the preview did not; each blocker is listed. Nothing was imported. Fix the blockers and preview again. |
 | `preview_unknown` | 2 | No open preview with that id in this folder. `cavelon status` lists the open ones. |
 | `preview_other_tenant`, `preview_other_instance` | 4 | The preview was made for another tenant or instance than the one this command uses. Preview again here. |
-| `uncommitted_changes` | 4 | `pull` would overwrite package files with uncommitted changes. Commit or discard them, or use `--force`. |
+| `uncommitted_changes` | 4 | `pull` would overwrite package files with uncommitted changes. Outside a git repository: it would overwrite or remove a package file that changed since the last pull, such as your edit or a test suite you have not applied. The files are listed. Commit them, apply them, or use `--force` to discard them. |
+| `package_file_outside` | 4 | `pull` or `init --from` would write a package file that is a symlink to a file outside the solution folder. Nothing was written. Move the file into the solution folder, or replace the link with the file. |
 | `package_files_differ` | 4 | `init --from` would change or remove package files that hold something else. The files are listed; `--force` replaces them. |
 
 ## Network

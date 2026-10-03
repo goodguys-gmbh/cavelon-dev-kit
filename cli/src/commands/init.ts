@@ -4,8 +4,8 @@ import { parseDocument } from "yaml";
 import { boolOption, listOption, stringOption, type CommandSpec, type Context } from "../command.js";
 import { AGENTS, bundledSkills, generatedCopy, parseAgents, SKILL_ROOTS, type AgentTarget, type McpTarget } from "../agents.js";
 import { CavelonError, ExitCode, usageError } from "../errors.js";
-import { confinedPath } from "../paths.js";
-import { readTextFile, writeFileAtomic } from "../fsutil.js";
+import { confinedPath, realPath, within } from "../paths.js";
+import { readTextFile, withoutBom, writeFileAtomic } from "../fsutil.js";
 import { git } from "../git.js";
 import { ensureStateDir, STATE_DIR } from "../local-state.js";
 import { isGenerated, upsertBlock, upsertJsonEntry, type BlockResult, type CommentStyle } from "../markers.js";
@@ -146,6 +146,7 @@ async function writeSkills(root: string, roots: string[]): Promise<FileAction[]>
 async function writeMcp(root: string, target: McpTarget, onlyExisting: boolean): Promise<FileAction> {
   const file = path.join(root, target.file);
   const existing = await readTextFile(file);
+  if (existing !== undefined && holdsOtherForm(existing, target)) return { file: target.file, action: "unchanged" };
   if (target.format === "toml") return applyBlock(root, file, upsertBlock(existing, target.block, "hash", { onlyExisting }));
   if (onlyExisting) {
     let present = false;
@@ -161,6 +162,21 @@ async function writeMcp(root: string, target: McpTarget, onlyExisting: boolean):
     result.reason = `${result.reason}; add "${target.keys.join(".")}": ${JSON.stringify(target.entry)} yourself`;
   }
   return applyBlock(root, file, result);
+}
+
+/** Whether a file holds the kit's entry as written on another operating system. */
+function holdsOtherForm(existing: string, target: McpTarget): boolean {
+  if (target.format === "toml") {
+    const text = existing.replace(/\r\n/g, "\n");
+    return target.others.some((block) => text.includes(`# cavelon:begin\n${block}\n# cavelon:end`));
+  }
+  let current: unknown;
+  try {
+    current = target.keys.reduce<unknown>((node, key) => (node && typeof node === "object" ? (node as Record<string, unknown>)[key] : undefined), JSON.parse(existing));
+  } catch {
+    return false;
+  }
+  return target.others.some((entry) => JSON.stringify(entry) === JSON.stringify(current));
 }
 
 /** Skill folders and MCP entries a previous `init --agents` wrote, for `init --update`. */
@@ -195,6 +211,19 @@ async function installHook(root: string, onlyExisting: boolean): Promise<FileAct
     return { file: ".git/hooks/pre-commit", action: "skipped", reason: "this folder is not in a git repository" };
   }
   const file = path.resolve(root, hooks, "pre-commit");
+  // core.hooksPath (often set globally) may name a folder every repository of the user runs its hooks from.
+  const top = (await git(["rev-parse", "--show-toplevel"], root))?.trim();
+  const common = (await git(["rev-parse", "--git-common-dir"], root))?.trim();
+  const own = [top, common].filter((dir): dir is string => Boolean(dir)).map((dir) => path.resolve(root, dir));
+  const hooksDir = await realPath(path.dirname(file));
+  const inside = await Promise.all(own.map(async (dir) => within(await realPath(dir), hooksDir)));
+  if (!inside.includes(true)) {
+    return {
+      file: rel(root, file),
+      action: "skipped",
+      reason: `core.hooksPath points to ${path.dirname(file)}, outside this repository, where other repositories' hooks may be; add the block yourself if you want it there`,
+    };
+  }
   const body = HOOK_LINES(prefix).join("\n");
   const existing = await readTextFile(file);
   let result = upsertBlock(existing, body, "hash", { onlyExisting, afterShebang: true });
@@ -267,7 +296,7 @@ async function readImportFile(ctx: Context, from: string): Promise<Record<string
   const stat = await fs.stat(file).catch(() => undefined);
   if (!stat?.isFile()) throw usageError(`No file ${from}.`, "Pass the path of a package export (JSON or YAML) to --from.");
   if (stat.size > MAX_PACKAGE_FILE_BYTES) throw importFileError(from, `it is larger than ${MAX_PACKAGE_FILE_BYTES / 1024 / 1024} MB`);
-  const text = (await readTextFile(file)) ?? "";
+  const text = withoutBom((await readTextFile(file)) ?? "");
   let value: unknown;
   if (/\.json$/i.test(file)) {
     try {
@@ -453,7 +482,7 @@ export const init: CommandSpec = {
       multiple: true,
       description: `Write the fallback for these agents: ${AGENTS.map((a) => a.name).join(", ")} or all (comma-separated).`,
     },
-    hook: { type: "boolean", description: "Add a git pre-commit hook that runs `cavelon validate`." },
+    hook: { type: "boolean", description: "Add a git pre-commit hook that runs `cavelon validate`; never in a hooks folder outside the repository." },
     update: { type: "boolean", description: "Only bring the marked blocks and fallback files to this version." },
     from: { type: "string", value: "<file>", description: "Write this package file (a JSON or YAML export) into package/ and tests/." },
     force: { type: "boolean", description: "With --from: replace package files that hold something else." },

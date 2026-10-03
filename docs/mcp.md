@@ -138,7 +138,7 @@ repeat them:
   show you any preview that reaches an active solution or production.
 - **What changes without `confirm`.** `init` and `pull` write files in the
   solution folder (`pull` refuses to replace package files with uncommitted
-  changes unless `force`), and the other tools marked changing act at once:
+  changes, or outside git files changed since the last pull, unless `force`), and the other tools marked changing act at once:
   `use_tenant`, `tenant_create`, `harness_new`, `harness_clone`, `activate`
   (through the readiness gate), `variables_set`, `kb_upload`, `test_run`,
   `loop_start`, `loop_pause`, `loop_resume`, `sandbox_validate`,
