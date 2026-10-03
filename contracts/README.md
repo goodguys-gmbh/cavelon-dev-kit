@@ -6,7 +6,7 @@ and the fake server in `cli/test/` serves them.
 
 ## `cavelon/`
 
-Recorded on 2026-10-03 from an instance with its default settings: every
+Recorded on 2026-10-04 from an instance with its default settings: every
 optional feature off, rate limiting on, a tenant without settings of its own,
 no licence entitlement, and an empty billing month. The tests switch features
 on in the fake server where a command needs them (personal access tokens, the

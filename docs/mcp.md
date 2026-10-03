@@ -143,10 +143,17 @@ repeat them:
   (through the readiness gate), `variables_set`, `kb_upload`, `test_run`,
   `loop_start`, `loop_pause`, `loop_resume`, `sandbox_validate`,
   `sandbox_refresh` and `artifacts_export`.
-- **What no tool does, even with `confirm`.** `api` refuses an operation that
-  changes a secret, creates or revokes a credential (personal access tokens,
-  API keys, sign-in) or decides an approval (`operation_for_a_person`); a
-  person does those in Cavelon or in their terminal.
+- **What no tool does, even with `confirm`.** `api` refuses an operation the
+  instance keeps for a person (`operation_for_a_person`); a person does those
+  in Cavelon or in their terminal. An instance marks them in its OpenAPI
+  (`x-cavelon-person-only`, with the reason in
+  `x-cavelon-person-only-reason`): setting or deleting a secret value,
+  issuing, resetting or revoking a credential, and deciding an approval. `api`
+  refuses exactly the operations marked, read-only or not, and the error
+  carries the instance's reason. On an instance that marks none, `api` judges
+  by the words of the path instead and refuses an operation that changes a
+  secret, creates or revokes a credential (personal access tokens, API keys,
+  sign-in) or decides an approval.
 - **Files stay in the solution folder.** Every path a tool takes (`api`'s
   `file` and `body` `@file`, `loop_start`'s `input` `@file`, `kb_upload`'s
   folder, `sandbox_seed`'s source, `artifacts_export`'s `out`, `init`'s

@@ -1348,7 +1348,7 @@ Call any operation the instance publishes in its OpenAPI.
 cavelon api <operation> [params...] [options]
 ```
 
-The operation is its operationId or the short name before FastAPI's path suffix (list_harnesses). Parameters: -p name=value or name=value. Body: --json '&lt;json&gt;', --json @file.json or --json - (stdin). The body is checked against the operation's schema before it is sent. As an MCP tool, an operation that changes something returns what it would send and sends it only with confirm; one that changes a secret, creates or revokes a credential or decides an approval is refused, as are files outside the solution folder.
+The operation is its operationId or the short name before FastAPI's path suffix (list_harnesses). Parameters: -p name=value or name=value. Body: --json '&lt;json&gt;', --json @file.json or --json - (stdin). The body is checked against the operation's schema before it is sent. As an MCP tool, an operation that changes something returns what it would send and sends it only with confirm; one the instance marks for a person only (x-cavelon-person-only) is refused, as are files outside the solution folder. On an instance that marks none, one that changes a secret, creates or revokes a credential or decides an approval is refused.
 
 | Argument | Description |
 |---|---|

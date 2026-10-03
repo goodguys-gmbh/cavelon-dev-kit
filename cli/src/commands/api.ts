@@ -83,12 +83,12 @@ function parseParams(input: Input): Record<string, string[]> {
 }
 
 /**
- * What the kit keeps for a person even when an agent has `confirm`: setting
- * or deleting a secret value, creating or revoking a credential (tokens, API
- * keys, sign-in), and deciding an approval. A dedicated command for each is
- * CLI-only or absent; this keeps `api` from reaching the same operations over
- * MCP. The words of the path decide, so an instance's newer route of the same
- * kind is kept too.
+ * What an instance that does not mark its operations keeps for a person even
+ * when an agent has `confirm`: setting or deleting a secret value, creating or
+ * revoking a credential (tokens, API keys, sign-in), and deciding an approval.
+ * A dedicated command for each is CLI-only or absent; this keeps `api` from
+ * reaching the same operations over MCP. The words of the path decide, so an
+ * instance's newer route of the same kind is kept too.
  */
 const FOR_A_PERSON: Array<{ does: string; hint: string; match(word: string): boolean }> = [
   {
@@ -108,10 +108,41 @@ const FOR_A_PERSON: Array<{ does: string; hint: string; match(word: string): boo
   },
 ];
 
-export function keptForPerson(op: Operation): { does: string; hint: string } | undefined {
-  if (op.readOnly) return undefined;
+function byPathWords(op: Operation): (typeof FOR_A_PERSON)[number] | undefined {
   const words = op.path.toLowerCase().split("/").filter((word) => word && !word.startsWith("{"));
   return FOR_A_PERSON.find((rule) => words.some((word) => rule.match(word)));
+}
+
+export interface KeptForPerson {
+  /** "instance" when the instance marks the operation, "kit" when the path's words decided. */
+  source: "instance" | "kit";
+  reason?: string;
+  hint: string;
+}
+
+/**
+ * Whether `api` over MCP refuses an operation. An instance that publishes
+ * `x-cavelon-person-only` on any operation decides alone: exactly the marked
+ * operations are refused, read-only or not. Only for an instance that marks
+ * none do the path's words decide.
+ */
+export function keptForPerson(op: Operation, all: Operation[]): KeptForPerson | undefined {
+  if (all.some((o) => o.personOnly)) {
+    if (!op.personOnly?.marked) return undefined;
+    // The path's words only pick the most useful hint; the marker decided.
+    const hint = byPathWords(op)?.hint ?? `A person runs it: in Cavelon, or in their terminal with \`cavelon api ${op.alias}\`.`;
+    return { source: "instance", ...(op.personOnly.reason ? { reason: op.personOnly.reason } : {}), hint };
+  }
+  if (op.readOnly) return undefined;
+  const rule = byPathWords(op);
+  return rule ? { source: "kit", reason: rule.does, hint: rule.hint } : undefined;
+}
+
+function refusal(op: Operation, kept: KeptForPerson): string {
+  const named = `${op.alias} (${op.method} ${op.path})`;
+  const after = "no tool sends it, with or without confirm.";
+  if (kept.source === "kit") return `${named} ${kept.reason}; that stays with a person, so ${after}`;
+  return `${named} is for a person only, as the instance marks it${kept.reason ? ` (${kept.reason})` : ""}; ${after}`;
 }
 
 function truncate(data: unknown, limit: number): { data: unknown; total?: number } {
@@ -132,8 +163,9 @@ export const api: CommandSpec = {
     "Parameters: -p name=value or name=value. Body: --json '<json>', --json @file.json or --json - (stdin).\n" +
     "The body is checked against the operation's schema before it is sent.\n" +
     "As an MCP tool, an operation that changes something returns what it would send and sends it only with confirm;\n" +
-    "one that changes a secret, creates or revokes a credential or decides an approval is refused, as are files outside\n" +
-    "the solution folder.",
+    "one the instance marks for a person only (x-cavelon-person-only) is refused, as are files outside the solution\n" +
+    "folder. On an instance that marks none, one that changes a secret, creates or revokes a credential or decides an\n" +
+    "approval is refused.",
   readOnly: false,
   destructive: true,
   mcpTool: "api",
@@ -171,23 +203,24 @@ export const api: CommandSpec = {
       const file = await confinedPath(ctx, spec.slice(at + 1), "The file");
       args.files = [...(args.files ?? []), { field: spec.slice(0, at), path: file }];
     }
-    if (ctx.mode === "mcp" && !op.readOnly) {
-      const kept = keptForPerson(op);
+    if (ctx.mode === "mcp") {
+      const kept = keptForPerson(op, operations(doc));
       if (kept) {
         throw new CavelonError(ExitCode.usage, {
           code: "operation_for_a_person",
-          message: `${op.alias} (${op.method} ${op.path}) ${kept.does}; that stays with a person, so no tool sends it, with or without confirm.`,
+          message: refusal(op, kept),
           hint: kept.hint,
+          details: { source: kept.source, ...(kept.reason ? { reason: kept.reason } : {}) },
         });
       }
-      if (!boolOption(input, "confirm")) {
-        const request = previewRequest(doc, op, args);
-        const files = (args.files ?? []).map((f) => ({ field: f.field, file: path.relative(ctx.io.cwd, f.path) || f.path }));
-        return {
-          data: { operation: op.alias, ...request, ...(files.length ? { files } : {}), sent: false, confirm: "Call api again with the same arguments and confirm: true." },
-          text: `Would send ${request.method} ${request.path}. Nothing was sent.`,
-        };
-      }
+    }
+    if (ctx.mode === "mcp" && !op.readOnly && !boolOption(input, "confirm")) {
+      const request = previewRequest(doc, op, args);
+      const files = (args.files ?? []).map((f) => ({ field: f.field, file: path.relative(ctx.io.cwd, f.path) || f.path }));
+      return {
+        data: { operation: op.alias, ...request, ...(files.length ? { files } : {}), sent: false, confirm: "Call api again with the same arguments and confirm: true." },
+        text: `Would send ${request.method} ${request.path}. Nothing was sent.`,
+      };
     }
     const client = await ctx.client();
     const result = await callOperation(ctx, client, doc, op, args);

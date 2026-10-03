@@ -21,7 +21,8 @@ const INSTRUCTIONS =
   "limits_set, models_set_limit, loop_cancel, sandbox_seed, trigger_identity, and api for an operation that is not read-only, " +
   "return what they would do and change nothing without confirm: true; show the person that first. " +
   "init and pull write files in the solution folder without confirm (pull refuses to replace package files with uncommitted changes unless force), " +
-  "and the other changing tools act at once. api refuses, even with confirm, an operation that changes a secret, " +
+  "and the other changing tools act at once. api refuses, even with confirm, an operation the instance marks for a person " +
+  "(x-cavelon-person-only; its reason is in the error), or on an instance that marks none, one that changes a secret, " +
   "creates or revokes a credential (tokens, API keys, sign-in) or decides an approval. Tools read and write files only " +
   "inside the solution folder (the folder of cavelon.yaml, or the one the server started in), never in cavelon's own " +
   "config or cache directory. Read limits before planning a solution: it lists what the " +

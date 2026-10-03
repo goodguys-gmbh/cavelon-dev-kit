@@ -33,6 +33,12 @@ export interface Operation {
   requestBody?: { required?: boolean; content: Record<string, { schema?: Record<string, unknown> }> };
   responses: Record<string, { content?: Record<string, { schema?: Record<string, unknown> }> }>;
   readOnly: boolean;
+  /**
+   * `x-cavelon-person-only`: the instance keeps the operation for a person
+   * (absent where an instance does not publish the marker), with
+   * `x-cavelon-person-only-reason`.
+   */
+  personOnly?: { marked: boolean; reason?: string };
 }
 
 /**
@@ -74,11 +80,21 @@ export function operations(doc: OpenApiDoc): Operation[] {
         requestBody: raw.requestBody ? (deref(doc, raw.requestBody) as Operation["requestBody"]) : undefined,
         responses: (raw.responses as Operation["responses"]) ?? {},
         readOnly: method === "get" || method === "head" || method === "options",
+        personOnly: personOnlyOf(raw),
       });
     }
   }
   indexCache.set(doc, out);
   return out;
+}
+
+function personOnlyOf(raw: Record<string, unknown>): Operation["personOnly"] {
+  if (!("x-cavelon-person-only" in raw)) return undefined;
+  const reason = raw["x-cavelon-person-only-reason"];
+  return {
+    marked: raw["x-cavelon-person-only"] === true,
+    ...(typeof reason === "string" && reason.trim() ? { reason: reason.trim() } : {}),
+  };
 }
 
 export function deref(doc: OpenApiDoc, value: unknown): unknown {
