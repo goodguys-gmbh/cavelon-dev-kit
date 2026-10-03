@@ -39,6 +39,10 @@ cavelon login --instance https://cavelon.example.com
 cavelon whoami
 ```
 
+Replace `https://cavelon.example.com` with the address of your Cavelon
+instance: the URL you open Cavelon at in the browser. `example.com` stands for
+it throughout these docs.
+
 **4. Start a solution** in an empty folder:
 
 ```bash
