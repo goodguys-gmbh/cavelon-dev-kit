@@ -2077,10 +2077,24 @@
       "docs": "/docs/reference/api-endpoints#errors-and-retries"
     },
     {
+      "code": "approval_approver_rule_not_met",
+      "area": "approval",
+      "message": "This approval names who may decide it, and you are not among them.",
+      "hint": "A person with one of the tenant roles or access groups in `approvers` decides it. A person's groups are those of the chat user with their verified email in this workspace; an API key matches no approver rule.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
       "code": "approval_needs_a_person",
       "area": "approval",
       "message": "This API key cannot decide or cancel an approval.",
       "hint": "A person decides, in the Admin or with their personal access token, or a key the tenant owner issued with the `approvals.decide` scope; `admin` does not include it.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "approval_requester_cannot_decide",
+      "area": "approval",
+      "message": "You requested this approval, so someone else must decide it.",
+      "hint": "The Approval node forbids self-approval (`forbid_self_approval`): another person who may decide approvals decides it.",
       "docs": "/docs/reference/api-endpoints#errors-and-retries"
     },
     {

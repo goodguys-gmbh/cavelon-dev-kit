@@ -7,6 +7,30 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Added
+
+- `docs/troubleshooting.md` has an Approvals section: the refusals of a
+  decision by someone an approver rule does not name, and by the requester.
+
+### Changed
+
+- `examples/expense-approval/`: the approval says who may decide, by the
+  policy's rule R8.1 and the amount (`approvers` in tiers: team leads, department
+  heads, management), and that nobody decides their own request
+  (`forbid_self_approval: true`). Its offline test checks both against the
+  package schema.
+- `docs/coding-agents.md`: the lesson "Enforce an approval rule through who may
+  decide" now puts the rule on the Approval node (`approvers`,
+  `forbid_self_approval`), tests that each tier reaches the approval, and lets
+  a person decide once per branch; the example brief and the testing section
+  say the same. The `cavelon-authoring` and `cavelon-testing` skills say it
+  too.
+- The contract snapshot is refreshed: the package schema types each node's,
+  edge's and trigger's config and a test suite's settings, and the error
+  catalog has the refusals of an approver rule
+  (`approval_approver_rule_not_met`) and of self-approval
+  (`approval_requester_cannot_decide`), which `cavelon explain` explains.
+
 ## [0.1.1] - 2026-10-03
 
 The first release built from the public repository: with provenance on npm,

@@ -83,6 +83,18 @@ orchestration_nodes:
       allow_edit: false
       on_expiry: reject
       expires_after_seconds: 1209600
+      # R8.1 decides who may approve, by the gross amount; the memo only tells the approver.
+      # The groups are the tenant's access groups; create them, or name your own.
+      approvers:
+        by: $.previous_output.amount
+        tiers:
+          - up_to: 500
+            groups: [team-leads]
+          - up_to: 2000
+            groups: [department-heads]
+          - groups: [management]
+      # R8.2: the person who chatted the request cannot decide it.
+      forbid_self_approval: true
     canvas_x: 1500
     canvas_y: 300
   - slug: decision

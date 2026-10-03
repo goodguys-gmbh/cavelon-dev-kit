@@ -1,4 +1,4 @@
-import { cpSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -159,6 +159,28 @@ describe("examples/expense-approval", () => {
     const after = edges.find((e) => e.from_node_ref.slug === approval.slug)!;
     const decision = edges.filter((e) => e.from_node_ref.slug === after.to_node_ref.slug && e.config.default !== true);
     expect(decision.map((e) => (e.config.condition as { path: string }).path)).toEqual(["approval.approved"]);
+  });
+
+  it("lets the approvers of R8.1 decide by the amount, never the requester (R8.2), as the schema checks", async () => {
+    const { orchestration_nodes: nodes } = registry();
+    const approval = nodes.find((n) => n.node_type === "approval")!;
+    expect(approval.config.forbid_self_approval).toBe(true);
+    const approvers = approval.config.approvers as { by: string; tiers: Array<{ up_to?: number; groups?: string[] }> };
+    expect(approvers.by).toBe("$.previous_output.amount");
+    expect(approvers.tiers.map((t) => t.up_to)).toEqual([500, 2000, undefined]);
+    for (const t of approvers.tiers) expect(t.groups?.length).toBe(1);
+    // The tier reads the amount the memo passes on.
+    const memo = nodes.find((n) => n.slug === "decision-memo")!;
+    expect((memo.config.mapping as Record<string, unknown>).amount).toBe("$.previous_output.amount");
+
+    // The snapshot's package schema types the approval's config, so validate refuses a role the instance does not have.
+    const dir = path.join(scratch, "expense-approval-unknown-role");
+    cpSync(path.join(EXAMPLES, "expense-approval"), dir, { recursive: true });
+    const file = path.join(dir, "package", "registry_entities.yaml");
+    writeFileSync(file, readFileSync(file, "utf8").replace("groups: [management]", "roles: [managing_director]"));
+    const result = await cli(sb, ["validate", "--instance", server.url, "--json"], { cwd: dir });
+    expect(result.code).not.toBe(0);
+    expect(JSON.stringify(result.json())).toContain("approvers.tiers[2].roles[0]");
   });
 
   it("has a suite with policy questions, a compliant request, a violation citing its rule, and the approval reached", () => {

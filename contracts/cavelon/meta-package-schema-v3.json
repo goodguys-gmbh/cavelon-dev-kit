@@ -2590,9 +2590,9 @@
           "type": "array"
         },
         "settings": {
-          "additionalProperties": true,
+          "$ref": "#/$defs/TestSuiteSettings",
           "title": "Settings",
-          "type": "object"
+          "description": "How the suite's runs are judged. An import refuses a key not listed here."
         },
         "test_cases": {
           "items": {
@@ -3339,6 +3339,2675 @@
       ],
       "title": "TriggerCaseSpec",
       "type": "object"
+    },
+    "TestSuiteSettings": {
+      "additionalProperties": false,
+      "description": "A test suite's settings. A key not listed here is refused.",
+      "properties": {
+        "auto_evaluate": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Whether a judge model scores each answer. Unset is true.",
+          "title": "Auto Evaluate"
+        },
+        "score_threshold": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The score a step needs to pass, as a fraction from 0 to 1, not a percentage. Unset is 0.7.",
+          "title": "Score Threshold"
+        },
+        "evaluation_language": {
+          "anyOf": [
+            {
+              "maxLength": 10,
+              "minLength": 2,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The language code the judge writes its reasoning in, such as 'de'. Unset is 'en'.",
+          "title": "Evaluation Language"
+        },
+        "evaluator_model": {
+          "anyOf": [
+            {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The judge model. Unset is the tenant's test_evaluator model.",
+          "title": "Evaluator Model"
+        },
+        "judge_style_weight": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The share of the score that presentation may move, from 0 to 1.",
+          "title": "Judge Style Weight"
+        },
+        "judge_strictness": {
+          "anyOf": [
+            {
+              "enum": [
+                "balanced",
+                "strict"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "'strict' grades closeness to the reference answer. Unset is 'balanced'.",
+          "title": "Judge Strictness"
+        },
+        "judge_samples": {
+          "anyOf": [
+            {
+              "enum": [
+                1,
+                3,
+                5
+              ],
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Judge calls per step; the median per criterion is scored. Unset is 1.",
+          "title": "Judge Samples"
+        },
+        "request_timeout_seconds": {
+          "anyOf": [
+            {
+              "maximum": 3600,
+              "minimum": 10,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The Chat API timeout per step. Unset is TEST_RUNNER_REQUEST_TIMEOUT_SECONDS.",
+          "title": "Request Timeout Seconds"
+        },
+        "external_refs": {
+          "anyOf": [
+            {
+              "items": {
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 50,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The source system's identifiers of the files this suite is about; each run reads their corpora.",
+          "title": "External Refs"
+        },
+        "reader_mode": {
+          "anyOf": [
+            {
+              "enum": [
+                "audience",
+                "as_chat_user",
+                "unrestricted"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Which reader the runs read as. Unset is 'audience'.",
+          "title": "Reader Mode"
+        },
+        "reader_chat_user_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The Chat User the runs read as; only with reader_mode 'as_chat_user'.",
+          "title": "Reader Chat User Id"
+        },
+        "controlled_run_datetime": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The ISO datetime with UTC offset the runs treat as now; set with controlled_timezone.",
+          "title": "Controlled Run Datetime"
+        },
+        "controlled_timezone": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The IANA timezone of controlled_run_datetime.",
+          "title": "Controlled Timezone"
+        },
+        "generation_status": {
+          "anyOf": [
+            {
+              "enum": [
+                "generating",
+                "completed",
+                "failed"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Written by the platform while it generates the suite's cases.",
+          "title": "Generation Status"
+        },
+        "generation_error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Written by the platform when generating the cases failed.",
+          "title": "Generation Error"
+        },
+        "generation_result": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Written by the platform: what generating the cases imported.",
+          "title": "Generation Result"
+        }
+      },
+      "title": "TestSuiteSettings",
+      "type": "object"
+    },
+    "EdgeCondition": {
+      "type": "object",
+      "description": "A leaf {source, path, operator, value} or exactly one of the compounds all (a list), any (a list) or not (one condition), nested freely.",
+      "properties": {
+        "source": {
+          "enum": [
+            "attachments",
+            "chat_payload",
+            "documents",
+            "loop",
+            "metadata",
+            "previous_output",
+            "run_state",
+            "trigger_payload"
+          ],
+          "default": "previous_output"
+        },
+        "path": {
+          "type": "string",
+          "description": "A dotted path into the source, such as decision.approved."
+        },
+        "operator": {
+          "enum": [
+            "contains",
+            "equals",
+            "exists",
+            "gt",
+            "gte",
+            "in",
+            "lt",
+            "lte",
+            "matches",
+            "not_equals",
+            "not_exists"
+          ],
+          "default": "exists"
+        },
+        "value": {
+          "description": "What the operator compares with; absent for exists and not_exists."
+        },
+        "all": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/EdgeCondition"
+          }
+        },
+        "any": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/EdgeCondition"
+          }
+        },
+        "not": {
+          "$ref": "#/$defs/EdgeCondition"
+        }
+      }
+    },
+    "AgentReported": {
+      "additionalProperties": false,
+      "description": "Accept a settled customer's task report without independent validation.",
+      "properties": {
+        "kind": {
+          "const": "agent_reported",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "AgentReported",
+      "type": "object"
+    },
+    "FixedBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "const": "fixed",
+          "title": "Mode",
+          "type": "string"
+        },
+        "sandbox_id": {
+          "format": "uuid",
+          "title": "Sandbox Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode",
+        "sandbox_id"
+      ],
+      "title": "FixedBinding",
+      "type": "object"
+    },
+    "InheritBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "const": "inherit",
+          "title": "Mode",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "title": "InheritBinding",
+      "type": "object"
+    },
+    "JsonValue": {},
+    "Limits": {
+      "additionalProperties": false,
+      "properties": {
+        "max_iterations": {
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Max Iterations",
+          "type": "integer"
+        },
+        "deadline_seconds": {
+          "maximum": 604800,
+          "minimum": 1,
+          "title": "Deadline Seconds",
+          "type": "integer"
+        },
+        "max_iteration_seconds": {
+          "maximum": 1800,
+          "minimum": 1,
+          "title": "Max Iteration Seconds",
+          "type": "integer"
+        },
+        "max_model_requests": {
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Max Model Requests",
+          "type": "integer"
+        },
+        "max_input_tokens": {
+          "maximum": 100000000,
+          "minimum": 0,
+          "title": "Max Input Tokens",
+          "type": "integer"
+        },
+        "max_output_tokens": {
+          "maximum": 10000000,
+          "minimum": 0,
+          "title": "Max Output Tokens",
+          "type": "integer"
+        },
+        "max_command_seconds": {
+          "maximum": 1800,
+          "minimum": 1,
+          "title": "Max Command Seconds",
+          "type": "integer"
+        },
+        "max_no_progress_iterations": {
+          "maximum": 20,
+          "minimum": 1,
+          "title": "Max No Progress Iterations",
+          "type": "integer"
+        },
+        "max_iteration_turns": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Iteration Turns"
+        }
+      },
+      "required": [
+        "max_iterations",
+        "deadline_seconds",
+        "max_iteration_seconds",
+        "max_model_requests",
+        "max_input_tokens",
+        "max_output_tokens",
+        "max_command_seconds",
+        "max_no_progress_iterations"
+      ],
+      "title": "Limits",
+      "type": "object"
+    },
+    "RunnerValidation": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "runner_validation",
+          "title": "Kind",
+          "type": "string"
+        },
+        "validation_profile_id": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Validation Profile Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "validation_profile_id"
+      ],
+      "title": "RunnerValidation",
+      "type": "object"
+    },
+    "RuntimeBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "const": "runtime",
+          "title": "Mode",
+          "type": "string"
+        },
+        "input_path": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Input Path",
+          "type": "string"
+        },
+        "allowed_sandbox_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "maxItems": 100,
+          "minItems": 1,
+          "title": "Allowed Sandbox Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "mode",
+        "input_path",
+        "allowed_sandbox_ids"
+      ],
+      "title": "RuntimeBinding",
+      "type": "object"
+    },
+    "StructuredCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "operator": {
+          "enum": [
+            "eq",
+            "gte",
+            "lte"
+          ],
+          "title": "Operator",
+          "type": "string"
+        },
+        "expected": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Expected"
+        }
+      },
+      "required": [
+        "path",
+        "operator",
+        "expected"
+      ],
+      "title": "StructuredCheck",
+      "type": "object"
+    },
+    "StructuredContract": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "structured_contract",
+          "title": "Kind",
+          "type": "string"
+        },
+        "checks": {
+          "items": {
+            "$ref": "#/$defs/StructuredCheck"
+          },
+          "maxItems": 20,
+          "minItems": 1,
+          "title": "Checks",
+          "type": "array"
+        }
+      },
+      "required": [
+        "kind",
+        "checks"
+      ],
+      "title": "StructuredContract",
+      "type": "object"
+    },
+    "NodeConfig_api_request": {
+      "type": "object",
+      "title": "api_request config",
+      "description": "Calls an external API and passes the response to the next step.",
+      "properties": {
+        "method": {
+          "enum": [
+            "DELETE",
+            "GET",
+            "HEAD",
+            "OPTIONS",
+            "PATCH",
+            "POST",
+            "PUT"
+          ],
+          "default": "GET"
+        },
+        "url": {
+          "type": "string"
+        },
+        "auth": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "enum": [
+                "api_key",
+                "basic",
+                "bearer",
+                "header",
+                "none"
+              ],
+              "default": "none"
+            },
+            "token": {
+              "type": "string",
+              "description": "bearer token — prefer {{secret:key}}."
+            },
+            "username": {
+              "type": "string"
+            },
+            "password": {
+              "type": "string",
+              "description": "prefer {{secret:key}}."
+            },
+            "header_name": {
+              "type": "string"
+            },
+            "header_value": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "placement": {
+              "enum": [
+                "header",
+                "query"
+              ],
+              "default": "header"
+            }
+          }
+        },
+        "headers": {
+          "description": "Object or list of {name, value} rows."
+        },
+        "query": {
+          "description": "Object or list of {name, value} rows."
+        },
+        "body": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "enum": [
+                "form_urlencoded",
+                "json",
+                "none",
+                "raw"
+              ],
+              "default": "none"
+            },
+            "json": {
+              "type": "object"
+            },
+            "form": {
+              "description": "Object or list of {name, value} rows."
+            },
+            "raw": {
+              "type": "string"
+            },
+            "content_type": {
+              "type": "string"
+            }
+          }
+        },
+        "response": {
+          "type": "object",
+          "properties": {
+            "format": {
+              "enum": [
+                "auto",
+                "json",
+                "text"
+              ],
+              "default": "auto"
+            },
+            "body_path": {
+              "type": "string"
+            },
+            "include_headers": {
+              "type": "boolean"
+            }
+          }
+        },
+        "error_policy": {
+          "enum": [
+            "continue",
+            "fail"
+          ],
+          "default": "fail"
+        },
+        "output_mode": {
+          "enum": [
+            "merge",
+            "response"
+          ],
+          "default": "response"
+        },
+        "response_key": {
+          "type": "string"
+        },
+        "timeout_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 120,
+          "default": 30,
+          "description": "Seconds for ONE attempt, CAPPED at 120s by API_REQUEST_MAX_TIMEOUT_SECONDS — a larger value is refused at the write and reduced at runtime. This is not the node budget: the whole node, retries and body read included, is bounded by API_REQUEST_MAX_TOTAL_SECONDS."
+        },
+        "retry": {
+          "type": "object",
+          "properties": {
+            "max_retries": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "retryable_status_codes": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 300,
+                "maximum": 599
+              }
+            }
+          }
+        }
+      },
+      "additionalProperties": true,
+      "required": [
+        "url"
+      ],
+      "x-rules": [
+        "url is required.",
+        "GET/HEAD/OPTIONS requests must not send a configured body (body.mode must be 'none').",
+        "auth.mode='header' requires auth.header_name; auth.mode='api_key' requires auth.name and auth.placement in {header, query}.",
+        "Secret-bearing fields (auth.token/password/header_value, sensitive headers) should use {{secret:key}} references.",
+        "error_policy='fail' aborts the whole run on error unless an Error edge routes the failure.",
+        "retry.retryable_status_codes must be 3xx-5xx codes; a 3xx counts as not-ok here because redirects are not followed, while 1xx never arrives and a 2xx must not be re-sent."
+      ]
+    },
+    "NodeConfig_approval": {
+      "type": "object",
+      "title": "approval config",
+      "description": "Human-in-the-loop pause for review and approval.",
+      "properties": {
+        "title": {
+          "type": "string",
+          "default": "Approval required"
+        },
+        "instructions": {
+          "type": "string"
+        },
+        "allow_edit": {
+          "type": "boolean",
+          "default": false
+        },
+        "rejection_message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expires_after_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "on_expiry": {
+          "enum": [
+            "fail",
+            "reject"
+          ],
+          "default": "reject"
+        },
+        "approvers": {
+          "type": "object",
+          "description": "Who may decide: tenant roles and access groups, directly or in tiers chosen by a number the run carries. Absent: anyone who may decide approvals.",
+          "properties": {
+            "roles": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "tenant_analyst",
+                  "tenant_builder",
+                  "tenant_observer",
+                  "tenant_operator",
+                  "tenant_owner",
+                  "tenant_user"
+                ]
+              },
+              "maxItems": 50,
+              "description": "Tenant roles whose members may decide."
+            },
+            "groups": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "maxItems": 50,
+              "description": "Access group keys whose members may decide."
+            },
+            "by": {
+              "type": "string",
+              "description": "JSON path to the number that chooses the tier, e.g. $.run_state.amount."
+            },
+            "tiers": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 20,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "up_to": {
+                    "type": "number",
+                    "description": "Highest value of this tier, inclusive; the last tier has none."
+                  },
+                  "roles": {
+                    "type": "array",
+                    "items": {
+                      "enum": [
+                        "tenant_analyst",
+                        "tenant_builder",
+                        "tenant_observer",
+                        "tenant_operator",
+                        "tenant_owner",
+                        "tenant_user"
+                      ]
+                    },
+                    "maxItems": 50
+                  },
+                  "groups": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "maxItems": 50
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "forbid_self_approval": {
+          "type": "boolean",
+          "default": false,
+          "description": "Refuse a decision by the person who requested the approval: the platform user who chatted, or the chat user's linked platform user (same verified email). Absent means false; a node created in the Admin or through the node API is created with true."
+        }
+      },
+      "additionalProperties": true,
+      "x-rules": [
+        "Cannot run as a parallel-fanout branch (a fanout cannot suspend for a human).",
+        "approvers takes roles and groups directly, or tiers chosen by the number at approvers.by: the first tier whose up_to is at least the value applies, and the last tier, without up_to, takes every value above. A value that is not a number fails the node.",
+        "A decider matches approvers by their tenant role (a membership, not a platform role), or by an access group of the chat user in this workspace with their verified email. An API key matches no approver rule.",
+        "Every approval expires. Without expires_after_seconds the platform arms its own fallback (APPROVAL_DEFAULT_EXPIRY_SECONDS, 14 days by default) — set the key only to shorten or lengthen that, not to enable it.",
+        "When the expiry elapses without a decision, the platform resolves the approval per on_expiry — 'reject' continues through the rejection routing, 'fail' fails the run. on_expiry is honored with the platform fallback too, so it needs no expires_after_seconds of its own.",
+        "The expiry sweep covers trigger-started AND chat-started runs.",
+        "rejection_message replaces the generic denial notice shown when a rejection halts the run. Plain text, not a template — it reaches the end user verbatim."
+      ]
+    },
+    "NodeConfig_calendar_find_slot": {
+      "type": "object",
+      "title": "calendar_find_slot config",
+      "description": "Deterministic free/busy slot finder over a configured outbound calendar.",
+      "properties": {
+        "outbound_config_id": {
+          "type": "string",
+          "description": "UUID of the calendar outbound config."
+        },
+        "window": {
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string",
+              "description": "ISO datetime, a relative shortcut like 'now+5d', or a $.path into the node context."
+            },
+            "to": {
+              "type": "string",
+              "description": "ISO datetime, a relative shortcut like 'now+5d', or a $.path into the node context."
+            }
+          },
+          "required": [
+            "from",
+            "to"
+          ]
+        },
+        "duration_minutes": {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        },
+        "buffer_minutes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_results": {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        }
+      },
+      "additionalProperties": true,
+      "required": [
+        "outbound_config_id",
+        "window"
+      ],
+      "x-rules": [
+        "outbound_config_id must be a UUID.",
+        "window.from and window.to are required time expressions (ISO, 'now+5d', or $.path); to must be after from."
+      ]
+    },
+    "NodeConfig_calendar_wait_until": {
+      "type": "object",
+      "title": "calendar_wait_until config",
+      "description": "Pause until an absolute datetime or a calendar-event anchor (event start ± offset).",
+      "properties": {
+        "wait_kind": {
+          "enum": [
+            "absolute",
+            "event"
+          ]
+        },
+        "at": {
+          "type": "string",
+          "description": "ISO datetime, a relative shortcut like 'now+5d', or a $.path into the node context."
+        },
+        "event_ref": {
+          "type": "string",
+          "description": "$.path to an ISO start_at (or {start_at:...} object)."
+        },
+        "relative": {
+          "type": "object",
+          "properties": {
+            "offset_minutes": {
+              "type": "integer"
+            }
+          }
+        }
+      },
+      "additionalProperties": true,
+      "required": [
+        "wait_kind"
+      ],
+      "x-rules": [
+        "wait_kind='absolute' requires 'at'; wait_kind='event' requires 'event_ref'.",
+        "Pause node — cannot run as a parallel-fanout branch."
+      ]
+    },
+    "NodeConfig_chat_start": {
+      "type": "object",
+      "title": "chat_start config",
+      "description": "Graph entrypoint for chat / Playground / widget / API chat runs.",
+      "properties": {
+        "payload_schema": {
+          "type": "object",
+          "description": "Optional JSON Schema describing $.chat_payload — NOT this node's whole output."
+        },
+        "sample_payload": {
+          "type": "object",
+          "description": "Optional example payload for the Workbench. Its fields are reported downstream as observed, not guaranteed."
+        }
+      },
+      "additionalProperties": true,
+      "x-rules": [
+        "payload_schema, when set, must be a valid JSON Schema.",
+        "payload_schema describes $.chat_payload, not the node's output. The node always emits message, chat_payload, metadata, session_id, contact_id and conversation_id; attachments only when the run has some.",
+        "No layer validates an incoming chat_payload against payload_schema, so a read INSIDE it is reported as a warning rather than a guarantee — a run may arrive with it empty.",
+        "The same holds for a field that exists only because sample_payload showed it: observed, not promised. A field in neither stays an error, and a sample never weakens a schema.",
+        "output_schema is NOT read here: the runtime builds the envelope unconditionally."
+      ]
+    },
+    "NodeConfig_document_metadata": {
+      "type": "object",
+      "title": "document_metadata config",
+      "description": "Sink — writes structured output to the bound document's metadata (passes payload through).",
+      "properties": {
+        "document": {
+          "type": "string",
+          "description": "JSON path starting with '$' (e.g. $.previous_output.field)."
+        },
+        "fields": {
+          "type": "string",
+          "description": "JSON path starting with '$' (e.g. $.previous_output.field)."
+        },
+        "document_type": {
+          "type": "string"
+        },
+        "merge": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true,
+      "x-rules": [
+        "Superseded by document_save (no kb_id = metadata-only). Prefer document_save for new graphs.",
+        "'document' must be a JSON path ($.documents[0].id or $.loop.item.id) or empty for the context default."
+      ]
+    },
+    "NodeConfig_document_save": {
+      "type": "object",
+      "title": "document_save config",
+      "description": "Sink twin of save_document — files the document into a KB and/or writes metadata.",
+      "properties": {
+        "kb_id": {
+          "type": "string",
+          "description": "Target KB UUID, or empty for metadata-only."
+        },
+        "document": {
+          "type": "string",
+          "description": "JSON path starting with '$' (e.g. $.previous_output.field)."
+        },
+        "fields": {
+          "type": "string",
+          "description": "JSON path starting with '$' (e.g. $.previous_output.field)."
+        },
+        "document_type": {
+          "type": "string"
+        },
+        "merge": {
+          "type": "boolean"
+        },
+        "on_existing": {
+          "enum": [
+            "create",
+            "overwrite",
+            "skip"
+          ],
+          "default": "create"
+        },
+        "identity": {
+          "type": "string",
+          "description": "JSON path starting with '$' (e.g. $.previous_output.field)."
+        }
+      },
+      "additionalProperties": true,
+      "x-rules": [
+        "kb_id must be a UUID, or empty (metadata-only, to the document's existing placement).",
+        "'document', 'fields' and 'identity' must be SINGLE-VALUED JSON paths — the runtime reads one value from each and refuses a collection. Inside a documents loop bind $.loop.item.id (NOT a fixed $.documents[0], and no [*] wildcard).",
+        "Placement failures route the error edge.",
+        "on_existing selects what happens when the identity already exists: 'create' (default) always files a new document, 'overwrite' replaces the active generation, 'skip' leaves it alone. Both non-default modes REQUIRE 'identity' and 'kb_id' (identity is KB-scoped).",
+        "'identity' is only read when on_existing is 'overwrite' or 'skip'; with the default it is ignored.",
+        "A document already placed in a DIFFERENT KB keeps its placement (tool parity). The outcome then carries already_placed_elsewhere plus the configured_kb_id — nothing was written to the configured KB.",
+        "Filing into kb_id needs the tenant's Knowledge Base Ingestion (Settings → Documents) on every run, and for a document generated or uploaded in the run also an active KB with 'Documents into this KB' (accepts_email_attachments) enabled. overwrite/skip accept only such documents, so saving them against a KB without that opt-in is refused.",
+        "An empty 'document' binding means the current item inside a documents for_each, otherwise the run's single document; a run with several documents must bind one explicitly."
+      ]
+    },
+    "NodeConfig_for_each_item": {
+      "type": "object",
+      "title": "for_each_item config",
+      "description": "Iterates a list — runs the inner subgraph once per item, accumulates results.",
+      "properties": {
+        "source": {
+          "type": "string",
+          "description": "JSON path starting with '$' (e.g. $.previous_output.field)."
+        },
+        "item_key": {
+          "type": "string",
+          "default": "item",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "results_key": {
+          "type": "string",
+          "default": "for_each_results"
+        },
+        "max_iterations": {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        },
+        "mode": {
+          "enum": [
+            "sequential",
+            "map"
+          ],
+          "default": "sequential"
+        },
+        "max_concurrency": {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        }
+      },
+      "additionalProperties": true,
+      "required": [
+        "source"
+      ],
+      "x-rules": [
+        "source must be a JSON path resolving to a list.",
+        "item_key and results_key must be distinct identifiers; reserved keys __for_each_done/__for_each_index/__for_each_total/__for_each_truncated/__for_each_completion_reason are forbidden.",
+        "max_iterations is a SAFETY CAP, not a page size: when it stops the loop below the list length the done payload carries __for_each_truncated=true and __for_each_completion_reason='max_iterations'. Leave it unset for no per-loop cap; the run-level stage ceiling can still truncate the loop and then reports __for_each_completion_reason='stage_ceiling' (otherwise false / 'source_exhausted'). __for_each_index is then the number processed and __for_each_total the real list length — read them on the done branch before treating the results as complete.",
+        "Routes outward via CONDITION edges (body with source previous_output, path __for_each_done, operator equals, value false, plus a done/default branch), re-entering via a pipeline back-edge.",
+        "mode=sequential is the default and re-enters the loop once per item.",
+        "mode=map processes items concurrently and emits the done payload in one beat only when the master switch and tenant feature flag are enabled, debug step-by-step is off, and the loop has a single safe agent body whose only pipeline output returns to the loop. A body agent that reads/writes Run State or holds side-effecting tools, a multi-node body, or any disabled gate falls back to sequential execution.",
+        "max_concurrency bounds in-flight items in mode=map, subject to the platform per-node and process caps; it has no concurrency effect in mode=sequential. Concurrent items may finish in any order, but result order remains input order."
+      ]
+    },
+    "NodeConfig_harness_call": {
+      "type": "object",
+      "title": "harness_call config",
+      "description": "Run another same-tenant harness synchronously as a sub-workflow; map input in and output back.",
+      "properties": {
+        "target_harness_id": {
+          "type": "string",
+          "description": "Target harness UUID (authoritative binding)."
+        },
+        "target_harness_slug": {
+          "type": "string",
+          "description": "Target harness slug (portable fallback)."
+        },
+        "input_mapping": {
+          "type": "object",
+          "minProperties": 1,
+          "description": "child input key → expression (transform vocabulary); OMIT the key entirely to pass the previous payload through — an empty object is rejected."
+        },
+        "output_path": {
+          "type": "string",
+          "description": "Optional $.path narrowing the child's output."
+        }
+      },
+      "additionalProperties": true,
+      "x-rules": [
+        "Requires target_harness_id or target_harness_slug.",
+        "input_mapping must be an object of { inputKey: expression } with at least one key; omit the key entirely to pass the previous payload through.",
+        "output_path, when set, must be a non-empty JSONPath string.",
+        "Same-tenant only; the called harness must not contain pausing nodes (wait/approval/poll_until/calendar_wait_until)."
+      ]
+    },
+    "NodeConfig_join": {
+      "type": "object",
+      "title": "join config",
+      "description": "Explicit fan-in that reconverges a parallel fanout's branches.",
+      "properties": {
+        "merge_mode": {
+          "enum": [
+            "array",
+            "object_by_branch",
+            "template_json",
+            "template_text"
+          ],
+          "default": "object_by_branch"
+        },
+        "template": {
+          "type": "string"
+        },
+        "baustein_error_policy": {
+          "enum": [
+            "fail",
+            "empty_with_warning"
+          ],
+          "default": "fail",
+          "description": "Unavailable text blocks abort the node, or substitute empty text with a visible warning."
+        }
+      },
+      "additionalProperties": true,
+      "x-rules": [
+        "A Join consumes a {branches:{...}} payload that ONLY a parallel fanout produces — feed it from fanout branches.",
+        "merge_mode 'template_json'/'template_text' require a 'template'.",
+        "The timeout_seconds key is legacy metadata that is still accepted but changes no Join behavior; Join has no timeout.",
+        "When the fanout policy is continue_on_error or route_errors, the merge input carries 'branch_failures' (branch, status, error) beside 'branches', and a failed branch's own value is an error hull ({error:{...}}). A template merge that reads a normal branch field on that hull renders an EMPTY STRING — render branch_failures (or check it) so a degraded merge cannot pass for a complete one."
+      ]
+    },
+    "NodeConfig_masterloop": {
+      "type": "object",
+      "title": "MasterloopNodeConfig",
+      "description": "Bounded durable iterations in a trigger-backed workflow, with verified terminal completion.",
+      "properties": {
+        "version": {
+          "const": "masterloop.v1",
+          "title": "Version",
+          "type": "string"
+        },
+        "iteration_harness_id": {
+          "format": "uuid",
+          "title": "Iteration Harness Id",
+          "type": "string"
+        },
+        "goal": {
+          "maxLength": 8192,
+          "minLength": 1,
+          "title": "Goal",
+          "type": "string"
+        },
+        "sandbox_binding": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InheritBinding"
+            },
+            {
+              "$ref": "#/$defs/FixedBinding"
+            },
+            {
+              "$ref": "#/$defs/RuntimeBinding"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Sandbox Binding"
+        },
+        "initial_input": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "maxProperties": 100,
+          "title": "Initial Input",
+          "type": "object"
+        },
+        "completion_policy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunnerValidation"
+            },
+            {
+              "$ref": "#/$defs/StructuredContract"
+            },
+            {
+              "$ref": "#/$defs/AgentReported"
+            }
+          ],
+          "title": "Completion Policy"
+        },
+        "limits": {
+          "$ref": "#/$defs/Limits"
+        },
+        "config_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Config Version",
+          "type": "integer"
+        },
+        "input_mapping": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "maxProperties": 100,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Mapping"
+        },
+        "output_mapping": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "maxProperties": 100,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Mapping"
+        },
+        "goal_expression": {
+          "$ref": "#/$defs/JsonValue",
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "iteration_harness_id",
+        "goal",
+        "sandbox_binding",
+        "initial_input",
+        "completion_policy",
+        "limits"
+      ],
+      "x-rules": [
+        "Requires an eligible same-tenant iteration harness and the original root execution identity.",
+        "Only trigger-backed single-visit DAGs are supported; no nesting, chat, sync call or parallel body.",
+        "Input and output mappings use ordinary expressions; output projection cannot change trusted evidence.",
+        "Empty input_mapping produces an empty input; literal initial_input must then be empty.",
+        "Runtime Sandbox selection must stay within the configured allowlist and current root authority.",
+        "Deployment limits and current permissions are checked at admission and before execution."
+      ]
+    },
+    "NodeConfig_mcp_tool_call": {
+      "type": "object",
+      "title": "mcp_tool_call config",
+      "description": "Calls one selected MCP tool from one configured MCP server with the incoming payload.",
+      "properties": {
+        "mcp_server_slug": {
+          "type": "string",
+          "description": "Stable slug of an active configured MCP server from the Tools page."
+        },
+        "mcp_server_name": {
+          "type": "string",
+          "description": "Display name snapshot for the workbench."
+        },
+        "mcp_tool_name": {
+          "type": "string",
+          "description": "Selected MCP tool name from discovery."
+        },
+        "mcp_tool_title": {
+          "type": "string",
+          "description": "Display title snapshot from discovery."
+        },
+        "mcp_tool_description": {
+          "type": "string",
+          "description": "Description snapshot from discovery."
+        },
+        "input_schema": {
+          "type": "object",
+          "description": "Discovered MCP tool JSON Schema; previous_output is passed directly."
+        },
+        "output_schema": {
+          "type": "object",
+          "description": "Optional JSON Schema for the MCP tool result."
+        },
+        "sample_output": {
+          "description": "Optional sample result used by the UI to infer output shape."
+        },
+        "output_format": {
+          "enum": [
+            "auto",
+            "json",
+            "text"
+          ],
+          "default": "auto"
+        }
+      },
+      "additionalProperties": true,
+      "x-rules": [
+        "requires mcp_server_slug and mcp_tool_name once configured.",
+        "MCP server setup, credentials, OAuth, and transport configuration stay on the Tools page.",
+        "the incoming previous_output must satisfy input_schema when one is declared.",
+        "sample_output and output_schema are alternatives; set only one."
+      ]
+    },
+    "NodeConfig_output": {
+      "type": "object",
+      "title": "output config",
+      "description": "Terminal-ish sink representing the run's final response / delivery.",
+      "properties": {
+        "mode": {
+          "enum": [
+            "artifact",
+            "conversation_message",
+            "email",
+            "log_only",
+            "webhook_callback"
+          ],
+          "default": "log_only"
+        },
+        "result_source": {
+          "enum": [
+            "json_mapping",
+            "payload",
+            "run_state",
+            "text_template"
+          ],
+          "default": "payload"
+        },
+        "response_path": {
+          "type": "string",
+          "description": "JSON path starting with '$' (e.g. $.previous_output.field)."
+        },
+        "run_state_path": {
+          "type": "string",
+          "description": "JSON path starting with '$' (e.g. $.previous_output.field)."
+        },
+        "template": {
+          "type": "string"
+        },
+        "mapping": {
+          "type": "object"
+        },
+        "target_mode": {
+          "enum": [
+            "flat",
+            "path"
+          ],
+          "default": "flat"
+        },
+        "artifact_types": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "delivery": {
+          "type": "object",
+          "description": "Delivery target sub-object (callback_url for webhook_callback, email_to for email)."
+        },
+        "baustein_error_policy": {
+          "enum": [
+            "fail",
+            "empty_with_warning"
+          ],
+          "default": "fail",
+          "description": "Unavailable text blocks abort the node, or substitute empty text with a visible warning."
+        }
+      },
+      "additionalProperties": true,
+      "x-rules": [
+        "mode='webhook_callback' REQUIRES a non-empty callback_url (config.delivery.callback_url or config.callback_url) — no payload fallback.",
+        "mode='email' should set a recipient (delivery.email_to or email_to); otherwise it falls back to run.payload.email_to (warning).",
+        "result_source='text_template' requires a 'template'; 'json_mapping' requires a 'mapping'."
+      ]
+    },
+    "NodeConfig_poll_until": {
+      "type": "object",
+      "title": "poll_until config",
+      "description": "Checks deterministic state on an interval until a condition is met.",
+      "properties": {
+        "check": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "enum": [
+                "run_state_path",
+                "uploaded_document_status"
+              ]
+            },
+            "path": {
+              "type": "string",
+              "description": "JSON path starting with '$' (e.g. $.previous_output.field)."
+            },
+            "file_selector": {
+              "type": "object",
+              "properties": {
+                "mode": {
+                  "enum": [
+                    "file_id_path",
+                    "latest_conversation_file"
+                  ],
+                  "default": "latest_conversation_file"
+                },
+                "source": {
+                  "enum": [
+                    "chat_payload",
+                    "metadata",
+                    "previous_output",
+                    "run_state",
+                    "trigger_payload"
+                  ]
+                },
+                "scope": {
+                  "enum": [
+                    "conversation",
+                    "user",
+                    "tenant_kb"
+                  ],
+                  "default": "conversation"
+                }
+              }
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        "condition": {
+          "type": "object",
+          "description": "{path, operator, value} — see condition operators."
+        },
+        "failure_condition": {
+          "type": "object"
+        },
+        "interval_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 5,
+          "description": "Seconds between attempts, CAPPED by backoff.max_interval_seconds — which defaults to 30s even with the default 'fixed' strategy. A longer interval needs backoff.max_interval_seconds raised to match."
+        },
+        "max_attempts": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "default": 24
+        },
+        "timeout_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "payload_policy": {
+          "enum": [
+            "check_result",
+            "merge_check_result",
+            "preserve_input"
+          ],
+          "default": "merge_check_result"
+        },
+        "on_timeout": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "enum": [
+                "continue",
+                "fail",
+                "pause_external_event"
+              ],
+              "default": "fail"
+            },
+            "resume_event": {
+              "type": "string"
+            }
+          }
+        },
+        "backoff": {
+          "type": "object",
+          "properties": {
+            "strategy": {
+              "enum": [
+                "exponential",
+                "fixed"
+              ],
+              "default": "fixed"
+            },
+            "max_interval_seconds": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "default": 30,
+              "description": "Upper bound on every wait between attempts, 'fixed' strategy included."
+            }
+          }
+        }
+      },
+      "additionalProperties": true,
+      "required": [
+        "check",
+        "condition"
+      ],
+      "x-rules": [
+        "REQUIRED: a 'condition' success-condition object {path, operator, value} — the node polls until this is met (regardless of check.type).",
+        "check.type='run_state_path' requires check.path; 'uploaded_document_status' requires check.file_selector.",
+        "on_timeout.action='pause_external_event' requires on_timeout.resume_event.",
+        "backoff.strategy must be 'fixed' or 'exponential'; backoff.max_interval_seconds must be positive.",
+        "The effective wait is min(interval_seconds, backoff.max_interval_seconds), and max_interval_seconds defaults to 30s — so interval_seconds above 30 does nothing unless backoff.max_interval_seconds is raised with it."
+      ]
+    },
+    "NodeConfig_router": {
+      "type": "object",
+      "title": "router config",
+      "description": "Conditional branching node — routes outward via condition edges.",
+      "properties": {
+        "strategy": {
+          "type": "string",
+          "default": "condition",
+          "description": "Label only — a router always routes by its condition edges."
+        },
+        "default_branch": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "deprecated": true,
+          "description": "Legacy metadata that changes no routing; the default lives on a condition edge."
+        }
+      },
+      "additionalProperties": false,
+      "x-rules": [
+        "A router routes via outgoing CONDITION edges (not pipeline). Wire at least one, and ideally a default branch.",
+        "The fallback lives ON THE EDGE: set config.default=true on exactly one outgoing condition edge. The runtime reads nothing else — a `default_branch` on the NODE config is legacy metadata that is still accepted but changes no routing.",
+        "Evaluation order is edge config.priority, an INTEGER, lowest first; the default edge runs last. Give sibling branches distinct priorities — on a tie the order falls back to the edge id."
+      ]
+    },
+    "NodeConfig_state_update": {
+      "type": "object",
+      "title": "state_update config",
+      "description": "Deterministically writes selected payload values into Run State.",
+      "properties": {
+        "mode": {
+          "const": "patch",
+          "default": "patch"
+        },
+        "writes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "state_path": {
+                "type": "string",
+                "description": "Dotted Run State path."
+              },
+              "path": {
+                "type": "string",
+                "description": "Alias for state_path."
+              },
+              "op": {
+                "enum": [
+                  "add",
+                  "append",
+                  "delete",
+                  "prepend",
+                  "remove",
+                  "remove_at",
+                  "replace",
+                  "set",
+                  "unset"
+                ],
+                "default": "replace"
+              },
+              "skip_when": {
+                "enum": [
+                  "absent",
+                  "absent_or_null",
+                  "never"
+                ],
+                "default": "never"
+              },
+              "ignore_missing": {
+                "type": "boolean",
+                "description": "Legacy alias for skip_when='absent'."
+              },
+              "ignore_missing_source": {
+                "type": "boolean",
+                "description": "Legacy alias for skip_when='absent'."
+              },
+              "source": {
+                "type": "string",
+                "description": "JSON path starting with '$' (e.g. $.previous_output.field)."
+              },
+              "value": {
+                "description": "Literal value."
+              },
+              "expression": {
+                "description": "Calculation/literal/text expression."
+              },
+              "template": {
+                "type": "string"
+              }
+            },
+            "anyOf": [
+              {
+                "required": [
+                  "state_path"
+                ]
+              },
+              {
+                "required": [
+                  "path"
+                ]
+              }
+            ]
+          }
+        },
+        "baustein_error_policy": {
+          "enum": [
+            "fail",
+            "empty_with_warning"
+          ],
+          "default": "fail",
+          "description": "Unavailable text blocks abort the node, or substitute empty text with a visible warning."
+        }
+      },
+      "additionalProperties": true,
+      "required": [
+        "writes"
+      ],
+      "x-rules": [
+        "mode must be 'patch'.",
+        "each write needs a state_path (or its 'path' alias) and (unless op deletes: delete/unset/remove/remove_at) one of source/value/expression/template.",
+        "write.source must be a JSON path ('$...').",
+        "skip_when must be never, absent, or absent_or_null. The legacy ignore_missing and ignore_missing_source booleans mean absent only; an explicit skip_when takes precedence.",
+        "op 'add' is an ALIAS FOR 'append' — it pushes onto the array at state_path. It does NOT add numbers: for arithmetic use op 'replace' with expression {op:'add', left, right}."
+      ]
+    },
+    "NodeConfig_structured_save": {
+      "type": "object",
+      "title": "structured_save config",
+      "description": "Atomically upsert, update or replace a structured KB from an array of records.",
+      "properties": {
+        "kb_id": {
+          "type": "string",
+          "description": "Target structured KB UUID."
+        },
+        "kb_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Portable package binding; import resolves it to the target tenant's KB UUID."
+        },
+        "records": {
+          "type": "string",
+          "description": "JSON path starting with '$' (e.g. $.previous_output.field)."
+        },
+        "mode": {
+          "enum": [
+            "replace_snapshot",
+            "update",
+            "upsert"
+          ],
+          "default": "upsert"
+        },
+        "allow_empty": {
+          "type": "boolean",
+          "default": false,
+          "description": "replace_snapshot only: true lets an empty records array clear the table."
+        }
+      },
+      "additionalProperties": true,
+      "anyOf": [
+        {
+          "required": [
+            "kb_id"
+          ]
+        },
+        {
+          "required": [
+            "kb_name"
+          ]
+        }
+      ],
+      "x-rules": [
+        "Live graph configs require kb_id and never carry kb_name beside it; portable v3 packages may use kb_name and import resolves it.",
+        "The resolved target must be a ready structured KB in the current tenant whose primary key is a declared single-column PRIMARY KEY or UNIQUE index of its SQLite table.",
+        "records must resolve to an array of objects (default: $.previous_output).",
+        "replace_snapshot replaces the complete selected table; upsert preserves absent rows; update changes only the supplied columns of rows that already exist.",
+        "upsert writes complete rows: each record must carry every NOT NULL column without a default, even for a key that exists. update needs the primary key plus at least one other column in every record, and every key must already exist — one missing key fails the whole batch (record_not_found) and nothing is written.",
+        "An empty records array fails upsert and update, and fails replace_snapshot unless allow_empty is true. allow_empty must be a boolean and applies only to replace_snapshot.",
+        "One run writes at most 500 records and 2 MB of JSON, so a replace_snapshot table holds at most that many rows afterwards; load larger datasets through the upload/indexing workflow."
+      ]
+    },
+    "NodeConfig_tool_call": {
+      "type": "object",
+      "title": "tool_call config",
+      "description": "Calls one selected function-style tool with the incoming payload.",
+      "properties": {
+        "tool_definition_id": {
+          "type": "string",
+          "description": "Selected ToolDefinition UUID."
+        },
+        "tool_slug": {
+          "type": "string",
+          "description": "Stable tool slug used to resolve imported packages when ids differ."
+        },
+        "tool_name": {
+          "type": "string",
+          "description": "Display name snapshot for the workbench."
+        },
+        "tool_type": {
+          "enum": [
+            "builtin",
+            "webhook"
+          ],
+          "description": "Tool family snapshot."
+        },
+        "config_overrides": {
+          "type": "object",
+          "description": "Node-local overrides layered after tenant binding/default config."
+        },
+        "input_schema": {
+          "type": "object",
+          "description": "JSON Schema for the tool arguments; previous_output is passed directly."
+        },
+        "output_schema": {
+          "type": "object",
+          "description": "Optional JSON Schema for the tool result."
+        },
+        "sample_output": {
+          "description": "Optional sample result used by the UI to infer output shape."
+        },
+        "output_format": {
+          "enum": [
+            "auto",
+            "json",
+            "text"
+          ],
+          "default": "auto"
+        }
+      },
+      "additionalProperties": true,
+      "x-rules": [
+        "requires tool_definition_id or tool_slug.",
+        "only function-style built-ins and webhooks are executable; MCP servers and hosted-only tools are rejected at runtime.",
+        "the incoming previous_output must satisfy input_schema when one is declared.",
+        "sample_output and output_schema are alternatives; set only one."
+      ]
+    },
+    "NodeConfig_transform": {
+      "type": "object",
+      "title": "transform config",
+      "description": "Deterministic payload reshaping between graph stages.",
+      "properties": {
+        "mode": {
+          "enum": [
+            "json_mapping",
+            "template_json",
+            "template_text"
+          ],
+          "default": "json_mapping"
+        },
+        "target_mode": {
+          "enum": [
+            "flat",
+            "path"
+          ],
+          "default": "flat"
+        },
+        "mapping": {
+          "type": "object",
+          "description": "field -> JSON-path | literal | calc | text-template | optional get."
+        },
+        "template": {
+          "type": "string"
+        },
+        "output_schema": {
+          "type": "object",
+          "description": "Optional JSON Schema for the output."
+        },
+        "baustein_error_policy": {
+          "enum": [
+            "fail",
+            "empty_with_warning"
+          ],
+          "default": "fail",
+          "description": "Unavailable text blocks abort the node, or substitute empty text with a visible warning."
+        }
+      },
+      "additionalProperties": true,
+      "x-rules": [
+        "mode='json_mapping' requires a 'mapping' object; 'template_json'/'template_text' require a 'template' string.",
+        "mode='template_json': interpolate every value through the tojson filter and do NOT quote it — write '\"field\": {{ $path | tojson }}', never '\"field\": \"{{ $path }}\"'. tojson emits the quotes itself and escapes \", newlines and backslashes; bare interpolation writes str(value) into the JSON source, so a quote or newline in the data makes the node fail with 'rendered invalid JSON', and a dict/None/True lands as {'k': 'v'} / \"None\" / \"True\".",
+        "templates read a payload key that shares a dict method name (items, keys, values, get) with subscript syntax: {{ previous_output['items'] }}. Jinja resolves attribute before key, so {{ previous_output.items }} yields the bound method, not the data.",
+        "an undefined template reference renders as an empty string rather than failing; the run records it as template_undefined on the node result. Guard optional fields with the default filter ({{ $path | default('') }}) so the intent is visible.",
+        "templates may reference approved text blocks via {{baustein:slug}} (requires the WORKFLOW_CATALOG feature); unavailable blocks follow baustein_error_policy (default: fail).",
+        "mapping string expressions must be JSON paths ('$...'); object expressions are {op:'literal'|'text'|add|subtract|multiply|divide}, a nested object {key: expression, ...}, an array op {op:'map'|'filter'|'reduce'|'length'|'unique'|'sort'|'flatten', over:<list path/op>}, a shape op {op:'concat'|'format'|'round'|'pick'|'merge'}, an optional read {op:'get', path:<JSON path>, default:<any>} that resolves to `default` instead of failing when the path is absent, or a date op {op:'now'|'parse_date'|'format_date'|'date_add'|'date_diff'} (UTC ISO-8601)."
+      ]
+    },
+    "NodeConfig_trigger_start": {
+      "type": "object",
+      "title": "trigger_start config",
+      "description": "Graph entrypoint bound to one trigger in the current harness.",
+      "properties": {
+        "trigger_slug": {
+          "type": "string",
+          "description": "Slug of a trigger in this harness."
+        },
+        "output_schema": {
+          "type": "object",
+          "description": "Optional override of what this node guarantees downstream."
+        },
+        "payload_schema": {
+          "type": "object",
+          "description": "Optional JSON Schema for the trigger payload, when the node declares it."
+        },
+        "input_schema": {
+          "type": "object",
+          "deprecated": true,
+          "description": "Legacy name of payload_schema."
+        },
+        "sample_payload": {
+          "type": "object",
+          "description": "An example payload; not enforced."
+        },
+        "demo_payload": {
+          "type": "object",
+          "description": "The editor's test payload; not enforced."
+        },
+        "demo_document_names": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "demo_request_context": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": true,
+      "required": [
+        "trigger_slug"
+      ],
+      "x-rules": [
+        "config.trigger_slug must reference a trigger that exists in this harness.",
+        "What the node guarantees downstream is decided in this order: config.output_schema, then config.payload_schema (or the legacy input_schema), then the BOUND trigger's own payload_schema. Only the last one is enforced anywhere — a webhook body that misses it is rejected with 422.",
+        "Each Trigger Start carries the schema of ITS trigger, not the merge of every trigger in the harness — a run only ever sees the payload of the trigger that fired.",
+        "A read of $.trigger_payload.task_prompt / .session_id / .document_bindings is reported as a warning, not a guarantee: those are injected only when the trigger is configured to extract them. The same applies to those fields under $.previous_output right after this node, where the same payload arrives.",
+        "A field that exists only because the BOUND TRIGGER's sample_payload showed it is reported the same way: nothing validates an incoming body against a sample, so it is observed, not promised. A field in NEITHER the sample nor the payload_schema stays an error. And a sample never weakens a schema — a required field the sample omits is still guaranteed. A sample_payload on THIS NODE is Workbench-only and read by neither rule."
+      ]
+    },
+    "NodeConfig_wait": {
+      "type": "object",
+      "title": "wait config",
+      "description": "Pauses graph execution until a duration, datetime, or external event.",
+      "properties": {
+        "mode": {
+          "enum": [
+            "duration",
+            "external_event",
+            "until_datetime"
+          ],
+          "default": "duration"
+        },
+        "duration_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "until_datetime": {
+          "type": "string",
+          "description": "ISO datetime."
+        },
+        "resume_event": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true,
+      "x-rules": [
+        "mode='duration' requires positive duration_seconds; 'until_datetime' requires an ISO until_datetime; 'external_event' requires a resume_event."
+      ]
+    },
+    "EdgeConfig_condition": {
+      "type": "object",
+      "title": "condition edge config",
+      "description": "One branch out of a router or a for_each_item node. The fallback is the one edge with default: true; the others are tried by priority, lowest first. Into an agent, the stage keys of a pipeline edge apply too.",
+      "properties": {
+        "branch_key": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The branch's name, such as body or done."
+        },
+        "priority": {
+          "type": "integer",
+          "description": "Evaluation order, lowest first; not a float."
+        },
+        "default": {
+          "type": "boolean",
+          "description": "The branch taken when no other matches."
+        },
+        "condition": {
+          "$ref": "#/$defs/EdgeCondition",
+          "description": "Required unless default is true."
+        },
+        "payload_mode": {
+          "enum": [
+            "auto",
+            "structured_json",
+            "text"
+          ],
+          "default": "auto",
+          "description": "How the previous output reaches the next stage."
+        },
+        "input_template": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "A template for the next stage's input; no text-block markers."
+        },
+        "require_structured_output": {
+          "type": "boolean",
+          "default": false
+        },
+        "on_invalid_output": {
+          "enum": [
+            "fail"
+          ],
+          "default": "fail"
+        },
+        "include_conversation_history": {
+          "type": "boolean",
+          "default": false
+        },
+        "include_run_state": {
+          "type": "boolean",
+          "default": true
+        },
+        "include_memory": {
+          "type": "boolean",
+          "default": true
+        },
+        "include_images": {
+          "type": "boolean",
+          "default": false,
+          "description": "Legacy form of forward_attachments."
+        },
+        "forward_attachments": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kinds": {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "audio",
+                      "document",
+                      "image"
+                    ]
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "max_stage_turns": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Turn limit of the agent this edge starts. Unset is the tenant's limit."
+        },
+        "execution": {
+          "enum": [
+            "linear",
+            "parallel"
+          ],
+          "default": "linear"
+        },
+        "fanout": {
+          "type": "boolean",
+          "default": false
+        },
+        "max_concurrency": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "failure_policy": {
+          "enum": [
+            "continue_on_error",
+            "fail_fast",
+            "route_errors",
+            "wait_all_then_fail"
+          ],
+          "default": "fail_fast"
+        }
+      },
+      "additionalProperties": false
+    },
+    "EdgeConfig_error": {
+      "type": "object",
+      "title": "error edge config",
+      "description": "Taken when the source fails. Into an agent, the stage keys of a pipeline edge apply too.",
+      "properties": {
+        "error_filter": {
+          "type": "object",
+          "properties": {
+            "classes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "match_message": {
+              "type": "string"
+            }
+          },
+          "description": "Which failures this edge takes; absent takes every failure."
+        },
+        "payload_mode": {
+          "enum": [
+            "auto",
+            "structured_json",
+            "text"
+          ],
+          "default": "auto",
+          "description": "How the previous output reaches the next stage."
+        },
+        "input_template": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "A template for the next stage's input; no text-block markers."
+        },
+        "require_structured_output": {
+          "type": "boolean",
+          "default": false
+        },
+        "on_invalid_output": {
+          "enum": [
+            "fail"
+          ],
+          "default": "fail"
+        },
+        "include_conversation_history": {
+          "type": "boolean",
+          "default": false
+        },
+        "include_run_state": {
+          "type": "boolean",
+          "default": true
+        },
+        "include_memory": {
+          "type": "boolean",
+          "default": true
+        },
+        "include_images": {
+          "type": "boolean",
+          "default": false,
+          "description": "Legacy form of forward_attachments."
+        },
+        "forward_attachments": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kinds": {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "audio",
+                      "document",
+                      "image"
+                    ]
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "max_stage_turns": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Turn limit of the agent this edge starts. Unset is the tenant's limit."
+        },
+        "execution": {
+          "enum": [
+            "linear",
+            "parallel"
+          ],
+          "default": "linear"
+        },
+        "fanout": {
+          "type": "boolean",
+          "default": false
+        },
+        "max_concurrency": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "failure_policy": {
+          "enum": [
+            "continue_on_error",
+            "fail_fast",
+            "route_errors",
+            "wait_all_then_fail"
+          ],
+          "default": "fail_fast"
+        }
+      },
+      "additionalProperties": false
+    },
+    "EdgeConfig_pipeline": {
+      "type": "object",
+      "title": "pipeline edge config",
+      "description": "Hands the source's output to the target. The loader refuses any other key.",
+      "properties": {
+        "payload_mode": {
+          "enum": [
+            "auto",
+            "structured_json",
+            "text"
+          ],
+          "default": "auto",
+          "description": "How the previous output reaches the next stage."
+        },
+        "input_template": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "A template for the next stage's input; no text-block markers."
+        },
+        "require_structured_output": {
+          "type": "boolean",
+          "default": false
+        },
+        "on_invalid_output": {
+          "enum": [
+            "fail"
+          ],
+          "default": "fail"
+        },
+        "include_conversation_history": {
+          "type": "boolean",
+          "default": false
+        },
+        "include_run_state": {
+          "type": "boolean",
+          "default": true
+        },
+        "include_memory": {
+          "type": "boolean",
+          "default": true
+        },
+        "include_images": {
+          "type": "boolean",
+          "default": false,
+          "description": "Legacy form of forward_attachments."
+        },
+        "forward_attachments": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kinds": {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "audio",
+                      "document",
+                      "image"
+                    ]
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "max_stage_turns": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Turn limit of the agent this edge starts. Unset is the tenant's limit."
+        },
+        "execution": {
+          "enum": [
+            "linear",
+            "parallel"
+          ],
+          "default": "linear"
+        },
+        "fanout": {
+          "type": "boolean",
+          "default": false
+        },
+        "max_concurrency": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "failure_policy": {
+          "enum": [
+            "continue_on_error",
+            "fail_fast",
+            "route_errors",
+            "wait_all_then_fail"
+          ],
+          "default": "fail_fast"
+        }
+      },
+      "additionalProperties": false
+    },
+    "TriggerConfig_calendar_event_received": {
+      "type": "object",
+      "title": "calendar_event_received trigger config",
+      "description": "Fires on a calendar event; the inbound config holds the provider detail.",
+      "properties": {
+        "sample_payload": {
+          "type": "object",
+          "description": "An example payload for the editor; not enforced."
+        },
+        "payload_schema": {
+          "type": "object",
+          "description": "JSON Schema of the payload; a webhook body must match it."
+        },
+        "state_model_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "The Run State model runs start with."
+        },
+        "state_seed_mapping": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Run State path to payload path, copied in when a run starts."
+        },
+        "conversation_id": {
+          "type": "string",
+          "description": "A fixed conversation the runs write into."
+        },
+        "inbound_config_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_body_mode": {
+          "enum": [
+            "full",
+            "minimal"
+          ]
+        },
+        "payload_version": {
+          "const": 1
+        }
+      },
+      "additionalProperties": true
+    },
+    "TriggerConfig_channel": {
+      "type": "object",
+      "title": "channel trigger config",
+      "description": "Fires on a message in a connected channel.",
+      "properties": {
+        "sample_payload": {
+          "type": "object",
+          "description": "An example payload for the editor; not enforced."
+        },
+        "payload_schema": {
+          "type": "object",
+          "description": "JSON Schema of the payload; a webhook body must match it."
+        },
+        "state_model_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "The Run State model runs start with."
+        },
+        "state_seed_mapping": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Run State path to payload path, copied in when a run starts."
+        },
+        "conversation_id": {
+          "type": "string",
+          "description": "A fixed conversation the runs write into."
+        }
+      },
+      "additionalProperties": true
+    },
+    "TriggerConfig_email_received": {
+      "type": "object",
+      "title": "email_received trigger config",
+      "description": "Fires on an email to a connected mailbox; the mailbox holds the provider detail.",
+      "properties": {
+        "sample_payload": {
+          "type": "object",
+          "description": "An example payload for the editor; not enforced."
+        },
+        "payload_schema": {
+          "type": "object",
+          "description": "JSON Schema of the payload; a webhook body must match it."
+        },
+        "state_model_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "The Run State model runs start with."
+        },
+        "state_seed_mapping": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Run State path to payload path, copied in when a run starts."
+        },
+        "conversation_id": {
+          "type": "string",
+          "description": "A fixed conversation the runs write into."
+        },
+        "mailbox_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "email_body_mode": {
+          "enum": [
+            "full",
+            "full_summarized",
+            "stripped"
+          ]
+        },
+        "quote_original_in_reply": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    },
+    "TriggerConfig_schedule": {
+      "type": "object",
+      "title": "schedule trigger config",
+      "description": "Fires on a cron expression or an interval; an active schedule needs one of them.",
+      "properties": {
+        "sample_payload": {
+          "type": "object",
+          "description": "An example payload for the editor; not enforced."
+        },
+        "payload_schema": {
+          "type": "object",
+          "description": "JSON Schema of the payload; a webhook body must match it."
+        },
+        "state_model_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "The Run State model runs start with."
+        },
+        "state_seed_mapping": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Run State path to payload path, copied in when a run starts."
+        },
+        "conversation_id": {
+          "type": "string",
+          "description": "A fixed conversation the runs write into."
+        },
+        "cron_expression": {
+          "type": "string",
+          "minLength": 1
+        },
+        "interval_minutes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "timezone": {
+          "type": "string",
+          "description": "IANA timezone of the cron expression."
+        },
+        "concurrency_policy": {
+          "enum": [
+            "allow",
+            "queue",
+            "skip"
+          ],
+          "default": "skip"
+        },
+        "input": {
+          "type": "object",
+          "properties": {
+            "task_prompt": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "output": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": true
+    },
+    "TriggerConfig_webhook": {
+      "type": "object",
+      "title": "webhook trigger config",
+      "description": "Fires on an inbound HTTP request.",
+      "properties": {
+        "sample_payload": {
+          "type": "object",
+          "description": "An example payload for the editor; not enforced."
+        },
+        "payload_schema": {
+          "type": "object",
+          "description": "JSON Schema of the payload; a webhook body must match it."
+        },
+        "state_model_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "The Run State model runs start with."
+        },
+        "state_seed_mapping": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Run State path to payload path, copied in when a run starts."
+        },
+        "conversation_id": {
+          "type": "string",
+          "description": "A fixed conversation the runs write into."
+        },
+        "execution_mode": {
+          "enum": [
+            "async",
+            "sync"
+          ]
+        },
+        "auth_mode": {
+          "enum": [
+            "secret_header",
+            "none"
+          ],
+          "description": "secret_header checks header_name and secret_value; absent or none checks nothing."
+        },
+        "header_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Required with secret_header."
+        },
+        "secret_value": {
+          "type": "string",
+          "description": "Required with secret_header; never exported."
+        },
+        "max_attachments": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        },
+        "idempotency_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "A path into the payload."
+        },
+        "task_prompt_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "A path into the payload."
+        },
+        "contact_id_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Needs auth_mode secret_header."
+        },
+        "session_id_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Needs auth_mode secret_header."
+        },
+        "conversation_id_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Needs auth_mode secret_header."
+        },
+        "document_bindings_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Needs auth_mode secret_header."
+        },
+        "document_handling": {
+          "type": "object"
+        },
+        "output": {
+          "type": "object",
+          "properties": {
+            "callback_url": {
+              "type": "string",
+              "minLength": 1
+            },
+            "callback_method": {
+              "enum": [
+                "DELETE",
+                "PATCH",
+                "POST",
+                "PUT"
+              ]
+            },
+            "callback_auth_mode": {
+              "enum": [
+                "basic",
+                "bearer",
+                "header",
+                "none"
+              ]
+            },
+            "callback_auth_header": {
+              "type": "string",
+              "minLength": 1
+            },
+            "callback_auth_value": {
+              "type": "string",
+              "minLength": 1
+            },
+            "callback_basic_username": {
+              "type": "string",
+              "minLength": 1
+            },
+            "callback_basic_password": {
+              "type": "string",
+              "minLength": 1
+            },
+            "callback_payload_mode": {
+              "enum": [
+                "default",
+                "template"
+              ]
+            },
+            "callback_payload_template": {
+              "type": "object"
+            },
+            "callback_headers": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "value": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
+            },
+            "email_to": {
+              "type": "string",
+              "minLength": 1
+            },
+            "email_subject": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      },
+      "additionalProperties": true
     }
   },
   "properties": {
@@ -3593,6 +6262,450 @@
             },
             "required": [
               "slug"
+            ],
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "node_type": {
+                      "enum": [
+                        "api_request"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "node_type"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "config": {
+                      "$ref": "#/$defs/NodeConfig_api_request"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "node_type": {
+                      "enum": [
+                        "approval"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "node_type"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "config": {
+                      "$ref": "#/$defs/NodeConfig_approval"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "node_type": {
+                      "enum": [
+                        "calendar_find_slot"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "node_type"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "config": {
+                      "$ref": "#/$defs/NodeConfig_calendar_find_slot"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "node_type": {
+                      "enum": [
+                        "calendar_wait_until"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "node_type"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "config": {
+                      "$ref": "#/$defs/NodeConfig_calendar_wait_until"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "node_type": {
+                      "enum": [
+                        "chat_start"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "node_type"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "config": {
+                      "$ref": "#/$defs/NodeConfig_chat_start"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "node_type": {
+                      "enum": [
+                        "document_metadata"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "node_type"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "config": {
+                      "$ref": "#/$defs/NodeConfig_document_metadata"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "node_type": {
+                      "enum": [
+                        "document_save"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "node_type"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "config": {
+                      "$ref": "#/$defs/NodeConfig_document_save"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "node_type": {
+                      "enum": [
+                        "for_each_item",
+                        "for_each_document"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "node_type"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "config": {
+                      "$ref": "#/$defs/NodeConfig_for_each_item"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "node_type": {
+                      "enum": [
+                        "harness_call"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "node_type"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "config": {
+                      "$ref": "#/$defs/NodeConfig_harness_call"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "node_type": {
+                      "enum": [
+                        "join"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "node_type"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "config": {
+                      "$ref": "#/$defs/NodeConfig_join"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "node_type": {
+                      "enum": [
+                        "masterloop"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "node_type"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "config": {
+                      "$ref": "#/$defs/NodeConfig_masterloop"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "node_type": {
+                      "enum": [
+                        "mcp_tool_call"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "node_type"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "config": {
+                      "$ref": "#/$defs/NodeConfig_mcp_tool_call"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "node_type": {
+                      "enum": [
+                        "output"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "node_type"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "config": {
+                      "$ref": "#/$defs/NodeConfig_output"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "node_type": {
+                      "enum": [
+                        "poll_until"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "node_type"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "config": {
+                      "$ref": "#/$defs/NodeConfig_poll_until"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "node_type": {
+                      "enum": [
+                        "router"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "node_type"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "config": {
+                      "$ref": "#/$defs/NodeConfig_router"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "node_type": {
+                      "enum": [
+                        "state_update"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "node_type"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "config": {
+                      "$ref": "#/$defs/NodeConfig_state_update"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "node_type": {
+                      "enum": [
+                        "structured_save"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "node_type"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "config": {
+                      "$ref": "#/$defs/NodeConfig_structured_save"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "node_type": {
+                      "enum": [
+                        "tool_call"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "node_type"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "config": {
+                      "$ref": "#/$defs/NodeConfig_tool_call"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "node_type": {
+                      "enum": [
+                        "transform"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "node_type"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "config": {
+                      "$ref": "#/$defs/NodeConfig_transform"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "node_type": {
+                      "enum": [
+                        "trigger_start"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "node_type"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "config": {
+                      "$ref": "#/$defs/NodeConfig_trigger_start"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "node_type": {
+                      "enum": [
+                        "wait"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "node_type"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "config": {
+                      "$ref": "#/$defs/NodeConfig_wait"
+                    }
+                  }
+                }
+              }
             ]
           }
         },
@@ -3662,6 +6775,71 @@
               "from_node_ref",
               "to_node_ref",
               "edge_type"
+            ],
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "edge_type": {
+                      "enum": [
+                        "condition"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "edge_type"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "config": {
+                      "$ref": "#/$defs/EdgeConfig_condition"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "edge_type": {
+                      "enum": [
+                        "error"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "edge_type"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "config": {
+                      "$ref": "#/$defs/EdgeConfig_error"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "edge_type": {
+                      "enum": [
+                        "pipeline"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "edge_type"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "config": {
+                      "$ref": "#/$defs/EdgeConfig_pipeline"
+                    }
+                  }
+                }
+              }
             ]
           }
         },
@@ -3708,6 +6886,113 @@
             },
             "required": [
               "slug"
+            ],
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "trigger_type": {
+                      "enum": [
+                        "calendar_event_received"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "trigger_type"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "config": {
+                      "$ref": "#/$defs/TriggerConfig_calendar_event_received"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "trigger_type": {
+                      "enum": [
+                        "channel"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "trigger_type"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "config": {
+                      "$ref": "#/$defs/TriggerConfig_channel"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "trigger_type": {
+                      "enum": [
+                        "email_received"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "trigger_type"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "config": {
+                      "$ref": "#/$defs/TriggerConfig_email_received"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "trigger_type": {
+                      "enum": [
+                        "schedule"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "trigger_type"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "config": {
+                      "$ref": "#/$defs/TriggerConfig_schedule"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "trigger_type": {
+                      "enum": [
+                        "webhook"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "trigger_type"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "config": {
+                      "$ref": "#/$defs/TriggerConfig_webhook"
+                    }
+                  }
+                }
+              }
             ]
           }
         }
