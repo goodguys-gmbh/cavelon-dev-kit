@@ -12,6 +12,21 @@ updates:
       # One PR for every minor and patch update; a major update gets its own.
       minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      # The types follow the oldest Node.js the CLI supports (engines in
+      # cli/package.json): newer ones would let the code use APIs that do not
+      # exist there. Move this major together with engines.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      # vitest 5 needs Node.js 22.12 or newer and @types/node 22 or newer, but
+      # CI tests the CLI on Node.js 20. Lift this when the CLI drops Node.js 20.
+      - dependency-name: vitest
+        update-types: ["version-update:semver-major"]
+      # typescript-eslint does not support TypeScript 7 yet: it refuses to
+      # load, so lint cannot run. TypeScript 6 is still offered. Lift this when
+      # typescript-eslint accepts TypeScript 7 as a peer.
+      - dependency-name: typescript
+        versions: [">=7"]
     commit-message:
       prefix: deps
   - package-ecosystem: github-actions
