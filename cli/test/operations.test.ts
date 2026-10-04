@@ -620,7 +620,7 @@ describe("kb upload of a file named like an existing document", () => {
     expect(preview.code, preview.stderr).toBe(0);
     const shown = preview.json<{ uploaded: boolean; confirm: string; existing: Match[] }>();
     expect(shown).toMatchObject({ uploaded: false, existing: [{ document_id: old, plan: "deactivate" }] });
-    expect(shown.confirm).toMatch(/^cavelon kb upload .*bergbahn-faq\.md --kb Bergbahn --replace --confirm$/);
+    expect(shown.confirm).toMatch(/^cavelon kb upload .*bergbahn-faq\.md"? --kb Bergbahn --replace --confirm$/);
     expect(server.state.requests.slice(before).filter((r) => r.method !== "GET")).toEqual([]);
 
     const result = await cli(own, ["kb", "upload", file, "--kb", "Bergbahn", "--replace", "--confirm", "--json"]);

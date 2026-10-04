@@ -57,7 +57,7 @@ export async function readInventory(root: string): Promise<TenantInventory | und
 /** Record one kind read now, as `models list` does, in the inventory of the last pull or a new one. */
 export async function refreshInventory(root: string, kind: InventoryKind, names: string[], now: Date): Promise<void> {
   const inventory = (await readInventory(root)) ?? { written_at: now.toISOString(), names: {} };
-  inventory.names[kind] = [...new Set(names)].sort();
+  inventory.names[kind] = [...new Set(names)].sort((a, b) => a.localeCompare(b, "en"));
   inventory.refreshed_at = { ...inventory.refreshed_at, [kind]: now.toISOString() };
   await writeState(root, INVENTORY_JSON, `${JSON.stringify(inventory, null, 2)}\n`);
 }
@@ -95,7 +95,7 @@ export async function writeInventory(ctx: Context, root: string, now: Date): Pro
       const data = await callStable<unknown>(ctx, "GET", listing.path, `listing ${listing.label}`, { query: listing.query });
       const items = itemsOf(data);
       counts.push({ label: listing.label, count: items.length });
-      if (listing.kind) names[listing.kind] = [...new Set(items.map((i) => i[listing.field!]).filter((v): v is string => typeof v === "string"))].sort();
+      if (listing.kind) names[listing.kind] = [...new Set(items.map((i) => i[listing.field!]).filter((v): v is string => typeof v === "string"))].sort((a, b) => a.localeCompare(b, "en"));
       const rows = items.slice(0, MAX_ROWS).map(row);
       const columns = COLUMNS.filter((c) => rows.some((r) => r[c] !== null && r[c] !== undefined));
       body = items.length
