@@ -7,6 +7,12 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-10-04
+
+Agents keep to what is meant for them: `cavelon api` run by a coding agent
+now applies the guards of the MCP tool, fields the instance marks as secret
+are never sent from an agent, and every test-case status is explained.
+
 ### Added
 
 - `cavelon explain` explains the test-case statuses that are neither pass nor
