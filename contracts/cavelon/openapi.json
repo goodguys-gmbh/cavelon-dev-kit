@@ -957,6 +957,128 @@
         }
       }
     },
+    "/api/v1/knowledge-bases/{kb_id}/documents": {
+      "get": {
+        "tags": [
+          "knowledge_bases"
+        ],
+        "summary": "List Documents",
+        "operationId": "list_documents_api_v1_knowledge_bases__kb_id__documents_get",
+        "parameters": [
+          {
+            "name": "kb_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Kb Id"
+            }
+          },
+          {
+            "name": "include_shards",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Shards"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DocumentResponse"
+                  },
+                  "title": "Response List Documents Api V1 Knowledge Bases  Kb Id  Documents Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/knowledge-bases/{kb_id}/documents/active": {
+      "patch": {
+        "tags": [
+          "knowledge_bases"
+        ],
+        "summary": "Batch Update Document Active",
+        "operationId": "batch_update_document_active_api_v1_knowledge_bases__kb_id__documents_active_patch",
+        "parameters": [
+          {
+            "name": "kb_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Kb Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchDocumentActiveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchDocumentActiveResponse"
+                }
+              }
+            }
+          },
+          "400": {},
+          "404": {},
+          "422": {},
+          "429": {
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": {
+                    "code": "INGESTION_BUDGET_EXCEEDED",
+                    "message": "Monthly ingestion token budget exhausted.",
+                    "used": 100000,
+                    "budget": 100000,
+                    "resets_at": "2026-10-01T00:00:00+00:00"
+                  }
+                }
+              }
+            }
+          },
+          "503": {}
+        }
+      }
+    },
     "/api/v1/knowledge-bases/{kb_id}/documents/upload": {
       "post": {
         "tags": [
@@ -2722,6 +2844,25 @@
         },
         "x-cavelon-person-only": true,
         "x-cavelon-person-only-reason": "Sets or deletes a secret value"
+      }
+    },
+    "/api/v1/skills": {
+      "get": {
+        "tags": [
+          "skills"
+        ],
+        "summary": "List Skill Definitions",
+        "operationId": "list_skill_definitions_api_v1_skills_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {}
+        }
       }
     },
     "/api/v1/tenants": {
@@ -6554,6 +6695,41 @@
         "type": "object",
         "title": "ArchiveUploadsChange"
       },
+      "BatchDocumentActiveRequest": {
+        "properties": {
+          "updates": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentActiveUpdate"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Updates"
+          }
+        },
+        "type": "object",
+        "required": [
+          "updates"
+        ],
+        "title": "BatchDocumentActiveRequest"
+      },
+      "BatchDocumentActiveResponse": {
+        "properties": {
+          "activated": {
+            "type": "integer",
+            "title": "Activated"
+          },
+          "deactivated": {
+            "type": "integer",
+            "title": "Deactivated"
+          }
+        },
+        "type": "object",
+        "required": [
+          "activated",
+          "deactivated"
+        ],
+        "title": "BatchDocumentActiveResponse"
+      },
       "Body_upload_documents_api_v1_knowledge_bases__kb_id__documents_upload_post": {
         "properties": {
           "files": {
@@ -7819,6 +7995,24 @@
           "error_json"
         ],
         "title": "ConversationTraceSpanResponse"
+      },
+      "DocumentActiveUpdate": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "is_active"
+        ],
+        "title": "DocumentActiveUpdate"
       },
       "DocumentBindingInput": {
         "properties": {

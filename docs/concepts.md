@@ -24,7 +24,10 @@ than your `cavelon` understands. `cavelon whoami` and `cavelon status` show the
 instance's version.
 
 `cavelon docs search <words>` and `cavelon docs get <page>` read the instance's
-own documentation, which describes the version you are connected to.
+own documentation, which describes the version you are connected to. The
+search ranks pages by the words of the question in their titles and summaries,
+ignores stop words, looks German words for the core concepts up in English, and
+lists only pages that match well; `cavelon docs get index` lists them all.
 
 ## Tenant
 

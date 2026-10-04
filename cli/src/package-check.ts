@@ -2,9 +2,21 @@ import { Ajv2020, type ErrorObject } from "ajv/dist/2020.js";
 import { BRANCH_WIDTH_KEY, branchConcurrency, offText } from "./branches.js";
 import type { CatalogEntry, ErrorCatalog, PackageSchema } from "./contracts.js";
 import type { PublishedLimits } from "./limits.js";
+import type { TenantInventory } from "./commands/inventory.js";
 import { locate, schemaSections, type Finding, type PackageOnDisk } from "./package-files.js";
 import { PERSONA_SECTION, sectionFields } from "./package-format.js";
 import { kitErrorEntry } from "./kit-codes.js";
+import {
+  checkModels,
+  checkReferences,
+  checkUnknownFields,
+  DUPLICATE_CODE,
+  FIELD_UNKNOWN_CODE,
+  MODEL_UNKNOWN_CODE,
+  REFERENCE_MISSING_CODE,
+  REFERENCE_UNKNOWN_CODE,
+  SEARCH_TOOL_KEYS,
+} from "./package-references.js";
 
 /**
  * The offline check behind `cavelon validate`: the package files against the
@@ -29,11 +41,10 @@ const KB_WITHOUT_SEARCH_CODE = "knowledge_base_without_search_tool";
 const SEARCH_DOCS = "/docs/reference/builtin-tools#binding-knowledge-bases-to-search_documents";
 /**
  * The built-in tool that searches knowledge bases. No contract publishes it as
- * data, only the instance's docs (reference/builtin-tools) name it; the two
- * other names are the ones older instances searched with.
+ * data, only the instance's docs (reference/builtin-tools) name it; the
+ * other names in SEARCH_TOOL_KEYS are the ones older instances searched with.
  */
 const SEARCH_TOOL = "search_documents";
-const SEARCH_TOOL_KEYS = new Set([SEARCH_TOOL, "search_knowledge_base", "search_kb"]);
 
 /** A persona that shows a greeting or a fallback whose text is empty. */
 const PERSONA_MESSAGE_CODE = "persona_message_empty";
@@ -115,6 +126,41 @@ export const KIT_CODES: CatalogEntry[] = [
     docs: PERSONA_DOCS,
   },
   {
+    code: DUPLICATE_CODE,
+    area: "package",
+    message: "Two entries of one section have the same key (slug, or name for a knowledge base).",
+    hint: "Rename or remove one of them: the import keeps only one entry per key.",
+    docs: PACKAGE_DOCS,
+  },
+  {
+    code: REFERENCE_MISSING_CODE,
+    area: "package",
+    message: "An agent hands off to an agent that is not in the package.",
+    hint: "Fix the to_agent_slug (the finding suggests the closest slug), or add the agent to package/agents.yaml.",
+    docs: PACKAGE_DOCS,
+  },
+  {
+    code: REFERENCE_UNKNOWN_CODE,
+    area: "package",
+    message: "A skill, tool, knowledge base or solution is named that is neither in the package nor among what the tenant held at the last pull.",
+    hint: "Fix the name (the finding suggests the closest one), or add the entry to the package. If it was created on the instance since, `cavelon pull` refreshes the list in .cavelon/inventory.json.",
+    docs: PACKAGE_DOCS,
+  },
+  {
+    code: FIELD_UNKNOWN_CODE,
+    area: "package",
+    message: "A package file sets a field this instance's package schema does not have; the import ignores it.",
+    hint: "Check the field name for a typo (the finding suggests the closest field); a field from a newer instance is ignored by this one.",
+    docs: PACKAGE_DOCS,
+  },
+  {
+    code: MODEL_UNKNOWN_CODE,
+    area: "package",
+    message: "An agent's llm_model is not in the tenant's model list as the kit last read it.",
+    hint: "Fix the model id (the finding suggests the closest one), or register the model. `cavelon models list` shows the tenant's models and refreshes the list validate checks against.",
+    docs: PACKAGE_DOCS,
+  },
+  {
     code: "package_file_duplicate",
     area: "package",
     message: "One section is in two files.",
@@ -175,6 +221,8 @@ export interface CheckOptions {
   accepted?: string[];
   /** The instance's published limits, for the branch concurrency warnings; none checks nothing. */
   limits?: PublishedLimits;
+  /** What the tenant held at the last pull, for references to it and agents' models; none checks only the package. */
+  inventory?: TenantInventory;
 }
 
 export function checkPackage(disk: PackageOnDisk, options: CheckOptions): Finding[] {
@@ -220,6 +268,9 @@ export function checkPackage(disk: PackageOnDisk, options: CheckOptions): Findin
   findings.push(...checkEndpointLimits(disk, options.schema));
   findings.push(...checkBranchConcurrency(disk, options.limits));
   findings.push(...checkKnowledgeSearch(disk));
+  findings.push(...checkUnknownFields(disk, options.schema, findings));
+  findings.push(...checkReferences(disk, options.inventory));
+  findings.push(...checkModels(disk, options.inventory));
   findings.push(...checkPersonaMessages(disk, options.schema));
 
   for (const finding of findings) {

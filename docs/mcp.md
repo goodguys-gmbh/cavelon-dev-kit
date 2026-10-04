@@ -154,6 +154,9 @@ repeat them:
   `activate` with `make_default`, and `api` for any operation that is not
   read-only (anything but GET, HEAD and OPTIONS), return what they would do
   (for `api`: the method, path, parameters and body) and act only with
+  `confirm: true`. `kb_upload` with `replace` needs it only on an instance
+  whose upload cannot replace a document itself: there it returns the
+  documents it would deactivate after the upload, and uploads nothing without
   `confirm: true`. The agent shows that to you first, and must show you any
   preview that reaches an active solution or production. Making a solution
   the tenant's default route changes which solution the tenant's chat and
@@ -164,7 +167,8 @@ repeat them:
   apply left it, unless `force`), and the other tools marked changing act at
   once:
   `use_tenant`, `tenant_create`, `harness_new`, `harness_clone`, `activate`
-  (through the readiness gate), `variables_set`, `kb_upload`, `test_run`,
+  (through the readiness gate), `variables_set`, `kb_upload` (without
+  `replace`, or where the instance replaces itself), `test_run`,
   `loop_start`, `loop_pause`, `loop_resume`, `sandbox_validate`,
   `sandbox_refresh` and `artifacts_export`.
 - **What no tool does, even with `confirm`.** `api` refuses an operation the

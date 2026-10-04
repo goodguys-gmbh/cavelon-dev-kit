@@ -126,7 +126,7 @@ Every command takes `--json` (one JSON document on stdout, errors included),
 | `activate [--harness] [--env]` | changing | Activate through the readiness gate only, never by force. |
 | `init [--harness] [--agents <list>] [--hook] [--update] [--from <file> [--force]]` | changing (files) | Make this folder a solution: `cavelon.yaml`, `package/`, `tests/`, `env/`, `.cavelon/`; on a terminal it asks for the tenant and the solution (or a new one by name); `--from` writes a package file into it. |
 | `pull [--harness] [--force]` | changing (files) | Write the instance's package into `package/` and `tests/`, the inventory into `.cavelon/`. |
-| `validate [--offline]` | read-only | Check the package files against the cached package schema. |
+| `validate [--offline]` | read-only | Check the package files against the cached package schema, their references, unknown fields and models. |
 | `schema [<section>] [--offline]` | read-only | The package schema's sections, or one section's fields with a minimal example. |
 | `apply [--env] [--harness] [--mode]` | changing | Preview the files against the instance; prints and stores a preview id. |
 | `apply --confirm <preview-id>` | changing | Import exactly that preview; a stale one, or one the import's own check refuses (it names the blockers), exits 4. |
@@ -144,7 +144,7 @@ Every command takes `--json` (one JSON document on stdout, errors included),
 | `docs get <page> [--max-chars] [--cursor]` | read-only | One docs page as markdown. |
 | `wait <operation…> [--timeout 90s]` | read-only | Wait for operations; resumable, and reports `waited_ms`. A test run with failed cases is a failure. |
 | `watch <operation> [--timeout 10m]` | read-only | Stream an operation's changes (server-sent events). |
-| `kb upload <dir> --kb <kb> [-r] [--ext pdf] [--wait]` | changing | Upload documents; returns operation ids. |
+| `kb upload <dir> --kb <kb> [-r] [--ext pdf] [--replace] [--wait]` | changing | Upload documents; returns operation ids. Names files that match an active document; `--replace` replaces those. |
 | `test run [--suite <s>] [--harness <h>] [--wait]` | changing | Start test-suite runs; returns operation ids. |
 | `trace <run> [--trace <id>] [--span <id>]` | read-only | Summarise a run's traces (or a test run's results, with why a case did not pass), then one trace's spans, then one span. |
 | `loop start <trigger> [--input <json>] [--wait]` | changing | Start a loop through its trigger, as you; returns the run and operation ids. |
@@ -394,6 +394,25 @@ op read op://dev/crm/token | cavelon secrets set crm_api_token
   `cavelon secrets set <name>` command instead.
 - `--env <name>` acts in the tenant `env/<name>.yaml` names, like `apply`. A
   name without its env file is refused (exit 2) before anything is sent.
+
+### Updating a document
+
+`kb upload` names each file that matches an active document of the knowledge
+base by file name, with what happens to that document, in `--dry-run` too:
+
+```text
+bergbahn-faq.md exists (094e95e9…) and stays active
+```
+
+- Without a flag the old document stays active next to the new one, and both
+  answer, unless the instance replaces same-named documents itself (its upload
+  offers `replace_existing`); there `--keep-both` keeps both.
+- `--replace` replaces it. It uses the instance's own replacement
+  (`replace_doc_ids`) and reads what was replaced from each document's
+  `replaced_document_ids`. On an instance whose upload offers neither, it shows
+  the documents it would deactivate after the upload and sends nothing; with
+  `--confirm` it uploads, then deactivates them (after the wait, with
+  `--wait`).
 
 ### Long-running work
 

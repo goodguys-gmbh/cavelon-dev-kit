@@ -39,7 +39,7 @@ import type { ProjectConfig } from "../project.js";
 import { CASE_STATUSES, caseStatus, TESTING_PAGE, type CaseStatus } from "../results.js";
 import { isUuid, requireInstance, type Session } from "../session.js";
 import { listedPages } from "./docs.js";
-import { writeInventory } from "./inventory.js";
+import { readInventory, writeInventory } from "./inventory.js";
 import { cavelonCommand, shellWord } from "../shell.js";
 import { secretSetCommand, targetFlags, variableSetCommand } from "./values.js";
 
@@ -356,6 +356,7 @@ async function validatePackage(ctx: Context, project: ProjectConfig, offline: bo
     catalog: await catalogFor(ctx, offline),
     accepted: await acceptedVersions(ctx, offline),
     limits: await limitsFor(ctx, offline),
+    inventory: await readInventory(project.root),
   });
   return { disk, findings, schemaVersion: schema["x-package-version"] ?? version ?? null, used };
 }

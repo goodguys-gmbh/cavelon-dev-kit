@@ -26,6 +26,8 @@ const INSTRUCTIONS =
   "return what they would do and change nothing without confirm: true; show the person that first. The default route " +
   "(harness_default, activate's make_default) decides which solution the tenant's chat and widget answer with: live traffic, " +
   "so ask the person, and confirm only with their yes. " +
+  "kb_upload names files that match an active document of the knowledge base; with replace it replaces them, and where the " +
+  "instance's upload cannot, it returns what it would deactivate and uploads nothing without confirm: true. " +
   "init, pull and fmt change nothing on the instance (pull only reads it); they write files in the solution folder without confirm " +
   "(pull refuses to replace a package file that changed since the last pull or apply and is not committed, unless force), " +
   "and the other changing tools act at once. api refuses, even with confirm, an operation the instance marks for a person " +

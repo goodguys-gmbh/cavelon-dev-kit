@@ -77,6 +77,8 @@ export interface Finding {
   path?: string;
   hint?: string;
   docs?: string;
+  /** The name the finding suggests instead of a misspelt one ("did you mean"). */
+  suggestion?: string;
 }
 
 interface Source {
