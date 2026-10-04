@@ -24,6 +24,15 @@ CLI, the skills and the plugin.
   folder to the `PATH` once and say where, and print the next step. Running
   them again updates `cavelon`; `--version` (or `CAVELON_VERSION`) installs a
   given release. No telemetry.
+- An update notice: when a newer release is out, `cavelon` says so after a
+  command, at most once a day, with the one command that updates it the way
+  it was installed (the install script again, into the same folder;
+  `brew upgrade cavelon`; `winget upgrade goodguys.Cavelon`;
+  `npm i -g @cavelon/cli`). It looks the release up on GitHub for the
+  executables and on the npm registry for npm, anonymously, for at most 1.5
+  seconds, and stays silent when that fails. Never with `--json`, in MCP mode,
+  in CI, without a terminal or through `npx`; `CAVELON_NO_UPDATE_CHECK=1` turns
+  it off.
 - The release workflow builds, smoke-tests and attests the executables after
   staging the npm package, creates the GitHub release, and updates a Homebrew
   tap and writes a winget manifest once those are set up. macOS signing and
@@ -34,6 +43,11 @@ CLI, the skills and the plugin.
 
 ### Changed
 
+- `cavelon --version` adds how `cavelon` was installed and the command that
+  updates it, on the lines after the version; the first line is still the
+  version alone. `--version --json` adds `install` (`method`, `path`,
+  `update`). The install scripts and the Homebrew formula's test read the first
+  line.
 - The plugin starts the `cavelon` on the `PATH` (`cavelon mcp`) when there is
   one, and `npx -y @cavelon/cli@0.1 mcp` otherwise, through `sh`. On native
   Windows, add the MCP server yourself as before, now simply

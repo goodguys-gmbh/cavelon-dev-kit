@@ -35,7 +35,12 @@ function environment(): Record<string, string> {
   for (const [key, value] of Object.entries(process.env)) {
     if (value !== undefined && !key.toUpperCase().startsWith("CAVELON_")) env[key] = value;
   }
-  return { ...env, CAVELON_CONFIG_DIR: path.join(home, "config"), CAVELON_CACHE_DIR: path.join(home, "cache") };
+  return {
+    ...env,
+    CAVELON_CONFIG_DIR: path.join(home, "config"),
+    CAVELON_CACHE_DIR: path.join(home, "cache"),
+    CAVELON_NO_UPDATE_CHECK: "1",
+  };
 }
 
 interface Ran {
@@ -91,11 +96,13 @@ describe.skipIf(!EXECUTABLE)("the standalone executable", () => {
     await server?.close();
   });
 
-  it("answers --version with the package's version", async () => {
+  it("answers --version with the package's version, then how it was installed", async () => {
     const plain = await run(["--version"]);
     expect(plain.code).toBe(0);
-    expect(plain.stdout.trim()).toBe(version);
-    expect((await run(["--version", "--json"])).json()).toEqual({ version });
+    expect(plain.stdout.split("\n")[0]).toBe(version);
+    // CI runs it under the release's file name, as a download by hand would be.
+    expect(plain.stdout).toContain("installed with: a downloaded executable");
+    expect((await run(["--version", "--json"])).json()).toMatchObject({ version, install: { method: "executable" } });
   });
 
   it("runs whoami against an instance from CAVELON_URL and CAVELON_TOKEN", async () => {

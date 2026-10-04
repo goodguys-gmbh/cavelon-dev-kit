@@ -169,7 +169,7 @@ jobs:
           mkdir -p "$tap/Formula" && cp packaging-out/homebrew/Formula/cavelon.rb "$tap/Formula/"
           brew install cavelon-test/local/cavelon
           brew test cavelon-test/local/cavelon
-          test "$("$(brew --prefix)/bin/cavelon" --version)" = "$VERSION"
+          test "$("$(brew --prefix)/bin/cavelon" --version | head -n 1)" = "$VERSION"
           brew uninstall cavelon-test/local/cavelon
           brew untap cavelon-test/local
       - name: The winget manifest

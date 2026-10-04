@@ -85,7 +85,7 @@ ${block("cavelon-linux-x64")}
   end
 
   test do
-    assert_equal version.to_s, shell_output("#{bin}/cavelon --version").strip
+    assert_equal version.to_s, shell_output("#{bin}/cavelon --version").lines.first.strip
   end
 end
 `,

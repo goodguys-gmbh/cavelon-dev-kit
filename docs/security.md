@@ -115,8 +115,14 @@ that.
   `kb upload`, the files you `sandbox seed`, and the values you set with
   `variables set` and `secrets set`. Nothing is uploaded that a command does not
   name.
-- **No telemetry.** `cavelon` sends no usage data, crash reports or update
-  checks anywhere.
+- **No telemetry.** `cavelon` sends no usage data or crash reports anywhere.
+- **Update check.** At most once a day, `cavelon` in a terminal asks for the
+  number of the latest release: the GitHub release API (`api.github.com`) for
+  the standalone executable, the npm registry for an npm install. The request
+  is an anonymous GET with no token, no instance and nothing about you or your
+  solutions; never with `--json`, in MCP mode, in CI or through `npx`.
+  `CAVELON_NO_UPDATE_CHECK=1` turns it off; see
+  [Updating](installation.md#updating).
 - **npm.** Installing or running through `npx` downloads `@cavelon/cli` and its
   dependencies from the npm registry. Releases are published from this
   repository's release workflow with npm provenance; `npm view @cavelon/cli
@@ -139,6 +145,7 @@ that.
 | `~/.config/cavelon/config.json` | `%APPDATA%\cavelon\config.json` | the current instance, the tenant chosen with `use`, which store holds the token; never a token |
 | `~/.config/cavelon/credentials.json` | `%APPDATA%\cavelon\credentials.json` | the token per instance (`0600`), only where there is no credential store |
 | `~/.cache/cavelon/<instance>/<version>/` | `%LOCALAPPDATA%\cavelon\cache\…` | what the instance publishes: capabilities, OpenAPI, error catalog, package schema, docs index |
+| `~/.cache/cavelon/update-check.json` | `%LOCALAPPDATA%\cavelon\cache\update-check.json` | when the latest release was last looked up, its number, and when `cavelon` last said so |
 
 `CAVELON_CONFIG_DIR` and `CAVELON_CACHE_DIR` move them; `XDG_CONFIG_HOME` and
 `XDG_CACHE_HOME` are honoured.

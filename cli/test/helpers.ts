@@ -4,6 +4,7 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import type { Io, InStream } from "../src/io.js";
 import { run } from "../src/main.js";
+import type { UpdateCheckOptions } from "../src/update-check.js";
 
 /** Run the CLI in-process, as a non-interactive agent would by default. */
 
@@ -42,6 +43,8 @@ export interface RunOptions {
   tty?: boolean;
   /** The clock the CLI reads, to age its cache without waiting. */
   now?: () => Date;
+  /** The install and the network the update check sees. */
+  updates?: UpdateCheckOptions;
 }
 
 export async function cli(sb: Sandbox, args: string[], options: RunOptions = {}): Promise<CliResult> {
@@ -58,7 +61,7 @@ export async function cli(sb: Sandbox, args: string[], options: RunOptions = {})
     now: options.now ?? (() => new Date()),
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
   };
-  const code = await run(args, io);
+  const code = await run(args, io, undefined, options.updates);
   return {
     code,
     stdout,

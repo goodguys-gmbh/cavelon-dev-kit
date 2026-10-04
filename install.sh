@@ -152,15 +152,17 @@ expected="$(awk -v name="$asset" '$2 == name || $2 == "*" name { print $1; exit 
 actual="$(sha256 "$tmp/$asset")"
 [ "$expected" = "$actual" ] || fail "the download's SHA-256 checksum does not match checksums.txt (expected $expected, got $actual); nothing was installed."
 chmod 755 "$tmp/$asset"
-if ! new_version="$("$tmp/$asset" --version 2>&1)"; then
-  fail "the downloaded cavelon does not run on this system: $new_version"
+if ! ran="$("$tmp/$asset" --version 2>&1)"; then
+  fail "the downloaded cavelon does not run on this system: $ran"
 fi
+# The first line is the version; later releases add how cavelon was installed.
+new_version="$(printf '%s\n' "$ran" | head -n 1)"
 
 # --- install ------------------------------------------------------------------
 
 target="$dir/cavelon"
 old_version=""
-if [ -x "$target" ]; then old_version="$("$target" --version 2>/dev/null || true)"; fi
+if [ -x "$target" ]; then old_version="$({ "$target" --version 2>/dev/null || true; } | head -n 1)"; fi
 mkdir -p "$dir" || fail "could not create $dir."
 # Copy next to the target, then rename over it: a running cavelon keeps its file.
 cp "$tmp/$asset" "$dir/.cavelon.$$" || fail "could not write to $dir."
