@@ -13,6 +13,22 @@ may activate solutions, whether it may work in Platform mode, and when it
 expires. Give each machine or purpose its own token, so you can revoke one
 without the others.
 
+**Choosing its ceiling.** Pick the lowest one that does the job, as the
+instance's token dialog recommends:
+
+| Task | Ceiling |
+|---|---|
+| read-only checks: `status`, `limits`, `trace`, reading docs and results | **Observer** |
+| building and testing a solution: `validate`, `apply`, `test run` | **Builder** |
+| changing the tenant's limits or settings (`limits set`) | **Tenant Owner** |
+| operating the platform itself | **Platform mode**, for platform operators only |
+
+Keep **May activate** off unless the token should put solutions live; without
+it, `cavelon activate` is refused and a person activates in the Admin. The
+instance's page on personal access tokens explains each ceiling:
+`/docs/administration/personal-access-tokens` on your instance, or
+`cavelon docs get administration/personal-access-tokens`.
+
 **Storing it.** `cavelon login` reads the token without echoing it, from your
 terminal or from standard input (`--token-stdin`), and keeps it in your
 operating system's credential store:

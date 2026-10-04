@@ -54,9 +54,82 @@ function summaryCount(summary: Record<string, unknown> | undefined, key: string)
  * instance then marks it not comparable and leaves out its pass rate. An
  * instance older than a count does not send it, which reads as 0.
  */
-const NOT_PASSED_COUNTS = ["failed", "errors", "technical_errors", "not_run", "cases_not_run", "missing_results", "unmeasurable_cases", "skipped"];
+export const NOT_PASSED_COUNTS = ["failed", "errors", "technical_errors", "not_run", "cases_not_run", "missing_results", "unmeasurable_cases", "skipped"];
 /** Counts a person clears: a manual verdict, or a value or knowledge base the case needs. */
-const WAITING_COUNTS = ["pending_review", "calibration_required"];
+export const WAITING_COUNTS = ["pending_review", "calibration_required"];
+
+/** The instance's regression-testing page, where its results table names the statuses. */
+export const TESTING_PAGE = "concepts/regression-testing";
+
+/**
+ * A result status that is neither a pass nor a failed verdict. Agents meet
+ * these in `test run` and `trace` and look them up with `cavelon explain`,
+ * but they are no error code, so the instance's catalog does not list them;
+ * the meanings follow the instance's regression-testing docs.
+ */
+export interface CaseStatus {
+  status: string;
+  /** The run summary's counts of this status. */
+  counts: string[];
+  /** A few words, printed next to the count. */
+  short: string;
+  meaning: string;
+  next: string;
+  /** The section of the regression-testing page that says more. */
+  section: string;
+}
+
+export const CASE_STATUSES: readonly CaseStatus[] = [
+  {
+    status: "calibration_required",
+    counts: ["calibration_required"],
+    short: "a knowledge base or value the case needs was not ready",
+    meaning:
+      "The instance did not run the case. When it accepted the run (its preflight), a knowledge base the case needs had no ready documents (knowledge_base_not_ready), or a {{var:…}} value the case refers to was not set (tenant_value_missing); the result's reason names which. The run keeps that verdict even if the documents become ready while it runs.",
+    next: "Wait until the knowledge base's documents are processed (`cavelon wait` on the upload's operation), or set the value (`cavelon variables set`), then start a new run.",
+    section: "preflight-is-decided-when-the-run-is-accepted",
+  },
+  {
+    status: "pending_review",
+    counts: ["pending_review"],
+    short: "the answer waits for a person's verdict",
+    meaning: "The case ran, and its answer waits for a manual verdict: Auto-Evaluate is off for the suite, so no judge scored it.",
+    next: "Tell the person: they set Pass, Fail or Skip on the result in the instance. To have the judge score it, turn Auto-Evaluate on for the suite and run it again.",
+    section: "reviewing-results",
+  },
+  {
+    status: "not_run",
+    counts: ["not_run", "cases_not_run", "missing_results"],
+    short: "the step produced no result",
+    meaning:
+      "The step produced no result: the run was cancelled or stopped before it (after repeated provider refusals, for example), or the case was held back before any step ran. The run is not comparable and has no pass rate.",
+    next: "`cavelon trace <test-run-id>` shows which steps ran and the reasons recorded; fix the cause and start a new run.",
+    section: "reviewing-results",
+  },
+  {
+    status: "not_evaluated",
+    counts: ["unevaluated_steps"],
+    short: "a preparation step, not scored",
+    meaning:
+      "A preparation step (`evaluate: false`, or a fixed response): it sets up the dialog for a later step and is not scored, so it counts toward neither side of the pass rate. It does not fail a run.",
+    next: "Nothing, unless the step should be judged: then give it `evaluate: true` and a reference answer or criteria.",
+    section: "reviewing-results",
+  },
+  {
+    status: "skip",
+    counts: ["skipped"],
+    short: "the step was skipped",
+    meaning: "The step was skipped: a person set a Skip verdict to park the case, or the run was cancelled before the step. The run is not comparable and has no pass rate.",
+    next: "When the case applies again, a person replaces the Skip verdict in the instance; after a cancelled run, start a new one.",
+    section: "reviewing-results",
+  },
+];
+
+/** A case status by its name or a summary count's, as people write it: "Calibration Required", "skipped". */
+export function caseStatus(name: string): CaseStatus | undefined {
+  const wanted = name.trim().toLowerCase().replaceAll(" ", "_").replaceAll("-", "_");
+  return CASE_STATUSES.find((s) => s.status === wanted || s.counts.includes(wanted));
+}
 
 export interface RunVerdict {
   /** Every count above 0 that is no pass, by the summary's own field names. */
@@ -89,11 +162,20 @@ export function runVerdict(summary: Record<string, unknown> | undefined): RunVer
   return { counts, comparable, non_comparable_reasons: reasons, exit_code: exitCode };
 }
 
-/** "3 not run, 2 pending review". */
+/** "3 not run, 2 pending review (the answer waits for a person's verdict)": a waiting count says why. */
 export function countsText(counts: Record<string, number>): string {
   return Object.entries(counts)
-    .map(([key, value]) => `${value} ${key === "errors" ? "errored" : key.replaceAll("_", " ")}`)
+    .map(([key, value]) => {
+      const why = WAITING_COUNTS.includes(key) ? caseStatus(key)?.short : undefined;
+      return `${value} ${key === "errors" ? "errored" : key.replaceAll("_", " ")}${why ? ` (${why})` : ""}`;
+    })
     .join(", ");
+}
+
+/** The case statuses behind a run's counts, for the `cavelon explain` that says what to do. */
+function explainedStatuses(counts: Record<string, number>): string[] {
+  const statuses = Object.keys(counts).map((key) => caseStatus(key)?.status);
+  return [...new Set(statuses.filter((s): s is string => Boolean(s)))];
 }
 
 /** At most this many cases are named per run; `cavelon trace <run>` lists them all. */
@@ -163,7 +245,11 @@ export async function resultFailure(ctx: Context, op: Operation): Promise<Result
       comparable: verdict.comparable,
       non_comparable_reasons: verdict.non_comparable_reasons,
       exit_code: verdict.exit_code,
-      cases: results.filter((r) => NOT_PASSED.has(r.status)).slice(0, MAX_CASES).map((r) => failedCase(r)),
+      // A waiting case carries the reason too: which knowledge base or value it needs.
+      cases: results
+        .filter((r) => NOT_PASSED.has(r.status) || WAITING_COUNTS.includes(r.status))
+        .slice(0, MAX_CASES)
+        .map((r) => failedCase(r)),
       trace: cavelonCommand("trace", id),
     };
   } catch (error) {
@@ -190,8 +276,10 @@ export function failureLines(failure: ResultFailure): string {
   if (failure.comparable === false && failure.non_comparable_reasons.length) lines.push(`  Not comparable: ${failure.non_comparable_reasons.join(", ")}`);
   for (const c of failure.cases) lines.push(`    ${caseLabel(c)}  ${c.status}${c.reason ? ": " + c.reason : ""}`);
   const shown = failure.cases.length;
-  const total = failure.failed_cases + failure.errored_cases;
+  const total = failure.failed_cases + failure.errored_cases + WAITING_COUNTS.reduce((sum, key) => sum + (failure.counts[key] ?? 0), 0);
   if (total > shown) lines.push(`    … ${total - shown} more`);
+  const statuses = explainedStatuses(failure.counts);
+  if (statuses.length) lines.push(`  What to do: ${statuses.map((s) => cavelonCommand("explain", s)).join("; ")}`);
   lines.push(`  Look closer: ${failure.trace}`);
   return lines.join("\n");
 }

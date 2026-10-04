@@ -7,6 +7,13 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Added
+
+- `cavelon explain` explains the test-case statuses that are neither pass nor
+  fail: `calibration_required`, `pending_review`, `not_run`, `not_evaluated`
+  and `skip`, with what each means and what to do next. They are no error
+  codes, so the instance's error catalog does not list them.
+
 ### Changed
 
 - `cavelon api` run by a coding agent applies the guards of the MCP `api`
@@ -23,6 +30,16 @@ CLI, the skills and the plugin.
   nested objects and arrays too, before sending anything
   (`secret_field_for_a_person`). An instance that marks no field behaves as
   before.
+- `test run --wait` and `wait` print a short reason next to a count that waits
+  for a person ("1 calibration required (a knowledge base or value the case
+  needs was not ready)"), name the waiting cases with the reason the instance
+  recorded, and say which `cavelon explain` to run. The cavelon-testing skill
+  lists the statuses.
+- The getting-started guide and the security page say which token ceiling to
+  pick for which task (Observer, Builder, Tenant Owner, Platform mode only for
+  platform operators) and to keep **May activate** off unless the token should
+  put solutions live, and link the instance's page on personal access tokens.
+- CI pins every action by commit, like the release workflow.
 
 ## [0.1.3] - 2026-10-04
 
