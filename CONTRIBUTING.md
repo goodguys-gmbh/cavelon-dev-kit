@@ -103,5 +103,16 @@ tenant or a token with **May activate** for this unless you mean to activate.
   the docs in `docs/` change with it.
 - Releases follow [RELEASING.md](RELEASING.md).
 
+### Dependency updates
+
+Dependabot opens the dependency pull requests (`.github/dependabot.yml`): a
+security update as soon as GitHub knows of a vulnerability in a dependency, and
+every Monday one grouped update for the CLI's npm minor and patch versions and
+one for the GitHub Actions the workflows pin by commit. A major version gets its
+own pull request. Review them like any other: CI must pass, and an update of an
+action that `release.yml` uses is checked against the action's release notes,
+because that workflow holds the token that stages a release. A security update
+that reaches the published package goes out with the next release.
+
 By contributing, you agree that your contribution is licensed under the
 [Apache License 2.0](LICENSE).

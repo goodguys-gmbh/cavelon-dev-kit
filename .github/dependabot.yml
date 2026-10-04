@@ -1,0 +1,26 @@
+# Dependency updates. Security updates for known vulnerabilities are opened
+# separately as soon as GitHub learns of them; these are the routine updates.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /cli
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      # One PR for every minor and patch update; a major update gets its own.
+      minor-and-patch:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: deps
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: ci
