@@ -447,7 +447,7 @@ Upload a folder's documents into a knowledge base; returns operation ids.
 cavelon kb upload <dir> [options]
 ```
 
-Hidden files are skipped. Ingestion runs on the instance; `cavelon wait` follows it. Files are checked against the instance's published upload limits first. A .zip goes only to a tenant that expands archives, and only within its caps on file count, unpacked size and compression ratio.
+Hidden files are skipped. Ingestion runs on the instance; `cavelon wait` follows it. Files are checked against the instance's published upload limits first. A .zip goes only to a tenant that expands archives, and only within its caps on file count, unpacked size and compression ratio. A file named like an active document of the knowledge base is listed, with what happens to that document. An instance that replaces same-named documents on upload does so (--keep-both keeps both); elsewhere the old one stays active. --replace replaces it: through the instance's own replacement where its upload offers one, else the kit deactivates the old document after the upload (after the wait with --wait), and then only with --confirm.
 
 | Argument | Description |
 |---|---|
@@ -458,7 +458,10 @@ Hidden files are skipped. Ingestion runs on the instance; `cavelon wait` follows
 | `--kb <kb>` | Knowledge base name or id (required). | yes |
 | `-r, --recursive` | Include subfolders. | yes |
 | `--ext <ext>` | Only these file extensions (pdf, md, …). Repeatable. | yes |
-| `--dry-run` | List what would be uploaded, upload nothing. | yes |
+| `--replace` | Replace active documents with the same file name. | yes |
+| `--keep-both` | Keep active documents with the same file name next to the new ones. | yes |
+| `--confirm` | With --replace, deactivate the old documents the instance does not replace itself; without it nothing is sent. | yes |
+| `--dry-run` | List what would be uploaded and replaced, upload nothing. | yes |
 | `--wait` | Wait for the work to finish (see `cavelon wait`). | CLI only |
 | `--timeout <duration>` | Stop waiting after this long (90s, 5m; default 90s). The work goes on; run wait again to resume. | yes |
 
@@ -466,6 +469,7 @@ Examples:
 
 ```bash
 cavelon kb upload ./docs --kb FAQ
+cavelon kb upload ./docs/bergbahn-faq.md --kb FAQ --replace --dry-run
 cavelon kb upload ./manuals --kb FAQ -r --ext pdf --wait --timeout 5m
 ```
 
@@ -1450,6 +1454,8 @@ Search this instance's docs (titles and summaries).
 cavelon docs search <query...> [options]
 ```
 
+Ranks the pages of the instance's docs index by the words of the question in their titles, addresses and summaries, rare words counting more than common ones. Stop words (English and German) are ignored, words match whole ("test" finds "testing", not "latest"), and German words for the core concepts are looked up in English (Wissensbasis: knowledge base). Only pages that match well are listed.
+
 | Argument | Description |
 |---|---|
 | `query` | What to look for. Required. One or more. |
@@ -1470,7 +1476,7 @@ cavelon docs get <page> [options]
 
 | Argument | Description |
 |---|---|
-| `page` | section/slug from `docs search`, a title, or the page URL. Required. |
+| `page` | section/slug from `docs search`, a title, the page URL, or `index` for the list of all pages. Required. |
 
 | Option | Description | MCP |
 |---|---|---|

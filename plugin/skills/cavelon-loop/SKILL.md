@@ -62,7 +62,11 @@ use it when you parse the result.
 2. **Edit** the files in `package/` (one file per schema section) and `tests/`
    (one file per test suite). See the cavelon-authoring skill.
 3. **Validate** offline: `cavelon validate`. Fix every error; `cavelon explain
-   <code>` says what a code means and how to fix it.
+   <code>` says what a code means and how to fix it. Besides the schema it
+   finds duplicate slugs, handoffs to an agent the package lacks, fields the
+   schema does not have (with "did you mean"), and skills, tools, knowledge
+   bases, solutions and models the tenant did not hold at the last pull
+   (warnings: `cavelon pull` or `cavelon models list` refreshes that list).
 4. **Preview**: `cavelon apply --env test` (or `--harness <name or slug>`). Nothing is
    imported yet. Read the preview: what is created, updated or deleted, which
    active solutions it reaches, what the target still needs (variables and
@@ -78,7 +82,15 @@ use it when you parse the result.
    a type it does not accept, and a `.zip` unless the tenant has archive
    uploads on (`kb_upload_archive_enabled`) and it stays within their file
    count, unpacked size and compression ratio (exit 3, naming the limit and who
-   changes it). A test
+   changes it).
+   **Updating a document**: upload the new version under the same file name
+   with `--replace` (try it with `--dry-run` first). Without it the old version
+   may stay active next to the new one, and both answer: `kb upload` names each
+   file that matches an active document ("bergbahn-faq.md exists (094e95e9…)
+   and stays active"). An instance that replaces same-named documents itself
+   does so on every upload (`--keep-both` keeps both); where the instance's
+   upload cannot replace, `--replace` shows the documents it would deactivate
+   after the upload and needs `--confirm`: show the person that first. A test
    Sandbox gets its files with `cavelon sandbox seed <sandbox> <folder>`
    (isolated container) or `cavelon sandbox refresh <sandbox>` after the files
    were put on the VM (customer VM).
@@ -179,9 +191,11 @@ preview · 5 needs a person · 6 timed out (still running) · 7 not authorised �
 ## Where to read more
 
 - `cavelon docs search <query>` and `cavelon docs get <page>`: the instance's
-  own docs, for its version.
-- `.cavelon/inventory.md`: the tenant's solutions, knowledge bases, tools, test
-  suites and sandboxes from the last pull; `cavelon sandbox list` for their
+  own docs, for its version. They are in English; a German question works for
+  the core concepts, English words for the rest. `cavelon docs get index`
+  lists every page.
+- `.cavelon/inventory.md`: the tenant's solutions, knowledge bases, tools,
+  skills, models, test suites and sandboxes from the last pull; `cavelon sandbox list` for their
   current state and mode.
 - `cavelon api list --search <word>` and `cavelon api <operation>`: any API
   operation the workflow commands do not cover.

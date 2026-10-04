@@ -46,6 +46,22 @@ function withMarkers(marks: Record<string, string | false> | null, secrets: Reco
   }
   return JSON.stringify(doc);
 }
+/**
+ * The upload as an instance of each kind publishes it: without
+ * `replace_doc_ids` for an older one, with `replace_existing` and
+ * `replaced_document_ids` for a newer one.
+ */
+function withUploadReplace(text: string, kind: FakeState["uploadReplace"]): string {
+  if (kind === "ids") return text;
+  const doc = JSON.parse(text) as { components: { schemas: Record<string, { properties: Record<string, unknown>; required?: string[] }> } };
+  const form = doc.components.schemas.Body_upload_documents_api_v1_knowledge_bases__kb_id__documents_upload_post!;
+  if (kind === "none") delete form.properties.replace_doc_ids;
+  else {
+    form.properties.replace_existing = { type: "boolean", title: "Replace Existing", default: true };
+    doc.components.schemas.DocumentResponse!.properties.replaced_document_ids = { type: "array", items: { type: "string" }, title: "Replaced Document Ids" };
+  }
+  return JSON.stringify(doc);
+}
 const readContract = (name: string) => readFileSync(path.join(CONTRACTS, name), "utf8");
 export const FIXTURES = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
 /** A small solution package that matches the package schema snapshot (checked in contract.test.ts). */
@@ -135,6 +151,16 @@ export interface FakeState {
   tenants: Array<{ id: string; slug: string; name: string; plan: string; status: string; created_at: string }>;
   harnesses: Array<Record<string, unknown> & { id: string; tenant_id: string; slug: string; name: string }>;
   kbs: Array<{ id: string; tenant_id: string; name: string }>;
+  /** Uploaded documents; a replaced one is soft-deleted and no longer listed. */
+  documents: Array<{ id: string; tenant_id: string; kb_id: string; filename: string; size: number; is_active: boolean; deleted: boolean; created_at: string }>;
+  /**
+   * How an upload replaces a document named like an existing one: "ids" only
+   * the ones `replace_doc_ids` names, as the snapshot's instance; "name" also a
+   * same-named active one by default (`replace_existing`), reporting
+   * `replaced_document_ids`, as a newer instance; "none" neither, as an older
+   * instance whose upload form has no `replace_doc_ids`.
+   */
+  uploadReplace: "none" | "ids" | "name";
   suites: Array<{ id: string; tenant_id: string; name: string; harness_id: string | null; archived_at: string | null }>;
   runs: Array<{ id: string; tenant_id: string; suite_id: string; summary: Record<string, unknown> }>;
   operations: Map<string, FakeOperation>;
@@ -423,6 +449,8 @@ export async function startFakeServer(): Promise<FakeServer> {
     tenants: [],
     harnesses: [],
     kbs: [],
+    documents: [],
+    uploadReplace: "ids",
     suites: [],
     runs: [],
     operations: new Map(),
@@ -528,7 +556,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     }
     if (p === "/openapi.json" || (p === "/api/v1/openapi.json" && !state.rootPathsReachApi)) {
       res.writeHead(200, { "content-type": "application/json" });
-      return res.end(withMarkers(state.personOnly, state.secretFields));
+      return res.end(withUploadReplace(withMarkers(state.personOnly, state.secretFields), state.uploadReplace));
     }
 
     // Auth: every API and docs route needs a known bearer token.
@@ -783,15 +811,54 @@ export async function startFakeServer(): Promise<FakeServer> {
       state.uploadsBeforeFailure--;
       const files = (body.form?.getAll("files") ?? []) as File[];
       if (!files.length) return send(res, 422, { detail: [{ loc: ["body", "files"], msg: "Field required", type: "missing" }] });
+      const mappedRaw = state.uploadReplace !== "none" ? body.form?.get("replace_doc_ids") : null;
+      const mapped = typeof mappedRaw === "string" ? (JSON.parse(mappedRaw) as Record<string, string>) : {};
+      const byName = state.uploadReplace === "name" && body.form?.get("replace_existing") !== "false";
+      const before = state.documents.filter((d) => d.kb_id === kb.id && !d.deleted);
       const docs = files.map((file) => {
         const id = randomUUID();
         const op = addOperation("document_ingestion", tid, [...state.defaultSteps], {
           id: opId("document_ingestion", id),
           resultRef: { type: "document", id, href: `/api/v1/knowledge-bases/${kb.id}/documents/${id}/content` },
         });
-        return documentView(id, file.name, file.size, state.serveOperations ? op.id : null);
+        // A name replace_doc_ids maps is replaced by that id only, never by name.
+        const replaced = mapped[file.name]
+          ? before.filter((d) => d.id === mapped[file.name])
+          : byName
+            ? before.filter((d) => d.filename === file.name && d.is_active).sort((a, b) => b.created_at.localeCompare(a.created_at))
+            : [];
+        for (const d of replaced) d.deleted = true;
+        state.documents.push({ id, tenant_id: tid, kb_id: kb.id, filename: file.name, size: file.size, is_active: true, deleted: false, created_at: now() });
+        const view = documentView(id, file.name, file.size, state.serveOperations ? op.id : null);
+        return state.uploadReplace === "name" ? { ...view, replaced_document_ids: replaced.map((d) => d.id) } : view;
       });
       return send(res, 202, docs);
+    }
+    m = /^\/api\/v1\/knowledge-bases\/([^/]+)\/documents$/.exec(p);
+    if (m && method === "GET") {
+      const kb = state.kbs.find((k) => k.tenant_id === tid && k.id === m![1]);
+      if (!kb) return send(res, 404, { detail: "Knowledge base not found" });
+      const listed = state.documents.filter((d) => d.kb_id === kb.id && !d.deleted);
+      return send(res, 200, listed.map((d) => ({ ...documentView(d.id, d.filename, d.size, null), status: "ready", is_active: d.is_active, created_at: d.created_at })));
+    }
+    m = /^\/api\/v1\/knowledge-bases\/([^/]+)\/documents\/active$/.exec(p);
+    if (m && method === "PATCH") {
+      const kb = state.kbs.find((k) => k.tenant_id === tid && k.id === m![1]);
+      if (!kb) return send(res, 404, { detail: "Knowledge base not found" });
+      const updates = ((body.json ?? {}) as { updates?: Array<{ id: string; is_active: boolean }> }).updates ?? [];
+      if (!updates.length) return send(res, 422, { detail: [{ loc: ["body", "updates"], msg: "List should have at least 1 item", type: "too_short" }] });
+      let activated = 0;
+      let deactivated = 0;
+      for (const u of updates) {
+        const d = state.documents.find((x) => x.kb_id === kb.id && x.id === u.id && !x.deleted);
+        if (!d) return send(res, 404, { detail: `Document ${u.id} not found` });
+        if (d.is_active !== u.is_active) {
+          if (u.is_active) activated++;
+          else deactivated++;
+        }
+        d.is_active = u.is_active;
+      }
+      return send(res, 200, { activated, deactivated });
     }
 
     if (p === "/api/v1/test-suites" && method === "GET") {
@@ -830,6 +897,11 @@ export async function startFakeServer(): Promise<FakeServer> {
     }
 
     if (p === "/api/v1/tools" && method === "GET") return send(res, 200, []);
+    // The skills the tenant holds: the ones of its configuration.
+    if (p === "/api/v1/skills" && method === "GET") {
+      const skills = state.configs.get(tid)?.pkg.skills;
+      return send(res, 200, Array.isArray(skills) ? skills.map((sk: { slug?: string; name?: string }) => ({ id: randomUUID(), slug: sk.slug, name: sk.name })) : []);
+    }
     if (p === "/api/v1/model-registry" || p.startsWith("/api/v1/model-registry/")) {
       return handleModel(res, method, tid, p.slice("/api/v1/model-registry".length + 1), body.json);
     }

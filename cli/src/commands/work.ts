@@ -16,7 +16,9 @@ import { capacityCodeIn, capacityHint, noteLines, runCapacityNote, type Capacity
 import { CavelonError, ExitCode, usageError, type ExitCodeValue } from "../errors.js";
 import { confinedPath } from "../paths.js";
 import { clip, keyValues, moreHint, table } from "../format.js";
-import { callStable } from "../invoke.js";
+import type { OpenApiDoc } from "../contracts.js";
+import { callStable, workflowOperation } from "../invoke.js";
+import { deref, type Operation } from "../openapi.js";
 import { bindsNow, changedBy, limitError, limitsOrWarn, readLimits, type Limit, type PublishedLimits } from "../limits.js";
 import { getOperation } from "../operations.js";
 import { caseCounts, caseLabel, countsText, failedCase, NOT_PASSED, runVerdict, type TestResultState } from "../results.js";
@@ -45,6 +47,165 @@ interface UploadedDocument {
   filename: string;
   status: string;
   operation_id?: string | null;
+  /** The documents this upload replaced, newest first; absent on an instance that does not report it. */
+  replaced_document_ids?: string[] | null;
+}
+
+/** A document already in the knowledge base, as the instance lists it. */
+interface ExistingDocument {
+  id: string;
+  filename: string;
+  is_active?: boolean;
+  created_at?: string;
+}
+
+const UPLOAD_ROUTE = "/api/v1/knowledge-bases/{kb_id}/documents/upload";
+const DOCUMENTS_ROUTE = "/api/v1/knowledge-bases/{kb_id}/documents";
+const ACTIVE_ROUTE = "/api/v1/knowledge-bases/{kb_id}/documents/active";
+
+/**
+ * How this instance's upload treats a file named like an existing document,
+ * from the fields its upload form publishes: `replace_doc_ids` replaces the
+ * documents it names once the new files are verified, and an instance that
+ * offers `replace_existing` replaces a same-named active document by default.
+ * An instance whose OpenAPI cannot be read is taken to do neither.
+ */
+interface ReplaceSupport {
+  byIds: boolean;
+  byName: boolean;
+}
+
+function replaceSupport(doc: OpenApiDoc | undefined, op: Operation): ReplaceSupport {
+  const schema = op.requestBody?.content?.["multipart/form-data"]?.schema;
+  const properties = doc && schema ? (deref(doc, schema) as { properties?: Record<string, unknown> } | undefined)?.properties : undefined;
+  return { byIds: Boolean(properties?.replace_doc_ids), byName: Boolean(properties?.replace_existing) };
+}
+
+/**
+ * What happens to an existing document named like a file: it stays active, the
+ * instance replaces it by name or by the id the kit sends, or the kit
+ * deactivates it after the upload.
+ */
+type ReplacePlan = "stays_active" | "replaced_by_name" | "replace_by_id" | "deactivate";
+type ReplaceOutcome = "stays_active" | "replaced" | "replace_requested" | "deactivated" | "not_uploaded";
+
+interface NameMatch {
+  /** The local file, relative to the working folder. */
+  file: string;
+  filename: string;
+  document_id: string;
+  plan: ReplacePlan;
+  outcome?: ReplaceOutcome;
+}
+
+const shortId = (id: string) => `${id.slice(0, 8)}…`;
+
+/** The active documents of the knowledge base; undefined, with a warning, when the instance does not list them here. */
+async function existingDocuments(ctx: Context, kbId: string): Promise<ExistingDocument[] | undefined> {
+  try {
+    const list = await callStable<ExistingDocument[]>(ctx, "GET", DOCUMENTS_ROUTE, "listing a knowledge base's documents", { params: { kb_id: [kbId] } });
+    return (Array.isArray(list) ? list : []).filter((d) => d.is_active !== false && typeof d.filename === "string");
+  } catch (error) {
+    if (!(error instanceof CavelonError)) throw error;
+    ctx.warn(`Could not list the knowledge base's documents (${error.message}); files named like an existing document are not reported.`);
+    return undefined;
+  }
+}
+
+/**
+ * Each active document named like a file to upload, with what this upload
+ * does to it. With --replace the newest one of a name goes to the instance's
+ * own replacement where it offers one; whatever it does not replace, the kit
+ * deactivates after the upload.
+ */
+function nameMatches(files: string[], cwd: string, existing: ExistingDocument[], mode: "replace" | "keep-both" | "default", support: ReplaceSupport): NameMatch[] {
+  const matches: NameMatch[] = [];
+  const mapped = new Set<string>();
+  for (const file of files) {
+    const filename = path.basename(file);
+    const same = existing.filter((d) => d.filename === filename).sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
+    same.forEach((document, index) => {
+      let plan: ReplacePlan = "stays_active";
+      if (mode === "default" && support.byName) plan = "replaced_by_name";
+      if (mode === "replace") plan = index === 0 && support.byIds && !mapped.has(filename) ? "replace_by_id" : "deactivate";
+      matches.push({ file: path.relative(cwd, file) || file, filename, document_id: document.id, plan });
+    });
+    mapped.add(filename);
+  }
+  return matches;
+}
+
+/** One line per match, as the dry run and the preview say it. */
+function plannedLine(match: NameMatch): string {
+  const head = `${match.filename} exists (${shortId(match.document_id)})`;
+  switch (match.plan) {
+    case "stays_active":
+      return `${head} and stays active`;
+    case "replaced_by_name":
+      return `${head} and is replaced by the upload (--keep-both keeps it)`;
+    case "replace_by_id":
+      return `${head} and is replaced once the new file is verified`;
+    case "deactivate":
+      return `${head} and is deactivated after the upload`;
+  }
+}
+
+function outcomeLine(match: NameMatch): string {
+  const head = `${match.filename} exists (${shortId(match.document_id)})`;
+  switch (match.outcome) {
+    case "replaced":
+      return `${head}: replaced`;
+    case "replace_requested":
+      return `${head}: replaced once the new file is verified`;
+    case "deactivated":
+      return `${head}: deactivated`;
+    case "not_uploaded":
+      return `${head} and stays active: its new version was not uploaded`;
+    default:
+      return `${head} and stays active`;
+  }
+}
+
+/** The hint after the lines, when a same-named document stays active without being asked to. */
+function staysActiveHint(matches: NameMatch[], mode: "replace" | "keep-both" | "default"): string {
+  return mode === "default" && matches.some((m) => (m.outcome ?? m.plan) === "stays_active")
+    ? "Both versions answer. --replace replaces the existing document; --keep-both keeps both without this note."
+    : "";
+}
+
+/**
+ * The outcome of each match from the upload's answer: an instance that reports
+ * `replaced_document_ids` says what it replaced; an older one replaces the ids
+ * the kit sent once the new files are verified, and replaces nothing by name.
+ */
+function settleMatches(matches: NameMatch[], uploaded: UploadedDocument[], uploadedFiles: Set<string>): void {
+  const reported = uploaded.some((d) => Array.isArray(d.replaced_document_ids));
+  const replaced = new Set(uploaded.flatMap((d) => (Array.isArray(d.replaced_document_ids) ? d.replaced_document_ids : [])));
+  for (const match of matches) {
+    if (!uploadedFiles.has(match.file)) match.outcome = "not_uploaded";
+    else if (replaced.has(match.document_id)) match.outcome = "replaced";
+    else if (match.plan === "replace_by_id" && !reported) match.outcome = "replace_requested";
+    else if (match.plan === "deactivate") match.outcome = undefined;
+    else match.outcome = "stays_active";
+  }
+}
+
+/** Deactivate the documents the kit replaces itself; undefined when all went, else the error. */
+async function deactivate(ctx: Context, kbId: string, matches: NameMatch[]): Promise<CavelonError | undefined> {
+  const due = matches.filter((m) => m.plan === "deactivate" && m.outcome === undefined);
+  if (!due.length) return undefined;
+  try {
+    await callStable(ctx, "PATCH", ACTIVE_ROUTE, "deactivating a document", {
+      params: { kb_id: [kbId] },
+      body: { updates: due.map((m) => ({ id: m.document_id, is_active: false })) },
+    });
+    for (const m of due) m.outcome = "deactivated";
+    return undefined;
+  } catch (error) {
+    if (!(error instanceof CavelonError)) throw error;
+    for (const m of due) m.outcome = "stays_active";
+    return error;
+  }
 }
 
 async function resolveKbId(ctx: Context, ref: string): Promise<{ id: string; name?: string }> {
@@ -342,7 +503,11 @@ export const kbUpload: CommandSpec = {
   description:
     "Hidden files are skipped. Ingestion runs on the instance; `cavelon wait` follows it.\n" +
     "Files are checked against the instance's published upload limits first. A .zip goes only to a tenant that expands\n" +
-    "archives, and only within its caps on file count, unpacked size and compression ratio.",
+    "archives, and only within its caps on file count, unpacked size and compression ratio.\n" +
+    "A file named like an active document of the knowledge base is listed, with what happens to that document. An\n" +
+    "instance that replaces same-named documents on upload does so (--keep-both keeps both); elsewhere the old one stays\n" +
+    "active. --replace replaces it: through the instance's own replacement where its upload offers one, else the kit\n" +
+    "deactivates the old document after the upload (after the wait with --wait), and then only with --confirm.",
   readOnly: false,
   mcpTool: "kb_upload",
   positionals: [{ name: "dir", description: "Folder (or single file) to upload.", required: true }],
@@ -350,15 +515,25 @@ export const kbUpload: CommandSpec = {
     kb: { type: "string", value: "<kb>", description: "Knowledge base name or id (required)." },
     recursive: { type: "boolean", short: "r", description: "Include subfolders." },
     ext: { type: "string", multiple: true, value: "<ext>", description: "Only these file extensions (pdf, md, …)." },
-    "dry-run": { type: "boolean", description: "List what would be uploaded, upload nothing." },
+    replace: { type: "boolean", description: "Replace active documents with the same file name." },
+    "keep-both": { type: "boolean", description: "Keep active documents with the same file name next to the new ones." },
+    confirm: { type: "boolean", description: "With --replace, deactivate the old documents the instance does not replace itself; without it nothing is sent." },
+    "dry-run": { type: "boolean", description: "List what would be uploaded and replaced, upload nothing." },
     wait: WAIT_OPTION,
     timeout: TIMEOUT_OPTION,
   },
-  examples: ["cavelon kb upload ./docs --kb FAQ", "cavelon kb upload ./manuals --kb FAQ -r --ext pdf --wait --timeout 5m"],
+  examples: [
+    "cavelon kb upload ./docs --kb FAQ",
+    "cavelon kb upload ./docs/bergbahn-faq.md --kb FAQ --replace --dry-run",
+    "cavelon kb upload ./manuals --kb FAQ -r --ext pdf --wait --timeout 5m",
+  ],
   async run(ctx, input) {
-    const dir = await confinedPath(ctx, positional(input, "dir")!, "The folder");
+    const dirArg = positional(input, "dir")!;
+    const dir = await confinedPath(ctx, dirArg, "The folder");
     const kbRef = stringOption(input, "kb");
     if (!kbRef) throw usageError("Which knowledge base?", "Pass --kb <name-or-id>.");
+    const mode = boolOption(input, "replace") ? "replace" : boolOption(input, "keep-both") ? "keep-both" : "default";
+    if (mode === "replace" && boolOption(input, "keep-both")) throw usageError("--replace and --keep-both exclude each other.");
     const extensions = listOption(input, "ext").flatMap((e) => e.split(",")).map((e) => e.replace(/^\./, "").toLowerCase()).filter(Boolean);
     let stat;
     try {
@@ -374,11 +549,48 @@ export const kbUpload: CommandSpec = {
       const found = await uploadRefusals(files, ctx.io.cwd, published, (message) => ctx.warn(message));
       if (found.refusals.length) throw refusalError(found, files.length);
     }
-    if (boolOption(input, "dry-run")) {
-      const rel = files.map((f) => path.relative(ctx.io.cwd, f) || f);
-      return { data: { kb: kbRef, files: rel, count: rel.length, dry_run: true }, text: `Would upload ${rel.length} files:\n${rel.join("\n")}` };
-    }
     const kb = await resolveKbId(ctx, kbRef);
+    const { doc, op } = await workflowOperation(ctx, "POST", UPLOAD_ROUTE, "document upload");
+    const support = replaceSupport(doc, op);
+    const existing = await existingDocuments(ctx, kb.id);
+    const matches = existing ? nameMatches(files, ctx.io.cwd, existing, mode, support) : [];
+    const rel = files.map((f) => path.relative(ctx.io.cwd, f) || f);
+    const planned = matches.map(({ outcome: _outcome, ...m }) => m);
+    const hint = staysActiveHint(matches, mode);
+    const deactivations = matches.filter((m) => m.plan === "deactivate");
+    if (boolOption(input, "dry-run")) {
+      return {
+        data: { kb: kbRef, files: rel, count: rel.length, dry_run: true, existing: planned },
+        text: [
+          `Would upload ${rel.length} files:`,
+          ...rel,
+          ...matches.map(plannedLine),
+          ...(hint ? [hint] : []),
+          ...(deactivations.length ? [`The kit deactivates ${deactivations.length === 1 ? "that document" : "those documents"} only with --replace --confirm.`] : []),
+        ].join("\n"),
+      };
+    }
+    if (deactivations.length && !boolOption(input, "confirm")) {
+      const confirm = cavelonCommand(
+        "kb",
+        "upload",
+        dirArg,
+        "--kb",
+        kbRef,
+        ...(boolOption(input, "recursive") ? ["-r"] : []),
+        ...extensions.flatMap((e) => ["--ext", e]),
+        "--replace",
+        "--confirm",
+      );
+      return {
+        data: { kb: { id: kb.id, name: kb.name ?? null }, files: rel, count: rel.length, uploaded: false, existing: planned, confirm },
+        text: [
+          `--replace uploads ${rel.length} files and then deactivates ${deactivations.length} document${deactivations.length === 1 ? "" : "s"} the instance's upload does not replace itself:`,
+          ...matches.map(plannedLine),
+          `Nothing was sent. Upload and deactivate with: ${confirm}`,
+        ].join("\n"),
+      };
+    }
     // Batches keep each request bounded in size and time.
     const batches: string[][] = [];
     let current: string[] = [];
@@ -395,15 +607,23 @@ export const kbUpload: CommandSpec = {
     }
     if (current.length) batches.push(current);
     const documents: UploadedDocument[] = [];
+    const uploadedFiles = new Set<string>();
     let failure: { error: CavelonError; notUploaded: string[] } | undefined;
     for (const [index, batch] of batches.entries()) {
+      const names = new Set(batch.map((f) => path.basename(f)));
+      const replaceIds = Object.fromEntries(matches.filter((m) => m.plan === "replace_by_id" && names.has(m.filename)).map((m) => [m.filename, m.document_id]));
+      const fields: Record<string, unknown> = {};
+      if (Object.keys(replaceIds).length) fields.replace_doc_ids = JSON.stringify(replaceIds);
+      if (mode === "keep-both" && support.byName) fields.replace_existing = false;
       try {
-        const uploaded = await callStable<UploadedDocument[]>(ctx, "POST", "/api/v1/knowledge-bases/{kb_id}/documents/upload", "document upload", {
+        const uploaded = await callStable<UploadedDocument[]>(ctx, "POST", UPLOAD_ROUTE, "document upload", {
           params: { kb_id: [kb.id] },
+          body: Object.keys(fields).length ? fields : undefined,
           files: batch.map((f) => ({ field: "files", path: f })),
           timeoutMs: 300_000,
         });
         documents.push(...uploaded);
+        for (const f of batch) uploadedFiles.add(path.relative(ctx.io.cwd, f) || f);
       } catch (error) {
         if (!(error instanceof CavelonError) || documents.length === 0) throw error;
         // Earlier batches are uploaded and ingesting: report them, and what is left.
@@ -411,32 +631,61 @@ export const kbUpload: CommandSpec = {
         break;
       }
     }
+    settleMatches(matches, documents, uploadedFiles);
     const operationIds = documents.map((d) => d.operation_id).filter((id): id is string => Boolean(id));
-    const summary = {
+    const summary = () => ({
       kb: { id: kb.id, name: kb.name ?? null },
-      documents: documents.map((d) => ({ id: d.id, filename: d.filename, status: d.status, operation_id: d.operation_id ?? null })),
+      documents: documents.map((d) => ({
+        id: d.id,
+        filename: d.filename,
+        status: d.status,
+        operation_id: d.operation_id ?? null,
+        ...(Array.isArray(d.replaced_document_ids) ? { replaced_document_ids: d.replaced_document_ids } : {}),
+      })),
       operation_ids: operationIds,
+      existing: matches,
+    });
+    const matchLines = () => {
+      const note = staysActiveHint(matches, mode);
+      return [...matches.map(outcomeLine), ...(note ? [note] : [])];
     };
     if (operationIds.length < documents.length) ctx.warn("The instance returned no operation id for some documents; it may be older than the operations API.");
     if (failure) {
+      const refused = await deactivate(ctx, kb.id, matches);
+      if (refused) ctx.warn(`The old documents stay active: ${refused.message}`);
       return {
-        data: { ...summary, error: failure.error.toJSON(), not_uploaded: failure.notUploaded },
-        text:
-          `Uploaded ${documents.length} files, then: ${failure.error.message}\n` +
-          `Not uploaded (${failure.notUploaded.length}): ${failure.notUploaded.join(", ")}\n` +
-          (operationIds.length ? `Wait for the uploaded ones with: cavelon wait ${operationIds.join(" ")}` : ""),
+        data: { ...summary(), error: failure.error.toJSON(), not_uploaded: failure.notUploaded },
+        text: [
+          `Uploaded ${documents.length} files, then: ${failure.error.message}`,
+          `Not uploaded (${failure.notUploaded.length}): ${failure.notUploaded.join(", ")}`,
+          ...matchLines(),
+          ...(operationIds.length ? [`Wait for the uploaded ones with: cavelon wait ${operationIds.join(" ")}`] : []),
+        ].join("\n"),
         exitCode: failure.error.exitCode,
       };
     }
     if (boolOption(input, "wait") && ctx.mode === "cli" && operationIds.length) {
       const waited = await waitAndReport(ctx, operationIds, timeoutMs(ctx, stringOption(input, "timeout")));
-      return { data: { ...summary, ...waited.data }, text: `Uploaded ${documents.length} files.\n${waited.text}`, exitCode: waited.exitCode };
+      // The old documents keep answering until the new ones are ingested; a failed ingestion keeps them.
+      const refused = waited.exitCode === ExitCode.ok ? await deactivate(ctx, kb.id, matches) : undefined;
+      if (waited.exitCode !== ExitCode.ok) for (const m of matches) if (m.outcome === undefined) m.outcome = "stays_active";
+      if (refused) ctx.warn(`The old documents stay active: ${refused.message}`);
+      return {
+        data: { ...summary(), ...waited.data },
+        text: [`Uploaded ${documents.length} files.`, ...matchLines(), waited.text].join("\n"),
+        exitCode: refused && waited.exitCode === ExitCode.ok ? refused.exitCode : waited.exitCode,
+      };
     }
+    const refused = await deactivate(ctx, kb.id, matches);
+    if (refused) ctx.warn(`The old documents stay active: ${refused.message}`);
     return {
-      data: summary,
-      text:
-        `Uploaded ${documents.length} files to ${kb.name ?? kb.id}.` +
-        (operationIds.length ? `\nOperations: ${operationIds.length}\nWait with: cavelon wait ${operationIds.join(" ")}` : ""),
+      data: summary(),
+      text: [
+        `Uploaded ${documents.length} files to ${kb.name ?? kb.id}.`,
+        ...matchLines(),
+        ...(operationIds.length ? [`Operations: ${operationIds.length}`, `Wait with: cavelon wait ${operationIds.join(" ")}`] : []),
+      ].join("\n"),
+      exitCode: refused?.exitCode,
     };
   },
 };

@@ -195,7 +195,9 @@ runs.
    refused (exit 4) and the agent previews again.
 6. **Upload.** `cavelon kb upload seeds/<folder> --kb "<name>"` sends the
    knowledge documents, after checking them against the tenant's upload
-   limits, and the agent waits for ingestion to finish.
+   limits, and the agent waits for ingestion to finish. A file named like a
+   document already in the knowledge base is listed; to update that document
+   the agent uploads it with `--replace`.
 7. **Test.** `cavelon test run --suite <suite>` runs the suite on the
    instance, where a judge scores each answer. The agent waits for the result.
    In a test result, check the pass count, and for each case that did not pass

@@ -23,6 +23,29 @@ CLI, the skills and the plugin.
   ready to activate (or the blockers), and its latest test run, from the
   readiness the instance publishes (`solution.state` in `--json`). An instance
   whose readiness does not name the latest run says so.
+- `cavelon kb upload` names each file whose name matches an active document of
+  the knowledge base, in `--dry-run` and after the upload:
+  "bergbahn-faq.md exists (094e95e9…) and stays active". `--replace` replaces
+  that document: through the instance's own replacement (`replace_doc_ids`),
+  reading what was replaced from `replaced_document_ids` where the instance
+  reports it; on an instance whose upload cannot replace, it uploads and then
+  deactivates the old document, and only with `--confirm`. On an instance that
+  replaces same-named documents by default, `--keep-both` keeps both.
+  `--dry-run` now looks the knowledge base up, so it fails for one that does
+  not exist. The cavelon-loop skill says how to update a document. `pull` writes
+  `.cavelon/inventory.json` next to `inventory.md`, which now lists skills and
+  models too.
+- `cavelon validate` checks what the schema cannot, each with file and line:
+  two entries with one slug (`package_duplicate_key`) and a handoff to an agent
+  the package lacks (`package_reference_missing`) are errors; a skill, tool,
+  knowledge base or solution that is neither in the package nor among what the
+  tenant held at the last pull (`package_reference_unknown`), a field the
+  package schema does not have (`package_field_unknown`, "did you mean
+  temperature?"), and an agent's `llm_model` outside the tenant's model list as
+  `pull` or `models list` last read it (`package_model_unknown`) are warnings.
+  A finding carries the closest name as `suggestion`; a required field under
+  another name is reported once, as the missing field, with the suggestion.
+- `cavelon docs get index` prints the instance's whole docs index.
 
 ### Changed
 
@@ -68,6 +91,16 @@ CLI, the skills and the plugin.
   marks a cached version too. Its text shows the quotas it cannot read, and a
   403 on the quota usage says that the token's ceiling (named) does not read
   them and who does, instead of the raw refusal; `limits` says the same.
+- `cavelon docs search` drops English and German stop words, matches whole
+  words (in a simple base form, so "testing" finds "test" but "latest" does
+  not), weighs rare words above common ones, looks German words for the core
+  concepts up in English (Wissensbasis, testen, Standard, Bot), and lists only
+  pages that match well, instead of every page that shares a letter sequence.
+  When nothing matches, it says so, with the words it looked for, English
+  words to try and `cavelon docs get index`. "Wie lade ich Dokumente in eine
+  Wissensbasis hoch?", "Wie teste ich meinen Agenten?" and "Wie mache ich
+  meinen Bot zur Standardantwort für alle Nutzer?" now find the concept page
+  first.
 
 - `cavelon login` and `cavelon setup` let an operator whose token reaches
   every tenant choose the tenant later: Enter at the question stores the token
