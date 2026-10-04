@@ -73,10 +73,21 @@ Which tenant? (type its number or part of its name) acme
 Logged in to https://cavelon.example.com as ada@example.com. Token stored in the credential store. Using tenant Acme Support (acme-support, 4f6174cf-3060-4ff1-bd3c-8a8e7999256b); `cavelon use` chooses another.
 ```
 
-A token that reaches one tenant uses it without asking. An operator's token
-that reaches every tenant asks for part of the tenant's name and searches. To
-skip the question, name the tenant: `--tenant acme-support` (a name, slug or id
-works).
+A token that reaches one tenant uses it without asking. To skip the question,
+name the tenant: `--tenant acme-support` (a name, slug or id works).
+
+An operator's token that reaches every tenant works in every tenant, one at a
+time, so the choice at login is only where to start:
+
+```text
+This token works in every tenant on https://cavelon.example.com, one at a time: `cavelon use` switches, and --tenant or `tenant:` in cavelon.yaml choose one per command or per solution folder.
+Which tenant to start in? (type part of its name, or press Enter to choose later)
+```
+
+Part of a name searches the instance's tenants. Enter chooses later: the token
+is stored without a tenant, as with `--token-stdin`, `cavelon status` shows the
+tenant as not chosen, and `cavelon use <name or slug>` chooses one when you
+need it.
 
 Without a terminal (CI, `--token-stdin`), nobody can answer: a token for
 several tenants is stored, and `login` prints one ready line per tenant, such

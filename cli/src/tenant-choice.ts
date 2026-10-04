@@ -26,7 +26,9 @@ export type TenantChoice =
   /** The token reaches no tenant. */
   | { kind: "none" }
   /** Several, and nobody to ask. */
-  | { kind: "open" };
+  | { kind: "open" }
+  /** Every tenant, and the person chose to pick one later. */
+  | { kind: "later" };
 
 /** What a person types to work in this tenant: its slug, else its id. */
 export function tenantRef(tenant: Pick<ReachableTenant, "slug" | "id">): string {
@@ -45,22 +47,34 @@ export async function searchTenants(client: ApiClient, text: string): Promise<Re
   return found && !found.refused ? (found.tenants ?? []) : [];
 }
 
-export async function chooseTenant(ctx: Context, client: ApiClient, reach: Reach): Promise<TenantChoice> {
+/**
+ * `later`: a token that reaches every tenant may leave the choice for later
+ * (Enter), for `login`, where any tenant stays one `cavelon use` away. A
+ * token for a list of tenants still chooses one: Enter there takes the
+ * default the instance marks.
+ */
+export async function chooseTenant(ctx: Context, client: ApiClient, reach: Reach, options: { later?: boolean } = {}): Promise<TenantChoice> {
   const { tenants, reachesAll } = reach;
   if (!reachesAll && tenants.length === 1) return { kind: "chosen", tenant: tenants[0]!, how: "only" };
   if (!reachesAll && tenants.length === 0) return { kind: "none" };
   if (!canAsk(ctx)) return { kind: "open" };
-  const intro = reachesAll
-    ? `This token reaches every tenant on ${client.url}.${tenants.length ? " Yours:" : ""}`
-    : `This token reaches ${tenants.length} tenants on ${client.url}:`;
+  const later = reachesAll && options.later;
+  const intro = later
+    ? `This token works in every tenant on ${client.url}, one at a time: \`cavelon use\` switches, ` +
+      `and --tenant or \`tenant:\` in cavelon.yaml choose one per command or per solution folder.${tenants.length ? "\nYours:" : ""}`
+    : reachesAll
+      ? `This token reaches every tenant on ${client.url}.${tenants.length ? " Yours:" : ""}`
+      : `This token reaches ${tenants.length} tenants on ${client.url}:`;
   const picked = await pick(ctx, {
     intro,
-    question: "Which tenant?",
+    question: later ? "Which tenant to start in?" : "Which tenant?",
     items: tenants,
     extra: (t) => t.role ?? undefined,
     preferred: tenants.find((t) => t.is_default),
     search: reachesAll ? (text) => searchTenants(client, text) : undefined,
+    ...(later ? { later: "choose later" } : {}),
   });
+  if ("later" in picked) return { kind: "later" };
   if (!("item" in picked)) throw new Error("unreachable: the tenant list offers no other entry");
   return { kind: "chosen", tenant: picked.item, how: "picked" };
 }
