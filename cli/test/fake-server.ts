@@ -218,6 +218,13 @@ export interface FakeState {
   dropStreams: number;
   /** Each tenant's configuration, as export returns it and import replaces it. */
   configs: Map<string, TenantConfig>;
+  /**
+   * Whether the export fills in the package schema's non-null defaults and
+   * orders each object's fields as the schema lists them, as an instance's
+   * export does. Off returns a package as it was imported, the fixture the
+   * tests that compare pulled bytes rely on.
+   */
+  exportFillsDefaults: boolean;
   /** Each solution's persona, by harness id, as GET/PUT /bot-persona read and write it. */
   personas: Map<string, Record<string, unknown>>;
   /** An older instance whose solution list has no is_default. */
@@ -228,9 +235,11 @@ export interface FakeState {
   /**
    * When set, a confirmed import's own check refuses it as
    * 409 package_requirements_changed: with these
-   * `blockers`, or without the field, as an older instance answers.
+   * `blockers`, or without the field, as an older instance answers; and with
+   * `blocker_details` (code, message, path, hint) beside them, as a preview
+   * sends them, where a test sets them.
    */
-  importRequirementsChanged: { blockers?: string[] } | null;
+  importRequirementsChanged: { blockers?: string[]; blocker_details?: Array<Record<string, unknown>> } | null;
   /** Whether readiness lets a solution activate. */
   ready: boolean;
   /** The blockers readiness names while not ready; a missing test run by default. */
@@ -481,6 +490,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     uploadsBeforeFailure: Infinity,
     dropStreams: 0,
     configs: new Map(),
+    exportFillsDefaults: false,
     previewExtras: {},
     previewBlockers: [],
     personas: new Map(),
@@ -633,8 +643,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     if (p === "/api/v1/meta/package-schema" && state.servePackageSchema) {
       const version = url.searchParams.get("version") ?? "v3";
       if (version !== "v3") return send(res, 404, { detail: "package_version_unsupported" });
-      const schema = JSON.parse(readContract("meta-package-schema-v3.json")) as { properties: Record<string, unknown> };
-      state.packageSchemaEdit?.(schema);
+      const schema = packageSchema();
       if (!state.packageSchemaEtag) return send(res, 200, schema);
       const text = JSON.stringify(schema);
       const etag = `"${createHash("sha256").update(text).digest("hex").slice(0, 16)}"`;
@@ -962,7 +971,7 @@ export async function startFakeServer(): Promise<FakeServer> {
         return send(res, 403, { detail: "full_config export requires admin authentication (JWT), not API key" });
       }
       const config = configFor(tid);
-      const pkg = structuredClone(config.pkg);
+      const pkg = state.exportFillsDefaults ? withSchemaDefaults(packageSchema(), config.pkg) : structuredClone(config.pkg);
       pkg.manifest = { ...(pkg.manifest as object), exported_at: now(), scope };
       return send(res, 200, pkg);
     }
@@ -1003,9 +1012,10 @@ export async function startFakeServer(): Promise<FakeServer> {
         const catalog = JSON.parse(readContract("meta-error-catalog.json")) as { api_error_codes: Array<{ code: string; message: string; hint: string; docs: string }> };
         const entry = catalog.api_error_codes.find((e) => e.code === "package_requirements_changed")!;
         const said = "Import requirements changed. Preview again; no changes were saved.";
-        const blockers = state.importRequirementsChanged.blockers;
+        const { blockers, blocker_details } = state.importRequirementsChanged;
         return send(res, 409, {
           ...(blockers ? { blockers } : {}),
+          ...(blocker_details ? { blocker_details } : {}),
           detail: said,
           code: entry.code,
           message: said,
@@ -1455,6 +1465,13 @@ export async function startFakeServer(): Promise<FakeServer> {
     };
   }
 
+  /** The package schema as the instance serves it, with the test's edit. */
+  function packageSchema(): { properties: Record<string, unknown> } {
+    const schema = JSON.parse(readContract("meta-package-schema-v3.json")) as { properties: Record<string, unknown> };
+    state.packageSchemaEdit?.(schema);
+    return schema;
+  }
+
   function configFor(tenantId: string): TenantConfig {
     let config = state.configs.get(tenantId);
     if (!config) {
@@ -1519,6 +1536,50 @@ export async function startFakeServer(): Promise<FakeServer> {
 }
 
 /** A secret's name and status, as the instance answers; never its value. */
+type Node = Record<string, unknown>;
+const isNode = (v: unknown): v is Node => Boolean(v) && typeof v === "object" && !Array.isArray(v);
+
+/**
+ * A package as an instance's export gives it: the instance reads an import
+ * into its models and writes them back out, so each object comes back with
+ * the fields the schema lists, in that order, and those it was sent without
+ * hold their non-null default. Written apart from the kit's own `fmt`, so a
+ * test of `fmt` against it proves something.
+ */
+function withSchemaDefaults(schema: { properties: Record<string, unknown> }, pkg: Record<string, unknown>): Record<string, unknown> {
+  const defs = ((schema as Node).$defs ?? {}) as Record<string, Node>;
+  const deref = (node: unknown): Node | undefined => {
+    let at = isNode(node) ? node : undefined;
+    for (let i = 0; at && typeof at.$ref === "string" && i < 10; i++) at = defs[(at.$ref as string).replace("#/$defs/", "")];
+    return at;
+  };
+  const options = (node: Node): Node[] => {
+    const list = (node.anyOf ?? node.oneOf) as unknown[] | undefined;
+    return list ? list.flatMap((b) => (deref(b) ? options(deref(b)!) : [])) : [node];
+  };
+  const fill = (node: unknown, value: unknown, depth: number): unknown => {
+    const at = deref(node);
+    if (!at || depth > 40) return structuredClone(value);
+    if (Array.isArray(value)) {
+      const list = options(at).filter((b) => b.type === "array");
+      return list.length === 1 && list[0]!.items ? value.map((v) => fill(list[0]!.items, v, depth + 1)) : structuredClone(value);
+    }
+    if (!isNode(value)) return value;
+    // An object field with several shapes is passed through, as the models keep a plain dict.
+    const objects = options(at).filter((b) => isNode(b.properties));
+    if (objects.length !== 1) return structuredClone(value);
+    const props = objects[0]!.properties as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const [key, sub] of Object.entries(props)) {
+      if (key in value) out[key] = fill(sub, value[key], depth + 1);
+      else if (deref(sub)?.default != null) out[key] = structuredClone(deref(sub)!.default);
+    }
+    for (const [key, inner] of Object.entries(value)) if (!(key in props)) out[key] = structuredClone(inner);
+    return out;
+  };
+  return Object.fromEntries(Object.entries(pkg).map(([section, value]) => [section, fill(schema.properties[section], value, 0)]));
+}
+
 function secretStatus(values: TenantValues, name: string) {
   const stored = values.secrets.get(name);
   const declared = values.declared.secrets.has(name);
@@ -1690,10 +1751,15 @@ function resultView(runId: string, name: string, status: string, conversationId:
   };
 }
 
-export function traceFixture(id: string, conversationId: string | null) {
-  const span = (n: number, type: string, name: string, status = "ok") => ({
+/**
+ * A trace of three spans: the agent, a model call, and a search that failed.
+ * `knowledgeOutcome` adds the search's retrieval span with the outcome the
+ * agent recorded on it, as a recent instance writes it.
+ */
+export function traceFixture(id: string, conversationId: string | null, options: { knowledgeOutcome?: string } = {}) {
+  const span = (n: number, type: string, name: string, status = "ok", parent = 1, attributes: Record<string, unknown> = {}) => ({
     id: `${id}-span-${n}`,
-    parent_span_id: n === 1 ? null : `${id}-span-1`,
+    parent_span_id: n === 1 ? null : `${id}-span-${parent}`,
     span_key: `k${n}`,
     span_type: type,
     name,
@@ -1711,7 +1777,7 @@ export function traceFixture(id: string, conversationId: string | null) {
     duration_ms: 10 * n,
     input_json: { prompt: "x".repeat(5000) },
     output_json: { text: "done" },
-    attributes_json: {},
+    attributes_json: attributes,
     token_usage_json: { input: 10, output: 5 },
     error_json: status === "error" ? { message: "tool exploded" } : null,
   });
@@ -1730,7 +1796,7 @@ export function traceFixture(id: string, conversationId: string | null) {
     ended_at: now(),
     duration_ms: 60,
     error_summary: null,
-    total_spans: 3,
+    total_spans: options.knowledgeOutcome ? 4 : 3,
     total_tool_calls: 1,
     total_llm_calls: 1,
     total_input_tokens: 10,
@@ -1739,6 +1805,11 @@ export function traceFixture(id: string, conversationId: string | null) {
     total_reasoning_tokens: 0,
     has_retrieval: false,
     created_at: now(),
-    spans: [span(1, "agent", "Main"), span(2, "llm", "generate"), span(3, "tool", "search_documents", "error")],
+    spans: [
+      span(1, "agent", "Main"),
+      span(2, "llm", "generate"),
+      span(3, "tool", "search_documents", "error"),
+      ...(options.knowledgeOutcome ? [span(4, "retrieval", "retrieve", "ok", 3, { knowledge_outcome: options.knowledgeOutcome })] : []),
+    ],
   };
 }

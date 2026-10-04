@@ -3,7 +3,7 @@ import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSy
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { parse, stringify } from "yaml";
-import { CONTRACTS, modelRow, startFakeServer, type FakeServer } from "./fake-server.js";
+import { CONTRACTS, FIXTURES, modelRow, startFakeServer, type FakeServer } from "./fake-server.js";
 import { cli, login, sandbox, type Sandbox } from "./helpers.js";
 
 /**
@@ -1043,6 +1043,94 @@ describe("validate", () => {
   });
 });
 
+describe("a test step's assertions, on an instance whose schema publishes them", () => {
+  /** The criterion shapes a recent instance publishes for a step: judge criteria, and assertions checked in code. */
+  const criteria = JSON.parse(readFileSync(path.join(FIXTURES, "step-criteria.json"), "utf8")) as { $defs: Record<string, unknown>; items: unknown };
+  const publishCriteria = (schema: { properties: Record<string, unknown> }) => {
+    const all = schema as unknown as { $defs: Record<string, { properties: Record<string, unknown> }> };
+    Object.assign(all.$defs, criteria.$defs);
+    all.$defs.PackageTestCaseStep!.properties.evaluation_criteria = { anyOf: [{ type: "array", items: criteria.items, maxItems: 50 }, { type: "null" }], default: null };
+  };
+  let own: Sandbox;
+
+  async function solution(steps: string): Promise<string> {
+    await login(own, server.url, token);
+    const dir = path.join(own.home, "solution");
+    mkdirSync(dir);
+    expect((await cli(own, ["init", "--instance", server.url, "--tenant", tenant, "--harness", "support"], { cwd: dir })).code).toBe(0);
+    expect((await cli(own, ["pull"], { cwd: dir })).code).toBe(0);
+    writeFileSync(
+      path.join(dir, "tests", "routing.yaml"),
+      `name: Routing\nharness_slug: support\ntest_cases:\n  - name: Family ticket price\n    steps:\n      - user_message: What does a family ticket cost?\n        evaluation_criteria:\n${steps}`,
+    );
+    return dir;
+  }
+
+  beforeEach(() => {
+    own = sandbox();
+    server.state.packageSchemaEdit = publishCriteria;
+  });
+  afterEach(() => {
+    server.state.packageSchemaEdit = null;
+    own.cleanup();
+  });
+
+  const routing =
+    "          - States the price of the family ticket.\n" +
+    "          - {type: handoff_to, value: ticket-agent}\n" +
+    "          - {type: answered_by, value: ticket-agent}\n" +
+    "          - {type: tool_called, value: search_documents}\n" +
+    "          - {type: tool_not_called, value: web_search}\n";
+
+  it("validate accepts handoff_to, answered_by, tool_called and tool_not_called, and fmt leaves them as written", async () => {
+    const dir = await solution(routing);
+    const valid = await cli(own, ["validate", "--json"], { cwd: dir });
+    expect(valid.code, valid.stdout).toBe(0);
+    expect(valid.json<{ findings: unknown[] }>().findings).toEqual([]);
+    expect((await cli(own, ["fmt"], { cwd: dir })).code).toBe(0);
+    const step = (parse(readFileSync(path.join(dir, "tests", "routing.yaml"), "utf8")) as { test_cases: Array<{ steps: Array<{ evaluation_criteria: unknown[] }> }> }).test_cases[0]!.steps[0]!;
+    expect(step.evaluation_criteria).toEqual([
+      "States the price of the family ticket.",
+      { type: "handoff_to", value: "ticket-agent" },
+      { type: "answered_by", value: "ticket-agent" },
+      { type: "tool_called", value: "search_documents" },
+      { type: "tool_not_called", value: "web_search" },
+    ]);
+    expect((await cli(own, ["validate", "--json"], { cwd: dir })).code).toBe(0);
+  });
+
+  it("on an instance whose schema does not describe a step's criteria, validate warns once per suite file that it cannot check them", async () => {
+    server.state.packageSchemaEdit = null;
+    const dir = await solution(routing);
+    const result = await cli(own, ["validate", "--json"], { cwd: dir });
+    expect(result.code, result.stdout).toBe(0);
+    const findings = result.json<{ findings: Array<{ code: string; severity: string; file: string; line: number; message: string }> }>().findings;
+    expect(findings).toEqual([
+      expect.objectContaining({
+        code: "test_assertion_unchecked",
+        severity: "warning",
+        file: "tests/routing.yaml",
+        line: 9,
+        message: expect.stringContaining("(handoff_to, answered_by, tool_called, tool_not_called) are not checked"),
+      }),
+    ]);
+    expect((await cli(own, ["explain", "test_assertion_unchecked"], { cwd: dir })).stdout).toMatch(/grades it as a judge criterion/);
+  });
+
+  it("validate names a routing assertion without its agent, and one with a field it does not take", async () => {
+    const dir = await solution("          - {type: handoff_to}\n          - {type: answered_by, value: ticket-agent, agent: front-desk}\n");
+    const result = await cli(own, ["validate", "--json"], { cwd: dir });
+    expect(result.code).toBe(3);
+    const findings = result.json<{ findings: Array<{ code: string; file: string; path: string; message: string }> }>().findings;
+    // Only what the closest shape (the routing assertion) says, not every other kind of criterion's complaints.
+    const at = "test_suites[1].test_cases[0].steps[0].evaluation_criteria";
+    expect(findings.map((f) => [f.file, f.path, f.message])).toEqual([
+      ["tests/routing.yaml", `${at}[0]`, 'missing required field "value"'],
+      ["tests/routing.yaml", `${at}[1]`, 'field "agent" is not allowed here'],
+    ]);
+  });
+});
+
 describe("validate on an instance whose schema changes under one version", () => {
   /** The section a development build gains while it keeps reporting v0.0.0-dev. */
   const gainNotes = (schema: { properties: Record<string, unknown> }) => {
@@ -1496,6 +1584,59 @@ describe("a confirmed import its own check refuses", () => {
     const plain = (await cli(sb, ["apply", "--confirm", second, "--json"], { cwd: other })).json<Refusal>().error;
     expect(plain.blockers).toEqual([blockers[0], blockers[2]]);
     expect(plain.hint).toBe("Run `cavelon apply --harness support` again, show the new preview, and confirm its id.");
+  });
+
+  it("shows structured blockers as a preview does: code, package file and path, hint and explain", async () => {
+    const blockers = ["Agent helper names model gpt-9, which this tenant does not have.", "Tool crm needs a connection."];
+    server.state.importRequirementsChanged = {
+      blockers,
+      blocker_details: [
+        { code: "agent_model_unknown", message: blockers[0], path: "agents[0].llm_model", hint: "Choose a model of this tenant." },
+        { code: "import_blocked", message: blockers[1], path: null, hint: null },
+      ],
+    };
+    const { dir, previewId } = await previewed();
+    const text = await cli(sb, ["apply", "--confirm", previewId], { cwd: dir });
+    expect(text.code).toBe(4);
+    expect(text.stderr).toContain(`error: The import's requirements changed since preview ${previewId}; nothing was imported; preview again.\nblockers:\n`);
+    expect(text.stderr).toMatch(/\n {2}- agent_model_unknown {2}package\/agents\.yaml:\d+ agents\[0\]\.llm_model: Agent helper names model gpt-9/);
+    expect(text.stderr).toMatch(/\n {4}hint: Choose a model of this tenant\.\n {4}more: cavelon explain agent_model_unknown\n/);
+    expect(text.stderr).toMatch(/\n {2}- import_blocked {2}Tool crm needs a connection\.\n {4}more: cavelon explain import_blocked\n/);
+    expect(text.stderr).toMatch(/\nhint: Run `cavelon apply --harness support` again/);
+
+    const { dir: other, previewId: second } = await previewed();
+    const error = (await cli(sb, ["apply", "--confirm", second, "--json"], { cwd: other })).json<Refusal & { error: { blocker_details: unknown[] } }>().error;
+    expect(error).toMatchObject({ code: "package_requirements_changed", exit_code: 4, blockers });
+    expect(error.blocker_details).toEqual([
+      { code: "agent_model_unknown", message: blockers[0], path: "agents[0].llm_model", hint: "Choose a model of this tenant.", file: "package/agents.yaml", line: expect.any(Number) },
+      { code: "import_blocked", message: blockers[1], path: null, hint: null },
+    ]);
+    expect(server.state.configs.get(tenant)!.version).toBe(1);
+  });
+
+  it("without blocker_details, a 409 keeps its plain blockers and no blocker_details", async () => {
+    const blockers = ["Tool crm needs a connection."];
+    server.state.importRequirementsChanged = { blockers };
+    const { dir, previewId } = await previewed();
+    const error = (await cli(sb, ["apply", "--confirm", previewId, "--json"], { cwd: dir })).json<Refusal>().error;
+    expect(error.blockers).toEqual(blockers);
+    expect(error).not.toHaveProperty("blocker_details");
+  });
+
+  it("a 422 for an import blocked when it applies shows its structured blockers too", async () => {
+    const { dir, previewId } = await previewed();
+    server.state.previewBlockers = ["Agent helper has no model."];
+    server.state.previewExtras = { blocker_details: [{ code: "agent_model_missing", message: "Agent helper has no model.", path: "agents[0].llm_model", hint: "Set llm_model." }] };
+    try {
+      const text = await cli(sb, ["apply", "--confirm", previewId], { cwd: dir });
+      expect(text.code).toBe(3);
+      expect(text.stderr).toContain(`error: The import's own check refused preview ${previewId} when it applied; nothing was imported.\n`);
+      expect(text.stderr).toMatch(/\nhint: Fix what each blocker names, run `cavelon apply --harness support` again/);
+      expect(text.stderr).toMatch(/blockers:\n {2}- agent_model_missing {2}package\/agents\.yaml:\d+ agents\[0\]\.llm_model: Agent helper has no model\.\n {4}hint: Set llm_model\./);
+    } finally {
+      server.state.previewBlockers = [];
+      server.state.previewExtras = {};
+    }
   });
 
   it("reads an older instance's 409 without blockers as before", async () => {

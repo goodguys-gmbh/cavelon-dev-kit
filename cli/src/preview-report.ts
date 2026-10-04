@@ -52,20 +52,22 @@ export function pointerOf(path: string): string {
 
 export function blockerDetails(raw: unknown, disk?: PackageOnDisk): BlockerDetail[] {
   if (!Array.isArray(raw)) return [];
-  return raw.filter(isObject).map((b) => {
-    const path = text(b.path) ?? text(b.pointer) ?? text(b.location);
-    const detail: BlockerDetail = {
-      code: text(b.code),
-      message: text(b.message) ?? text(b.detail) ?? JSON.stringify(b),
-      path,
-      hint: text(b.hint),
-    };
-    if (path && disk) {
-      const at = locate(disk, pointerOf(path));
-      if (at.file) detail.file = at.file;
-      if (at.line) detail.line = at.line;
-    }
-    return detail;
+  const details = raw.filter(isObject).map((b) => ({
+    code: text(b.code),
+    message: text(b.message) ?? text(b.detail) ?? JSON.stringify(b),
+    path: text(b.path) ?? text(b.pointer) ?? text(b.location),
+    hint: text(b.hint),
+  }));
+  return locateBlockers(details, disk);
+}
+
+/** Each blocker with the package file and line its path is in, where the kit finds it. */
+export function locateBlockers(details: BlockerDetail[], disk?: PackageOnDisk): BlockerDetail[] {
+  if (!disk) return details;
+  return details.map((b) => {
+    if (!b.path) return b;
+    const at = locate(disk, pointerOf(b.path));
+    return { ...b, ...(at.file ? { file: at.file } : {}), ...(at.line ? { line: at.line } : {}) };
   });
 }
 

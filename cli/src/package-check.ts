@@ -55,6 +55,10 @@ const PERSONA_MESSAGES = [
   { switch: "fallback_message_enabled", text: "fallback_message", what: "fallback message", when: "when the assistant has no answer" },
 ];
 
+/** A test step's criterion with a `type`, on an instance whose schema does not describe a step's criteria. */
+const ASSERTION_UNCHECKED_CODE = "test_assertion_unchecked";
+const TESTING_DOCS = "/docs/concepts/regression-testing";
+
 /**
  * The codes `validate` reports itself. The instance's catalog wins where it
  * lists the same code; these explain the rest without a round trip.
@@ -115,6 +119,15 @@ export const KIT_CODES: CatalogEntry[] = [
     message: "An agent is given knowledge bases, but no search tool reaches it, so it cannot read them.",
     hint: `A knowledge base reaches an agent only through a search tool: add \`- tool_slug: ${SEARCH_TOOL}\` to the tool_assignments of the skill that names the knowledge base, or of the agent. \`cavelon docs get reference/builtin-tools\` shows the binding.`,
     docs: SEARCH_DOCS,
+  },
+  {
+    code: ASSERTION_UNCHECKED_CODE,
+    area: "package",
+    message: "A test step has assertions (criteria with a type), and this instance's package schema does not describe a step's criteria, so validate cannot check them.",
+    hint:
+      "An instance that knows the type checks the assertion in code; one that does not grades it as a judge criterion. " +
+      "`cavelon docs get concepts/regression-testing` says which types this instance knows; a newer instance publishes them in its package schema.",
+    docs: TESTING_DOCS,
   },
   {
     code: PERSONA_MESSAGE_CODE,
@@ -196,12 +209,64 @@ export function packageVersionOf(pkg: Record<string, unknown>): string | undefin
 function compile(schema: PackageSchema) {
   // The schema's own $id is a path on the instance; ajv needs none to check.
   const { $id: _id, $schema: _schema, ...body } = schema;
-  const ajv = new Ajv2020({ strict: false, allErrors: true, validateSchema: false, validateFormats: false });
+  const ajv = new Ajv2020({ strict: false, allErrors: true, verbose: true, validateSchema: false, validateFormats: false });
   return ajv.compile(body);
+}
+
+/**
+ * The errors worth showing. Where a value matches no branch of an
+ * `anyOf`/`oneOf` (a step's criteria are a text, a judge criterion or one of
+ * several assertions by `type`), only the errors of the branch it comes
+ * closest to: a branch of another JSON type, or one whose `const` or `enum`
+ * on a field of the value (its `type`) does not match, is far; otherwise the
+ * fewer errors, the closer. Ajv reports an inner choice before the one around
+ * it, so inner choices are made first and an outer one counts what is left of
+ * them. An error inside a `$ref`'d branch carries the referenced definition's
+ * path, which is how it is told to that branch; `verbose` errors carry the
+ * choice's branches.
+ */
+function closestBranchErrors(errors: ErrorObject[]): ErrorObject[] {
+  const dropped = new Set<ErrorObject>();
+  // The schema path an error counts under once an inner choice kept it: that choice's own.
+  const countedAt = new Map<ErrorObject, string>();
+  const pathOf = (e: ErrorObject) => countedAt.get(e) ?? e.schemaPath;
+  const isChoice = (e: ErrorObject) => e.keyword === "anyOf" || e.keyword === "oneOf";
+  errors.forEach((choice, index) => {
+    if (!isChoice(choice)) return;
+    const list = choice.schema;
+    if (!Array.isArray(list)) return;
+    const prefixes = list.map((branch, i) => {
+      const ref = branch && typeof branch === "object" ? (branch as Record<string, unknown>).$ref : undefined;
+        return [`${choice.schemaPath}/${i}/`, ...(typeof ref === "string" && ref.startsWith("#/") ? [`${ref}/`] : [])];
+    });
+    const here = choice.instancePath;
+    const byBranch = new Map<number, ErrorObject[]>();
+    for (const error of errors.slice(0, index)) {
+      if (dropped.has(error) || isChoice(error)) continue;
+      if (error.instancePath !== here && !error.instancePath.startsWith(`${here}/`)) continue;
+      const branch = prefixes.findIndex((list) => list.some((prefix) => pathOf(error).startsWith(prefix)));
+      if (branch >= 0) byBranch.set(branch, [...(byBranch.get(branch) ?? []), error]);
+    }
+    const distance = (list: ErrorObject[]) =>
+      list.reduce((sum, e) => {
+        if (e.keyword === "type" && e.instancePath === here) return sum + 1000;
+        const field = e.instancePath.startsWith(`${here}/`) && !e.instancePath.slice(here.length + 1).includes("/");
+        return sum + ((e.keyword === "const" || e.keyword === "enum") && field ? 100 : 1);
+      }, 0);
+    const ranked = [...byBranch.values()].map((list) => ({ list, distance: distance(list) })).sort((a, b) => a.distance - b.distance);
+    // A tie says nothing about which branch was meant: all of them stay.
+    if (ranked.length < 2 || ranked[0]!.distance === ranked[1]!.distance) return;
+    for (const other of ranked.slice(1)) for (const error of other.list) dropped.add(error);
+    for (const error of ranked[0]!.list) countedAt.set(error, pathOf(choice));
+  });
+  return errors.filter((e) => !dropped.has(e));
 }
 
 function describe(error: ErrorObject): { pointer: string; message: string } {
   const params = error.params as Record<string, unknown>;
+  if (error.keyword === "additionalProperties") {
+    return { pointer: error.instancePath, message: `field "${String(params.additionalProperty)}" is not allowed here` };
+  }
   if (error.keyword === "required") {
     return { pointer: error.instancePath, message: `missing required field "${String(params.missingProperty)}"` };
   }
@@ -254,7 +319,7 @@ export function checkPackage(disk: PackageOnDisk, options: CheckOptions): Findin
   const validate = compile(options.schema);
   if (!validate(disk.package)) {
     const seen = new Set<string>();
-    for (const error of validate.errors ?? []) {
+    for (const error of closestBranchErrors(validate.errors ?? [])) {
       // anyOf reports each branch and then itself; the branches say more.
       if (error.keyword === "anyOf" || error.keyword === "oneOf") continue;
       const { pointer, message } = describe(error);
@@ -272,6 +337,7 @@ export function checkPackage(disk: PackageOnDisk, options: CheckOptions): Findin
   findings.push(...checkReferences(disk, options.inventory));
   findings.push(...checkModels(disk, options.inventory));
   findings.push(...checkPersonaMessages(disk, options.schema));
+  findings.push(...checkUncheckedAssertions(disk, options.schema));
 
   for (const finding of findings) {
     const entry = catalogEntry(options.catalog, finding.code);
@@ -489,6 +555,65 @@ function checkKnowledgeSearch(disk: PackageOnDisk): Finding[] {
  * or its own wording, where the solution meant its own. A switch the file
  * leaves out counts as the schema's default.
  */
+/** A schema node with its local `$ref` followed. */
+function schemaNode(schema: PackageSchema, node: unknown): Record<string, unknown> | undefined {
+  let at = asObject(node);
+  for (let hops = 0; at && typeof at.$ref === "string" && hops < 10; hops++) {
+    const ref = at.$ref as string;
+    at = ref.startsWith("#/$defs/") ? asObject((schema.$defs as Record<string, unknown> | undefined)?.[ref.slice("#/$defs/".length)]) : undefined;
+  }
+  return at;
+}
+
+/** The schema of a list field's entries: the `items` of its one array branch. */
+function listItems(schema: PackageSchema, node: unknown): Record<string, unknown> | undefined {
+  const at = schemaNode(schema, node);
+  if (!at) return undefined;
+  const branches = Array.isArray(at.anyOf) ? at.anyOf.map((b) => schemaNode(schema, b)) : [at];
+  const arrays = branches.filter((b) => b?.type === "array");
+  return arrays.length === 1 && "items" in arrays[0]! ? (asObject(arrays[0]!.items) ?? {}) : undefined;
+}
+
+/**
+ * A step's assertions (criteria with a `type`) on an instance whose schema
+ * says nothing of a step's criteria: validate cannot check them, and an
+ * instance that does not know a type grades it as a judge criterion. Said
+ * once per suite file. An instance that describes them is checked by the
+ * schema instead.
+ */
+function checkUncheckedAssertions(disk: PackageOnDisk, schema: PackageSchema): Finding[] {
+  const field = (node: Record<string, unknown> | undefined, name: string) => (asObject(schemaNode(schema, node)?.properties) ?? {})[name];
+  const step = schemaNode(schema, listItems(schema, field(listItems(schema, field(listItems(schema, schema.properties?.test_suites), "test_cases")), "steps")));
+  const criteria = listItems(schema, field(step, "evaluation_criteria"));
+  const described = !criteria || Object.keys(criteria).some((k) => k !== "title" && k !== "description");
+  if (described) return [];
+  const suites = Array.isArray(disk.package.test_suites) ? disk.package.test_suites : [];
+  const byFile = new Map<string, { at: ReturnType<typeof locate>; types: Set<string> }>();
+  suites.forEach((suite, s) => {
+    (Array.isArray(asObject(suite)?.test_cases) ? (asObject(suite)!.test_cases as unknown[]) : []).forEach((testCase, c) => {
+      (Array.isArray(asObject(testCase)?.steps) ? (asObject(testCase)!.steps as unknown[]) : []).forEach((step, t) => {
+        const list = asObject(step)?.evaluation_criteria;
+        (Array.isArray(list) ? list : []).forEach((criterion, i) => {
+          const type = asObject(criterion)?.type;
+          if (typeof type !== "string") return;
+          const at = locate(disk, `/test_suites/${s}/test_cases/${c}/steps/${t}/evaluation_criteria/${i}`);
+          const key = at.file ?? "";
+          if (!byFile.has(key)) byFile.set(key, { at, types: new Set() });
+          byFile.get(key)!.types.add(type);
+        });
+      });
+    });
+  });
+  return [...byFile.values()].map(({ at, types }) => ({
+    code: ASSERTION_UNCHECKED_CODE,
+    severity: "warning" as const,
+    ...at,
+    message:
+      `This instance's package schema does not describe a step's criteria, so the assertions here (${[...types].join(", ")}) are not checked. ` +
+      "An instance that does not know a type grades it as a judge criterion instead of checking it in code.",
+  }));
+}
+
 function checkPersonaMessages(disk: PackageOnDisk, schema: PackageSchema): Finding[] {
   const persona = asObject(disk.package[PERSONA_SECTION]);
   const fields = sectionFields(schema, PERSONA_SECTION);

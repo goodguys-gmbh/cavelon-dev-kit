@@ -1,6 +1,7 @@
 import { capacityCodeIn, capacityHint } from "./capacity.js";
 import { ceilingRefusal, LIMIT_ABOVE_CEILING } from "./limits.js";
 import { CavelonError, ExitCode, type ExitCodeValue } from "./errors.js";
+import { blockerDetails, type BlockerDetail } from "./preview-report.js";
 import { KIT_VERSION } from "./version.js";
 
 // The standalone executable runs on Bun, the npm package on Node.js.
@@ -316,6 +317,7 @@ export function errorFromResponse(status: number, body: unknown, what: string, h
   let docs: string | undefined;
   let details: unknown;
   let blockers: string[] | undefined;
+  let structured: BlockerDetail[] | undefined;
   const pick = (source: Record<string, unknown>) => {
     if (typeof source.code === "string") code = source.code;
     if (typeof source.error === "string" && !code) code = source.error;
@@ -325,6 +327,9 @@ export function errorFromResponse(status: number, body: unknown, what: string, h
     // A refused import names what its own check found.
     const said = Array.isArray(source.blockers) ? source.blockers.filter((b): b is string => typeof b === "string" && b !== "") : [];
     if (said.length) blockers = said;
+    // A recent instance sends them structured too; an older one sends the sentences alone.
+    const detailed = blockerDetails(source.blocker_details);
+    if (detailed.length) structured = detailed;
   };
   if (body && typeof body === "object" && !Array.isArray(body)) {
     const map = body as Record<string, unknown>;
@@ -386,6 +391,7 @@ export function errorFromResponse(status: number, body: unknown, what: string, h
     status,
     details,
     blockers,
+    blockerDetails: structured,
   });
 }
 

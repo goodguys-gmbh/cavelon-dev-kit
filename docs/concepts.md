@@ -261,15 +261,40 @@ test_cases:
           - Says that it can only help with questions about the shop.
 ```
 
+Besides the judge's criteria, a step can carry **assertions**: objects with a
+`type` in `evaluation_criteria`, checked in code before the judge runs. A
+failed assertion fails the step whatever the judge would say. `tool_called` and
+`tool_not_called` check the tools a step called; on a recent instance,
+`answered_by` checks which agent answered and `handoff_to` that the step was
+handed to an agent, both by agent slug:
+
+```yaml
+      - user_message: What does a family ticket cost?
+        evaluation_criteria:
+          - States the price of the family ticket.
+          - {type: handoff_to, value: ticket-agent}
+          - {type: answered_by, value: ticket-agent}
+          - {type: tool_called, value: search_documents}
+```
+
+Where the instance's package schema describes a step's criteria, `validate`
+checks each assertion like any other field; where it does not, `validate`
+warns that it cannot (`test_assertion_unchecked`), and an instance that does
+not know a type grades it as a judge criterion.
+
 `apply` sends the suites with the rest of the package. `cavelon test run`
 starts them on the instance, where a judge scores each answer. With `--wait`,
 a run whose cases failed exits 1 and names them. So does a run that measured
 nothing comparable (steps not run, technical errors, no pass rate): it says
 nothing about the solution. A run whose answers wait for a manual verdict
 exits 5. `cavelon trace <run>` shows
-each case with its score, error and the judge's reasoning (for a pass too, when
-the instance sends it), and leads to the conversation behind it, span by span,
-with each command carrying the id its route needs. The package schema also allows cases
+each case with its score, the agent that answered it, its error and the judge's
+reasoning (for a pass too, when the instance sends it), and leads to the
+conversation behind it, span by span, with each command carrying the id its
+route needs. A knowledge search's span shows what the agent recorded it found
+(`knowledge_outcome`: `usable_evidence`, `content_gap`, `unusable_hits`,
+`retrieval_fault` or `deliberately_unanswerable`), where the instance records
+it. The package schema also allows cases
 that start a trigger and check how its run ends.
 
 A test run never waits for a person. A pipeline that reaches an approval ends

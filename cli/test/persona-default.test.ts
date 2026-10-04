@@ -58,6 +58,8 @@ afterAll(async () => {
 });
 beforeEach(() => {
   server.state.configs.clear();
+  server.state.exportFillsDefaults = false;
+  server.state.importRequirementsChanged = null;
   server.state.previewExtras = {};
   server.state.previewBlockers = [];
   server.state.requests.length = 0;
@@ -287,7 +289,7 @@ describe("api describe", () => {
 describe("fmt", () => {
   it("fills the schema's defaults in hand-written files, keeps files already in that form, and --check says which would change", async () => {
     const dir = await pulled();
-    // The fake export fills no defaults, as a real one does; fmt brings the pulled files there first.
+    // The fake export fills no defaults here, unlike an instance's; fmt brings the pulled files there first.
     expect((await cli(sb, ["fmt"], { cwd: dir })).code).toBe(0);
     const agents = path.join(dir, "package", "agents.yaml");
     const harnesses = read(path.join(dir, "package", "harnesses.yaml"));
@@ -307,6 +309,43 @@ describe("fmt", () => {
     expect(read(path.join(dir, "package", "harnesses.yaml"))).toBe(harnesses);
     expect((await cli(sb, ["fmt", "--check"], { cwd: dir })).code).toBe(0);
     expect((await cli(sb, ["validate", "--offline"], { cwd: dir })).code).toBe(0);
+  });
+
+  describe("against an export that fills the schema's defaults, as an instance's does", () => {
+    const byHand = "- {slug: helper, name: Helper, llm_model: gpt-4.1, llm_provider: openai, temperature: 0.2, parallel_tool_calls: false, system_prompt: Answer from the handbook.}\n";
+
+    async function applied(dir: string): Promise<void> {
+      const preview = await cli(sb, ["apply", "--json"], { cwd: dir });
+      expect(preview.code, preview.stderr + preview.stdout).toBe(0);
+      const confirmed = await cli(sb, ["apply", "--confirm", preview.json<{ preview_id: string }>().preview_id], { cwd: dir });
+      expect(confirmed.code, confirmed.stderr).toBe(0);
+    }
+
+    it("the first pull after fmt and apply writes no file", async () => {
+      server.state.exportFillsDefaults = true;
+      const dir = await pulled();
+      const agents = path.join(dir, "package", "agents.yaml");
+      writeFileSync(agents, byHand);
+      expect((await cli(sb, ["fmt"], { cwd: dir })).code).toBe(0);
+      await applied(dir);
+      const pull = await cli(sb, ["pull", "--json"], { cwd: dir });
+      expect(pull.code, pull.stderr).toBe(0);
+      expect(pull.json<{ files: { written: string[] } }>().files.written).toEqual([]);
+    });
+
+    it("without fmt, the first pull writes the files the export fills defaults into", async () => {
+      server.state.exportFillsDefaults = true;
+      const dir = await pulled();
+      const agents = path.join(dir, "package", "agents.yaml");
+      writeFileSync(agents, byHand);
+      await applied(dir);
+      const pull = await cli(sb, ["pull", "--json"], { cwd: dir });
+      expect(pull.code, pull.stderr).toBe(0);
+      // The manifest follows with its export time, as it does whenever another file changes.
+      expect(pull.json<{ files: { written: string[] } }>().files.written).toEqual(["package/agents.yaml", "package/manifest.yaml"]);
+      expect((parse(read(agents)) as Array<Record<string, unknown>>)[0]).toMatchObject({ slug: "helper", is_active: true, display_order: 0 });
+      expect(read(agents)).toMatch(/^- slug: helper\n {2}name: Helper\n/);
+    });
   });
 
   it("fills defaults through references, lists and nullable fields", () => {

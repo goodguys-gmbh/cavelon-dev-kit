@@ -35,26 +35,41 @@ function resolve(schema: PackageSchema, node: unknown): SchemaNode | undefined {
   return current;
 }
 
-/** The branches of an `anyOf`/`oneOf`, or the node itself. */
-function branches(schema: PackageSchema, node: SchemaNode): SchemaNode[] {
+/** The branches of an `anyOf`/`oneOf`, nested ones flattened, or the node itself. */
+function branches(schema: PackageSchema, node: SchemaNode, depth = 0): SchemaNode[] {
   const list = (Array.isArray(node.anyOf) ? node.anyOf : Array.isArray(node.oneOf) ? node.oneOf : undefined) as unknown[] | undefined;
-  if (!list) return [node];
-  return list.map((b) => resolve(schema, b)).filter((b): b is SchemaNode => b !== undefined);
+  if (!list || depth > 10) return [node];
+  return list.map((b) => resolve(schema, b)).flatMap((b) => (b ? branches(schema, b, depth + 1) : []));
 }
 
 const propertiesOf = (node: SchemaNode | undefined) => (isObject(node?.properties) ? (node.properties as Record<string, unknown>) : undefined);
 
+/** Whether a field's value is one its schema allows, as far as a `const` or an `enum` says. */
+function allowed(schema: PackageSchema, node: unknown, value: unknown): boolean {
+  const field = resolve(schema, node);
+  if (!field) return true;
+  if ("const" in field) return field.const === value;
+  return Array.isArray(field.enum) ? field.enum.includes(value) : true;
+}
+
+/** Whether a value can be of this object shape: it holds the required fields, and every field it has the shape knows and allows. */
+function fits(schema: PackageSchema, shape: SchemaNode, value: Record<string, unknown>): boolean {
+  const props = propertiesOf(shape)!;
+  const required = Array.isArray(shape.required) ? (shape.required as string[]) : [];
+  return Object.entries(value).every(([k, v]) => k in props && allowed(schema, props[k], v)) && required.every((k) => k in value);
+}
+
 /** The object schema a value of this node follows, when one branch fits it. */
 function objectBranch(schema: PackageSchema, node: SchemaNode, value: Record<string, unknown>): SchemaNode | undefined {
   const objects = branches(schema, node).filter((b) => propertiesOf(b));
-  if (objects.length <= 1) return objects[0];
-  // Several object shapes: the one that knows every key the value has and holds its required ones.
-  const fits = objects.filter((b) => {
-    const props = propertiesOf(b)!;
-    const required = Array.isArray(b.required) ? (b.required as string[]) : [];
-    return Object.keys(value).every((k) => k in props) && required.every((k) => k in value);
-  });
-  return fits.length === 1 ? fits[0] : undefined;
+  if (objects.length === 1) {
+    // One shape that takes no other field: a value with another field is not of it, and stays as written.
+    const only = objects[0]!;
+    return only.additionalProperties === false && Object.keys(value).some((k) => !(k in propertiesOf(only)!)) ? undefined : only;
+  }
+  // Several object shapes (a step's criteria: judge criteria and assertions by `type`): the one the value fits.
+  const fitting = objects.filter((b) => fits(schema, b, value));
+  return fitting.length === 1 ? fitting[0] : undefined;
 }
 
 function arrayBranch(schema: PackageSchema, node: SchemaNode): SchemaNode | undefined {

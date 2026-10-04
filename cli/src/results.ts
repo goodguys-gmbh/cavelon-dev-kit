@@ -29,6 +29,8 @@ export interface TestResultState {
   status: string;
   conversation_id?: string | null;
   agent_run_id?: string | null;
+  /** The agent that answered the step. */
+  agent_slug?: string | null;
   llm_judge_score?: number | null;
   llm_judge_reasoning?: string | null;
   judge_breakdown?: Record<string, unknown> | null;

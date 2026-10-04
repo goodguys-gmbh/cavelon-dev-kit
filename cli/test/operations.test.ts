@@ -372,6 +372,73 @@ describe("trace", () => {
     );
   });
 
+  it("shows the knowledge outcome the agent recorded on a search, and none on an instance that records none", async () => {
+    const runId = "7aace000-0000-4000-8000-000000000002";
+    const traceId = "7aace000-0000-4000-8000-0000000000ab";
+    server.state.traces.set(`trigger:${runId}`, [traceFixture(traceId, null, { knowledgeOutcome: "content_gap" })]);
+    const spans = await cli(sb, ["trace", runId, "--trace", traceId, "--json"]);
+    const items = spans.json<{ spans: { items: Array<{ name: string; type: string; knowledge_outcome: string | null }> } }>().spans.items;
+    expect(items.map((s) => [s.type, s.knowledge_outcome])).toEqual([
+      ["agent", null],
+      ["llm", null],
+      ["tool", "content_gap"],
+      ["retrieval", "content_gap"],
+    ]);
+    const text = await cli(sb, ["trace", runId, "--trace", traceId]);
+    expect(text.stdout).toMatch(/STATUS\s+KNOWLEDGE_OUTCOME/);
+    expect(text.stdout).toMatch(/search_documents\s+error\s+content_gap/);
+    const span = await cli(sb, ["trace", runId, "--trace", traceId, "--span", `${traceId}-span-3`, "--json"]);
+    expect(span.json()).toMatchObject({ name: "search_documents", knowledge_outcome: "content_gap" });
+
+    const older = "7aace000-0000-4000-8000-000000000003";
+    server.state.traces.set(`trigger:${older}`, [traceFixture("7aace000-0000-4000-8000-0000000000ac", null)]);
+    const plain = await cli(sb, ["trace", older, "--trace", "7aace000-0000-4000-8000-0000000000ac"]);
+    expect(plain.stdout).not.toMatch(/KNOWLEDGE_OUTCOME/);
+    const plainJson = await cli(sb, ["trace", older, "--trace", "7aace000-0000-4000-8000-0000000000ac", "--json"]);
+    expect(plainJson.json<{ spans: { items: Array<{ knowledge_outcome: string | null }> } }>().spans.items.every((s) => s.knowledge_outcome === null)).toBe(true);
+  });
+
+  it("names the agent that answered each test step, and why a handoff_to step failed", async () => {
+    const reason = "Observed handoffs to []; a handoff to ticket-agent is required.";
+    server.state.runResults = [
+      {
+        name: "Family ticket price",
+        status: "fail",
+        agent_slug: "front-desk",
+        llm_judge_score: 0,
+        error_message: reason,
+        judge_breakdown: {
+          evaluation_kind: "hybrid",
+          judge_skipped: true,
+          deterministic_criteria: [
+            { type: "handoff_to", label: "Handed off to ticket-agent", passed: false, expected: "ticket-agent", observed: [], reasoning: reason },
+            { type: "answered_by", label: "Answered by ticket-agent", passed: false, expected: "ticket-agent", observed: "front-desk", reasoning: "Agent front-desk answered; ticket-agent must answer." },
+          ],
+        },
+      },
+      { name: "Greets", status: "pass", agent_slug: "front-desk" },
+      // An instance that records no agent for a step.
+      { name: "Opening hours", status: "pass", agent_slug: null },
+    ];
+    try {
+      const started = await cli(sb, ["test", "run", "--suite", "smoke", "--json"]);
+      const runId = started.json<{ runs: Array<{ run_id: string }> }>().runs[0]!.run_id;
+      const json = await cli(sb, ["trace", runId, "--json"]);
+      const items = json.json<{ results: { items: Array<{ case: string; agent: string | null; reason?: string; judge_breakdown?: unknown }> } }>().results.items;
+      expect(items.map((r) => [r.case, r.agent])).toEqual([
+        ["Family ticket price", "front-desk"],
+        ["Greets", "front-desk"],
+        ["Opening hours", null],
+      ]);
+      expect(items[0]).toMatchObject({ reason, judge_breakdown: { deterministic_criteria: [expect.objectContaining({ type: "handoff_to", passed: false }), expect.objectContaining({ type: "answered_by" })] } });
+      const text = await cli(sb, ["trace", runId]);
+      expect(text.stdout).toMatch(/^CASE\s+STEP\s+STATUS\s+SCORE\s+AGENT\s/m);
+      expect(text.stdout).toContain(`Did not pass:\n  Family ticket price (step 1)  fail\n    ${reason}\n    Answered by: front-desk`);
+    } finally {
+      server.state.runResults = null;
+    }
+  });
+
   it("follows an operation id to its test run's results", async () => {
     const started = await cli(sb, ["test", "run", "--suite", "smoke", "--json"]);
     const opId = started.json<{ operation_ids: string[] }>().operation_ids[0]!;
