@@ -1,7 +1,8 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { startFakeServer, traceFixture, type FakeServer } from "./fake-server.js";
+import { CASE_STATUSES, NOT_PASSED_COUNTS, WAITING_COUNTS } from "../src/results.js";
+import { CONTRACTS, startFakeServer, traceFixture, type FakeServer } from "./fake-server.js";
 import { cli, login, sandbox, type Sandbox } from "./helpers.js";
 
 let server: FakeServer;
@@ -271,6 +272,25 @@ describe("test run", () => {
       expect(wait.json<{ failed_results: Array<Record<string, unknown>> }>().failed_results[0]).toMatchObject({ counts: { pending_review: 2 }, exit_code: 5 });
     });
 
+    it("says why a case waits: the short reason next to the count, the case's own reason, and the explain to run", async () => {
+      server.state.runResults = [
+        { name: "Refund policy", status: "calibration_required", error_message: "knowledge_base_not_ready: Policies has no ready documents" },
+        { name: "Greets", status: "pass" },
+      ];
+      try {
+        const { testRun, wait } = await waitOn({ passed: 1, failed: 0, errors: 0, calibration_required: 1, comparable: false, pass_rate: null });
+        expect(testRun.code, testRun.stdout).toBe(5);
+        expect(testRun.stdout).toContain("smoke: completed  passed 1  failed 0  errors 0  1 calibration required (a knowledge base or value the case needs was not ready)");
+        expect(testRun.stdout).toContain("Refund policy (step 1)  calibration_required: knowledge_base_not_ready: Policies has no ready documents");
+        expect(testRun.stdout).toContain("What to do: cavelon explain calibration_required");
+        expect(wait.json<{ failed_results: Array<{ cases: unknown[] }> }>().failed_results[0]!.cases).toEqual([
+          expect.objectContaining({ case: "Refund policy", status: "calibration_required", reason: expect.stringContaining("knowledge_base_not_ready") }),
+        ]);
+      } finally {
+        server.state.runResults = null;
+      }
+    });
+
     it("exits 1 for a run the instance marks not comparable without a count, and for an older instance's null pass rate", async () => {
       for (const summary of [
         { passed: 0, failed: 0, errors: 0, comparable: false, non_comparable_reasons: ["no_behavior_verdict"], pass_rate: null },
@@ -470,5 +490,37 @@ describe("trace", () => {
     const result = await cli(sb, ["trace", "99999999-9999-4999-8999-999999999999", "--json"]);
     expect(result.code).toBe(1);
     expect(result.json<{ error: { code: string } }>().error.code).toBe("run_not_found");
+  });
+});
+
+describe("test-case statuses that are neither pass nor fail", () => {
+  const statuses = CASE_STATUSES.map((s) => s.status);
+
+  it("are the five the instance records, each tied to the summary counts test run prints", () => {
+    expect(statuses).toEqual(["calibration_required", "pending_review", "not_run", "not_evaluated", "skip"]);
+    // Every count test run prints is a failed verdict or one of these statuses, so each has an explanation.
+    const verdicts = ["failed", "errors", "technical_errors", "unmeasurable_cases"];
+    const explained = new Set(CASE_STATUSES.flatMap((s) => s.counts));
+    for (const count of [...NOT_PASSED_COUNTS, ...WAITING_COUNTS].filter((c) => !verdicts.includes(c))) expect(explained, count).toContain(count);
+    // Each count they name is a field of the run summary the instance publishes.
+    const openapi = JSON.parse(readFileSync(path.join(CONTRACTS, "openapi.json"), "utf8")) as { components: { schemas: Record<string, { properties: object }> } };
+    const summary = openapi.components.schemas.TestRunSummary!.properties;
+    for (const count of explained) expect(Object.keys(summary), count).toContain(count);
+  });
+
+  it("explain answers each, by status, summary count or label, with what to do next", async () => {
+    for (const name of [...statuses, "skipped", "cases_not_run", "Calibration Required"]) {
+      const result = await cli(sb, ["explain", name, "--json"]);
+      expect(result.code, `${name}: ${result.stderr}`).toBe(0);
+      expect(result.json()).toMatchObject({ kind: "test_case_status", message: expect.any(String), hint: expect.any(String) });
+    }
+    const text = await cli(sb, ["explain", "calibration_required"]);
+    expect(text.stdout).toMatch(/meaning: +The instance did not run the case\. .*knowledge_base_not_ready/);
+    expect(text.stdout).toMatch(/docs: +http:\/\/\S+\/docs\/concepts\/regression-testing#preflight-is-decided-when-the-run-is-accepted/);
+  });
+
+  it("are listed in the cavelon-testing skill", () => {
+    const skill = readFileSync(path.join(CONTRACTS, "..", "..", "plugin", "skills", "cavelon-testing", "SKILL.md"), "utf8");
+    for (const status of statuses) expect(skill, status).toContain(`\`${status}\``);
   });
 });

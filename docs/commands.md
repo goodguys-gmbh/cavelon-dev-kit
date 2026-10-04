@@ -294,11 +294,11 @@ Look a code up in the instance's error catalog: what it means and how to fix it.
 cavelon explain <code>
 ```
 
-Rule codes come from the package and graph checks, API error codes from failed requests. Uses the cached catalog first.
+Rule codes come from the package and graph checks, API error codes from failed requests. Uses the cached catalog first. Also explains the test-case statuses that are neither pass nor fail: calibration_required, pending_review, not_run, not_evaluated, skip.
 
 | Argument | Description |
 |---|---|
-| `code` | The code, e.g. from `cavelon validate` or an error's code. Required. |
+| `code` | The code, e.g. from `cavelon validate` or an error's code, or a test-case status. Required. |
 
 ## Tenants and solutions
 

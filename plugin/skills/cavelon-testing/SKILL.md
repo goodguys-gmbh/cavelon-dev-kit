@@ -61,6 +61,20 @@ errors, no pass rate): it is no evidence the solution works, so do not go on to
 `activate`; find the cause and run again. Exit 5 means answers wait for a
 person's verdict or a value a case needs: tell the person.
 
+Besides `pass`, `fail` and `error`, a case's step can end in a status that is
+no verdict; `cavelon explain <status>` says what it means and what to do next:
+
+| Status | Means | Next |
+|---|---|---|
+| `calibration_required` | Not run: a knowledge base it needs had no ready documents, or a `{{var:…}}` value was not set, when the run started (exit 5) | Wait for the documents or set the value, then start a new run |
+| `pending_review` | Ran; the answer waits for a person's verdict, because Auto-Evaluate is off (exit 5) | Tell the person |
+| `not_run` | The step produced no result: the run stopped or was cancelled first (exit 1) | `cavelon trace <run>`, fix the cause, run again |
+| `skip` | A person parked the case with a Skip verdict, or the run was cancelled before it (exit 1) | Run again, or leave it to the person |
+| `not_evaluated` | A preparation step (`evaluate: false`): it ran and is not scored | Nothing |
+
+The case's own reason (which knowledge base, which value) is in the output of
+`test run --wait`, `wait` and `cavelon trace <run>`.
+
 ## Reading what happened
 
 ```bash
