@@ -40,12 +40,16 @@ describe("wait", () => {
     const first = await cli(sb, ["wait", op.id, "--timeout", "100ms", "--json"]);
     expect(first.code).toBe(6);
     const state = first.json<WaitOutput>();
-    expect(state).toMatchObject({ settled: false, timed_out: true, resume: `cavelon wait ${op.id}` });
+    expect(state).toMatchObject({ settled: false, timed_out: true, timeout_ms: 100, resume: `cavelon wait ${op.id}` });
+    expect((state as WaitOutput & { waited_ms: number }).waited_ms).toBeGreaterThanOrEqual(100);
     expect(state.operations[0]!.status).toBe("running");
 
     const text = await cli(sb, ["wait", op.id, "--timeout", "0"]);
     expect(text.code).toBe(6);
     expect(text.stdout).toMatch(new RegExp(`Wait with: cavelon wait ${op.id}`));
+    // A timeout of 0 reads the state once; it never claims to have waited.
+    const once = await cli(sb, ["wait", op.id, "--timeout", "0", "--json"]);
+    expect(once.json<WaitOutput & { timeout_ms: number }>()).toMatchObject({ settled: false, timed_out: false, timeout_ms: 0 });
 
     const second = await cli(sb, ["wait", op.id, "--timeout", "30s", "--json"]);
     expect(second.code).toBe(0);

@@ -21,7 +21,7 @@ const GROUPS: Array<{ title: string; intro: string; names: string[] }> = [
   {
     title: "Solution as code",
     intro: "Turn a folder into a solution, check it, preview it, import it and activate it.",
-    names: ["init", "pull", "validate", "apply", "activate", "explain"],
+    names: ["init", "pull", "validate", "schema", "apply", "activate", "explain"],
   },
   {
     title: "Tenants and solutions",

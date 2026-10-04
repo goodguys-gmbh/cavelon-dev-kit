@@ -29,7 +29,7 @@ the environment over the files. The exit codes are listed in [Troubleshooting](t
 ## Contents
 
 - **Session:** [`setup`](#cavelon-setup), [`login`](#cavelon-login), [`logout`](#cavelon-logout), [`whoami`](#cavelon-whoami), [`use`](#cavelon-use), [`status`](#cavelon-status)
-- **Solution as code:** [`init`](#cavelon-init), [`pull`](#cavelon-pull), [`validate`](#cavelon-validate), [`apply`](#cavelon-apply), [`activate`](#cavelon-activate), [`explain`](#cavelon-explain)
+- **Solution as code:** [`init`](#cavelon-init), [`pull`](#cavelon-pull), [`validate`](#cavelon-validate), [`schema`](#cavelon-schema), [`apply`](#cavelon-apply), [`activate`](#cavelon-activate), [`explain`](#cavelon-explain)
 - **Tenants and solutions:** [`tenant create`](#cavelon-tenant-create), [`tenant list`](#cavelon-tenant-list), [`harness list`](#cavelon-harness-list), [`harness new`](#cavelon-harness-new), [`harness clone`](#cavelon-harness-clone)
 - **Knowledge, tests and traces:** [`kb upload`](#cavelon-kb-upload), [`test run`](#cavelon-test-run), [`wait`](#cavelon-wait), [`watch`](#cavelon-watch), [`trace`](#cavelon-trace)
 - **Variables and secrets:** [`variables list`](#cavelon-variables-list), [`variables get`](#cavelon-variables-get), [`variables set`](#cavelon-variables-set), [`variables delete`](#cavelon-variables-delete), [`secrets list`](#cavelon-secrets-list), [`secrets set`](#cavelon-secrets-set), [`secrets delete`](#cavelon-secrets-delete)
@@ -206,12 +206,12 @@ Write the instance's package into package/ (split along the schema's sections) a
 cavelon pull [options]
 ```
 
-With a solution (--harness, or cavelon.yaml's harness), exports that solution; without one, the tenant's full configuration. A file whose content did not change keeps its bytes, so `git diff` shows what changed on the instance. Files of sections the schema does not know are kept byte for byte. Refuses when package files have uncommitted changes, unless --force; outside a git repository, when a file it would overwrite or remove changed since the last pull.
+With a solution (--harness, or cavelon.yaml's harness), exports that solution; without one, the tenant's full configuration. A file whose content did not change keeps its bytes, so `git diff` shows what changed on the instance. Files of sections the schema does not know are kept byte for byte. Refuses when package files have uncommitted changes, unless --force; outside a git repository, when a file it would overwrite or remove changed since the last pull. A file as the last pull or apply left it (digests in .cavelon/) counts as unchanged, committed or not.
 
 | Option | Description | MCP |
 |---|---|---|
 | `--harness <harness>` | The solution to export, by name, slug or id; its slug is recorded in cavelon.yaml when it names none. | yes |
-| `--force` | Overwrite package files that have uncommitted changes (outside git: changes since the last pull). | yes |
+| `--force` | Overwrite package files that have uncommitted changes since the last pull or apply. | yes |
 
 Examples:
 
@@ -239,6 +239,34 @@ With --json, `warnings` is always a list of `{code, message}` objects: the warni
 | `--offline` | Never contact the instance, even when nothing is cached. | yes |
 | `--limit <n>` | Print at most n findings (default 50). | yes |
 | `--verbose` | Also say which copy of the package schema was used: cached or read now, when, and its hash. | yes |
+
+### cavelon schema
+
+Show the package schema the instance publishes: its sections, or one section's fields with a minimal example.
+
+**read-only** · MCP tool: `package_schema`
+
+```text
+cavelon schema [section] [options]
+```
+
+Without a section, lists the sections with the file each is kept in. With one, lists its fields (type, required, allowed values, default) and prints the smallest entry that has every required field, ready to copy into the file. Placeholders are written &lt;field&gt;. Reads the schema as `validate` does: the cached copy first, the instance otherwise.
+
+| Argument | Description |
+|---|---|
+| `section` | A section of the package, such as agents or knowledge_bases. |
+
+| Option | Description | MCP |
+|---|---|---|
+| `--offline` | Use only the cached schema; never contact the instance. | yes |
+
+Examples:
+
+```bash
+cavelon schema
+cavelon schema agents
+cavelon schema knowledge_bases --json
+```
 
 ### cavelon apply
 
@@ -314,7 +342,7 @@ Create a tenant (personal access token in Platform mode with tenants.manage).
 cavelon tenant create <slug> [options]
 ```
 
-A tenant API key never can. Inviting people and assigning roles stay in the Admin.
+A tenant API key never can. Before sending, the token is checked: one that may not enter Platform mode, or enters it without tenants.manage, is refused with exit 7 and nothing is sent. With --use, the new tenant is chosen only once the instance confirms the token acts in it. Inviting people and assigning roles stay in the Admin.
 
 | Argument | Description |
 |---|---|
@@ -324,7 +352,7 @@ A tenant API key never can. Inviting people and assigning roles stay in the Admi
 |---|---|---|
 | `--name <name>` | Display name (default: the slug). | yes |
 | `--plan <plan>` | Licence plan, when the instance knows several. | yes |
-| `--use` | Switch to the new tenant afterwards (`cavelon use`). | yes |
+| `--use` | Switch to the new tenant afterwards (`cavelon use`), once the token is known to act in it. | yes |
 | `--idempotency-key <key>` | Send an Idempotency-Key, so a retry does not create a second one. | yes |
 
 ### cavelon tenant list
@@ -482,7 +510,7 @@ Wait until operations finish, need a person, or the timeout passes.
 cavelon wait <operation...> [options]
 ```
 
-Exit 0 when all succeeded, 1 when one failed or was cancelled, 5 when one needs a person, 6 when the timeout passed first. A test run that finished with failed cases counts as failed, and its cases are named. The state is printed in every case, and a second `wait` resumes.
+Exit 0 when all succeeded, 1 when one failed or was cancelled, 5 when one needs a person, 6 when one still runs at the end (timed_out says whether it waited the whole timeout; --timeout 0 reads the state once). A test run that finished with failed cases counts as failed, and its cases are named. The state is printed in every case with waited_ms, and a second `wait` resumes. As the MCP tool operation_status it returns the state at once unless given a timeout, and waits at most 50 s.
 
 | Argument | Description |
 |---|---|
@@ -490,7 +518,7 @@ Exit 0 when all succeeded, 1 when one failed or was cancelled, 5 when one needs 
 
 | Option | Description | MCP |
 |---|---|---|
-| `--timeout <duration>` | Stop waiting after this long (90s, 5m; default 90s). The work goes on; run wait again to resume. | yes |
+| `--timeout <duration>` | Stop waiting after this long (90s, 5m; default 90s). The work goes on; run wait again to resume. As an MCP tool: none by default (returns at once), at most 50s. | yes |
 
 Examples:
 
@@ -1392,7 +1420,7 @@ Call any operation the instance publishes in its OpenAPI.
 cavelon api <operation> [params...] [options]
 ```
 
-The operation is its operationId or the short name before FastAPI's path suffix (list_harnesses). Parameters: -p name=value or name=value. Body: --json '&lt;json&gt;', --json @file.json or --json - (stdin). The body is checked against the operation's schema before it is sent. As an MCP tool, or run by a coding agent (CLAUDECODE, CODEX_THREAD_ID, CODEX_SANDBOX, CURSOR_AGENT, GEMINI_CLI, COPILOT_CLI, COPILOT_AGENT, AI_AGENT or CAVELON_AGENT=1 is set), an operation that changes something returns what it would send and sends it only with confirm (as an MCP tool) or --confirm &lt;token&gt; (the token the preview printed). Run by an agent, one the instance marks for a person only (x-cavelon-person-only) is refused, as is a body that sets a field the instance marks as a secret value (x-cavelon-secret) and a file outside the solution folder. On an instance that marks no operation, one that changes a secret, creates or revokes a credential or decides an approval is refused. A person's own terminal sends at once.
+The operation is its operationId or the short name before FastAPI's path suffix (list_harnesses). Parameters: -p name=value or name=value (not --name). Body: --body '&lt;json&gt;', --body @file.json or --body - (stdin); --json &lt;body&gt; still works for now but is deprecated: --json alone prints JSON, as on every command. The body is checked against the operation's schema before it is sent. As an MCP tool, or run by a coding agent (CLAUDECODE, CODEX_THREAD_ID, CODEX_SANDBOX, CURSOR_AGENT, GEMINI_CLI, COPILOT_CLI, COPILOT_AGENT, AI_AGENT or CAVELON_AGENT=1 is set), an operation that changes something returns what it would send and sends it only with confirm (as an MCP tool) or --confirm &lt;token&gt; (the token the preview printed). Run by an agent, one the instance marks for a person only (x-cavelon-person-only) is refused, as is a body that sets a field the instance marks as a secret value (x-cavelon-secret) and a file outside the solution folder. On an instance that marks no operation, one that changes a secret, creates or revokes a credential or decides an approval is refused. A person's own terminal sends at once.
 
 | Argument | Description |
 |---|---|
@@ -1402,7 +1430,7 @@ The operation is its operationId or the short name before FastAPI's path suffix 
 | Option | Description | MCP |
 |---|---|---|
 | `-p, --param <name=value>` | A path, query or header parameter. Repeatable. | yes |
-| `--body <json|@file|->` | The request body (also accepted as --json &lt;body&gt;). | yes |
+| `--body <json|@file|->` | The request body: JSON, @file.json or - for stdin (--json &lt;body&gt; is a deprecated alias). | yes |
 | `--file <field=path>` | Attach a file to a multipart body. Repeatable. | yes |
 | `--output <file>` | Write the response body to a file instead of printing it. | CLI only |
 | `--confirm <token>` | Send an operation that changes something: run by a coding agent, the token its preview printed; as an MCP tool, true. Without it, nothing is sent. A person's terminal sends at once. | yes |
@@ -1413,7 +1441,7 @@ Examples:
 ```bash
 cavelon api list_harnesses
 cavelon api get_harness_by_slug slug=support
-cavelon api create_knowledge_base --json '{"name": "FAQ"}'
+cavelon api create_knowledge_base --body '{"name": "FAQ"}'
 ```
 
 ### cavelon docs search

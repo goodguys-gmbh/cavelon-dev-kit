@@ -111,14 +111,14 @@ Every command takes `--json` (one JSON document on stdout, errors included),
 | `setup [--agents] [--yes] [--check] [--remove]` | changing (destructive) | Set up the coding agents on this computer (the plugin for Claude Code and Codex; the MCP server and skills in the user settings of Cursor, VS Code with GitHub Copilot, Gemini CLI and Kiro) and log in. `--check` reports what works, `--remove` undoes it. A person runs this; not an MCP tool. |
 | `login [--token-stdin]` | changing | Store a token for an instance. A person runs this. |
 | `logout [--all]` | changing | Delete the stored token. |
-| `whoami` | read-only | Owner or key, tenant (name, slug and id), role, and where the credential came from. |
+| `whoami` | read-only | Owner or key, tenant (name, slug and id), role, where the credential came from, whether it may enter Platform mode and which tenants it reaches. |
 | `use [<tenant>]` / `use --clear` | changing | Choose the tenant for this instance, by name, slug or id, or from a list. |
-| `status [--offline]` | read-only | Instance, credential, tenant, solution folder, running operations, quotas close to full. |
+| `status [--offline]` | read-only | Instance, credential, tenant, solution folder and the solution's state (draft or active, ready to activate, latest test run), open previews, running operations, quotas close to full or why they cannot be read. |
 | `limits [--key <key>] [--source <source>]` | read-only | The instance's limits for this tenant by source, who changes each and how; the tenant's quotas with their use (the monthly Processing Step cap among them); branch concurrency. |
 | `limits set <key> <value> [--confirm]` | changing (destructive) | Change a limit through the operation the instance names: a tenant admin's, a quota of the Tenant Owner's (inference budget, Processing Step cap), or an operator's run cap with a Platform-mode token; without `--confirm`, shows the old and new value. |
 | `models list` | read-only | The tenant's Model Registry rows with their endpoint and `max_concurrent_requests`; never a key. |
 | `models set-limit <model> <n\|none> [--confirm]` | changing (destructive) | Set or clear a row's `max_concurrent_requests`; without `--confirm`, shows the old and new value. |
-| `tenant create <slug> [--name] [--use]` | changing | Create a tenant (personal token in Platform mode with `tenants.manage`). |
+| `tenant create <slug> [--name] [--use]` | changing | Create a tenant (personal token in Platform mode with `tenants.manage`); refused before sending when the token cannot. |
 | `tenant list [--search]` | read-only | Tenants the token can see, with name, slug, role and id. |
 | `harness list [--readiness]` | read-only | The tenant's solutions, with slug, name, status and id. |
 | `harness new <slug> [--name] [--description]` | changing | Create an empty draft solution. |
@@ -127,6 +127,7 @@ Every command takes `--json` (one JSON document on stdout, errors included),
 | `init [--harness] [--agents <list>] [--hook] [--update] [--from <file> [--force]]` | changing (files) | Make this folder a solution: `cavelon.yaml`, `package/`, `tests/`, `env/`, `.cavelon/`; on a terminal it asks for the tenant and the solution (or a new one by name); `--from` writes a package file into it. |
 | `pull [--harness] [--force]` | changing (files) | Write the instance's package into `package/` and `tests/`, the inventory into `.cavelon/`. |
 | `validate [--offline]` | read-only | Check the package files against the cached package schema, their references, unknown fields and models. |
+| `schema [<section>] [--offline]` | read-only | The package schema's sections, or one section's fields with a minimal example. |
 | `apply [--env] [--harness] [--mode]` | changing | Preview the files against the instance; prints and stores a preview id. |
 | `apply --confirm <preview-id>` | changing | Import exactly that preview; a stale one, or one the import's own check refuses (it names the blockers), exits 4. |
 | `explain <code>` | read-only | Look a code up in the instance's error catalog. |
@@ -136,12 +137,12 @@ Every command takes `--json` (one JSON document on stdout, errors included),
 | `secrets list [--missing]` | read-only | The tenant's secret names (`{{secret:…}}`): set or not, declared, changed when. Never a value. |
 | `secrets set <name>` | changing | Set a secret's value from the terminal or stdin. A person runs this. |
 | `secrets delete <name> [--confirm]` | changing (destructive) | Delete a secret's value; without `--confirm`, shows its status. A person runs this. |
-| `api <operation> [name=value…] [--json <body>]` | changing | Call any operation of the instance's OpenAPI. |
+| `api <operation> [name=value…] [--body <body>]` | changing | Call any operation of the instance's OpenAPI. |
 | `api list [--tag] [--search] [--method] [--tags]` | read-only | The operations the instance publishes. |
 | `api describe <operation>` | read-only | One operation's parameters, body and responses. |
 | `docs search <query>` | read-only | Search the instance's own docs. |
 | `docs get <page> [--max-chars] [--cursor]` | read-only | One docs page as markdown. |
-| `wait <operation…> [--timeout 90s]` | read-only | Wait for operations; resumable. A test run with failed cases is a failure. |
+| `wait <operation…> [--timeout 90s]` | read-only | Wait for operations; resumable, and reports `waited_ms`. A test run with failed cases is a failure. |
 | `watch <operation> [--timeout 10m]` | read-only | Stream an operation's changes (server-sent events). |
 | `kb upload <dir> --kb <kb> [-r] [--ext pdf] [--replace] [--wait]` | changing | Upload documents; returns operation ids. Names files that match an active document; `--replace` replaces those. |
 | `test run [--suite <s>] [--harness <h>] [--wait]` | changing | Start test-suite runs; returns operation ids. |
@@ -168,15 +169,18 @@ Every command takes `--json` (one JSON document on stdout, errors included),
 cavelon api list --search harness
 cavelon api describe create_harness
 cavelon api get_harness_by_slug slug=support
-cavelon api create_knowledge_base --json '{"name": "FAQ"}'
-cavelon api create_knowledge_base --json @kb.json      # or --json - for stdin
+cavelon api create_knowledge_base --body '{"name": "FAQ"}'
+cavelon api create_knowledge_base --body @kb.json      # or --body - for stdin
 ```
 
 An operation is named by its `operationId` or by its short name (the part before
-FastAPI's path suffix, `list_harnesses` for `list_harnesses_api_v1_harnesses_get`).
-Parameters are `name=value` or `-p name=value`; the body is checked against the
-operation's schema before it is sent. On `api`, `--json` followed by a value is
-the body; a bare `--json` is the output switch as everywhere else.
+FastAPI's path suffix, `list_harnesses` for `list_harnesses_api_v1_harnesses_get`);
+a looser spelling such as `createTenant` finds `create_tenant` and says so.
+Parameters are `name=value` or `-p name=value`, never `--name value`; the body
+(`--body`) is checked against the operation's schema before it is sent. `--json`
+is the output switch, as everywhere else. `--json <body>` still sends the body
+for now, with a warning: it is deprecated and will be removed in a later
+release.
 
 ### Limits
 
@@ -700,10 +704,13 @@ The same commands as MCP tools over stdio, for agents that prefer tools to a
 shell. The tools are coarse, one per workflow command plus `api`, `api_list`,
 `api_describe`, `docs_search` and `docs_get`, and carry the standard read-only and
 destructive annotations. The repository tools (`init`, `pull`, `validate`,
-`apply`, `explain`, `activate`) and `sandbox_seed` and `artifacts_export` work in
-the folder the agent started `cavelon mcp` in. They never block: `kb_upload`,
-`test_run`, `loop_start`, `sandbox_seed` and `artifacts_export` return operation
-ids, `operation_status` reads them, and `loop_iterations` follows a loop
+`package_schema`, `apply`, `explain`, `activate`) and `sandbox_seed` and
+`artifacts_export` work in the folder the agent started `cavelon mcp` in;
+`init` and `pull` change nothing on the instance. Tools that start work never
+block: `kb_upload`, `test_run`, `loop_start`, `sandbox_seed` and
+`artifacts_export` return operation ids, `operation_status` reads them (at
+once, or waiting up to its `timeout`, at most 50 seconds, with `waited_ms` in
+the answer), and `loop_iterations` follows a loop
 (`loop watch` and `watch` stream, so they are no tools). `loop_cancel`,
 `sandbox_seed` and `trigger_identity` are marked destructive and change nothing
 without `confirm: true`. `limits` is read-only; the server's instructions tell

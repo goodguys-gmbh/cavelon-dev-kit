@@ -100,6 +100,8 @@ export class Contracts {
   private versionValue?: string;
   /** True when the instance needs a tenant before it answers (a token in Platform mode). */
   needsTenant = false;
+  /** When the capabilities this command uses were read from the instance, if they came from the cache; undefined when read now. */
+  cachedAt?: string;
 
   constructor(
     private readonly client: ApiClient,
@@ -142,11 +144,13 @@ export class Contracts {
       if (cached) {
         this.caps = cached;
         this.versionValue = state.version;
+        this.cachedAt = state.checked_at;
         return cached;
       }
     }
     const response = await this.client.get<Capabilities>("/api/v1/meta/capabilities", { allow: [400, 404] });
     this.live = true;
+    this.cachedAt = undefined;
     if (response.status === 400) {
       // A platform token without a tenant cannot read tenant routes yet. Keep
       // the last known version, and remember nothing new.

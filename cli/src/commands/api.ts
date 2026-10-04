@@ -21,31 +21,40 @@ import { clip, moreHint, table } from "../format.js";
 import { readAll } from "../io.js";
 import { callOperation, previewRequest, type CallArguments } from "../invoke.js";
 import { confinedPath } from "../paths.js";
-import { describeSchema, findOperation, jsonBodySchema, operations, schemaTypes, secretFields, type Operation } from "../openapi.js";
+import { describeSchema, findOperation, jsonBodySchema, matchedLoosely, operations, schemaTypes, secretFields, type Operation } from "../openapi.js";
 import { canonical } from "../package-files.js";
 import { cavelonCommand } from "../shell.js";
 
+/** Said once when `--json` carried the body: the alias goes away in a later release. */
+export const JSON_BODY_DEPRECATED =
+  "`--json <body>` as the request body is deprecated and will be removed in a later release; pass the body with --body. " +
+  "--json alone prints JSON, as on every command.";
+
 /**
- * `--json` means "print JSON" on every command. On `api` it may also carry
- * the request body, as the plan writes it (`api <operationId> --json body`):
- * when a value follows, it is the body.
+ * `--json` means "print JSON" on every command. On `api` it also carried the
+ * request body before `--body` did (`api <operationId> --json body`): when a
+ * value that looks like a body follows, it is still the body, with a warning.
  */
-export function splitJsonBody(args: string[]): string[] {
+export function splitJsonBody(args: string[], warn?: (message: string) => void): string[] {
   const out: string[] = [];
+  let aliased = false;
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]!;
     if (arg.startsWith("--json=")) {
       out.push(`--body=${arg.slice("--json=".length)}`);
+      aliased = true;
       continue;
     }
     const next = args[i + 1];
     if (arg === "--json" && next !== undefined && looksLikeBody(next)) {
       out.push("--body", next);
+      aliased = true;
       i++;
       continue;
     }
     out.push(arg);
   }
+  if (aliased) warn?.(JSON_BODY_DEPRECATED);
   return out;
 }
 
@@ -95,7 +104,7 @@ export async function readBody(ctx: Context, raw: string, confine = ctx.mode ===
   try {
     return JSON.parse(text);
   } catch (error) {
-    throw usageError(`The body is not JSON: ${error instanceof Error ? error.message : String(error)}`, "Pass --json '{\"key\": \"value\"}', @file.json or - for stdin.");
+    throw usageError(`The body is not JSON: ${error instanceof Error ? error.message : String(error)}`, "Pass --body '{\"key\": \"value\"}', @file.json or - for stdin.");
   }
 }
 
@@ -243,7 +252,8 @@ export const api: CommandSpec = {
   summary: "Call any operation the instance publishes in its OpenAPI.",
   description:
     "The operation is its operationId or the short name before FastAPI's path suffix (list_harnesses).\n" +
-    "Parameters: -p name=value or name=value. Body: --json '<json>', --json @file.json or --json - (stdin).\n" +
+    "Parameters: -p name=value or name=value (not --name). Body: --body '<json>', --body @file.json or --body - (stdin);\n" +
+    "--json <body> still works for now but is deprecated: --json alone prints JSON, as on every command.\n" +
     "The body is checked against the operation's schema before it is sent.\n" +
     "As an MCP tool, or run by a coding agent (" +
     AGENT_VARIABLES.filter((v) => v.variable !== "CAVELON_AGENT").map((v) => v.variable).join(", ") +
@@ -262,7 +272,7 @@ export const api: CommandSpec = {
   ],
   options: {
     param: { type: "string", short: "p", multiple: true, value: "<name=value>", description: "A path, query or header parameter." },
-    body: { type: "string", value: "<json|@file|->", description: "The request body (also accepted as --json <body>)." },
+    body: { type: "string", value: "<json|@file|->", description: "The request body: JSON, @file.json or - for stdin (--json <body> is a deprecated alias)." },
     file: { type: "string", multiple: true, value: "<field=path>", description: "Attach a file to a multipart body." },
     output: { type: "string", value: "<file>", description: "Write the response body to a file instead of printing it.", cliOnly: true },
     confirm: {
@@ -278,13 +288,14 @@ export const api: CommandSpec = {
   examples: [
     "cavelon api list_harnesses",
     "cavelon api get_harness_by_slug slug=support",
-    "cavelon api create_knowledge_base --json '{\"name\": \"FAQ\"}'",
+    "cavelon api create_knowledge_base --body '{\"name\": \"FAQ\"}'",
   ],
-  preprocess: (args) => splitConfirm(splitJsonBody(args)),
+  preprocess: (args, warn) => splitConfirm(splitJsonBody(args, warn)),
   async run(ctx, input) {
     const name = positional(input, "operation")!;
     const doc = await (await ctx.contracts()).openapi();
     const op = findOperation(doc, name);
+    if (matchedLoosely(op, name)) ctx.warn(`"${name}" is taken as ${op.alias} (${op.method} ${op.path}).`);
     // An MCP client, or a coding agent in its shell: the same guards hold for both.
     const driven = drivenByAgent(ctx);
     const confine = driven !== undefined;
@@ -447,7 +458,9 @@ export const apiDescribe: CommandSpec = {
   positionals: [{ name: "operation", description: "operationId or its short name.", required: true }],
   async run(ctx, input) {
     const doc = await (await ctx.contracts()).openapi();
-    const op = findOperation(doc, positional(input, "operation")!);
+    const name = positional(input, "operation")!;
+    const op = findOperation(doc, name);
+    if (matchedLoosely(op, name)) ctx.warn(`"${name}" is taken as ${op.alias}; that is the name \`cavelon api\` takes.`);
     const bodyTypes = Object.keys(op.requestBody?.content ?? {});
     const bodySchema = jsonBodySchema(op) ?? op.requestBody?.content?.[bodyTypes[0] ?? ""]?.schema;
     const responses = Object.fromEntries(

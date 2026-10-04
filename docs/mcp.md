@@ -53,7 +53,7 @@ cavelon login --instance https://cavelon.example.com
 
 The agent never sees or passes the token, and there is no login tool. Without
 a login, tools answer `not_logged_in` and tell the agent to ask you.
-Repository tools (`init`, `pull`, `validate`, `apply`, `explain`, `activate`,
+Repository tools (`init`, `pull`, `validate`, `package_schema`, `apply`, `explain`, `activate`,
 `sandbox_seed`, `artifacts_export`) work in the folder the agent started the
 server in, and use its `cavelon.yaml`.
 
@@ -61,7 +61,10 @@ server in, and use its `cavelon.yaml`.
 
 Each tool carries the MCP annotations `readOnlyHint` and `destructiveHint`, so
 your agent can ask you before it calls a tool that changes or deletes
-something. Most tools take an optional `tenant` argument as well.
+something. Most tools take an optional `tenant` argument as well. `init` and
+`pull` are marked destructive because they may overwrite files in the solution
+folder; their descriptions say that they change nothing on the instance (`pull`
+only reads it).
 
 | Tool | Command | Marked |
 |---|---|---|
@@ -78,9 +81,10 @@ something. Most tools take an optional `tenant` argument as well.
 | `harness_new` | `cavelon harness new` | changing |
 | `harness_clone` | `cavelon harness clone` | changing |
 | `activate` | `cavelon activate` | changing |
-| `init` | `cavelon init` | destructive |
-| `pull` | `cavelon pull` | destructive |
+| `init` | `cavelon init` | destructive (local files only) |
+| `pull` | `cavelon pull` | destructive (local files only) |
 | `validate` | `cavelon validate` | read-only |
+| `package_schema` | `cavelon schema` | read-only |
 | `apply` | `cavelon apply` | destructive |
 | `explain` | `cavelon explain` | read-only |
 | `variables_list` | `cavelon variables list` | read-only |
@@ -135,10 +139,13 @@ Each tool's arguments are the command's arguments and options, as listed in the
 The server tells the agent these rules when it connects, and the Cavelon skills
 repeat them:
 
-- **Nothing blocks.** Tools that start work (`kb_upload`, `test_run`,
+- **Nothing blocks for long.** Tools that start work (`kb_upload`, `test_run`,
   `loop_start`, `sandbox_seed`, `artifacts_export`) return operation ids at
   once; the agent reads them with `operation_status` and follows a loop with
-  `loop_iterations`.
+  `loop_iterations`. `operation_status` returns the state at once, or, given a
+  `timeout`, waits until the operations settle or the timeout passes, at most
+  50 seconds (a longer timeout is cut there, with a warning). Its answer says
+  `waited_ms`, and `timed_out` is true only when it waited the whole timeout.
 - **What needs `confirm`.** `apply` returns a preview and imports only with
   `confirm` set to that preview's id. `limits_set`, `models_set_limit`,
   `loop_cancel`, `sandbox_seed`, `trigger_identity`, and `api` for any
@@ -149,9 +156,10 @@ repeat them:
   the documents it would deactivate after the upload, and uploads nothing
   without `confirm: true`. The agent shows that to you first, and must
   show you any preview that reaches an active solution or production.
-- **What changes without `confirm`.** `init` and `pull` write files in the
-  solution folder (`pull` refuses to replace package files with uncommitted
-  changes, or outside git files changed since the last pull, unless `force`), and the other tools marked changing act at once:
+- **What changes without `confirm`.** `init` and `pull` change nothing on the
+  instance; they write files in the solution folder (`pull` refuses to replace
+  a package file that is neither committed nor as the last pull or apply left
+  it, unless `force`), and the other tools marked changing act at once:
   `use_tenant`, `tenant_create`, `harness_new`, `harness_clone`, `activate`
   (through the readiness gate), `variables_set`, `kb_upload` (without
   `replace`, or where the instance replaces itself), `test_run`,

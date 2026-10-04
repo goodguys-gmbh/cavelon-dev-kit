@@ -141,14 +141,18 @@ version; leave it as `pull` wrote it.
    (JSON or YAML): it writes the same files as `pull`, refuses to change files
    that hold something else unless `--force`, and names the sections this
    instance ignores.
-2. The schema: `cavelon validate` checks the files against the instance's
-   package schema, and each error names the file, line and field. It also
-   checks the references: a duplicate slug and a handoff to an agent the
-   package lacks are errors; a skill, tool, knowledge base or solution that is
-   neither in the package nor in the tenant's list from the last pull, a field
-   the schema does not have (`package_field_unknown`, "did you mean
-   temperature?") and an `llm_model` outside the tenant's model list are
-   warnings. A finding's `suggestion` (with `--json`) is the closest name.
+2. The schema: `cavelon schema` lists the sections and the file each is kept
+   in; `cavelon schema <section>` (the `package_schema` tool) lists a section's
+   fields with type, required, allowed values and default, and prints the
+   smallest entry with every required field, to copy into the file. A pulled
+   file that is `[]` shows no shape; this does. `cavelon validate` checks the
+   files against the same schema, and each error names the file, line and
+   field. It also checks the references: a duplicate slug and a handoff to an
+   agent the package lacks are errors; a skill, tool, knowledge base or
+   solution that is neither in the package nor in the tenant's list from the
+   last pull, a field the schema does not have (`package_field_unknown`, "did
+   you mean temperature?") and an `llm_model` outside the tenant's model list
+   are warnings. A finding's `suggestion` (with `--json`) is the closest name.
 3. Concepts and fields: `cavelon docs search <topic>` (for example "agent
    graph", "tools", "knowledge base", "triggers"), then `cavelon docs get
    <page>`.

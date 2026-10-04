@@ -69,6 +69,12 @@ export interface CommandSpec {
   readOnly: boolean;
   /** May delete or overwrite something; for the MCP destructive annotation. */
   destructive?: boolean;
+  /**
+   * What the MCP tool's description says the command changes, where the
+   * marking alone would mislead: a command that writes only local files is
+   * not one that "changes the instance".
+   */
+  mcpEffect?: string;
   /** Repeating the call with the same arguments has no further effect. */
   idempotent?: boolean;
   positionals?: PositionalSpec[];
@@ -76,8 +82,8 @@ export interface CommandSpec {
   /** The MCP tool name, or false for commands only a person runs (login, logout). */
   mcpTool: string | false;
   examples?: string[];
-  /** Rewrite raw arguments before parsing (`api --json <body>`). */
-  preprocess?(args: string[]): string[];
+  /** Rewrite raw arguments before parsing (`api --json <body>`); `warn` reaches the command's warnings. */
+  preprocess?(args: string[], warn: (message: string) => void): string[];
   run(ctx: Context, input: Input): Promise<CommandResult>;
 }
 

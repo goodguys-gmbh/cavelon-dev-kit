@@ -1,6 +1,7 @@
 import type { Context } from "./command.js";
 import { CavelonError, ExitCode, type ExitCodeValue } from "./errors.js";
 import type { ApiResponse } from "./http.js";
+import { readPrincipal } from "./principal.js";
 import { cavelonCommand } from "./shell.js";
 
 /**
@@ -143,6 +144,8 @@ export interface TenantQuotas {
   items: Quota[];
   /** Why the quotas could not be read; the limits still stand. */
   unavailable?: string;
+  /** The instance's status when it refused to show them (403: the token may not read them). */
+  unavailable_status?: number;
 }
 
 const NEAR = 0.8;
@@ -443,8 +446,20 @@ export async function readQuotas(ctx: Context, limits: PublishedLimits): Promise
     if (!(error instanceof CavelonError)) throw error;
     return { ...base, items: [], unavailable: `${link.path}: ${error.message}` };
   }
+  if (response.status === 403) {
+    // The read permission is not published; the token's ceiling is the likely reason, and the person can act on it.
+    const ceiling = (await readPrincipal(client).catch(() => undefined))?.token?.ceiling_role;
+    return {
+      ...base,
+      items: [],
+      unavailable_status: 403,
+      unavailable:
+        `this token${ceiling ? ` (ceiling ${ceiling})` : ""} may not read the tenant's quota usage (${link.path} answered 403). ` +
+        "A token whose ceiling includes it, such as a tenant owner's or administrator's, sees the quotas, and so does the Admin; the limits still stand.",
+    };
+  }
   if (response.status !== 200 || !response.data || typeof response.data !== "object") {
-    return { ...base, items: [], unavailable: `${link.path} answered ${response.status}.` };
+    return { ...base, items: [], unavailable: `${link.path} answered ${response.status}.`, unavailable_status: response.status };
   }
   const items = Object.entries(response.data)
     .filter((entry): entry is [string, Record<string, unknown>] => Boolean(entry[1]) && typeof entry[1] === "object" && !Array.isArray(entry[1]))

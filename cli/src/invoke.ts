@@ -3,7 +3,7 @@ import path from "node:path";
 import type { Context } from "./command.js";
 import type { OpenApiDoc } from "./contracts.js";
 import { CavelonError, ExitCode, validationError } from "./errors.js";
-import { bodyBytes, type ApiClient, type QueryValue } from "./http.js";
+import { bodyBytes, isPlatformRoute, type ApiClient, type QueryValue } from "./http.js";
 import { coerceParameter, isArrayParameter, operationAt, validateBody, type Operation } from "./openapi.js";
 
 /**
@@ -86,7 +86,7 @@ export function buildRequest(op: Operation, args: CallArguments): { path: string
     throw validationError(`${op.alias} needs ${missing.join(", ")}.`, { missing }, "Pass each as -p name=value.");
   }
   if (op.requestBody?.required && args.body === undefined && !args.files?.length && !args.bytes) {
-    throw validationError(`${op.alias} needs a request body.`, undefined, "Pass it with --json '<body>' (or @file, or - for stdin).");
+    throw validationError(`${op.alias} needs a request body.`, undefined, "Pass it with --body '<json>' (or @file, or - for stdin).");
   }
   return { path: filled, query, headers };
 }
@@ -137,7 +137,12 @@ export async function callOperation(ctx: Context, client: ApiClient, doc: OpenAp
       data = text;
     }
   }
-  if (!response.ok) throw await client.refusal(response.status, data, `${op.method} ${new URL(client.resolve(target)).pathname}`, response.headers);
+  if (!response.ok) {
+    const pathname = new URL(client.resolve(target)).pathname;
+    throw await client.refusal(response.status, data, `${op.method} ${pathname}`, response.headers, {
+      platform: args.sendTenant === false || isPlatformRoute(pathname),
+    });
+  }
   return { status: response.status, contentType, data: isText ? (text ? data : null) : undefined, bytes: isText ? undefined : bytes };
 }
 

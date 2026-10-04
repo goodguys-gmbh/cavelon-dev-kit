@@ -23,7 +23,10 @@ Two commands help with any code:
   (`calibration_required`, `pending_review`, `not_run`, `not_evaluated` and
   `skip`): what each means and what to do next.
 - **`cavelon status`** shows the instance, credential, tenant and solution this
-  folder uses, open previews and running operations.
+  folder uses, the solution's state (draft or active, ready to activate or what
+  blocks it, the latest test run), open previews, running operations, and why
+  the quotas cannot be read when the token may not read them. Offline, the
+  version it shows is the cached one, marked with when it was read.
 
 ## Exit codes
 
@@ -63,10 +66,12 @@ came from. The order is in [Concepts](concepts.md#tenant).
 | `not_logged_in` | 7 | No token for this instance. A person runs `cavelon login --instance <url>`, or sets `CAVELON_URL` and `CAVELON_TOKEN`. |
 | `personal_access_tokens_disabled` | 7 | The instance has personal access tokens turned off, so it refuses every `cvpat_` token. Its operator turns them on (`PERSONAL_ACCESS_TOKENS_ENABLED`). Until then, a tenant API key (`cbp_…`) works for the commands that accept one. |
 | `unauthorized` (401) | 7 | The token is missing, expired or revoked. Create a new one on `/account/access-tokens` and run `cavelon login` again. `cavelon whoami` shows when a token expires and warns seven days before. |
-| `forbidden` (403) | 7 | The token does not reach this: another tenant, or a permission your role or the token's ceiling lacks. Check the tenant with `cavelon whoami`; the message names the permission where the instance publishes it. |
+| `forbidden` (403) | 7 | The token does not reach this: another tenant, or a permission your role or the token's ceiling lacks. Check the tenant with `cavelon whoami`; the message names the permission where the instance publishes it. On a platform route (creating tenants, the platform's settings) the tenant does not matter: the hint says the route needs a token that allows Platform mode, and `cavelon whoami` shows whether this one does. |
 | `token_activation_refused` | 7 | The token was created without **May activate**. A person activates in the Admin, or creates a token that may. |
 | `secret_needs_a_person` | 7 | Secrets are set by a person with a personal access token, never with a tenant API key. |
 | `api_key_cannot_create_tenants` | 7 | Creating a tenant needs a personal access token in Platform mode. |
+| `platform_mode_not_allowed` | 7 | `tenant create` asked the instance first: this personal access token may not enter Platform mode (the message names its ceiling), so nothing was sent. Create a token with **Allow Platform mode** and a platform ceiling, owned by someone with `tenants.manage`, and log in with it; or create the tenant in the Admin. |
+| `permission_missing` | 7 | `tenant create` asked the instance first: the token enters Platform mode, but without `tenants.manage`, so nothing was sent. |
 | `platform_role_required` | 7 | An operator's change needs a personal access token that allows Platform mode, of the role the change names. See [Limits](limits.md#operators-changes). |
 | `limit_changed_by_operator` | 7 | Only the instance operator changes this limit; the message names the setting. |
 | `operation_for_a_person` | 2 | Over MCP, `api` does not send an operation the instance marks for a person only (`x-cavelon-person-only`; the message has its reason), even with `confirm`. On an instance that marks none, that is an operation that changes a secret, creates or revokes a credential or decides an approval. A person does it: `cavelon secrets set <name>` in their terminal, or in Cavelon. |
@@ -158,7 +163,7 @@ used: cached or read now, when, and its hash.
 | `package_requirements_changed` | 4 | The import's own check found something the preview did not; each blocker is listed. Nothing was imported. Fix the blockers and preview again. |
 | `preview_unknown` | 2 | No open preview with that id in this folder. `cavelon status` lists the open ones. |
 | `preview_other_tenant`, `preview_other_instance` | 4 | The preview was made for another tenant or instance than the one this command uses. Preview again here. |
-| `uncommitted_changes` | 4 | `pull` would overwrite package files with uncommitted changes. Outside a git repository: it would overwrite or remove a package file that changed since the last pull, such as your edit or a test suite you have not applied. The files are listed. Commit them, apply them, or use `--force` to discard them. |
+| `uncommitted_changes` | 4 | `pull` would overwrite package files with uncommitted changes. Outside a git repository: it would overwrite or remove a package file that changed since the last pull, such as your edit or a test suite you have not applied. A file as the last pull or confirmed apply left it is never listed. The files are listed. Commit them, apply them, or use `--force` to discard them. |
 | `package_file_outside` | 4 | `pull` or `init --from` would write a package file that is a symlink to a file outside the solution folder. Nothing was written. Move the file into the solution folder, or replace the link with the file. |
 | `package_files_differ` | 4 | `init --from` would change or remove package files that hold something else. The files are listed; `--force` replaces them. |
 

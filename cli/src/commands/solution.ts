@@ -15,9 +15,11 @@ import {
   deletePreview,
   digest,
   fileDigest,
+  fileDigests,
   listPreviews,
   loadPreview,
   readPulledFiles,
+  rememberAppliedFiles,
   savePreview,
   writePulledFiles,
   writeState,
@@ -211,6 +213,16 @@ function uncommittedChanges(files: string[], what: string): CavelonError {
   });
 }
 
+/** The files whose bytes are not what the last pull or apply left. */
+async function unknownStates(root: string, files: string[], known: Record<string, string>): Promise<string[]> {
+  const out: string[] = [];
+  for (const file of files) {
+    const current = await fileDigest(path.join(root, file));
+    if (current === undefined || current !== known[file]) out.push(file);
+  }
+  return out;
+}
+
 /**
  * Outside git, the package files pull would change or remove whose bytes are
  * not what the last pull left: a local edit, or a file no pull wrote (a suite
@@ -234,14 +246,18 @@ export const pull: CommandSpec = {
     "With a solution (--harness, or cavelon.yaml's harness), exports that solution; without one, the tenant's full configuration.\n" +
     "A file whose content did not change keeps its bytes, so `git diff` shows what changed on the instance. Files of sections\n" +
     "the schema does not know are kept byte for byte. Refuses when package files have uncommitted changes, unless --force;\n" +
-    "outside a git repository, when a file it would overwrite or remove changed since the last pull.",
+    "outside a git repository, when a file it would overwrite or remove changed since the last pull. A file as the last pull\n" +
+    "or apply left it (digests in .cavelon/) counts as unchanged, committed or not.",
   readOnly: false,
   destructive: true,
+  mcpEffect:
+    "Reads the instance and changes nothing there. Writes the package files and .cavelon/ in the solution folder; refuses to " +
+    "overwrite or remove a package file that changed since the last pull or apply and is not committed, unless force.",
   idempotent: true,
   mcpTool: "pull",
   options: {
     harness: { type: "string", value: "<harness>", description: "The solution to export, by name, slug or id; its slug is recorded in cavelon.yaml when it names none." },
-    force: { type: "boolean", description: "Overwrite package files that have uncommitted changes (outside git: changes since the last pull)." },
+    force: { type: "boolean", description: "Overwrite package files that have uncommitted changes since the last pull or apply." },
   },
   examples: ["cavelon pull --harness support", "cavelon pull && git diff -- package tests"],
   async run(ctx, input) {
@@ -251,7 +267,10 @@ export const pull: CommandSpec = {
     const layoutDirs = [project.layout.package, ...Object.values(project.layout.items)];
     const force = boolOption(input, "force");
     // Only package files count; an untracked .gitkeep loses nothing. Undefined outside git.
-    const dirty = force ? [] : (await uncommitted(project.root, layoutDirs))?.filter((f) => /\.(ya?ml|json)"?$/i.test(f));
+    // A file as the last pull or apply left it holds nothing the instance lacks, committed or not.
+    const known = force ? {} : await readPulledFiles(project.root);
+    const changed = force ? [] : (await uncommitted(project.root, layoutDirs))?.filter((f) => /\.(ya?ml|json)$/i.test(f));
+    const dirty = changed && (await unknownStates(project.root, changed, known));
     if (dirty?.length) throw uncommittedChanges(dirty, "pull would overwrite uncommitted changes");
     const { ref } = harnessRef(session, input);
     let harness: Harness | undefined;
@@ -296,7 +315,7 @@ export const pull: CommandSpec = {
     for (const file of report.kept) ctx.warn(`Kept ${file}: its section is not in this instance's package schema.`);
     for (const section of report.refused) ctx.warn(`Did not write section ${JSON.stringify(section)}: its name is not a plain file name.`);
 
-    const changed = report.written.length + report.removed.length;
+    const rewritten = report.written.length + report.removed.length;
     const lines = [
       `Pulled ${harness ? `solution ${harness.name} (${harness.slug})` : "the tenant's full configuration"} into ${project.layout.package}/` +
         (Object.keys(project.layout.items).length ? ` and ${Object.values(project.layout.items).join("/, ")}/` : "") +
@@ -305,7 +324,7 @@ export const pull: CommandSpec = {
       ...report.removed.map((f) => `removed    ${f}`),
       `${report.unchanged.length} file${report.unchanged.length === 1 ? "" : "s"} unchanged.`,
       `Inventory: ${inventory.file} (${inventory.counts.map((c) => `${c.count} ${c.label}`).join(", ")})`,
-      changed ? `See what changed: git diff -- ${layoutDirs.join(" ")}` : "Nothing changed on the instance since the last pull.",
+      rewritten ? `See what changed: git diff -- ${layoutDirs.join(" ")}` : "Nothing changed on the instance since the last pull.",
     ];
     return { data: { ...record, inventory }, text: lines.join("\n") };
   },
@@ -535,6 +554,11 @@ export function previewText(p: Preview, flags = ""): string {
   return keyValues(lines);
 }
 
+/** The package files a package on disk was read from, relative to the solution folder. */
+function sourceFiles(disk: PackageOnDisk): string[] {
+  return Object.values(disk.sources).flatMap((source) => (Array.isArray(source) ? source : [source]).map((s) => s.file));
+}
+
 function previewIdOption(input: Parameters<CommandSpec["run"]>[1]): string | undefined {
   const id = stringOption(input, "confirm");
   if (id !== undefined && !id.trim()) throw usageError("--confirm needs the preview id that `cavelon apply` printed.");
@@ -578,6 +602,7 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
     });
     // Every other open preview was made against the state this import changed.
     for (const other of await listPreviews(project.root)) await deletePreview(project.root, other.preview_id);
+    if (stored.file_digests) await rememberAppliedFiles(project.root, stored.file_digests);
     const summary = (result.summary ?? {}) as Preview["summary"];
     const flags = targetFlags(session, stored.env ?? session.envFile?.name);
     const still = setCommands(stored.preview as Preview, flags);
@@ -777,6 +802,7 @@ export const apply: CommandSpec = {
         env: envFile?.name ?? null,
         harness: target,
         package_digest: digest(disk.package),
+        file_digests: await fileDigests(project.root, sourceFiles(disk)),
         request,
         preview,
       };
@@ -954,6 +980,81 @@ interface Readiness {
   checks?: ReadinessCheck[];
   blockers?: ReadinessCheck[];
   warnings?: ReadinessCheck[];
+  /** The solution's latest test run; absent on an instance that does not publish it. */
+  latest_test_run?: { id?: string; status?: string; summary?: Record<string, unknown> | null; created_at?: string | null; completed_at?: string | null } | null;
+}
+
+/** A solution's state as `status` shows it: draft or active, whether it may activate, and its latest test run. */
+export interface SolutionState {
+  harness: { id: string; slug: string; name: string; status: string } | null;
+  ready_to_activate?: boolean | null;
+  blockers?: string[];
+  /** Null when the solution has no test run yet; undefined when the instance does not publish it. */
+  latest_test_run?: { id: string | null; status: string | null; passed: number | null; failed: number | null; total: number | null; at: string | null } | null;
+  /** Why part of it could not be read; the rest stands. */
+  unavailable?: string;
+}
+
+const count = (value: unknown) => (typeof value === "number" ? value : null);
+
+/**
+ * The state of the solution a folder holds, from the instance: one lookup
+ * and its readiness, which carries the latest test run. Never throws: a
+ * solution that cannot be read says why.
+ */
+export async function solutionState(ctx: Context, ref: string): Promise<SolutionState> {
+  let harness: Harness | undefined;
+  try {
+    harness = (await lookupHarness<Harness>(ctx, ref)).harness;
+  } catch (error) {
+    return { harness: null, unavailable: error instanceof Error ? error.message : String(error) };
+  }
+  if (!harness) return { harness: null, unavailable: `This tenant has no solution "${ref}".` };
+  const state: SolutionState = { harness: { id: harness.id, slug: harness.slug, name: harness.name, status: harness.status } };
+  try {
+    const readiness = await callStable<Readiness>(ctx, "GET", "/api/v1/harnesses/{harness_id}/readiness", "reading readiness", {
+      params: { harness_id: [harness.id] },
+    });
+    state.ready_to_activate = typeof readiness.ready_to_activate === "boolean" ? readiness.ready_to_activate : null;
+    state.blockers = (readiness.blockers ?? []).map((b) => clip(String(b.label ?? b.key ?? b.detail ?? "?"), 80));
+    if ("latest_test_run" in readiness) {
+      const run = readiness.latest_test_run;
+      const summary = run?.summary ?? {};
+      state.latest_test_run = run
+        ? {
+            id: run.id ?? null,
+            status: run.status ?? null,
+            passed: count(summary.passed),
+            failed: count(summary.failed),
+            total: count(summary.total_cases) ?? count(summary.total),
+            at: run.completed_at ?? run.created_at ?? null,
+          }
+        : null;
+    }
+  } catch (error) {
+    state.unavailable = `readiness: ${error instanceof Error ? error.message : String(error)}`;
+  }
+  return state;
+}
+
+/** The lines `status` prints for a solution's state. */
+export function solutionStateLines(state: SolutionState): Array<[string, unknown]> {
+  if (!state.harness) return [["state", `not readable: ${state.unavailable ?? "unknown"}`]];
+  const ready =
+    state.ready_to_activate === true
+      ? "ready to activate"
+      : state.ready_to_activate === false
+        ? `not ready to activate${state.blockers?.length ? ` (${list(state.blockers, 3)})` : ""}`
+        : undefined;
+  const lines: Array<[string, unknown]> = [["state", [state.harness.status, ready].filter(Boolean).join(", ")]];
+  const run = state.latest_test_run;
+  if (run === null) lines.push(["last test run", "none yet (`cavelon test run`)"]);
+  else if (run) {
+    const counts = run.total !== null ? `: ${run.passed ?? "?"} of ${run.total} passed${run.failed ? `, ${run.failed} failed` : ""}` : "";
+    lines.push(["last test run", `${run.status ?? "?"}${counts}${run.at ? ` (${run.at})` : ""}${run.id ? `  ${run.id}` : ""}`]);
+  } else if (!state.unavailable) lines.push(["last test run", "not published by this instance"]);
+  if (state.unavailable) lines.push(["state error", state.unavailable]);
+  return lines;
 }
 
 function checkLine(c: ReadinessCheck): string {
