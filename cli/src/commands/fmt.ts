@@ -100,8 +100,8 @@ export const fmt: CommandSpec = {
       // A file pull or apply left holds the same value in its new spelling; a later pull may replace it as before.
       if (wasKnown.length) await rememberAppliedFiles(project.root, await fileDigests(project.root, wasKnown));
     }
-    const files = changes.map((c) => c.file).sort();
-    const data = { check, changed: files, written: written.sort(), unchanged };
+    const files = changes.map((c) => c.file).sort((a, b) => a.localeCompare(b, "en"));
+    const data = { check, changed: files, written: written.sort((a, b) => a.localeCompare(b, "en")), unchanged };
     if (check) {
       return {
         data,

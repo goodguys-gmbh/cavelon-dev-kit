@@ -138,7 +138,7 @@ export function fieldChanges(raw: unknown): FieldChange[] {
 
 function shown(value: unknown): string {
   if (value === undefined || value === null) return "null";
-  return clip(typeof value === "string" ? JSON.stringify(value) : JSON.stringify(value), 80);
+  return clip(JSON.stringify(value), 80);
 }
 
 export function changeLines(changes: FieldChange[], max = 20): string {
