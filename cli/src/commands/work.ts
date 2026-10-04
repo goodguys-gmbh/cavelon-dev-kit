@@ -25,7 +25,7 @@ import { cavelonCommand, shellWord } from "../shell.js";
 import { readZipSummary, ZipError, type ZipSummary } from "../zip.js";
 import { TIMEOUT_OPTION, timeoutMs, waitAndReport } from "./async.js";
 import { stageErrors, stageErrorText, type StageError } from "./loops.js";
-import { resolveHarnessId } from "./tenants.js";
+import { resolveHarnessId } from "../harness-ref.js";
 
 /** Seeding, testing and tracing: the commands that start work and read its result. */
 
@@ -490,7 +490,7 @@ export const testRun: CommandSpec = {
   mcpTool: "test_run",
   options: {
     suite: { type: "string", multiple: true, value: "<suite>", description: "Suite name or id." },
-    harness: { type: "string", value: "<harness>", description: "Solution slug or id to run against." },
+    harness: { type: "string", value: "<harness>", description: "The solution to run against: its name, slug or id." },
     wait: WAIT_OPTION,
     timeout: TIMEOUT_OPTION,
     "idempotency-key": { type: "string", value: "<key>", description: "Send an Idempotency-Key with each start." },

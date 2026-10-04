@@ -53,7 +53,7 @@ Store a token for an instance (a person runs this, never the agent).
 cavelon login [options]
 ```
 
-Asks for the token without echoing it, or reads it from standard input with --token-stdin. It is never an argument. Create a personal access token (cvpat_…) on /account/access-tokens; a tenant API key (cbp_…) also works. The token is kept in the operating system's credential store, or in a file only you can read. Without --tenant, the token acts where the instance places it: in the one tenant it is limited to, its owner's default tenant, or Platform mode. A token without Platform mode that the instance cannot place is refused without a tenant, and the instance then names none of its tenants: pass --tenant &lt;tenant-id&gt;.
+Asks for the token without echoing it, or reads it from standard input with --token-stdin. It is never an argument. Create a personal access token (cvpat_…) on /account/access-tokens; a tenant API key (cbp_…) also works. The token is kept in the operating system's credential store, or in a file only you can read. Without --tenant, login finds the tenants the token reaches: one is used; from several, a person chooses on a terminal by number or name; without a terminal the token is stored and login prints one `cavelon use` line per tenant (exit 2). An operator's token that reaches every tenant asks for part of the tenant's name. --tenant takes the tenant's name, slug or id. An older instance that lists no tenants places the token itself, or needs --tenant &lt;tenant-id&gt;.
 
 | Option | Description |
 |---|---|
@@ -63,8 +63,8 @@ Examples:
 
 ```bash
 cavelon login --instance https://cavelon.example.com
-cavelon login --instance https://cavelon.example.com --tenant 4f6174cf-3060-4ff1-bd3c-8a8e7999256b
-op read op://dev/cavelon/token | cavelon login --token-stdin
+cavelon login --instance https://cavelon.example.com --tenant "Acme Support"
+op read op://dev/cavelon/token | cavelon login --token-stdin --tenant acme-support
 ```
 
 ### cavelon logout
@@ -101,15 +101,23 @@ Choose the tenant this instance's commands act in.
 cavelon use [tenant] [options]
 ```
 
-Stored per instance for your user. CAVELON_TENANT, --tenant and a cavelon.yaml tenant take precedence over it.
+Stored per instance for your user. CAVELON_TENANT, --tenant and a cavelon.yaml tenant take precedence over it. Without a tenant, it lists the tenants the token reaches: a person chooses one on a terminal by number or part of its name; without a terminal it prints one `cavelon use` line per tenant, and as an MCP tool it returns them as choices and changes nothing.
 
 | Argument | Description |
 |---|---|
-| `tenant` | Tenant slug, name or id. |
+| `tenant` | The tenant's name, slug or id; leave it out to choose from a list. |
 
 | Option | Description | MCP |
 |---|---|---|
 | `--clear` | Forget the chosen tenant. | yes |
+
+Examples:
+
+```bash
+cavelon use
+cavelon use acme-support
+cavelon use "Acme Support"
+```
 
 ### cavelon status
 
@@ -143,7 +151,7 @@ Never overwrites a file it did not create. AGENTS.md, .gitignore and an existing
 
 | Option | Description | MCP |
 |---|---|---|
-| `--harness <slug>` | The solution (harness) this folder holds; pull and apply use it. | yes |
+| `--harness <harness>` | The solution (harness) this folder holds, by name, slug or id; its slug goes into cavelon.yaml. Without it, init asks on a terminal. | yes |
 | `--agents <list>` | Write the fallback for these agents: claude, codex, cursor, copilot, gemini, kiro, pi, other or all (comma-separated). Repeatable. | yes |
 | `--hook` | Add a git pre-commit hook that runs `cavelon validate`; never in a hooks folder outside the repository. | yes |
 | `--update` | Only bring the marked blocks and fallback files to this version. | yes |
@@ -153,7 +161,8 @@ Never overwrites a file it did not create. AGENTS.md, .gitignore and an existing
 Examples:
 
 ```bash
-cavelon init --instance https://cavelon.example.com --tenant acme --harness support
+cavelon init
+cavelon init --instance https://cavelon.example.com --tenant "Acme Support" --harness "Support FAQ"
 cavelon init --agents codex,cursor --hook
 cavelon init --update
 cavelon init --instance https://cavelon.example.com --tenant acme --from ./blueprint.json
@@ -173,7 +182,7 @@ With a solution (--harness, or cavelon.yaml's harness), exports that solution; w
 
 | Option | Description | MCP |
 |---|---|---|
-| `--harness <slug>` | The solution to export; recorded in cavelon.yaml when it names none. | yes |
+| `--harness <harness>` | The solution to export, by name, slug or id; its slug is recorded in cavelon.yaml when it names none. | yes |
 | `--force` | Overwrite package files that have uncommitted changes (outside git: changes since the last pull). | yes |
 
 Examples:
@@ -218,7 +227,7 @@ Without --confirm nothing is imported: the preview shows what changes, which act
 | Option | Description | MCP |
 |---|---|---|
 | `--env <name>` | Use env/&lt;name&gt;.yaml: its tenant, solution and runtime bindings. | yes |
-| `--harness <slug>` | The solution (harness); default: env file, then cavelon.yaml. | yes |
+| `--harness <harness>` | The solution (harness): its name, slug or id; default: env file, then cavelon.yaml. | yes |
 | `--confirm <preview-id>` | Import exactly this stored preview. | yes |
 | `--mode <mode>` | overwrite (default) or replace (deletes what the package does not hold). | yes |
 
@@ -244,7 +253,7 @@ Only when every readiness check passes, and with a personal access token only wh
 
 | Option | Description | MCP |
 |---|---|---|
-| `--harness <slug>` | The solution (harness); default: env file, then cavelon.yaml. | yes |
+| `--harness <harness>` | The solution (harness): its name, slug or id; default: env file, then cavelon.yaml. | yes |
 | `--env <name>` | Use env/&lt;name&gt;.yaml: its tenant, solution and runtime bindings. | yes |
 
 ### cavelon explain
@@ -292,13 +301,15 @@ A tenant API key never can. Inviting people and assigning roles stay in the Admi
 
 ### cavelon tenant list
 
-List the tenants this token can see.
+List the tenants this token can see, with name, slug and id.
 
 **read-only** · MCP tool: `tenant_list`
 
 ```text
 cavelon tenant list [options]
 ```
+
+A personal access token in Platform mode sees every tenant; any other sees the tenants it reaches. An operator's token that reaches every tenant lists the person's own and finds any other with --search.
 
 | Option | Description | MCP |
 |---|---|---|
@@ -354,7 +365,7 @@ cavelon harness clone <source> [options]
 
 | Argument | Description |
 |---|---|
-| `source` | Slug or id of the solution to copy. Required. |
+| `source` | Name, slug or id of the solution to copy. Required. |
 
 | Option | Description | MCP |
 |---|---|---|
@@ -417,7 +428,7 @@ Without --suite, runs every suite of the solution (--harness, or cavelon.yaml's 
 | Option | Description | MCP |
 |---|---|---|
 | `--suite <suite>` | Suite name or id. Repeatable. | yes |
-| `--harness <harness>` | Solution slug or id to run against. | yes |
+| `--harness <harness>` | The solution to run against: its name, slug or id. | yes |
 | `--wait` | Wait for the work to finish (see `cavelon wait`). | CLI only |
 | `--timeout <duration>` | Stop waiting after this long (90s, 5m; default 90s). The work goes on; run wait again to resume. | yes |
 | `--idempotency-key <key>` | Send an Idempotency-Key with each start. | yes |
@@ -1082,7 +1093,7 @@ cavelon sandbox files <sandbox> [path] [options]
 
 | Option | Description | MCP |
 |---|---|---|
-| `--harness <harness>` | The solution the Sandbox is read for (default: cavelon.yaml's, or the Sandbox's only allowed one). | yes |
+| `--harness <harness>` | The solution the Sandbox is read for, by name, slug or id (default: cavelon.yaml's, or the Sandbox's only allowed one). | yes |
 | `--limit <n>` | Return at most n entries (at most 100). | yes |
 | `--cursor <cursor>` | Continue after the previous page (its next_cursor). | yes |
 
@@ -1112,7 +1123,7 @@ At most 32 KiB per call; --offset reads on. --base64 for a binary file.
 
 | Option | Description | MCP |
 |---|---|---|
-| `--harness <harness>` | The solution the Sandbox is read for (default: cavelon.yaml's, or the Sandbox's only allowed one). | yes |
+| `--harness <harness>` | The solution the Sandbox is read for, by name, slug or id (default: cavelon.yaml's, or the Sandbox's only allowed one). | yes |
 | `--offset <bytes>` | Start at this byte. | yes |
 | `--length <bytes>` | Read at most this many bytes (at most 32768). | yes |
 | `--base64` | Return the bytes as base64. | yes |
@@ -1141,7 +1152,7 @@ cavelon sandbox activity <sandbox> [activity] [options]
 
 | Option | Description | MCP |
 |---|---|---|
-| `--harness <harness>` | The solution the Sandbox is read for (default: cavelon.yaml's, or the Sandbox's only allowed one). | yes |
+| `--harness <harness>` | The solution the Sandbox is read for, by name, slug or id (default: cavelon.yaml's, or the Sandbox's only allowed one). | yes |
 | `--limit <n>` | Return at most n entries (at most 100). | yes |
 | `--cursor <cursor>` | Continue after the previous page (its next_cursor). | yes |
 
@@ -1171,7 +1182,7 @@ The runner keeps a bounded tail; the next page needs the same --snapshot, which 
 
 | Option | Description | MCP |
 |---|---|---|
-| `--harness <harness>` | The solution the Sandbox is read for (default: cavelon.yaml's, or the Sandbox's only allowed one). | yes |
+| `--harness <harness>` | The solution the Sandbox is read for, by name, slug or id (default: cavelon.yaml's, or the Sandbox's only allowed one). | yes |
 | `--offset <bytes>` | Start at this byte. | yes |
 | `--length <bytes>` | Read at most this many bytes (at most 32768). | yes |
 | `--snapshot <digest>` | The snapshot digest of the first page, to read on. | yes |
@@ -1201,7 +1212,7 @@ A trusted receipt exists only on an isolated container; a customer VM reports ag
 
 | Option | Description | MCP |
 |---|---|---|
-| `--harness <harness>` | The solution the Sandbox is read for (default: cavelon.yaml's, or the Sandbox's only allowed one). | yes |
+| `--harness <harness>` | The solution the Sandbox is read for, by name, slug or id (default: cavelon.yaml's, or the Sandbox's only allowed one). | yes |
 
 Examples:
 
@@ -1228,7 +1239,7 @@ Isolated container only; on a customer VM, put the files on the VM and run `sand
 
 | Option | Description | MCP |
 |---|---|---|
-| `--harness <harness>` | The solution the Sandbox is read for (default: cavelon.yaml's, or the Sandbox's only allowed one). | yes |
+| `--harness <harness>` | The solution the Sandbox is read for, by name, slug or id (default: cavelon.yaml's, or the Sandbox's only allowed one). | yes |
 | `--revision <revision>` | The workspace revision the job expects (default: the current one). | yes |
 | `--confirm` | Send it; without it nothing changes. | yes |
 | `--wait` | Wait for the job to finish (see `cavelon wait`). | CLI only |
@@ -1289,7 +1300,7 @@ Starts an export job and returns its operation id; with --wait (or later with --
 | `--path <path>` | Export only these workspace paths (repeatable; default: all). Repeatable. | yes |
 | `--out <file>` | Where to write the tar (default: sandbox-&lt;job&gt;.tar). | yes |
 | `--job <job_id>` | Download a job started earlier, instead of starting one. | yes |
-| `--harness <harness>` | The solution the Sandbox is read for (default: cavelon.yaml's, or the Sandbox's only allowed one). | yes |
+| `--harness <harness>` | The solution the Sandbox is read for, by name, slug or id (default: cavelon.yaml's, or the Sandbox's only allowed one). | yes |
 | `--revision <revision>` | The workspace revision the job expects (default: the current one). | yes |
 | `--wait` | Wait for the job to finish (see `cavelon wait`). | CLI only |
 | `--timeout <duration>` | Stop waiting after this long (90s, 5m; default 90s). The work goes on; run wait again to resume. | yes |

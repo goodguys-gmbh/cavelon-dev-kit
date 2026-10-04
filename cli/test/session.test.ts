@@ -111,87 +111,265 @@ describe("login", () => {
 });
 
 describe("login without --tenant", () => {
-  type Refusal = { error: { code: string; message: string; hint: string; status: number } };
+  type Refusal = { error: { code: string; message: string; hint: string; status: number; details: Record<string, unknown> } };
   const PLATFORM_REFUSAL = "This personal access token does not work in Platform mode; select a tenant with X-Tenant-Id";
   const credentials = () => path.join(sb.env.CAVELON_CONFIG_DIR!, "credentials.json");
+  const config = () => JSON.parse(readFileSync(path.join(sb.env.CAVELON_CONFIG_DIR!, "config.json"), "utf8")) as { instances: Record<string, Record<string, unknown>> };
+  /** A person at a terminal: the hidden token, then each answer on its own line. */
+  const atTerminal = (args: string[], ...lines: string[]) => cli(sb, args, { tty: true, stdin: lines.map((l) => `${l}\n`).join(""), env: { NO_COLOR: "1" } });
+  /** An older instance: it lists no tenants and refuses a token it cannot place, everywhere. */
+  async function olderInstance<T>(run: () => Promise<T>): Promise<T> {
+    server.state.serveTenantReach = false;
+    try {
+      return await run();
+    } finally {
+      server.state.serveTenantReach = true;
+    }
+  }
 
-  it("the fake refuses a token without Platform mode on every route, as the instance does, when it cannot place it in a tenant", async () => {
+  it("the fake answers a token it cannot place only on /meta/principal, with the tenants it reaches; an older one refuses it there too", async () => {
     const token = server.addToken({ kind: "pat", tenantIds: [tenantA, tenantB] });
-    for (const route of ["/api/v1/auth/me", "/api/v1/meta/principal", "/api/v1/meta/capabilities", "/api/v1/tenants"]) {
+    for (const route of ["/api/v1/auth/me", "/api/v1/meta/capabilities", "/api/v1/tenants"]) {
       const response = await fetch(`${server.url}${route}`, { headers: { Authorization: `Bearer ${token}` } });
       expect([route, response.status]).toEqual([route, 403]);
       expect(await response.json()).toEqual({ detail: PLATFORM_REFUSAL });
     }
+    const principal = await fetch(`${server.url}/api/v1/meta/principal`, { headers: { Authorization: `Bearer ${token}` } });
+    expect(principal.status).toBe(200);
+    expect(await principal.json()).toMatchObject({
+      tenant_id: null,
+      reaches_all_tenants: false,
+      tenants: [
+        { id: tenantA, slug: "acme", name: "Acme", role: "tenant_admin", is_default: false },
+        { id: tenantB, slug: "globex", name: "Globex", role: "tenant_admin", is_default: false },
+      ],
+    });
+    await olderInstance(async () => {
+      const refused = await fetch(`${server.url}/api/v1/meta/principal`, { headers: { Authorization: `Bearer ${token}` } });
+      expect(refused.status).toBe(403);
+    });
     const inTenant = await fetch(`${server.url}/api/v1/auth/me`, { headers: { Authorization: `Bearer ${token}`, "X-Tenant-Id": tenantB } });
     expect(inTenant.status).toBe(200);
   });
 
-  it("a token limited to one tenant: uses it and says so", async () => {
+  it("one tenant: uses it, says so, and remembers it by name and slug", async () => {
     const token = server.addToken({ kind: "pat", tenantIds: [tenantA], email: "ada@example.com" });
     const result = await cli(sb, ["login", "--instance", server.url, "--token-stdin"], { stdin: `${token}\n` });
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain(`Acting in tenant Acme (${tenantA}), the one the instance chooses for this token.`);
-    expect(result.stderr).not.toMatch(/other tenants/);
+    expect(result.stdout).toContain(`Using tenant Acme (acme, ${tenantA}), the only one this token reaches.`);
+    expect(result.stderr).not.toMatch(/other tenant/);
+    expect(config().instances[server.url]).toMatchObject({ tenant: "acme", tenant_id: tenantA, tenant_name: "Acme", tenant_slug: "acme" });
 
+    // Logging in again keeps the tenant chosen before.
     const json = await cli(sb, ["login", "--instance", server.url, "--token-stdin", "--json"], { stdin: `${token}\n` });
-    expect(json.json<{ tenant: unknown }>().tenant).toEqual({ ref: null, id: tenantA, name: "Acme" });
+    expect(json.json<{ tenant: unknown }>().tenant).toEqual({ ref: "acme", id: tenantA, name: "Acme", slug: "acme", chosen: "use" });
     const who = await cli(sb, ["whoami", "--json"]);
     expect(who.code).toBe(0);
-    expect(who.json<{ tenant: unknown }>().tenant).toMatchObject({ id: tenantA, name: "Acme", mode: "tenant" });
+    expect(who.json<{ tenant: unknown }>().tenant).toMatchObject({ id: tenantA, name: "Acme", slug: "acme", mode: "tenant" });
+    expect((await cli(sb, ["whoami"])).stdout).toMatch(new RegExp(`tenant:\\s+Acme \\(acme, ${tenantA}\\)`));
   });
 
-  it("a token whose owner has a default tenant: acts there and names the other tenants", async () => {
+  it("several tenants on a terminal: a numbered list, and a number chooses", async () => {
+    const token = server.addToken({ kind: "pat", tenantIds: [tenantA, tenantB] });
+    const result = await atTerminal(["login", "--instance", server.url], token, "2");
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.stderr).toContain(`This token reaches 2 tenants on ${server.url}:`);
+    expect(result.stderr).toMatch(/ 1 {2}Acme {2}acme {2}\(tenant_admin\)\n {3}2 {2}Globex {2}globex {2}\(tenant_admin\)/);
+    expect(result.stderr).toContain("Which tenant? (type its number or part of its name)");
+    expect(result.stdout).toContain(`Using tenant Globex (globex, ${tenantB}); \`cavelon use\` chooses another.`);
+    expect(result.stdout + result.stderr).not.toContain(token);
+    expect(config().instances[server.url]).toMatchObject({ tenant: "globex", tenant_id: tenantB });
+    const who = await cli(sb, ["whoami", "--json"]);
+    expect(who.json<{ tenant: unknown }>().tenant).toMatchObject({ id: tenantB, slug: "globex", source: "use" });
+  });
+
+  it("several tenants on a terminal: part of a name chooses, a miss asks again, and Enter takes the default", async () => {
+    const token = server.addToken({ kind: "pat", tenantIds: [tenantA, tenantB] });
+    const byName = await atTerminal(["login", "--instance", server.url], token, "nope", "7", "glob");
+    expect(byName.code, byName.stderr).toBe(0);
+    expect(byName.stderr).toContain('Nothing is called "nope".');
+    expect(byName.stderr).toContain("There is no number 7 in the list.");
+    expect(byName.stdout).toContain("Using tenant Globex");
+
+    const withDefault = server.addToken({ kind: "pat", tenantIds: [tenantA, tenantB], defaultTenant: tenantB });
+    await cli(sb, ["use", "--clear", "--instance", server.url]);
+    const enter = await atTerminal(["login", "--instance", server.url], withDefault, "");
+    expect(enter.code, enter.stderr).toBe(0);
+    expect(enter.stderr).toMatch(/2 {2}Globex {2}globex {2}\(tenant_admin, default, press Enter\)/);
+    expect(enter.stdout).toContain("Using tenant Globex");
+
+    await cli(sb, ["use", "--clear", "--instance", server.url]);
+    const cancelled = await atTerminal(["login", "--instance", server.url], token);
+    expect(cancelled.code).toBe(1);
+    expect(cancelled.stderr).toMatch(/Cancelled; nothing was chosen/);
+  });
+
+  it("several tenants without a terminal: stores the token and prints one ready `cavelon use` line per tenant (exit 2)", async () => {
+    const token = server.addToken({ kind: "pat", tenantIds: [tenantA, tenantB] });
+    const result = await cli(sb, ["login", "--instance", server.url, "--token-stdin"], { stdin: `${token}\n` });
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain(`error: The token is stored for ${server.url}, but no tenant is chosen yet. This token reaches 2 tenants on ${server.url}, and there is no terminal to ask which one to use.`);
+    expect(result.stderr).toMatch(/hint: Run the line for the tenant you want:\n {2}cavelon use acme +Acme\n {2}cavelon use globex +Globex/);
+    expect(existsSync(credentials())).toBe(true);
+    expect(result.stdout + result.stderr).not.toContain(token);
+
+    const json = await cli(sb, ["login", "--instance", server.url, "--token-stdin", "--json"], { stdin: `${token}\n` });
+    const { error } = json.json<Refusal>();
+    expect(error.code).toBe("tenant_required");
+    expect(error.details.tenants).toEqual([
+      { id: tenantA, slug: "acme", name: "Acme", role: "tenant_admin", is_default: false, command: "cavelon use acme" },
+      { id: tenantB, slug: "globex", name: "Globex", role: "tenant_admin", is_default: false, command: "cavelon use globex" },
+    ]);
+    // The printed line works as it is.
+    const used = await cli(sb, ["use", "globex", "--json"]);
+    expect(used.code, used.stderr + used.stdout).toBe(0);
+    expect(used.json()).toMatchObject({ tenant: { ref: "globex", id: tenantB, name: "Globex", slug: "globex" } });
+  });
+
+  it("a tenant chosen with an earlier token that the new one does not reach is chosen again", async () => {
+    await login(sb, server.url, server.addToken({ kind: "pat", tenantIds: [tenantA] }));
+    const result = await cli(sb, ["login", "--instance", server.url, "--token-stdin", "--json"], { stdin: server.addToken({ kind: "pat", tenantIds: [tenantB] }) });
+    expect(result.code, result.stdout).toBe(0);
+    expect(result.json<{ tenant: unknown; warnings: string[] }>()).toMatchObject({
+      tenant: { id: tenantB, chosen: "only" },
+      warnings: expect.arrayContaining(["The tenant chosen before (acme) is not one this token reaches; choosing again."]),
+    });
+  });
+
+  it("a token whose owner has a default tenant, without a terminal: acts there and prints the line for each other tenant", async () => {
     const token = server.addToken({ kind: "pat", tenantIds: [tenantA, tenantB], defaultTenant: tenantB });
     const result = await cli(sb, ["login", "--instance", server.url, "--token-stdin"], { stdin: `${token}\n` });
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain(`Acting in tenant Globex (${tenantB})`);
-    expect(result.stderr).toMatch(/Your other tenants: Acme; `cavelon use <tenant>` chooses one/);
+    expect(result.stdout).toContain(`Acting in tenant Globex (globex, ${tenantB}), the one the instance chooses for this token.`);
+    expect(result.stderr).toMatch(/Without a tenant this token acts in Globex\. To work in another tenant, run:\n {2}cavelon use acme {4}Acme/);
   });
 
-  it("a token for several tenants that the instance cannot place: asks for --tenant and stores nothing", async () => {
-    const token = server.addToken({ kind: "pat", tenantIds: [tenantA, tenantB] });
+  it("an operator's token that reaches every tenant: asks for part of a name on a terminal and searches", async () => {
+    const summaries = server.addTenant("demo-long-document-summaries", "Demo: Long Document Summaries");
+    server.addTenant("demo-short-answers", "Demo: Short Answers");
+    const token = server.addToken({ kind: "pat", tenantIds: [], reachesAll: true, globalRole: "superadmin" });
+    const result = await atTerminal(["login", "--instance", server.url], token, "demo", "long");
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.stderr).toContain(`This token reaches every tenant on ${server.url}.`);
+    expect(result.stderr).toContain("Which tenant? (type part of its name)");
+    expect(result.stderr).toMatch(/2 match "demo":\n {3}1 {2}Demo: Long Document Summaries {2}demo-long-document-summaries/);
+    expect(result.stdout).toContain(`Using tenant Demo: Long Document Summaries (demo-long-document-summaries, ${summaries})`);
+    // The search went to the instance, without a tenant.
+    const searches = server.state.requests.filter((r) => r.path === "/api/v1/meta/principal" && r.query.get("search"));
+    expect(searches.map((r) => [r.query.get("search"), r.headers["x-tenant-id"]])).toEqual(expect.arrayContaining([["demo", undefined]]));
+  });
+
+  it("an operator's token that reaches every tenant: --tenant and `use` find a tenant by slug or name; without a terminal it is stored and told how to choose", async () => {
+    const summaries = server.addTenant("demo-summaries-op", "Summaries for Operators");
+    const token = server.addToken({ kind: "pat", tenantIds: [], reachesAll: true, globalRole: "superadmin" });
+    const bySlug = await cli(sb, ["login", "--instance", server.url, "--tenant", "demo-summaries-op", "--token-stdin", "--json"], { stdin: `${token}\n` });
+    expect(bySlug.code, bySlug.stdout).toBe(0);
+    expect(bySlug.json<{ tenant: unknown }>().tenant).toMatchObject({ id: summaries, name: "Summaries for Operators", slug: "demo-summaries-op", chosen: "option" });
+    expect((await cli(sb, ["use", "summaries for operators", "--json"])).json()).toMatchObject({ tenant: { ref: "demo-summaries-op", id: summaries } });
+
+    await cli(sb, ["use", "--clear"]);
+    const open = await cli(sb, ["login", "--instance", server.url, "--token-stdin"], { stdin: `${token}\n` });
+    expect(open.code).toBe(2);
+    expect(open.stderr).toContain(`This token reaches every tenant on ${server.url}, and there is no terminal`);
+    expect(open.stderr).toContain("Choose one: `cavelon use <name or slug>`; `cavelon tenant list --search <part of the name>` finds its slug.");
+    const listed = await cli(sb, ["tenant", "list", "--search", "operators", "--json"]);
+    expect(listed.json<{ source: string; items: unknown[] }>()).toMatchObject({ source: "token", items: [{ id: summaries, slug: "demo-summaries-op" }] });
+    const miss = await cli(sb, ["use", "demo-sumaries-op", "--json"]);
+    expect(miss.code).toBe(1);
+    expect(miss.json<Refusal>().error).toMatchObject({ code: "tenant_not_found", hint: expect.stringContaining("tenant list --search") });
+  });
+
+  it("no tenant: says where to change the token, and stores nothing", async () => {
+    const token = server.addToken({ kind: "pat", tenantIds: [] });
     const result = await cli(sb, ["login", "--instance", server.url, "--token-stdin", "--json"], { stdin: `${token}\n` });
-    expect(result.code).toBe(2);
+    expect(result.code).toBe(7);
     const { error } = result.json<Refusal>();
-    expect(error.code).toBe("tenant_required");
-    expect(error.status).toBe(403);
-    expect(error.message).toContain(PLATFORM_REFUSAL);
-    expect(error.hint).toMatch(/--tenant <tenant-id>/);
-    expect(error.hint).toMatch(/limited to one tenant needs none/);
+    expect(error.code).toBe("no_tenant_reached");
+    expect(error.hint).toContain(`${server.url}/account/access-tokens`);
     expect(existsSync(credentials())).toBe(false);
-    expect(result.stdout + result.stderr).not.toContain(token);
-
-    // A name or slug cannot be looked up: no route answers this token without a tenant.
-    const byName = await cli(sb, ["login", "--instance", server.url, "--tenant", "acme", "--token-stdin", "--json"], { stdin: `${token}\n` });
-    expect(byName.code).toBe(2);
-    expect(byName.json<Refusal>().error).toMatchObject({ code: "tenant_required", hint: expect.stringMatching(/--tenant <tenant-id>/) });
-    expect(byName.json<Refusal>().error.message).toMatch(/Cannot find tenant "acme" by its name or slug/);
-    expect(existsSync(credentials())).toBe(false);
-
-    // The id gets in, and is kept for the commands that follow.
-    const byId = await cli(sb, ["login", "--instance", server.url, "--tenant", tenantB, "--token-stdin", "--json"], { stdin: `${token}\n` });
-    expect(byId.code).toBe(0);
-    expect(byId.json<{ tenant: unknown; instance_version: string }>()).toMatchObject({ tenant: { ref: tenantB, id: tenantB }, instance_version: "v0.0.0-dev" });
-    const who = await cli(sb, ["whoami", "--json"]);
-    expect(who.code).toBe(0);
-    expect(who.json<{ tenant: unknown }>().tenant).toMatchObject({ id: tenantB, name: "Globex", source: "use" });
   });
 
-  it("whoami and any first call without a tenant say to pass the tenant's id", async () => {
+  it("whoami of a token that acts in no tenant yet: shows it and how to choose; any other call says the same", async () => {
     const token = server.addToken({ kind: "pat", tenantIds: [tenantA, tenantB] });
     const env = { CAVELON_URL: server.url, CAVELON_TOKEN: token };
     const who = await cli(sb, ["whoami", "--json"], { env });
-    expect(who.code).toBe(2);
-    expect(who.json<Refusal>().error).toMatchObject({ code: "tenant_required", message: expect.stringContaining(PLATFORM_REFUSAL) });
+    expect(who.code).toBe(0);
+    expect(who.json<{ tenant: unknown; warnings: string[] }>()).toMatchObject({
+      tenant: { id: null, mode: "none" },
+      warnings: [expect.stringMatching(/No tenant is chosen\. Choose one with `cavelon use`, or run the line for the tenant you want:\n {2}cavelon use acme/)],
+    });
 
     const limits = await cli(sb, ["limits", "--json"], { env });
     expect(limits.code).toBe(7);
     expect(limits.json<Refusal>().error.message).toContain(PLATFORM_REFUSAL);
-    expect(limits.json<Refusal>().error.hint).toMatch(/^No tenant was named\..*--tenant <tenant-id>/);
+    expect(limits.json<Refusal>().error.hint).toMatch(/^No tenant was named\. .*Run `cavelon use` to choose one/);
 
-    const inTenant = await cli(sb, ["whoami", "--json", "--tenant", tenantA], { env });
+    const inTenant = await cli(sb, ["whoami", "--json", "--tenant", "Globex"], { env });
     expect(inTenant.code).toBe(0);
-    expect(inTenant.json<{ tenant: unknown }>().tenant).toMatchObject({ id: tenantA, mode: "tenant" });
+    expect(inTenant.json<{ tenant: unknown }>().tenant).toMatchObject({ id: tenantB, slug: "globex", mode: "tenant" });
+  });
+
+  it("an older instance: a token for several tenants it cannot place asks for --tenant <tenant-id> and stores nothing", async () => {
+    const token = server.addToken({ kind: "pat", tenantIds: [tenantA, tenantB] });
+    await olderInstance(async () => {
+      const result = await cli(sb, ["login", "--instance", server.url, "--token-stdin", "--json"], { stdin: `${token}\n` });
+      expect(result.code).toBe(2);
+      const { error } = result.json<Refusal>();
+      expect(error.code).toBe("tenant_required");
+      expect(error.status).toBe(403);
+      expect(error.message).toContain(PLATFORM_REFUSAL);
+      expect(error.hint).toMatch(/--tenant <tenant-id>/);
+      expect(error.hint).toMatch(/limited to one tenant needs none/);
+      expect(existsSync(credentials())).toBe(false);
+      expect(result.stdout + result.stderr).not.toContain(token);
+
+      // Not even on a terminal: the instance names no tenant to choose from.
+      const tty = await atTerminal(["login", "--instance", server.url], token);
+      expect(tty.code).toBe(2);
+      expect(tty.stderr).not.toContain("Which tenant?");
+
+      // A name or slug cannot be looked up: no route answers this token without a tenant.
+      const byName = await cli(sb, ["login", "--instance", server.url, "--tenant", "acme", "--token-stdin", "--json"], { stdin: `${token}\n` });
+      expect(byName.code).toBe(2);
+      expect(byName.json<Refusal>().error).toMatchObject({ code: "tenant_required", hint: expect.stringMatching(/--tenant <tenant-id>/) });
+      expect(byName.json<Refusal>().error.message).toMatch(/Cannot find tenant "acme" by its name or slug/);
+      expect(existsSync(credentials())).toBe(false);
+
+      // The id gets in, and is kept for the commands that follow.
+      const byId = await cli(sb, ["login", "--instance", server.url, "--tenant", tenantB, "--token-stdin", "--json"], { stdin: `${token}\n` });
+      expect(byId.code).toBe(0);
+      expect(byId.json<{ tenant: unknown; instance_version: string }>()).toMatchObject({ tenant: { ref: tenantB, id: tenantB }, instance_version: "v0.0.0-dev" });
+      const who = await cli(sb, ["whoami", "--json"]);
+      expect(who.code).toBe(0);
+      expect(who.json<{ tenant: unknown }>().tenant).toMatchObject({ id: tenantB, name: "Globex", source: "use" });
+      // `use` without a tenant has no list to offer there.
+      const use = await cli(sb, ["use"]);
+      expect(use.code).toBe(2);
+      expect(use.stderr).toContain("This instance does not list the tenants a token reaches.");
+    });
+  });
+
+  it("an older instance: whoami and any first call without a tenant say to pass the tenant's id", async () => {
+    const token = server.addToken({ kind: "pat", tenantIds: [tenantA, tenantB] });
+    const env = { CAVELON_URL: server.url, CAVELON_TOKEN: token };
+    await olderInstance(async () => {
+      const who = await cli(sb, ["whoami", "--json"], { env });
+      expect(who.code).toBe(2);
+      expect(who.json<Refusal>().error).toMatchObject({ code: "tenant_required", message: expect.stringContaining(PLATFORM_REFUSAL) });
+      const limits = await cli(sb, ["limits", "--json"], { env });
+      expect(limits.code).toBe(7);
+      expect(limits.json<Refusal>().error.hint).toMatch(/--tenant <tenant-id>/);
+    });
+  });
+
+  it("an older instance: a token whose owner has a default tenant acts there and names the other tenants", async () => {
+    const token = server.addToken({ kind: "pat", tenantIds: [tenantA, tenantB], defaultTenant: tenantB });
+    await olderInstance(async () => {
+      const result = await cli(sb, ["login", "--instance", server.url, "--token-stdin"], { stdin: `${token}\n` });
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain(`Acting in tenant Globex (${tenantB})`);
+      expect(result.stderr).toMatch(/Your other tenants: Acme; `cavelon use <tenant>` chooses one/);
+    });
   });
 
   it("an instance without /meta/principal refuses the same token on /auth/me, and login says the same", async () => {
@@ -215,6 +393,56 @@ describe("login without --tenant", () => {
     const who = await cli(sb, ["whoami", "--json"]);
     expect(who.code).toBe(0);
     expect(who.json<{ tenant: unknown }>().tenant).toMatchObject({ id: null, mode: "platform" });
+  });
+});
+
+describe("use without a tenant", () => {
+  it("on a terminal: the same list as login, and the choice is stored", async () => {
+    const token = server.addToken({ kind: "pat", tenantIds: [tenantA, tenantB], defaultTenant: tenantA });
+    await login(sb, server.url, token);
+    const result = await cli(sb, ["use"], { tty: true, stdin: "Glo\n", env: { NO_COLOR: "1" } });
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.stderr).toContain("This token reaches 2 tenants");
+    expect(result.stdout).toContain(`Using tenant Globex (globex, ${tenantB}) on ${server.url}.`);
+    expect((await cli(sb, ["status", "--offline", "--json"])).json<{ tenant: unknown }>().tenant).toEqual({ ref: "globex", source: "use" });
+  });
+
+  it("without a terminal: one ready line per tenant, and nothing changes (exit 2)", async () => {
+    const token = server.addToken({ kind: "pat", tenantIds: [tenantA, tenantB], defaultTenant: tenantA });
+    await login(sb, server.url, token);
+    const result = await cli(sb, ["use"]);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toMatch(/cavelon use acme +Acme\n {2}cavelon use globex +Globex/);
+    expect((await cli(sb, ["status", "--offline", "--json"])).json<{ tenant: unknown }>().tenant).toBeNull();
+  });
+
+  it("a token for one tenant: uses it", async () => {
+    await login(sb, server.url, server.addToken({ kind: "pat", tenantIds: [tenantB] }));
+    const result = await cli(sb, ["use", "--json"]);
+    expect(result.code).toBe(0);
+    expect(result.json()).toMatchObject({ tenant: { ref: "globex", id: tenantB } });
+  });
+
+  it("reads every page of a long list of tenants", async () => {
+    const many = Array.from({ length: 230 }, (_, i) => server.addTenant(`zz-page-${String(i).padStart(3, "0")}`, `Page Tenant ${i}`));
+    await login(sb, server.url, server.addToken({ kind: "pat", tenantIds: many, defaultTenant: many[0] }));
+    server.state.requests.length = 0;
+    const result = await cli(sb, ["use", "zz-page-229", "--json"]);
+    expect(result.code, result.stdout).toBe(0);
+    expect(result.json()).toMatchObject({ tenant: { id: many[229], name: "Page Tenant 229" } });
+    const pages = server.state.requests.filter((r) => r.path === "/api/v1/meta/principal");
+    expect(pages.map((r) => [r.query.get("limit"), r.query.get("cursor")])).toEqual([["200", null], ["200", "200"]]);
+  });
+
+  it("a name or slug that is not one of the token's tenants names the closest", async () => {
+    await login(sb, server.url, server.addToken({ kind: "pat", tenantIds: [tenantA, tenantB], defaultTenant: tenantA }));
+    const result = await cli(sb, ["use", "globx", "--json"]);
+    expect(result.code).toBe(1);
+    const error = result.json<{ error: { code: string; message: string; hint: string; details: unknown } }>().error;
+    expect(error.code).toBe("tenant_not_found");
+    expect(error.message).toBe('No tenant "globx" that this token reaches. Closest: Globex (globex).');
+    expect(error.hint).toContain("cavelon use globex");
+    expect(error.details).toEqual({ tenants: [{ id: tenantB, slug: "globex", name: "Globex" }] });
   });
 });
 
@@ -385,31 +613,62 @@ describe("use and the tenant precedence", () => {
     }
   });
 
-  it("tells a member who may not read the tenant's detail to use its name or id", async () => {
+  it("finds a member's tenant by its slug from the token's tenants, even without the tenant's settings", async () => {
     const umbrella = server.addTenant("umbrella", "Umbrella Holdings");
     const token = server.addToken({ kind: "pat", tenantIds: [umbrella], defaultTenant: umbrella, permissions: ["agents.view"] });
     await login(sb, server.url, token);
     const result = await cli(sb, ["use", "umbrella", "--json"]);
-    expect(result.code).toBe(1);
-    const error = result.json<{ error: { code: string; message: string; hint: string; details: unknown } }>().error;
-    expect(error.code).toBe("tenant_not_found");
-    expect(error.hint).toMatch(/name or id/);
-    // It names the tenants the instance told, so the person can pick one by name.
-    expect(error.message).toContain(`Your tenants: Umbrella Holdings (${umbrella}).`);
-    expect(error.details).toEqual({ tenants: [{ id: umbrella, name: "Umbrella Holdings" }] });
-    expect((await cli(sb, ["use", "Umbrella Holdings", "--json"])).code).toBe(0);
-    expect((await cli(sb, ["use", umbrella, "--json"])).code).toBe(0);
+    expect(result.code, result.stdout).toBe(0);
+    expect(result.json()).toMatchObject({ tenant: { ref: "umbrella", id: umbrella, name: "Umbrella Holdings", slug: "umbrella" } });
   });
 
-  it("login --tenant with a slug the member's token cannot resolve names the tenants by name, and stores nothing", async () => {
+  it("an older instance: tells a member who may not read the tenant's detail to use its name or id", async () => {
+    const umbrella = server.addTenant("umbrella-old", "Umbrella Holdings");
+    const token = server.addToken({ kind: "pat", tenantIds: [umbrella], defaultTenant: umbrella, permissions: ["agents.view"] });
+    await login(sb, server.url, token);
+    server.state.serveTenantReach = false;
+    try {
+      const result = await cli(sb, ["use", "umbrella-old", "--json"]);
+      expect(result.code).toBe(1);
+      const error = result.json<{ error: { code: string; message: string; hint: string; details: unknown } }>().error;
+      expect(error.code).toBe("tenant_not_found");
+      expect(error.hint).toMatch(/name or id/);
+      // It names the tenants the instance told, so the person can pick one by name.
+      expect(error.message).toContain(`Your tenants: Umbrella Holdings (${umbrella}).`);
+      expect(error.details).toEqual({ tenants: [{ id: umbrella, name: "Umbrella Holdings" }] });
+      expect((await cli(sb, ["use", "Umbrella Holdings", "--json"])).code).toBe(0);
+      expect((await cli(sb, ["use", umbrella, "--json"])).code).toBe(0);
+    } finally {
+      server.state.serveTenantReach = true;
+    }
+  });
+
+  it("an older instance: login --tenant with a slug the member's token cannot resolve names the tenants by name, and stores nothing", async () => {
     const initech = server.addTenant("initech-labs", "Initech");
     const token = server.addToken({ kind: "pat", tenantIds: [initech, tenantB], defaultTenant: initech, permissions: ["agents.view"] });
-    const result = await cli(sb, ["login", "--instance", server.url, "--tenant", "initech-labs", "--token-stdin"], { stdin: `${token}\n` });
-    expect(result.code).toBe(1);
-    expect(result.stderr).toContain(`No tenant "initech-labs" that this token can see. Your tenants: Initech (${initech}), Globex (${tenantB}).`);
-    expect(existsSync(path.join(sb.env.CAVELON_CONFIG_DIR!, "credentials.json"))).toBe(false);
-    const byName = await cli(sb, ["login", "--instance", server.url, "--tenant", "Initech", "--token-stdin", "--json"], { stdin: `${token}\n` });
-    expect(byName.json<{ tenant: unknown }>().tenant).toMatchObject({ ref: "Initech", id: initech });
+    server.state.serveTenantReach = false;
+    try {
+      const result = await cli(sb, ["login", "--instance", server.url, "--tenant", "initech-labs", "--token-stdin"], { stdin: `${token}\n` });
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain(`No tenant "initech-labs" that this token can see. Your tenants: Initech (${initech}), Globex (${tenantB}).`);
+      expect(existsSync(path.join(sb.env.CAVELON_CONFIG_DIR!, "credentials.json"))).toBe(false);
+      const byName = await cli(sb, ["login", "--instance", server.url, "--tenant", "Initech", "--token-stdin", "--json"], { stdin: `${token}\n` });
+      expect(byName.json<{ tenant: unknown }>().tenant).toMatchObject({ ref: "Initech", id: initech });
+    } finally {
+      server.state.serveTenantReach = true;
+    }
+    // A recent instance finds the slug in the token's tenants.
+    const bySlug = await cli(sb, ["login", "--instance", server.url, "--tenant", "initech-labs", "--token-stdin", "--json"], { stdin: `${token}\n` });
+    expect(bySlug.code, bySlug.stdout).toBe(0);
+    expect(bySlug.json<{ tenant: unknown }>().tenant).toMatchObject({ ref: "initech-labs", id: initech, name: "Initech", slug: "initech-labs" });
+  });
+
+  it("a Platform-mode token finds any tenant by slug, not only its owner's memberships", async () => {
+    const initrode = server.addTenant("initrode", "Initrode");
+    await login(sb, server.url, server.addToken({ kind: "pat", tenantIds: [tenantA], platform: true }));
+    const used = await cli(sb, ["use", "initrode", "--json"]);
+    expect(used.code, used.stdout).toBe(0);
+    expect(used.json()).toMatchObject({ tenant: { ref: "initrode", id: initrode, name: "Initrode", slug: "initrode" } });
   });
 
   it("refuses a tenant the token cannot reach", async () => {

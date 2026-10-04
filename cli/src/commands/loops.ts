@@ -966,7 +966,7 @@ async function resolveApiKey(ctx: Context, ref: string): Promise<ApiKey | { id: 
   if (isUuid(ref)) return { id: ref };
   const client = await ctx.client();
   const tenantId = client.target.tenantId ?? (await readPrincipal(client))?.tenant_id ?? undefined;
-  if (!tenantId) throw usageError("Which tenant's API keys? Choose one with `cavelon use <tenant>` or --tenant, or pass the key's id.");
+  if (!tenantId) throw usageError("Which tenant's API keys? Choose one with `cavelon use` (it lists your tenants) or --tenant, or pass the key's id.");
   const keys: ApiKey[] = [];
   for (let offset = 0; offset < 1000; offset += 100) {
     const page = await callStable<{ items: ApiKey[]; total: number }>(ctx, "GET", "/api/v1/tenants/{tenant_id}/api-keys", "API keys", {

@@ -36,7 +36,7 @@ git init
 ```
 
 Edit two lines of `cavelon.yaml`: `instance` is your Cavelon URL, `tenant` your
-tenant's slug (`cavelon whoami` shows it). The agent uses the model `gpt-4.1`
+tenant's slug, name or id (`cavelon tenant list` shows all three). The agent uses the model `gpt-4.1`
 from `openai`; `cavelon models list` shows the models your tenant has, so change
 `llm_model` and `llm_provider` in `package/agents.yaml` if it has another.
 

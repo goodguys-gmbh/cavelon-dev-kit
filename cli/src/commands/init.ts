@@ -11,9 +11,15 @@ import { ensureStateDir, STATE_DIR } from "../local-state.js";
 import { isGenerated, upsertBlock, upsertJsonEntry, type BlockResult, type CommentStyle } from "../markers.js";
 import { packageVersionOf } from "../package-check.js";
 import { defaultLayoutFor, safeSectionName, schemaSections, toYaml, writePackage, type WriteReport } from "../package-files.js";
-import { readPrincipal } from "../principal.js";
+import { readPrincipal, readTenantless } from "../principal.js";
 import { ENV_DIR, parseProject, PROJECT_FILE, type ProjectConfig } from "../project.js";
-import { requireInstance, requireToken } from "../session.js";
+import { canAsk, readLine } from "../prompt.js";
+import { pick } from "../choose.js";
+import { harnessNotFoundError, listHarnesses, lookupHarness, type HarnessLookup, type HarnessSummary } from "../harness-ref.js";
+import { lookupTenantId, requireInstance, requireToken, tenantRequiredError, type Session } from "../session.js";
+import { cavelonCommand } from "../shell.js";
+import { chooseTenant, listsTenants, noTenantError, tenantOpenError, tenantRef, tenantTitle } from "../tenant-choice.js";
+import { createHarness } from "./tenants.js";
 import { schemaFor, setProjectKey } from "./solution.js";
 
 /**
@@ -237,19 +243,157 @@ async function installHook(root: string, onlyExisting: boolean): Promise<FileAct
   return action;
 }
 
-function solutionYaml(values: Record<string, unknown>): string {
+function solutionYaml(values: Record<string, unknown>, tenantNote?: string): string {
+  let body = toYaml(values).trimEnd();
+  // Which tenant the slug or id stands for, for whoever reads the file in git.
+  if (tenantNote) body = body.split("\n").map((line) => (line.startsWith("tenant: ") ? `${line}  # ${tenantNote}` : line)).join("\n");
   return [
     "# A Cavelon solution. `cavelon` finds this file from the working directory upwards;",
     "# it names the instance, tenant and solution, never a token.",
-    toYaml(values).trimEnd(),
+    body,
     "",
   ].join("\n");
+}
+
+/** A name for a comment: one line, no control characters. */
+function commentText(text: string): string {
+  return [...text].map((c) => (c < " " || c === "\u007f" ? " " : c)).join("").trim();
+}
+
+/** A slug from a solution's name: lower-case letters, digits and single dashes. */
+export function slugFromName(name: string): string {
+  const plain = name.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  let slug = plain.replace(/[^a-z0-9]+/g, "-");
+  while (slug.startsWith("-")) slug = slug.slice(1);
+  while (slug.endsWith("-")) slug = slug.slice(0, -1);
+  slug = slug.slice(0, 60);
+  while (slug.endsWith("-")) slug = slug.slice(0, -1);
+  return slug;
+}
+
+const SLUG = /^[a-z0-9][a-z0-9-]*$/;
+
+/** The tenant a new solution folder names, with what tells a person which one it is. */
+interface InitTenant {
+  /** What cavelon.yaml says: the slug, else what was given or the id. */
+  ref: string;
+  id?: string;
+  name?: string;
+  slug?: string;
+}
+
+/**
+ * The tenant for a new cavelon.yaml: the one named (by name, slug or id), else
+ * the only one the token reaches, the one a person picks on a terminal, or
+ * the one the instance places the token in. Several and nobody to ask is a
+ * refusal with one ready `cavelon init --tenant` line per tenant.
+ */
+async function initTenant(ctx: Context, session: Session): Promise<InitTenant | undefined> {
+  // A tenant API key works in its own tenant; a tenant named anyway is written as given.
+  if (session.tokenKind === "api_key") return session.tenant ? { ref: session.tenant } : undefined;
+  const client = await ctx.client({ tenant: false });
+  const pat = session.tokenKind === "personal_access_token";
+  const tenantless = pat ? await readTenantless(client) : undefined;
+  const reach = listsTenants(tenantless) ? tenantless : undefined;
+  if (session.tenant) {
+    const found = await lookupTenantId(client, session.tenant, session.tenantSource);
+    const listed = reach?.tenants.find((t) => t.id === found.id);
+    const name = found.name ?? listed?.name ?? undefined;
+    const slug = found.slug ?? listed?.slug ?? undefined;
+    return { ref: slug ?? session.tenant, id: found.id, name, slug };
+  }
+  if (tenantless?.refused) throw tenantRequiredError(client.url, tenantless.said);
+  if (reach && !reach.platform && (canAsk(ctx) || !reach.tenantId)) {
+    const choice = await chooseTenant(ctx, client, reach);
+    if (choice.kind === "none") throw noTenantError(client.url, false);
+    if (choice.kind === "open") {
+      throw tenantOpenError(client.url, reach, "A solution belongs to one tenant. ", {
+        line: (ref) => cavelonCommand("init", "--tenant", ref),
+        template: "cavelon init --tenant <name or slug>",
+      });
+    }
+    const t = choice.tenant;
+    if (choice.how === "picked") ctx.io.stderr.write(`Using tenant ${tenantTitle(t)}.\n`);
+    return { ref: tenantRef(t), id: t.id, name: t.name ?? undefined, slug: t.slug ?? undefined };
+  }
+  const placed = reach?.tenantId ?? (tenantless && !tenantless.refused ? tenantless.tenantId : null) ?? (await readPrincipal(await ctx.client()))?.tenant_id;
+  if (!placed) return undefined;
+  const listed = reach?.tenants.find((t) => t.id === placed);
+  return { ref: listed?.slug ?? placed, id: placed, name: listed?.name ?? undefined, slug: listed?.slug ?? undefined };
+}
+
+/** What `init` decided about the solution, and the next step it suggests. */
+interface InitHarness {
+  slug?: string;
+  created?: boolean;
+  /** Not on the instance yet: `apply --env test` creates it. */
+  missing?: boolean;
+  /** This tenant's solutions, offered when none was chosen. */
+  choices?: Array<{ id: string; slug: string; name: string; status: string }>;
+}
+
+/**
+ * The solution a new cavelon.yaml names: --harness by name, slug or id (a
+ * slug not on the instance yet is kept, for `apply --env test` to create), or
+ * on a terminal one of the tenant's solutions or a new one by name. Without a
+ * terminal, none, and the tenant's solutions are offered as next steps.
+ */
+async function initHarness(ctx: Context, given: string | undefined): Promise<InitHarness> {
+  if (given) {
+    let lookup: HarnessLookup<HarnessSummary>;
+    try {
+      lookup = await lookupHarness(ctx, given);
+    } catch (error) {
+      // The instance's solutions cannot be read (a feature off, a token that may not list them): keep what was given.
+      ctx.warn(`Could not check solution "${given}" on the instance: ${error instanceof Error ? error.message : String(error)}`);
+      return { slug: given };
+    }
+    if (lookup.harness) return { slug: lookup.harness.slug };
+    if (SLUG.test(given)) return { slug: given, missing: true };
+    throw harnessNotFoundError(given, lookup.candidates, undefined, (slug) => cavelonCommand("init", "--harness", slug));
+  }
+  let all: HarnessSummary[];
+  try {
+    all = await listHarnesses(ctx);
+  } catch {
+    return {};
+  }
+  const choices = all.map((h) => ({ id: h.id, slug: h.slug, name: h.name, status: h.status }));
+  if (!canAsk(ctx)) return { choices };
+  const write = (text: string) => ctx.io.stderr.write(`${text}\n`);
+  let name: string;
+  if (all.length) {
+    const picked = await pick(ctx, {
+      intro: `This tenant has ${all.length} solution${all.length === 1 ? "" : "s"}:`,
+      question: "Which solution does this folder hold?",
+      items: all,
+      extra: (h) => h.status,
+      other: { label: "a new solution (or type new)", word: "new" },
+    });
+    if ("item" in picked) return { slug: picked.item.slug };
+    name = await readLine(ctx.io, "Name of the new solution: ");
+  } else {
+    write("This tenant has no solutions yet.");
+    name = await readLine(ctx.io, "Name of the new solution (press Enter to decide later): ");
+    if (!name) return {};
+  }
+  let base = slugFromName(name);
+  while (!base) {
+    write("The name needs at least one letter or digit.");
+    name = await readLine(ctx.io, "Name of the new solution: ");
+    base = slugFromName(name);
+  }
+  let slug = base;
+  for (let n = 2; all.some((h) => h.slug === slug); n++) slug = `${base}-${n}`;
+  const created = await createHarness(ctx, { slug, name: name.slice(0, 255) });
+  write(`Created the draft solution ${created.name} (${created.slug}).`);
+  return { slug: created.slug, created: true };
 }
 
 function envYaml(name: string, harness: string | undefined): string {
   return [
     `# Where \`cavelon apply --env ${name}\` goes. Never a token or a secret value.`,
-    "# tenant: <slug or id>        # default: the tenant in cavelon.yaml",
+    "# tenant: <name, slug or id> # default: the tenant in cavelon.yaml",
     harness ? `harness: ${harness}` : "# harness: <slug>             # created as a draft when it does not exist yet",
     "# mode: overwrite             # or replace",
     "# runtime_bindings:           # the package's runtime requirement key -> this tenant's resource id",
@@ -389,6 +533,7 @@ async function runInit(ctx: Context, input: Parameters<CommandSpec["run"]>[1]) {
     return { root, actions: actions.filter((a) => !(a.action === "skipped" && /does not exist|no cavelon (block|entry)/.test(a.reason ?? ""))), next, imported: undefined };
   }
   const packageHarness = imported ? onlyHarnessSlug(imported) : undefined;
+  let chosenHarness: InitHarness | undefined;
 
   const root = ctx.io.cwd;
   const existing = await readTextFile(path.join(root, PROJECT_FILE));
@@ -397,32 +542,35 @@ async function runInit(ctx: Context, input: Parameters<CommandSpec["run"]>[1]) {
   } else {
     const url = requireInstance(session);
     requireToken(session);
+    // The tenant comes first: a token that acts in no tenant yet is answered nowhere else.
+    const tenant = await initTenant(ctx, session);
+    // Every later call of this command sends the id, so a name or slug is not looked up twice.
+    if (tenant?.id) [session.tenant, session.tenantSource] = [tenant.id, session.tenantSource ?? "option"];
     const contracts = await ctx.contracts();
     const caps = await contracts.capabilities();
     if (contracts.needsTenant) {
       throw new CavelonError(ExitCode.usage, {
         code: "tenant_required",
         message: "A solution belongs to one tenant, and none is chosen.",
-        hint: "Pass --tenant <slug>, or run `cavelon use <tenant>` first.",
+        hint: "Pass --tenant <name or slug>, or run `cavelon use` first to choose one.",
       });
     }
     // Cache the schema and the catalog now, so `validate` works offline from here on.
     const schema = await contracts.packageSchema();
     await contracts.errorCatalog().catch(() => null);
     if (!schema) ctx.warn("The instance does not publish its package schema; `validate` will have nothing to check against.");
-    let tenant = session.tenant;
-    if (!tenant && session.tokenKind !== "api_key") {
-      const principal = await readPrincipal(await ctx.client());
-      tenant = principal?.tenant_id ?? undefined;
-    }
-    const harness = stringOption(input, "harness") ?? packageHarness;
+    const decided = stringOption(input, "harness") ? await initHarness(ctx, stringOption(input, "harness")) : packageHarness ? { slug: packageHarness } : await initHarness(ctx, undefined);
+    chosenHarness = decided;
+    const harness = decided.slug;
+    if (decided.missing) next.push(`Solution ${harness} is not on the instance yet: \`cavelon apply --env test\` creates it as a draft.`);
     const values: Record<string, unknown> = { instance: url };
-    if (tenant) values.tenant = tenant;
+    if (tenant) values.tenant = tenant.ref;
     if (harness) values.harness = harness;
     const version = caps?.contracts?.package_versions?.current ?? schema?.["x-package-version"];
     if (version) values.package_version = version;
     values.layout = defaultLayoutFor(schema);
-    await writeFileAtomic(path.join(root, PROJECT_FILE), solutionYaml(values));
+    const note = tenant && (tenant.name || tenant.id !== tenant.ref) ? commentText([tenant.name, tenant.id !== tenant.ref ? tenant.id : undefined].filter(Boolean).join(", ")) : undefined;
+    await writeFileAtomic(path.join(root, PROJECT_FILE), solutionYaml(values, note));
     actions.push({ file: PROJECT_FILE, action: "created" });
   }
 
@@ -449,15 +597,20 @@ async function runInit(ctx: Context, input: Parameters<CommandSpec["run"]>[1]) {
   if (imported && from) {
     result = await importPackage(ctx, project, from, imported, boolOption(input, "force"));
     if (packageHarness && !project.harness && !stringOption(input, "harness")) await setProjectKey(project, "harness", packageHarness);
-    next.unshift("Check it offline: cavelon validate", `Preview it on the instance: cavelon apply${harness ? " --env test" : " --harness <slug>"}`);
+    next.unshift("Check it offline: cavelon validate", `Preview it on the instance: cavelon apply${harness ? " --env test" : " --harness <name or slug>"}`);
   } else if (!(await hasPackageFiles(root, project.layout.package))) {
-    next.unshift(
-      harness
-        ? `Bring the solution into package/: cavelon pull`
-        : "Bring an existing solution into package/: cavelon pull --harness <slug>  (or write package files, then cavelon validate)",
-    );
+    const choices = chosenHarness?.choices ?? [];
+    if (chosenHarness?.created || chosenHarness?.missing) next.unshift("Write the package files in package/, then: cavelon validate");
+    else if (harness) next.unshift(`Bring the solution into package/: cavelon pull`);
+    else if (choices.length) {
+      next.unshift(
+        "Bring one of this tenant's solutions into package/ (or write package files, then cavelon validate):",
+        ...choices.slice(0, 10).map((h) => `  ${cavelonCommand("pull", "--harness", h.slug)}${h.name !== h.slug ? `    ${h.name}` : ""}`),
+        ...(choices.length > 10 ? [`  … and ${choices.length - 10} more (\`cavelon harness list\`)`] : []),
+      );
+    } else next.unshift("Bring an existing solution into package/: cavelon pull --harness <name or slug>  (or write package files, then cavelon validate)");
   }
-  return { root, actions, next, imported: result };
+  return { root, actions, next, imported: result, harness: chosenHarness };
 }
 
 export const init: CommandSpec = {
@@ -475,7 +628,11 @@ export const init: CommandSpec = {
   idempotent: true,
   mcpTool: "init",
   options: {
-    harness: { type: "string", value: "<slug>", description: "The solution (harness) this folder holds; pull and apply use it." },
+    harness: {
+      type: "string",
+      value: "<harness>",
+      description: "The solution (harness) this folder holds, by name, slug or id; its slug goes into cavelon.yaml. Without it, init asks on a terminal.",
+    },
     agents: {
       type: "string",
       value: "<list>",
@@ -488,13 +645,14 @@ export const init: CommandSpec = {
     force: { type: "boolean", description: "With --from: replace package files that hold something else." },
   },
   examples: [
-    "cavelon init --instance https://cavelon.example.com --tenant acme --harness support",
+    "cavelon init",
+    "cavelon init --instance https://cavelon.example.com --tenant \"Acme Support\" --harness \"Support FAQ\"",
     "cavelon init --agents codex,cursor --hook",
     "cavelon init --update",
     "cavelon init --instance https://cavelon.example.com --tenant acme --from ./blueprint.json",
   ],
   async run(ctx, input) {
-    const { root, actions, next, imported } = await runInit(ctx, input);
+    const { root, actions, next, imported, harness } = await runInit(ctx, input);
     const changed = actions.filter((a) => a.action !== "unchanged");
     const skipped = actions.filter((a) => a.action === "skipped");
     for (const s of skipped) ctx.warn(`Left ${s.file} as it is: ${s.reason}.`);
@@ -509,6 +667,7 @@ export const init: CommandSpec = {
       lines.length ? lines.join("\n") : "Nothing to change.",
       ...(next.length ? ["", "Next:", ...next.map((n) => `  ${n}`)] : []),
     ].join("\n");
-    return { data: { solution: root, files: actions, ...(imported ? { imported } : {}), next }, text };
+    const choices = harness?.choices && !harness.slug ? { solutions: harness.choices } : {};
+    return { data: { solution: root, files: actions, ...(imported ? { imported } : {}), ...choices, next }, text };
   },
 };

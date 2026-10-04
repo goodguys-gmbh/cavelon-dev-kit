@@ -35,27 +35,35 @@ happens in one tenant.
 Which tenant, and which instance, a command uses is decided in this order,
 highest first:
 
-1. the options `--instance <url>` and `--tenant <slug or id>`;
+1. the options `--instance <url>` and `--tenant <name, slug or id>`;
 2. the environment variables `CAVELON_URL` and `CAVELON_TENANT`;
 3. the environment file of `--env <name>` (`env/<name>.yaml`, tenant only);
 4. the nearest `cavelon.yaml`, from the working directory upwards;
-5. your login, and the tenant you chose with `cavelon use <tenant>`.
+5. your login, and the tenant you chose with `cavelon use`.
 
-A personal access token that reaches one tenant uses it by default, and one
-whose owner has a default tenant acts there. With several, choose one with
-`cavelon use`; `cavelon tenant list` shows those you can see. `cavelon whoami`
-says which tenant a command would use and why.
+`cavelon login` finds the tenants your token reaches: it uses the only one, or
+lets you choose from a numbered list by number or part of a name. `cavelon use`
+offers the same list later. Without a terminal, both print one ready
+`cavelon use <tenant>` line per tenant instead of asking, and as an MCP tool
+`use_tenant` returns the tenants as choices. `cavelon whoami` says which tenant
+a command would use and why.
 
-A token without Platform mode that the instance cannot place in a tenant on
-its own is refused on every route without a tenant, `/api/v1/auth/me` and
-`/api/v1/meta/principal` included, so nothing tells it which tenants it
-reaches. Name the tenant by its id then: `cavelon login --tenant <tenant-id>`,
-`cavelon use <tenant-id>` or `CAVELON_TENANT`. A name or slug cannot be looked
-up for such a token.
+A tenant and a solution can be named by name, slug or id wherever `cavelon`
+asks for one. `cavelon tenant list` and `cavelon harness list` show all three.
+A name that matches nothing is answered with the closest tenants or solutions
+and the line to run for each.
 
-A tenant is named by its slug, its name or its id. A token in Platform mode
-finds any slug; a member's token finds the slug of a tenant whose settings it
-may view (`settings.view`), and otherwise needs the name or the id.
+An operator's token that may enter every tenant without a membership (a
+personal access token without Platform mode and without a tenant allowlist)
+works in any tenant you name: `login` and `use` ask for part of its name and
+search, and `cavelon tenant list --search <text>` finds its slug.
+
+An older instance does not tell a token which tenants it reaches, and it
+refuses a token without Platform mode that it cannot place in a tenant on every
+route without a tenant. There, name the tenant by its id:
+`cavelon login --tenant <tenant-id>`, `cavelon use <tenant-id>` or
+`CAVELON_TENANT`. A member's token there finds a slug only for a tenant whose
+settings it may view (`settings.view`), and otherwise needs the name or the id.
 
 A command that prints the next command to run (a `--confirm` line, the
 `secrets set` lines of `apply`) prints it with the `--instance`, `--env` and
@@ -278,7 +286,7 @@ platform admin), and sent without a tenant.
   the change names. See [Limits](limits.md#operators-changes).
 
 A Platform-mode token reaches no tenant by default; choose one with
-`cavelon use <tenant>` before tenant commands. `cavelon whoami` shows
+`cavelon use <name or slug>` before tenant commands. `cavelon whoami` shows
 `tenant: none (Platform mode)` until you do.
 
 ## Built for agents

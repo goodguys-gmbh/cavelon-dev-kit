@@ -50,6 +50,47 @@ function payload(result: Awaited<ReturnType<Client["callTool"]>>): Record<string
 }
 
 describe("cavelon mcp", () => {
+  it("never prompts for a tenant: use_tenant without one returns the choices and changes nothing, and init names them", async () => {
+    const globex = server.addTenant("globex-mcp", "Globex");
+    const multi = server.addToken({ kind: "pat", tenantIds: [tenant, globex] });
+    const own = sandbox();
+    const io: Io = {
+      stdout: { write: () => true },
+      stderr: { write: () => true },
+      stdin: Object.assign(Readable.from([]), { isTTY: true }) as unknown as InStream,
+      env: { ...own.env, CAVELON_URL: server.url, CAVELON_TOKEN: multi },
+      cwd: own.home,
+      now: () => new Date(),
+      sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+    };
+    const mcp = createMcpServer(io, COMMANDS);
+    const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+    await mcp.connect(serverSide);
+    const other = new Client({ name: "test", version: "0" });
+    await other.connect(clientSide);
+    try {
+      const choices = payload(await other.callTool({ name: "use_tenant", arguments: {} }));
+      expect(choices).toMatchObject({
+        tenant: null,
+        chosen: false,
+        reaches_all_tenants: false,
+        choices: [
+          { id: tenant, slug: "acme", name: "Acme", command: "cavelon use acme" },
+          { id: globex, slug: "globex-mcp", name: "Globex", command: "cavelon use globex-mcp" },
+        ],
+      });
+      const init = await other.callTool({ name: "init", arguments: {} });
+      expect(init.isError).toBe(true);
+      expect(payload(init).error).toMatchObject({ code: "tenant_required", details: { tenants: [{ command: "cavelon init --tenant acme" }, { command: "cavelon init --tenant globex-mcp" }] } });
+
+      const chosen = payload(await other.callTool({ name: "use_tenant", arguments: { tenant: "Globex" } }));
+      expect(chosen).toMatchObject({ tenant: { ref: "globex-mcp", id: globex } });
+    } finally {
+      await other.close();
+      own.cleanup();
+    }
+  });
+
   it("offers coarse tools, one per workflow command plus api and docs_search, with annotations", async () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
@@ -133,7 +174,7 @@ describe("cavelon mcp", () => {
     expect(Object.keys((byName.test_run!.inputSchema as { properties: object }).properties)).not.toContain("wait");
     expect((byName.docs_search!.inputSchema as { required: string[] }).required).toEqual(["query"]);
     // use_tenant's own argument is the tenant to choose, not an override.
-    expect((byName.use_tenant!.inputSchema as { properties: Record<string, { description: string }> }).properties.tenant!.description).toMatch(/slug, name or id/);
+    expect((byName.use_tenant!.inputSchema as { properties: Record<string, { description: string }> }).properties.tenant!.description).toMatch(/name, slug or id/);
   });
 
   it("offers limits_set as a destructive tool that changes nothing without confirm", async () => {

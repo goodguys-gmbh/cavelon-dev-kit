@@ -48,31 +48,87 @@ export async function readPrincipal(client: ApiClient, options: { sendTenant?: b
   return Array.isArray(permissions) ? { ...rest, permissions: permissions.filter((p) => typeof p === "string") } : rest;
 }
 
+/** A tenant a personal access token reaches, as `/meta/principal` without a tenant lists it on a recent instance. */
+export interface ReachableTenant {
+  id: string;
+  slug: string | null;
+  name: string | null;
+  /** The token's role there: the lesser of the person's role and the token's ceiling. */
+  role: string | null;
+  /** The tenant the instance places the token in when a request names none. */
+  is_default: boolean;
+}
+
 /** How the instance answers a personal access token on a request that names no tenant. */
 export type Tenantless =
-  /** It acts in this tenant (the token reaches only it, or it is the owner's default), or in Platform mode (null). */
-  | { refused: false; tenantId: string | null }
-  /** The token works only inside a tenant; the instance's own words. */
+  | {
+      refused: false;
+      /** The tenant it acts in (the token reaches only it, or it is the owner's default); null in Platform mode or nowhere. */
+      tenantId: string | null;
+      platform: boolean;
+      /**
+       * The tenants the token reaches. Undefined on an instance that does not
+       * list them; then only an id or a membership's name finds a tenant.
+       */
+      tenants?: ReachableTenant[];
+      /** An operator's token without a tenant allowlist: it reaches every tenant, and `search` finds them. */
+      reachesAll: boolean;
+    }
+  /** The token works only inside a tenant, and the instance tells it nothing without one; its own words. */
   | { refused: true; said: string };
 
+/** Tenants per page of the list, the most an instance serves at once. */
+const TENANT_PAGE = 200;
+/** A list longer than this many pages is cut there, so a lookup stays bounded; a search finds the rest. */
+const MAX_TENANT_PAGES = 5;
+
+function reachableTenants(value: unknown): ReachableTenant[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const text = (v: unknown) => (typeof v === "string" && v ? v : null);
+  return value
+    .filter((t): t is Record<string, unknown> => Boolean(t) && typeof t === "object" && typeof (t as { id?: unknown }).id === "string")
+    .map((t) => ({ id: t.id as string, slug: text(t.slug), name: text(t.name), role: text(t.role), is_default: t.is_default === true }));
+}
+
 /**
- * Asks `/meta/principal` without `X-Tenant-Id`. A token without Platform mode
- * that the instance cannot place in a tenant on its own is refused there, as
- * on every route: no route tells it which tenants it reaches. Undefined on an
- * instance without the route.
+ * Asks `/meta/principal` without `X-Tenant-Id`. A recent instance answers
+ * every personal access token there and lists the tenants it reaches; with
+ * `search`, an operator's token that reaches every tenant gets the tenants
+ * whose name or slug holds the text. An older one refuses a token without
+ * Platform mode that it cannot place in a tenant on its own, as on every
+ * route. Undefined on an instance without the route.
  */
-export async function readTenantless(client: ApiClient): Promise<Tenantless | undefined> {
-  const response = await client.get<{ mode?: unknown; tenant_id?: unknown; detail?: unknown }>("/api/v1/meta/principal", {
-    allow: [400, 403, 404, 405],
-    sendTenant: false,
-  });
+export async function readTenantless(client: ApiClient, options: { search?: string } = {}): Promise<Tenantless | undefined> {
+  type Answer = { mode?: unknown; tenant_id?: unknown; detail?: unknown; tenants?: unknown; reaches_all_tenants?: unknown; next_cursor?: unknown; token?: { platform_mode_allowed?: unknown } | null };
+  const read = (cursor?: string) =>
+    client.get<Answer>("/api/v1/meta/principal", {
+      allow: [400, 403, 404, 405, 422],
+      sendTenant: false,
+      // One page answers a search; the whole list is read in the largest pages the instance serves.
+      query: options.search !== undefined ? { search: options.search } : { limit: TENANT_PAGE, cursor },
+    });
+  const response = await read();
   if (response.status === 403) {
     const detail = response.data?.detail;
     return { refused: true, said: typeof detail === "string" && detail ? detail : "403 Forbidden" };
   }
-  if (response.status !== 200 || (response.data?.mode !== "tenant" && response.data?.mode !== "platform")) return undefined;
-  const tenantId = response.data.tenant_id;
-  return { refused: false, tenantId: response.data.mode === "tenant" && typeof tenantId === "string" ? tenantId : null };
+  if (response.status !== 200 || !response.data) return undefined;
+  const { mode, tenant_id: tenantId } = response.data;
+  let tenants = reachableTenants(response.data.tenants);
+  let next = response.data.next_cursor;
+  for (let pages = 1; tenants && options.search === undefined && typeof next === "string" && next && pages < MAX_TENANT_PAGES; pages++) {
+    const page = await read(next);
+    const more = page.status === 200 ? reachableTenants(page.data?.tenants) : undefined;
+    if (!more) break;
+    tenants = [...tenants, ...more];
+    next = page.data?.next_cursor;
+  }
+  const reachesAll = response.data.reaches_all_tenants === true;
+  if (mode === "tenant" && typeof tenantId === "string") return { refused: false, tenantId, platform: false, tenants, reachesAll };
+  // A token that does not allow Platform mode is never in it, whatever an instance calls the state of acting nowhere.
+  if (mode === "platform" && response.data.token?.platform_mode_allowed !== false) return { refused: false, tenantId: null, platform: true, tenants, reachesAll };
+  if (!tenants) return undefined;
+  return { refused: false, tenantId: null, platform: false, tenants, reachesAll };
 }
 
 /** The person's global role from `/api/v1/auth/me` (a platform operator's), or undefined when it is not readable. */

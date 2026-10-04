@@ -87,7 +87,7 @@ export const limits: CommandSpec = {
       throw new CavelonError(ExitCode.usage, {
         code: "tenant_required",
         message: "Limits belong to a tenant, and none is chosen.",
-        hint: "Choose one with `cavelon use <tenant>` or pass --tenant.",
+        hint: "Choose one with `cavelon use` (it lists your tenants) or pass --tenant <name or slug>.",
       });
     }
     if (!published.published) {

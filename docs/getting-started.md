@@ -18,7 +18,7 @@ It takes about fifteen minutes. You need:
 
 The outputs below are what `cavelon` prints, shortened where marked with `…`.
 Your ids, dates and counts will differ. The instance in the examples is
-`https://cavelon.example.com` and the tenant is `acme`.
+`https://cavelon.example.com` and the tenant is Acme Support (slug `acme-support`).
 
 ## 1. Create a personal access token
 
@@ -49,15 +49,24 @@ instance, and stores it in your system's credential store:
 
 ```text
 Token (input hidden):
-Logged in to https://cavelon.example.com as ada@example.com. Token stored in the credential store. Acting in tenant Acme (4f6174cf-3060-4ff1-bd3c-8a8e7999256b), the one the instance chooses for this token.
+This token reaches 2 tenants on https://cavelon.example.com:
+   1  Acme Support  acme-support  (tenant_admin)
+   2  Globex  globex  (tenant_viewer)
+Which tenant? (type its number or part of its name) acme
+Logged in to https://cavelon.example.com as ada@example.com. Token stored in the credential store. Using tenant Acme Support (acme-support, 4f6174cf-3060-4ff1-bd3c-8a8e7999256b); `cavelon use` chooses another.
 ```
 
-Without `--tenant`, the token acts in the one tenant it is limited to, or in
-your default tenant. If the instance cannot place it (for example a platform
-operator's token for several tenants), `login` stops with
-`tenant_required`: log in again with `--tenant <tenant-id>`, the id an
-operator copies in **Platform › Tenants**. A token limited to one tenant needs
-none.
+A token that reaches one tenant uses it without asking. An operator's token
+that reaches every tenant asks for part of the tenant's name and searches. To
+skip the question, name the tenant: `--tenant acme-support` (a name, slug or id
+works).
+
+Without a terminal (CI, `--token-stdin`), nobody can answer: a token for
+several tenants is stored, and `login` prints one ready line per tenant, such
+as `cavelon use acme-support`, and exits 2. An older instance does not tell a
+token its tenants; there `login` stops with `tenant_required` when the instance
+cannot place the token itself, and you log in again with `--tenant
+<tenant-id>`, the id an operator copies in **Platform › Tenants**.
 
 `cavelon` never takes a token as a command-line argument, so it never lands in
 your shell history, and your coding agent never sees it. To paste it from a
@@ -73,8 +82,8 @@ cavelon whoami
 ```text
 instance:     https://cavelon.example.com (login)
 acting as:    Ada Lovelace <ada@example.com>
-tenant:       Acme (4f6174cf-3060-4ff1-bd3c-8a8e7999256b)
-tenant from:  the token's default
+tenant:       Acme Support (acme-support, 4f6174cf-3060-4ff1-bd3c-8a8e7999256b)
+tenant from:  use
 role:         tenant_admin
 credential:   personal access token "laptop" from login (credential store)
 expires:      2026-12-02T15:40:26.342Z (in 60 days)
@@ -82,8 +91,8 @@ may activate: yes
 version:      v1.42.0
 ```
 
-If your account belongs to several tenants, choose the one to work in:
-`cavelon use acme`. `cavelon tenant list` shows them.
+To work in another tenant later, run `cavelon use`: it shows the same list.
+`cavelon tenant list` shows each tenant's name, slug and id.
 
 ## 3. Create the solution folder
 
@@ -91,10 +100,18 @@ If your account belongs to several tenants, choose the one to work in:
 mkdir support-faq
 cd support-faq
 git init
-cavelon init --tenant acme --harness support-faq
+cavelon init
 ```
 
+`init` asks which solution this folder holds:
+
 ```text
+This tenant has 1 solution:
+   1  Expense Approval  expense-approval  (draft)
+   2  a new solution (or type new)
+Which solution does this folder hold? (type its number or part of its name) new
+Name of the new solution: Support FAQ
+Created the draft solution Support FAQ (support-faq).
 created   cavelon.yaml
 created   package/
 created   tests/
@@ -106,17 +123,27 @@ created   .gitignore
 created   AGENTS.md
 
 Next:
-  Bring the solution into package/: cavelon pull
+  Write the package files in package/, then: cavelon validate
   Catch an invalid package before each commit: cavelon init --hook
 ```
 
+To answer up front, name them: `cavelon init --tenant acme-support --harness
+"Support FAQ"`. For a solution that already exists, `init` writes its slug,
+and `cavelon pull` brings it into `package/`.
+
 `cavelon.yaml` names the instance, the tenant and the solution (a *harness* in
-Cavelon's API), never a token. `env/test.yaml` says where `apply --env test`
+Cavelon's API) by their slugs, with a comment that names the tenant, never a
+token:
+
+```yaml
+instance: https://cavelon.example.com
+tenant: acme-support  # Acme Support, 4f6174cf-3060-4ff1-bd3c-8a8e7999256b
+harness: support-faq
+``` `env/test.yaml` says where `apply --env test`
 goes. `.cavelon/` holds local state and is ignored by git. See
 [Concepts](concepts.md#the-solution-folder) for each file.
 
-`cavelon pull` would bring an existing solution from the instance into
-`package/`. This one is new, so take its files from the example instead.
+This solution is new and empty, so take its files from the example.
 
 ## 4. Add the package files
 

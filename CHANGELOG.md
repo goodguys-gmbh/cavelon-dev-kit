@@ -40,6 +40,25 @@ CLI, the skills and the plugin.
   (RELEASING.md); until then the executables are unsigned, and
   `docs/installation.md` says what macOS and Windows show for a file
   downloaded in a browser, and what to do.
+- Choose a tenant and a solution from a list instead of typing a slug or id.
+  `cavelon login` without `--tenant` reads which tenants the token reaches,
+  where the instance lists them: it uses the only one and says so; with several
+  it shows a numbered list on a terminal, and you type a number or part of a
+  name; an operator's token that reaches every tenant asks for part of a name
+  and searches. Without a terminal, `login` stores the token and prints one
+  ready `cavelon use <tenant>` line per tenant (exit 2, `tenant_required`); a
+  token that reaches no tenant is refused with `no_tenant_reached` (exit 7) and
+  where to change it. An older instance that lists no tenants behaves as
+  before.
+- `cavelon use` without a tenant offers the same list; as the MCP tool
+  `use_tenant` it returns the tenants as choices and changes nothing.
+- `cavelon init` without `--harness`, on a terminal, offers the tenant's
+  solutions or a new one by name, whose slug it derives and which it creates as
+  a draft; without a terminal, the next steps list the tenant's solutions.
+  Without `--tenant`, it asks for the tenant the way `login` does.
+- `--tenant` takes a tenant's name, slug or id everywhere, resolved from the
+  tenants the token reaches, and `--harness` a solution's name, slug or id. A
+  miss names the closest tenants or solutions with the line to run for each.
 
 ### Changed
 
@@ -60,6 +79,13 @@ CLI, the skills and the plugin.
   Installation covers every way in (the one-line install with its options,
   checking the download, Homebrew and winget, npx and npm), updating and
   uninstalling each, and the proxy settings of the standalone `cavelon`.
+- `tenant list` shows name, slug, role and id for every token, `whoami` shows
+  the tenant's slug next to its name and id, and `init` writes `tenant: <slug>`
+  into `cavelon.yaml` with a comment naming the tenant.
+- The README, Getting started, Concepts, Troubleshooting, the FAQ, the
+  examples' READMEs and the skills no longer ask for identifiers a person
+  cannot find. The examples' READMEs said `cavelon whoami` shows the tenant's
+  slug; `cavelon tenant list` does.
 
 - Docs: the README's five-minute start, Installation, Getting started, the
   "before you start" part of Building with a coding agent and the FAQ start

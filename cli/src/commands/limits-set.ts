@@ -462,7 +462,7 @@ async function pathParams(ctx: Context, change: LimitChange, principal: MetaPrin
       throw notPublished(`${change.method} ${change.path} needs ${name}, which the kit cannot fill, so nothing was sent.`, "The instance names an operation this kit does not know how to call; `cavelon api describe` shows it.");
     }
     const tenantId = (await ctx.client()).target.tenantId ?? principal?.tenant_id ?? undefined;
-    if (!tenantId) throw usageError("Which tenant? Choose one with `cavelon use <tenant>` or --tenant.");
+    if (!tenantId) throw usageError("Which tenant? Choose one with `cavelon use` (it lists your tenants) or --tenant.");
     params[name] = [tenantId];
   }
   return params;
@@ -621,7 +621,7 @@ export const limitsSet: CommandSpec = {
       throw new CavelonError(ExitCode.usage, {
         code: "tenant_required",
         message: "Limits belong to a tenant, and none is chosen.",
-        hint: "Choose one with `cavelon use <tenant>` or pass --tenant; an operator's change reads the limits of any tenant and sends in Platform mode.",
+        hint: "Choose one with `cavelon use` (it lists your tenants) or pass --tenant; an operator's change reads the limits of any tenant and sends in Platform mode.",
       });
     }
     if (!published.published) {

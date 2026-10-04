@@ -87,11 +87,100 @@ beforeEach(() => {
   server.state.readinessWithoutChecks = false;
 });
 
+describe("init chooses the tenant and the solution", () => {
+  let other: Sandbox;
+  let globex: string;
+  let multi: string;
+  beforeAll(async () => {
+    globex = server.addTenant("globex", "Globex");
+    multi = server.addToken({ kind: "pat", tenantIds: [tenant, globex] });
+    const owner = sandbox();
+    try {
+      await login(owner, server.url, server.addToken({ kind: "pat", tenantIds: [globex] }));
+      for (const [slug, name] of [["expense-approval", "Expense Approval"], ["support-faq", "Support FAQ"]] as const) {
+        expect((await cli(owner, ["harness", "new", slug, "--name", name])).code).toBe(0);
+      }
+    } finally {
+      owner.cleanup();
+    }
+  });
+  beforeEach(async () => {
+    other = sandbox();
+    // Stored, with no tenant chosen yet: login exits 2 without a terminal.
+    await cli(other, ["login", "--instance", server.url, "--token-stdin"], { stdin: multi });
+  });
+  afterEach(() => other.cleanup());
+  const atTerminal = (dir: string, args: string[], ...lines: string[]) =>
+    cli(other, args, { cwd: dir, tty: true, stdin: lines.map((l) => `${l}\n`).join(""), env: { NO_COLOR: "1" } });
+  const dirFor = () => {
+    const dir = path.join(other.home, `solution-${++dirCount}`);
+    mkdirSync(dir, { recursive: true });
+    return dir;
+  };
+
+  it("on a terminal: asks for the tenant, then one of its solutions, and writes their slugs", async () => {
+    const dir = dirFor();
+    const result = await atTerminal(dir, ["init"], "globex", "2");
+    expect(result.code, result.stderr + result.stdout).toBe(0);
+    expect(result.stderr).toContain("This token reaches 2 tenants");
+    expect(result.stderr).toMatch(/This tenant has 2 solutions:\n {3}1 {2}Expense Approval {2}expense-approval {2}\(draft\)\n {3}2 {2}Support FAQ {2}support-faq {2}\(draft\)\n {3}3 {2}a new solution \(or type new\)/);
+    const yaml = read(path.join(dir, "cavelon.yaml"));
+    expect(yaml).toContain(`tenant: globex  # Globex, ${globex}\n`);
+    expect(parse(yaml)).toMatchObject({ tenant: "globex", harness: "support-faq" });
+    expect(parse(read(path.join(dir, "env", "test.yaml")))).toEqual({ harness: "support-faq" });
+    expect(result.stdout).toContain("Bring the solution into package/: cavelon pull");
+  });
+
+  it("on a terminal: a new solution by name gets a slug from the name and is created as a draft", async () => {
+    const dir = dirFor();
+    const result = await atTerminal(dir, ["init", "--tenant", "Globex"], "new", "Résumé Screening!");
+    expect(result.code, result.stderr + result.stdout).toBe(0);
+    expect(result.stderr).toContain("Created the draft solution Résumé Screening! (resume-screening).");
+    expect(parse(read(path.join(dir, "cavelon.yaml")))).toMatchObject({ tenant: "globex", harness: "resume-screening" });
+    const created = server.state.harnesses.find((h) => h.tenant_id === globex && h.slug === "resume-screening");
+    expect(created?.name).toBe("Résumé Screening!");
+    expect(result.stdout).toContain("Write the package files in package/, then: cavelon validate");
+  });
+
+  it("without a terminal: refuses to guess the tenant, with one ready init line per tenant", async () => {
+    const result = await cli(other, ["init", "--json"], { cwd: dirFor() });
+    expect(result.code).toBe(2);
+    const error = result.json<{ error: { code: string; message: string; hint: string; details: { tenants: Array<{ command: string }> } } }>().error;
+    expect(error.code).toBe("tenant_required");
+    expect(error.message).toMatch(/^A solution belongs to one tenant\. This token reaches 2 tenants/);
+    expect(error.details.tenants.map((t) => t.command)).toEqual(["cavelon init --tenant acme", "cavelon init --tenant globex"]);
+  });
+
+  it("without a terminal: names the tenant's solutions as next steps, and finds --harness by its name", async () => {
+    const listed = await cli(other, ["init", "--tenant", "globex", "--json"], { cwd: dirFor() });
+    expect(listed.code, listed.stdout).toBe(0);
+    const data = listed.json<{ next: string[]; solutions: Array<{ slug: string }> }>();
+    expect(data.solutions.map((h) => h.slug)).toEqual(expect.arrayContaining(["expense-approval", "support-faq"]));
+    expect(data.next).toEqual(expect.arrayContaining(["  cavelon pull --harness support-faq    Support FAQ"]));
+
+    const dir = dirFor();
+    const byName = await cli(other, ["init", "--tenant", "Globex", "--harness", "support faq"], { cwd: dir });
+    expect(byName.code, byName.stderr).toBe(0);
+    expect(parse(read(path.join(dir, "cavelon.yaml")))).toMatchObject({ tenant: "globex", harness: "support-faq" });
+
+    // A slug that is not there yet is kept, for `apply --env test` to create; anything else names the closest.
+    const later = dirFor();
+    const fresh = await cli(other, ["init", "--tenant", "globex", "--harness", "brand-new", "--json"], { cwd: later });
+    expect(fresh.code).toBe(0);
+    expect(fresh.json<{ next: string[] }>().next).toEqual(expect.arrayContaining([expect.stringMatching(/brand-new is not on the instance yet: `cavelon apply --env test` creates it/)]));
+    const miss = await cli(other, ["init", "--tenant", "globex", "--harness", "Support FA", "--json"], { cwd: dirFor() });
+    expect(miss.code).toBe(1);
+    expect(miss.json<{ error: { code: string; hint: string } }>().error).toMatchObject({ code: "solution_not_found", hint: expect.stringContaining("cavelon init --harness support-faq") });
+  });
+});
+
 describe("init", () => {
   it("creates its own files and folders and the uncommitted .cavelon/", async () => {
     const dir = await initSolution();
     const project = parse(read(path.join(dir, "cavelon.yaml")));
-    expect(project).toMatchObject({ instance: server.url, tenant, harness: "support", package_version: "v3", layout: { package: "package", items: { test_suites: "tests" } } });
+    // The tenant's slug, with a comment that names it.
+    expect(project).toMatchObject({ instance: server.url, tenant: "acme", harness: "support", package_version: "v3", layout: { package: "package", items: { test_suites: "tests" } } });
+    expect(read(path.join(dir, "cavelon.yaml"))).toContain(`tenant: acme  # Acme, ${tenant}\n`);
     expect(read(path.join(dir, "cavelon.yaml"))).not.toContain(token);
     for (const sub of ["package", "tests", "seeds", "env", ".cavelon"]) expect(statSync(path.join(dir, sub)).isDirectory(), sub).toBe(true);
     expect(parse(read(path.join(dir, "env", "test.yaml")))).toEqual({ harness: "support" });

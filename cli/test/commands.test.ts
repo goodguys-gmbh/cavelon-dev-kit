@@ -139,13 +139,30 @@ describe("tenant", () => {
     expect(who.json<{ tenant: { ref: string; source: string } }>().tenant).toEqual({ ref: "newco", source: "use" });
   });
 
-  it("lists a person's memberships when they are no platform operator", async () => {
+  it("lists the tenants the token reaches with name, slug, role and id when it is no platform operator", async () => {
     const result = await cli(sb, ["tenant", "list", "--json"]);
     expect(result.code).toBe(0);
     expect(result.json<{ source: string; items: Array<{ id: string; name: string }> }>()).toMatchObject({
-      source: "memberships",
-      items: [{ id: tenant, name: "Acme" }],
+      source: "token",
+      items: [{ id: tenant, name: "Acme", slug: "acme", role: "tenant_admin" }],
     });
+    const text = await cli(sb, ["tenant", "list"]);
+    expect(text.stdout).toMatch(/^NAME\s+SLUG\s+ROLE\s+ID\nAcme\s+acme\s+tenant_admin\s+[0-9a-f-]{36}$/m);
+    expect(text.stdout).toContain("Choose one: cavelon use <slug>");
+  });
+
+  it("an older instance: lists the person's memberships, with the slug where /auth/me names it", async () => {
+    server.state.serveTenantReach = false;
+    try {
+      const result = await cli(sb, ["tenant", "list", "--json"]);
+      expect(result.code).toBe(0);
+      expect(result.json<{ source: string; items: Array<{ id: string; name: string; slug: string | null }> }>()).toMatchObject({
+        source: "memberships",
+        items: [{ id: tenant, name: "Acme", slug: null }],
+      });
+    } finally {
+      server.state.serveTenantReach = true;
+    }
   });
 
   it("refuses tenant creation with a tenant API key (exit 7)", async () => {
@@ -184,7 +201,26 @@ describe("harness", () => {
   it("says which source is unknown", async () => {
     const result = await cli(sb, ["harness", "clone", "ghost", "--json"]);
     expect(result.code).toBe(1);
-    expect(result.json<{ error: { code: string } }>().error.code).toBe("not_found");
+    expect(result.json<{ error: { code: string } }>().error.code).toBe("solution_not_found");
+  });
+
+  it("finds a solution by its name, or by its slug in other letter case, and names the closest on a miss", async () => {
+    const created = await cli(sb, ["harness", "new", "expense-approval", "--name", "Expense Approval", "--json"]);
+    expect(created.code, created.stderr).toBe(0);
+    const id = created.json<{ id: string }>().id;
+    for (const ref of ["Expense Approval", "expense approval", "EXPENSE-APPROVAL", id]) {
+      server.state.requests.length = 0;
+      const cloned = await cli(sb, ["harness", "clone", ref, "--slug", `copy-${Math.random().toString(36).slice(2, 8)}`, "--json"]);
+      expect(cloned.code, `${ref}: ${cloned.stderr}${cloned.stdout}`).toBe(0);
+      expect(server.state.requests.some((r) => r.path === `/api/v1/harnesses/${id}/clone`), ref).toBe(true);
+    }
+    const miss = await cli(sb, ["harness", "clone", "Expense Aproval", "--json"]);
+    expect(miss.code).toBe(1);
+    const error = miss.json<{ error: { code: string; message: string; hint: string; details: { candidates: Array<{ slug: string }> } } }>().error;
+    expect(error.code).toBe("solution_not_found");
+    expect(error.message).toContain('No solution "Expense Aproval" in this tenant. Closest: Expense Approval (expense-approval).');
+    expect(error.hint).toContain("--harness expense-approval");
+    expect(error.details.candidates[0]!.slug).toBe("expense-approval");
   });
 });
 

@@ -93,5 +93,5 @@ Change one thing at a time, then run the same suite again and compare:
   a smaller model or fewer tool rounds often suffice for a step.
 
 Record why a change helped in the commit message. When every suite passes,
-`cavelon activate --harness <slug>` goes through the readiness gate; if the
+`cavelon activate --harness <name or slug>` goes through the readiness gate; if the
 token may not activate, a person activates in the Admin.

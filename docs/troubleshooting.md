@@ -44,8 +44,9 @@ meaning.
 | Code | Exit | Cause and fix |
 |---|---|---|
 | `no_instance` | 2 | No instance chosen. Log in (`cavelon login --instance <url>`), set `CAVELON_URL`, or work in a folder with `cavelon.yaml`. |
-| `tenant_required` | 2 | The token reaches several tenants, or none (Platform mode). Choose one: `cavelon use <tenant>`, or `--tenant`. When the instance refuses the token without a tenant ("does not work in Platform mode"), it names none of the token's tenants: pass the tenant's id, `--tenant <tenant-id>` (an operator copies it in Platform › Tenants), or use a token limited to one tenant. |
-| `tenant_not_found` | 1 | The tenant named by `--tenant`, `CAVELON_TENANT`, `cavelon.yaml` or `cavelon use` is not one your token reaches, or your token finds no tenant by that slug: a member's token finds a slug only where it may view the tenant's settings. Use the tenant's name or id: the error names your tenants (`details.tenants` with `--json`), and `cavelon tenant list` shows those your token reaches. |
+| `tenant_required` | 2 | No tenant is chosen and the token reaches several, every one (an operator's token) or none (Platform mode). Run `cavelon use` and choose one by number or name, or pass `--tenant <name, slug or id>`. Without a terminal, the error lists one ready `cavelon use <tenant>` line per tenant (`details.tenants` with `--json`); after `login`, the token is already stored. An older instance that refuses the token without a tenant ("does not work in Platform mode") names none of its tenants: pass the tenant's id, `--tenant <tenant-id>` (an operator copies it in Platform › Tenants), or use a token limited to one tenant. |
+| `tenant_not_found` | 1 | The tenant named by `--tenant`, `CAVELON_TENANT`, `cavelon.yaml` or `cavelon use` is not one your token reaches. The error names the closest tenants with the `cavelon use` line for each (`details.tenants` with `--json`); `cavelon tenant list` shows the tenants your token reaches with name, slug and id, and an operator's token that reaches every tenant finds one with `cavelon tenant list --search <part of the name>`. On an older instance a member's token finds a slug only where it may view the tenant's settings: use the tenant's name or id there. |
+| `no_tenant_reached` | 7 | The token reaches no tenant, so `login` stored nothing. Create a token for the tenant you work in on `/account/access-tokens` (or ask a tenant administrator to add you to a tenant), then run `cavelon login` again. |
 | `foreign_url` | 2 | A request would have gone to another host than the instance; `cavelon` never sends the token elsewhere. |
 | `usage` "Refusing to send a token over plain http" | 2 | Use `https://`. For a test instance on a private network, set `CAVELON_ALLOW_HTTP=1`; `localhost` is always allowed. |
 
@@ -128,7 +129,7 @@ who may decide before you test, read the node's `approvers` in
 | `project_file_invalid`, `env_file_invalid` | 3 | `cavelon.yaml` or `env/<name>.yaml` is not valid YAML or has a wrong value. |
 | `project_file_has_secret` | 3 | `cavelon.yaml` contains something that looks like a token. Remove it, revoke the token, and use `cavelon login` or `CAVELON_TOKEN`. |
 | `no_solution` | 2 | The command needs a solution folder: run it in a folder with `cavelon.yaml`, or `cavelon init` first. |
-| `solution_not_found` | 1 | The solution named by `--harness` or `cavelon.yaml` does not exist in this tenant. `cavelon harness list` shows those that do. |
+| `solution_not_found` | 1 | The solution named by `--harness`, `cavelon.yaml` or an env file does not exist in this tenant, by name, slug or id. The error names the closest solutions (`details.candidates` with `--json`); `cavelon harness list` shows those that do, with name, slug and id. |
 
 A finding with a code of the instance's rules (such as a graph rule) is
 explained by `cavelon explain <code>`. Warnings never fail `validate`;

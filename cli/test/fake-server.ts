@@ -74,6 +74,14 @@ export interface TokenInfo {
    * publishes them unless `servePermissions` is off.
    */
   permissions?: string[];
+  /**
+   * An operator's token without a tenant allowlist: with X-Tenant-Id it enters
+   * any tenant, and without one /meta/principal says it reaches every tenant
+   * and searches them. `tenantIds` are then the person's own memberships.
+   */
+  reachesAll?: boolean;
+  /** The token's role in each tenant, as /meta/principal lists it; tenant_admin by default. */
+  roles?: Record<string, string>;
   /** A Platform-mode token's owner's global role; platform_admin by default. */
   globalRole?: string;
   /** The token's ceiling role; the global role in Platform mode, tenant_admin otherwise, by default. */
@@ -207,6 +215,12 @@ export interface FakeState {
   inferenceBudgets: Map<string, number>;
   /** Whether /meta/principal lists `permissions`; off is an older instance. */
   servePermissions: boolean;
+  /**
+   * Whether /meta/principal answers a personal access token without a tenant
+   * and lists the tenants it reaches, and /auth/me memberships carry
+   * tenant_slug; off is an older instance, which refuses such a token there.
+   */
+  serveTenantReach: boolean;
   /** Each tenant's monthly Processing Step cap, and its use this month. */
   processingStepCaps: Map<string, number>;
   processingStepsUsed: number;
@@ -428,6 +442,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     tenantLimits: new Map(),
     inferenceBudgets: new Map(),
     servePermissions: true,
+    serveTenantReach: true,
     processingStepCaps: new Map(),
     processingStepsUsed: 0,
     runCapacity: {},
@@ -513,16 +528,18 @@ export async function startFakeServer(): Promise<FakeServer> {
     let tenantId: string | undefined;
     if (info.kind === "key") tenantId = info.tenantIds[0];
     else if (headerTenant) {
-      if (!info.tenantIds.includes(headerTenant) && !info.platform) {
+      if (!info.tenantIds.includes(headerTenant) && !info.platform && !info.reachesAll) {
         return send(res, 403, { detail: "This personal access token does not reach this tenant" });
       }
       tenantId = headerTenant;
     } else if (info.defaultTenant) tenantId = info.defaultTenant;
     // A token limited to one tenant selects it when the request names none.
     else if (!info.platform && info.tenantIds.length === 1) tenantId = info.tenantIds[0];
-    // A token without Platform mode is refused before any route, so no route
-    // (not /auth/me, not /meta/principal) says which tenants it reaches.
-    if (info.kind === "pat" && !tenantId && !info.platform && !isDocs) {
+    // A token without Platform mode is refused before any route. An older
+    // instance refuses it on /meta/principal too, so no route says which
+    // tenants it reaches; a recent one answers it there.
+    const reachRead = state.serveTenantReach && p === "/api/v1/meta/principal" && method === "GET";
+    if (info.kind === "pat" && !tenantId && !info.platform && !isDocs && !reachRead) {
       return send(res, 403, { detail: "This personal access token does not work in Platform mode; select a tenant with X-Tenant-Id" });
     }
     const needTenant = () => {
@@ -601,8 +618,9 @@ export async function startFakeServer(): Promise<FakeServer> {
               }
             : null,
         tenant_id: tenantId ?? null,
-        mode: tenantId ? "tenant" : "platform",
+        mode: tenantId ? "tenant" : info.platform || info.kind === "key" ? "platform" : "none",
         ...(state.servePermissions ? { permissions: permissionsOf(info, tenantId) } : {}),
+        ...(info.kind === "pat" && state.serveTenantReach ? reachOf(info, url.searchParams) : {}),
       });
     }
     if (p === "/api/v1/auth/me") {
@@ -610,6 +628,7 @@ export async function startFakeServer(): Promise<FakeServer> {
       const memberships = info.tenantIds.map((id, i) => ({
         tenant_id: id,
         tenant_name: state.tenants.find((t) => t.id === id)?.name ?? id,
+        ...(state.serveTenantReach ? { tenant_slug: state.tenants.find((t) => t.id === id)?.slug ?? null } : {}),
         role: "tenant_admin",
         is_primary: i === 0,
       }));
@@ -1331,6 +1350,25 @@ export async function startFakeServer(): Promise<FakeServer> {
     const op: FakeOperation = { id: opId(kind, record), kind, tenantId, steps, reads: 0, created_at: now(), ...extra };
     state.operations.set(op.id, op);
     return op;
+  }
+
+  /**
+   * What /meta/principal adds for a personal access token asked without a
+   * tenant: the tenants it reaches with its role there, and for an operator's
+   * token without an allowlist, that it reaches every tenant; `search` then
+   * finds up to 50 tenants by name or slug.
+   */
+  function reachOf(info: TokenInfo, query: URLSearchParams) {
+    const placed = info.defaultTenant ?? (!info.platform && info.tenantIds.length === 1 ? info.tenantIds[0] : undefined);
+    const row = (t: FakeState["tenants"][number]) => ({ id: t.id, slug: t.slug, name: t.name, role: info.roles?.[t.id] ?? "tenant_admin", is_default: t.id === placed });
+    const wanted = query.get("search")?.toLowerCase();
+    const matches = (t: FakeState["tenants"][number]) => !wanted || t.slug.includes(wanted) || t.name.toLowerCase().includes(wanted) || t.id === wanted;
+    const own = info.tenantIds.flatMap((id) => state.tenants.filter((t) => t.id === id));
+    const all = (info.reachesAll && wanted ? state.tenants : own).filter(matches).sort((a, b) => a.slug.localeCompare(b.slug));
+    const limit = Math.min(Number(query.get("limit") ?? 50), 200);
+    const offset = Number(query.get("cursor") ?? 0);
+    const next = offset + limit < all.length ? String(offset + limit) : null;
+    return { tenants: all.slice(offset, offset + limit).map(row), reaches_all_tenants: Boolean(info.reachesAll), next_cursor: next };
   }
 
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));

@@ -277,10 +277,11 @@ export interface RefusalContext {
   tenantless?: boolean;
 }
 
-/** Said where a personal access token was refused without a tenant: the instance names none to it, so only the id gets in. */
+/** Said where a personal access token was refused without a tenant. */
 export const TENANT_ID_HINT =
-  "A token without Platform mode works only inside a tenant, and without one the instance tells it nothing, not even which tenants it reaches. " +
-  "Pass --tenant <tenant-id> (or set CAVELON_TENANT, or run `cavelon use <tenant-id>`); an operator copies the id in Platform › Tenants. " +
+  "A token without Platform mode works only inside a tenant. Run `cavelon use` to choose one of the tenants it reaches, " +
+  "or pass --tenant <name, slug or id> (or set CAVELON_TENANT). An older instance tells such a token nothing without a tenant, " +
+  "not even which tenants it reaches: pass --tenant <tenant-id> there; an operator copies the id in Platform › Tenants. " +
   "A token limited to one tenant needs none.";
 
 export function errorFromResponse(status: number, body: unknown, what: string, headers?: Headers, sent: RefusalContext = {}): CavelonError {
@@ -340,7 +341,7 @@ export function errorFromResponse(status: number, body: unknown, what: string, h
     details = details && typeof details === "object" ? { ...(details as Record<string, unknown>), ...ceiling.details } : ceiling.details;
   }
   if (status === 400 && !hint && message && /select a tenant|tenant context|X-Tenant-Id/i.test(message)) {
-    hint = "Choose a tenant with `cavelon use <tenant>`, --tenant or CAVELON_TENANT.";
+    hint = "Choose a tenant with `cavelon use` (it lists your tenants), --tenant or CAVELON_TENANT.";
   }
   if ((status === 401 || status === 403) && !hint) {
     hint =

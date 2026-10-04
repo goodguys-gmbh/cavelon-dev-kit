@@ -12,6 +12,8 @@ export interface OutStream {
 
 export interface InStream extends AsyncIterable<Buffer | string> {
   isTTY?: boolean;
+  /** True once the input has ended, so a question is not left waiting for a line that never comes. */
+  readableEnded?: boolean;
   setRawMode?(mode: boolean): unknown;
   on?(event: string, listener: (...args: never[]) => void): unknown;
   off?(event: string, listener: (...args: never[]) => void): unknown;
