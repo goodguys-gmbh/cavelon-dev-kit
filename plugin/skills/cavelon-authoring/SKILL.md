@@ -155,7 +155,10 @@ version; leave it as `pull` wrote it.
   a slug creates a new entry and, with `--mode replace`, deletes the old one.
 - **Secrets and variables are references only:** write `{{secret:<name>}}` or
   `{{var:<name>}}` where a value is needed, and declare the name (below). Never
-  write a secret value into any file, an argument or a message.
+  write a secret value into any file, an argument or a message. `cavelon api`
+  refuses a body that sets a field the instance marks as a secret value
+  (`x-cavelon-secret`: provider keys, passwords and the like): leave the field
+  out and let the person enter the value in the Admin.
 - **Environment specifics go into `env/`, not `package/`.** Runtime
   requirements (Sandboxes, other solutions) are bound per environment in
   `runtime_bindings`, keyed by the requirement's key, to the target tenant's

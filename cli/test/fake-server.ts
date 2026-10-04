@@ -20,9 +20,20 @@ export function openapiSnapshot(): string {
   openapiText ??= readFileSync(path.join(CONTRACTS, "openapi.json"), "utf8");
   return openapiText;
 }
-/** The snapshot with its person-only markers changed, or without any (null). */
-function withPersonOnly(marks: Record<string, string | false> | null): string {
-  const doc = JSON.parse(openapiSnapshot()) as { paths: Record<string, Record<string, Record<string, unknown>>> };
+/**
+ * The snapshot with its person-only markers changed, or without any (null),
+ * and the body fields `secrets` names (component schema → its properties)
+ * marked as an instance marks a secret value.
+ */
+function withMarkers(marks: Record<string, string | false> | null, secrets: Record<string, string[]>): string {
+  if (marks && !Object.keys(marks).length && !Object.keys(secrets).length) return openapiSnapshot();
+  const doc = JSON.parse(openapiSnapshot()) as {
+    paths: Record<string, Record<string, Record<string, unknown>>>;
+    components: { schemas: Record<string, { properties: Record<string, Record<string, unknown>> }> };
+  };
+  for (const [schema, fields] of Object.entries(secrets)) {
+    for (const field of fields) Object.assign(doc.components.schemas[schema]!.properties[field]!, { "x-cavelon-secret": true, writeOnly: true });
+  }
   for (const [route, item] of Object.entries(doc.paths)) {
     for (const [method, op] of Object.entries(item)) {
       if (method === "parameters") continue;
@@ -162,6 +173,8 @@ export interface FakeState {
    * OpenAPI without any marker, as an instance older than the marker.
    */
   personOnly: Record<string, string | false> | null;
+  /** Body fields marked `x-cavelon-secret`, by component schema; none in the snapshot, as before instances marked them. */
+  secretFields: Record<string, string[]>;
   /**
    * Answers that break off after the status and part of the body, as a proxy
    * or a dropped connection leaves them: "cut" closes the connection, "stall"
@@ -422,6 +435,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     rootPathsReachApi: true,
     serveOpenapi: true,
     personOnly: {},
+    secretFields: {},
     interruptions: [],
     failures: [],
     uploadsBeforeFailure: Infinity,
@@ -506,7 +520,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     }
     if (p === "/openapi.json" || (p === "/api/v1/openapi.json" && !state.rootPathsReachApi)) {
       res.writeHead(200, { "content-type": "application/json" });
-      return res.end(state.personOnly && !Object.keys(state.personOnly).length ? openapiSnapshot() : withPersonOnly(state.personOnly));
+      return res.end(withMarkers(state.personOnly, state.secretFields));
     }
 
     // Auth: every API and docs route needs a known bearer token.
@@ -1228,7 +1242,8 @@ export async function startFakeServer(): Promise<FakeServer> {
     if (rest.includes("/") || method !== "PATCH") return send(res, 404, { detail: "Not Found" });
     const row = state.models.find((m) => m.tenant_id === tid && m.id === rest);
     if (!row) return send(res, 404, { detail: "Model not found" });
-    const changes = (json && typeof json === "object" ? json : {}) as Record<string, unknown>;
+    // The provider key is write-only: accepted, never stored or answered here.
+    const { api_key: _key, ...changes } = (json && typeof json === "object" ? json : {}) as Record<string, unknown>;
     const extra = Object.keys(changes).filter((k) => !["max_concurrent_requests", "base_url", "display_name", "is_active"].includes(k));
     if (extra.length) return send(res, 422, { detail: extra.map((k) => ({ type: "extra_forbidden", loc: ["body", k], msg: "Extra inputs are not permitted" })) });
     const limit = changes.max_concurrent_requests;

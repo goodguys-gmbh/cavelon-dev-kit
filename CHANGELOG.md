@@ -16,6 +16,20 @@ CLI, the skills and the plugin.
 
 ### Changed
 
+- `cavelon api` run by a coding agent applies the guards of the MCP `api`
+  tool. `cavelon` sees an agent by the variable its shell tool sets
+  (`CLAUDECODE`, `CODEX_THREAD_ID` or `CODEX_SANDBOX`, `CURSOR_AGENT`,
+  `GEMINI_CLI`, `COPILOT_CLI`, `COPILOT_AGENT`, `AI_AGENT`), or by
+  `CAVELON_AGENT=1`. There, it refuses an operation the instance keeps for a
+  person, keeps its files in the solution folder, and for an operation that is
+  not read-only prints the request with a token and sends exactly that request
+  only when run again with `--confirm <token>`. A person's terminal is
+  unaffected.
+- The `api` tool, and `cavelon api` run by a coding agent, refuse a body that
+  sets a field the instance marks as a secret value (`x-cavelon-secret`), in
+  nested objects and arrays too, before sending anything
+  (`secret_field_for_a_person`). An instance that marks no field behaves as
+  before.
 - `test run --wait` and `wait` print a short reason next to a count that waits
   for a person ("1 calibration required (a knowledge base or value the case
   needs was not ready)"), name the waiting cases with the reason the instance
