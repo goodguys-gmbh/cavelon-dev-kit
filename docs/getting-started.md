@@ -48,8 +48,15 @@ instance, and stores it in your system's credential store:
 
 ```text
 Token (input hidden):
-Logged in to https://cavelon.example.com as ada@example.com. Token stored in the credential store.
+Logged in to https://cavelon.example.com as ada@example.com. Token stored in the credential store. Acting in tenant Acme (4f6174cf-3060-4ff1-bd3c-8a8e7999256b), the one the instance chooses for this token.
 ```
+
+Without `--tenant`, the token acts in the one tenant it is limited to, or in
+your default tenant. If the instance cannot place it (for example a platform
+operator's token for several tenants), `login` stops with
+`tenant_required`: log in again with `--tenant <tenant-id>`, the id an
+operator copies in **Platform › Tenants**. A token limited to one tenant needs
+none.
 
 `cavelon` never takes a token as a command-line argument, so it never lands in
 your shell history, and your coding agent never sees it. To paste it from a

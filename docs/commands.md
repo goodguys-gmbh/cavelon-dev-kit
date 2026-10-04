@@ -53,7 +53,7 @@ Store a token for an instance (a person runs this, never the agent).
 cavelon login [options]
 ```
 
-Asks for the token without echoing it, or reads it from standard input with --token-stdin. It is never an argument. Create a personal access token (cvpat_…) on /account/access-tokens; a tenant API key (cbp_…) also works. The token is kept in the operating system's credential store, or in a file only you can read.
+Asks for the token without echoing it, or reads it from standard input with --token-stdin. It is never an argument. Create a personal access token (cvpat_…) on /account/access-tokens; a tenant API key (cbp_…) also works. The token is kept in the operating system's credential store, or in a file only you can read. Without --tenant, the token acts where the instance places it: in the one tenant it is limited to, its owner's default tenant, or Platform mode. A token without Platform mode that the instance cannot place is refused without a tenant, and the instance then names none of its tenants: pass --tenant &lt;tenant-id&gt;.
 
 | Option | Description |
 |---|---|
@@ -63,6 +63,7 @@ Examples:
 
 ```bash
 cavelon login --instance https://cavelon.example.com
+cavelon login --instance https://cavelon.example.com --tenant 4f6174cf-3060-4ff1-bd3c-8a8e7999256b
 op read op://dev/cavelon/token | cavelon login --token-stdin
 ```
 

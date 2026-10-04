@@ -95,6 +95,19 @@ Replace `https://cavelon.example.com` with the address of your Cavelon
 instance: the URL you open Cavelon at in the browser. `example.com` stands for
 it throughout these docs.
 
+`--tenant` is optional. Without it, a token limited to one tenant, or one whose
+owner has a default tenant, acts there, and `login` says which tenant that is.
+A token for several tenants that the instance cannot place is refused without
+a tenant, and the instance then names none of its tenants: `login` stops with
+`tenant_required` and asks for the tenant's id. Log in again with it:
+
+```bash
+npx -y @cavelon/cli login --instance https://cavelon.example.com --tenant 4f6174cf-3060-4ff1-bd3c-8a8e7999256b
+```
+
+An operator copies a tenant's id in **Platform › Tenants**. A token limited to
+one tenant (**Tenants** on the token form) needs no `--tenant` at all.
+
 Where nothing can ask for it, in CI or for an agent that runs unattended, a
 person pipes the token in from a secret store with `--token-stdin`; it is never
 an argument:

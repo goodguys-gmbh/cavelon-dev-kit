@@ -174,7 +174,9 @@ export class ApiClient {
       });
     }
     if (!response.ok && !options.allow?.includes(response.status)) {
-      throw await this.refusal(response.status, data, `${method} ${new URL(response.url || this.resolve(path)).pathname}`, response.headers);
+      // A tenant call sent without a tenant, because none is chosen: a token without Platform mode is refused for that alone.
+      const tenantless = options.sendTenant !== false && !this.headers(options)["X-Tenant-Id"] && Boolean(this.target.token?.startsWith("cvpat_"));
+      throw await this.refusal(response.status, data, `${method} ${new URL(response.url || this.resolve(path)).pathname}`, response.headers, { tenantless });
     }
     return { status: response.status, headers: response.headers, data: data as T, text };
   }
@@ -185,11 +187,11 @@ export class ApiClient {
    * refuses every token, and the person needs to hear that, not that theirs is
    * expired or revoked.
    */
-  async refusal(status: number, body: unknown, what: string, headers?: Headers): Promise<CavelonError> {
+  async refusal(status: number, body: unknown, what: string, headers?: Headers, sent: RefusalContext = {}): Promise<CavelonError> {
     if (status === 401 && this.target.token?.startsWith("cvpat_") && (await this.personalAccessTokensOff())) {
       return tokensDisabledError(this.url);
     }
-    return errorFromResponse(status, body, what, headers);
+    return errorFromResponse(status, body, what, headers, sent);
   }
 
   /**
@@ -266,7 +268,19 @@ function networkError(error: unknown, url: URL, signal?: AbortSignal): CavelonEr
 const BARE_CODE = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/;
 
 /** The server's code, message, hint and docs link, from any error shape it sends. */
-export function errorFromResponse(status: number, body: unknown, what: string, headers?: Headers): CavelonError {
+/** What the refused request carried, where the refusal alone does not say why. */
+export interface RefusalContext {
+  /** A personal access token's tenant call sent without X-Tenant-Id. */
+  tenantless?: boolean;
+}
+
+/** Said where a personal access token was refused without a tenant: the instance names none to it, so only the id gets in. */
+export const TENANT_ID_HINT =
+  "A token without Platform mode works only inside a tenant, and without one the instance tells it nothing, not even which tenants it reaches. " +
+  "Pass --tenant <tenant-id> (or set CAVELON_TENANT, or run `cavelon use <tenant-id>`); an operator copies the id in Platform › Tenants. " +
+  "A token limited to one tenant needs none.";
+
+export function errorFromResponse(status: number, body: unknown, what: string, headers?: Headers, sent: RefusalContext = {}): CavelonError {
   let code: string | undefined;
   let message: string | undefined;
   let hint: string | undefined;
@@ -329,7 +343,9 @@ export function errorFromResponse(status: number, body: unknown, what: string, h
     hint =
       status === 401
         ? "The token is missing, expired or revoked. A person runs `cavelon login` with a new one."
-        : "The token does not reach this. Check the tenant (`cavelon whoami`) and the token's permission ceiling.";
+        : sent.tenantless
+          ? `No tenant was named. ${TENANT_ID_HINT} Otherwise check the token's permission ceiling.`
+          : "The token does not reach this. Check the tenant (`cavelon whoami`) and the token's permission ceiling.";
   }
   return new CavelonError(exitCode, {
     code: code ?? defaultCode(status),

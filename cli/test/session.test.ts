@@ -110,6 +110,114 @@ describe("login", () => {
   });
 });
 
+describe("login without --tenant", () => {
+  type Refusal = { error: { code: string; message: string; hint: string; status: number } };
+  const PLATFORM_REFUSAL = "This personal access token does not work in Platform mode; select a tenant with X-Tenant-Id";
+  const credentials = () => path.join(sb.env.CAVELON_CONFIG_DIR!, "credentials.json");
+
+  it("the fake refuses a token without Platform mode on every route, as the instance does, when it cannot place it in a tenant", async () => {
+    const token = server.addToken({ kind: "pat", tenantIds: [tenantA, tenantB] });
+    for (const route of ["/api/v1/auth/me", "/api/v1/meta/principal", "/api/v1/meta/capabilities", "/api/v1/tenants"]) {
+      const response = await fetch(`${server.url}${route}`, { headers: { Authorization: `Bearer ${token}` } });
+      expect([route, response.status]).toEqual([route, 403]);
+      expect(await response.json()).toEqual({ detail: PLATFORM_REFUSAL });
+    }
+    const inTenant = await fetch(`${server.url}/api/v1/auth/me`, { headers: { Authorization: `Bearer ${token}`, "X-Tenant-Id": tenantB } });
+    expect(inTenant.status).toBe(200);
+  });
+
+  it("a token limited to one tenant: uses it and says so", async () => {
+    const token = server.addToken({ kind: "pat", tenantIds: [tenantA], email: "ada@example.com" });
+    const result = await cli(sb, ["login", "--instance", server.url, "--token-stdin"], { stdin: `${token}\n` });
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain(`Acting in tenant Acme (${tenantA}), the one the instance chooses for this token.`);
+    expect(result.stderr).not.toMatch(/other tenants/);
+
+    const json = await cli(sb, ["login", "--instance", server.url, "--token-stdin", "--json"], { stdin: `${token}\n` });
+    expect(json.json<{ tenant: unknown }>().tenant).toEqual({ ref: null, id: tenantA, name: "Acme" });
+    const who = await cli(sb, ["whoami", "--json"]);
+    expect(who.code).toBe(0);
+    expect(who.json<{ tenant: unknown }>().tenant).toMatchObject({ id: tenantA, name: "Acme", mode: "tenant" });
+  });
+
+  it("a token whose owner has a default tenant: acts there and names the other tenants", async () => {
+    const token = server.addToken({ kind: "pat", tenantIds: [tenantA, tenantB], defaultTenant: tenantB });
+    const result = await cli(sb, ["login", "--instance", server.url, "--token-stdin"], { stdin: `${token}\n` });
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain(`Acting in tenant Globex (${tenantB})`);
+    expect(result.stderr).toMatch(/Your other tenants: Acme; `cavelon use <tenant>` chooses one/);
+  });
+
+  it("a token for several tenants that the instance cannot place: asks for --tenant and stores nothing", async () => {
+    const token = server.addToken({ kind: "pat", tenantIds: [tenantA, tenantB] });
+    const result = await cli(sb, ["login", "--instance", server.url, "--token-stdin", "--json"], { stdin: `${token}\n` });
+    expect(result.code).toBe(2);
+    const { error } = result.json<Refusal>();
+    expect(error.code).toBe("tenant_required");
+    expect(error.status).toBe(403);
+    expect(error.message).toContain(PLATFORM_REFUSAL);
+    expect(error.hint).toMatch(/--tenant <tenant-id>/);
+    expect(error.hint).toMatch(/limited to one tenant needs none/);
+    expect(existsSync(credentials())).toBe(false);
+    expect(result.stdout + result.stderr).not.toContain(token);
+
+    // A name or slug cannot be looked up: no route answers this token without a tenant.
+    const byName = await cli(sb, ["login", "--instance", server.url, "--tenant", "acme", "--token-stdin", "--json"], { stdin: `${token}\n` });
+    expect(byName.code).toBe(2);
+    expect(byName.json<Refusal>().error).toMatchObject({ code: "tenant_required", hint: expect.stringMatching(/--tenant <tenant-id>/) });
+    expect(byName.json<Refusal>().error.message).toMatch(/Cannot find tenant "acme" by its name or slug/);
+    expect(existsSync(credentials())).toBe(false);
+
+    // The id gets in, and is kept for the commands that follow.
+    const byId = await cli(sb, ["login", "--instance", server.url, "--tenant", tenantB, "--token-stdin", "--json"], { stdin: `${token}\n` });
+    expect(byId.code).toBe(0);
+    expect(byId.json<{ tenant: unknown; instance_version: string }>()).toMatchObject({ tenant: { ref: tenantB, id: tenantB }, instance_version: "v0.0.0-dev" });
+    const who = await cli(sb, ["whoami", "--json"]);
+    expect(who.code).toBe(0);
+    expect(who.json<{ tenant: unknown }>().tenant).toMatchObject({ id: tenantB, name: "Globex", source: "use" });
+  });
+
+  it("whoami and any first call without a tenant say to pass the tenant's id", async () => {
+    const token = server.addToken({ kind: "pat", tenantIds: [tenantA, tenantB] });
+    const env = { CAVELON_URL: server.url, CAVELON_TOKEN: token };
+    const who = await cli(sb, ["whoami", "--json"], { env });
+    expect(who.code).toBe(2);
+    expect(who.json<Refusal>().error).toMatchObject({ code: "tenant_required", message: expect.stringContaining(PLATFORM_REFUSAL) });
+
+    const limits = await cli(sb, ["limits", "--json"], { env });
+    expect(limits.code).toBe(7);
+    expect(limits.json<Refusal>().error.message).toContain(PLATFORM_REFUSAL);
+    expect(limits.json<Refusal>().error.hint).toMatch(/^No tenant was named\..*--tenant <tenant-id>/);
+
+    const inTenant = await cli(sb, ["whoami", "--json", "--tenant", tenantA], { env });
+    expect(inTenant.code).toBe(0);
+    expect(inTenant.json<{ tenant: unknown }>().tenant).toMatchObject({ id: tenantA, mode: "tenant" });
+  });
+
+  it("an instance without /meta/principal refuses the same token on /auth/me, and login says the same", async () => {
+    const token = server.addToken({ kind: "pat", tenantIds: [tenantA, tenantB] });
+    server.state.serveMeta = false;
+    try {
+      const result = await cli(sb, ["login", "--instance", server.url, "--token-stdin", "--json"], { stdin: `${token}\n` });
+      expect(result.code).toBe(2);
+      expect(result.json<Refusal>().error).toMatchObject({ code: "tenant_required", message: expect.stringContaining(PLATFORM_REFUSAL) });
+      expect(existsSync(credentials())).toBe(false);
+    } finally {
+      server.state.serveMeta = true;
+    }
+  });
+
+  it("a Platform-mode token: logs in without a tenant and says to choose one", async () => {
+    const token = server.addToken({ kind: "pat", tenantIds: [tenantA, tenantB], platform: true });
+    const result = await cli(sb, ["login", "--instance", server.url, "--token-stdin", "--json"], { stdin: `${token}\n` });
+    expect(result.code).toBe(0);
+    expect(result.json<{ tenant: unknown; warnings: string[] }>()).toMatchObject({ tenant: null, warnings: expect.arrayContaining([expect.stringMatching(/Platform mode; choose a tenant with `cavelon use <tenant>`/)]) });
+    const who = await cli(sb, ["whoami", "--json"]);
+    expect(who.code).toBe(0);
+    expect(who.json<{ tenant: unknown }>().tenant).toMatchObject({ id: null, mode: "platform" });
+  });
+});
+
 describe("logout", () => {
   it("deletes the stored token", async () => {
     const token = server.addToken({ kind: "pat", tenantIds: [tenantA], defaultTenant: tenantA });
@@ -283,11 +391,25 @@ describe("use and the tenant precedence", () => {
     await login(sb, server.url, token);
     const result = await cli(sb, ["use", "umbrella", "--json"]);
     expect(result.code).toBe(1);
-    const error = result.json<{ error: { code: string; hint: string } }>().error;
+    const error = result.json<{ error: { code: string; message: string; hint: string; details: unknown } }>().error;
     expect(error.code).toBe("tenant_not_found");
     expect(error.hint).toMatch(/name or id/);
+    // It names the tenants the instance told, so the person can pick one by name.
+    expect(error.message).toContain(`Your tenants: Umbrella Holdings (${umbrella}).`);
+    expect(error.details).toEqual({ tenants: [{ id: umbrella, name: "Umbrella Holdings" }] });
     expect((await cli(sb, ["use", "Umbrella Holdings", "--json"])).code).toBe(0);
     expect((await cli(sb, ["use", umbrella, "--json"])).code).toBe(0);
+  });
+
+  it("login --tenant with a slug the member's token cannot resolve names the tenants by name, and stores nothing", async () => {
+    const initech = server.addTenant("initech-labs", "Initech");
+    const token = server.addToken({ kind: "pat", tenantIds: [initech, tenantB], defaultTenant: initech, permissions: ["agents.view"] });
+    const result = await cli(sb, ["login", "--instance", server.url, "--tenant", "initech-labs", "--token-stdin"], { stdin: `${token}\n` });
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain(`No tenant "initech-labs" that this token can see. Your tenants: Initech (${initech}), Globex (${tenantB}).`);
+    expect(existsSync(path.join(sb.env.CAVELON_CONFIG_DIR!, "credentials.json"))).toBe(false);
+    const byName = await cli(sb, ["login", "--instance", server.url, "--tenant", "Initech", "--token-stdin", "--json"], { stdin: `${token}\n` });
+    expect(byName.json<{ tenant: unknown }>().tenant).toMatchObject({ ref: "Initech", id: initech });
   });
 
   it("refuses a tenant the token cannot reach", async () => {

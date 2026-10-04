@@ -41,9 +41,17 @@ highest first:
 4. the nearest `cavelon.yaml`, from the working directory upwards;
 5. your login, and the tenant you chose with `cavelon use <tenant>`.
 
-A personal access token that reaches one tenant uses it by default. With
-several, choose one with `cavelon use`; `cavelon tenant list` shows those you
-can see. `cavelon whoami` says which tenant a command would use and why.
+A personal access token that reaches one tenant uses it by default, and one
+whose owner has a default tenant acts there. With several, choose one with
+`cavelon use`; `cavelon tenant list` shows those you can see. `cavelon whoami`
+says which tenant a command would use and why.
+
+A token without Platform mode that the instance cannot place in a tenant on
+its own is refused on every route without a tenant, `/api/v1/auth/me` and
+`/api/v1/meta/principal` included, so nothing tells it which tenants it
+reaches. Name the tenant by its id then: `cavelon login --tenant <tenant-id>`,
+`cavelon use <tenant-id>` or `CAVELON_TENANT`. A name or slug cannot be looked
+up for such a token.
 
 A tenant is named by its slug, its name or its id. A token in Platform mode
 finds any slug; a member's token finds the slug of a tenant whose settings it
