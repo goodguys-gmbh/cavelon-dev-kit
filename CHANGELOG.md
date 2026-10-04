@@ -21,6 +21,11 @@ CLI, the skills and the plugin.
   needs was not ready)"), name the waiting cases with the reason the instance
   recorded, and say which `cavelon explain` to run. The cavelon-testing skill
   lists the statuses.
+- The getting-started guide and the security page say which token ceiling to
+  pick for which task (Observer, Builder, Tenant Owner, Platform mode only for
+  platform operators) and to keep **May activate** off unless the token should
+  put solutions live, and link the instance's page on personal access tokens.
+- CI pins every action by commit, like the release workflow.
 
 ## [0.1.3] - 2026-10-04
 
