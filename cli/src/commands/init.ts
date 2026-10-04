@@ -155,7 +155,7 @@ async function writeMcp(root: string, target: McpTarget, onlyExisting: boolean):
   if (existing !== undefined && holdsOtherForm(existing, target)) return { file: target.file, action: "unchanged" };
   if (target.format === "toml") return applyBlock(root, file, upsertBlock(existing, target.block, "hash", { onlyExisting }));
   if (onlyExisting) {
-    let present = false;
+    let present: boolean;
     try {
       present = Boolean(existing && (JSON.parse(existing) as Record<string, Record<string, unknown>>)[target.keys[0]!]?.[target.keys[1]!]);
     } catch {
