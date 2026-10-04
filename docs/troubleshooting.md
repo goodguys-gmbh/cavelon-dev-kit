@@ -18,7 +18,10 @@ own error code where it sent one:
 Two commands help with any code:
 
 - **`cavelon explain <code>`** looks the code up in your instance's error
-  catalog: what it means, how to fix it, and the docs page.
+  catalog: what it means, how to fix it, and the docs page. It also explains
+  the test-case statuses that are neither pass nor fail
+  (`calibration_required`, `pending_review`, `not_run`, `not_evaluated` and
+  `skip`): what each means and what to do next.
 - **`cavelon status`** shows the instance, credential, tenant and solution this
   folder uses, open previews and running operations.
 
@@ -34,7 +37,7 @@ meaning.
 | 2 | usage: unknown command or option, a missing argument, no instance chosen | `cavelon <command> --help` |
 | 3 | validation failed: the arguments, files or body do not match the instance's schema, or the instance refused them (400, 422) | fix what the findings name; `cavelon explain <code>` |
 | 4 | conflict or stale preview (409, 412) | preview or read again, then repeat |
-| 5 | needs a person (`needs_action`): an approval, a review, test answers that wait for a manual verdict | the message gives the reason and the Admin link |
+| 5 | needs a person (`needs_action`): an approval, a review, test answers that wait for a manual verdict or a knowledge base or value a case needs | the message gives the reason and the Admin link |
 | 6 | timed out; the work goes on | run the printed `cavelon wait …` again to resume |
 | 7 | not authorised: no token, or the instance refused it (401, 403) | see [Logging in and permissions](#logging-in-and-permissions) |
 | 8 | server or network error (5xx, 429, unreachable, request timeout) | retry; see [Network](#network) |
