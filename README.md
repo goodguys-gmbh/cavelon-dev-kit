@@ -41,8 +41,8 @@ repository's latest release, checks it against the release's checksums, puts
 it into `~/.local/bin` (on Windows, `%LOCALAPPDATA%\Programs\cavelon`), adds
 that folder to your `PATH` if it is not there yet, and says what to do next.
 Open a new terminal so it finds `cavelon`. Run the same line again to update.
-[Installation](docs/installation.md) has the details, Homebrew and npm, and how
-to remove it.
+With Homebrew (macOS, Linux): `brew install goodguys-gmbh/cavelon/cavelon`.
+[Installation](docs/installation.md) has the details, npm, and how to remove it.
 
 *With Node.js instead:* if you have Node.js 20.3 or newer, `npx -y @cavelon/cli`
 runs the same `cavelon` without installing it: type `npx -y @cavelon/cli setup`

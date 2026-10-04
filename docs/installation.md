@@ -143,18 +143,22 @@ from the release page in a browser:
 
 Check the checksum or the attestation (above) before you do either.
 
-### Homebrew and winget
+### Homebrew
 
-A Homebrew tap and a winget package are being prepared. Once the
-[changelog](../CHANGELOG.md) announces them:
+On macOS (Apple silicon and Intel) and Linux (x64 and arm64):
 
 ```bash
-brew install goodguys-gmbh/cavelon/cavelon      # macOS, Linux
-winget install goodguys.Cavelon                 # Windows
+brew install goodguys-gmbh/cavelon/cavelon
 ```
 
-They install the same executables, and update with `brew upgrade cavelon` and
-`winget upgrade goodguys.Cavelon`.
+It installs the same executable from the same release, and `brew upgrade
+cavelon` updates it; `cavelon --version` names Homebrew as the install method.
+The release workflow updates the formula in
+[goodguys-gmbh/homebrew-cavelon](https://github.com/goodguys-gmbh/homebrew-cavelon)
+on every release.
+
+A winget package for Windows follows once the Windows executable is signed;
+until then, use the one-line install above.
 
 ### With Node.js: npx or npm
 
