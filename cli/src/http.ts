@@ -125,7 +125,7 @@ export class ApiClient {
 
   headers(options: RequestOptions = {}): Record<string, string> {
     const headers: Record<string, string> = {
-      "User-Agent": `cavelon/${KIT_VERSION} node/${process.versions.node}`,
+      "User-Agent": `cavelon/${KIT_VERSION} ${process.versions.bun ? `bun/${process.versions.bun}` : `node/${process.versions.node}`}`,
       Accept: options.accept ?? "application/json",
       ...options.headers,
     };

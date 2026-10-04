@@ -8,10 +8,11 @@ says when it does not know. It uses the files of
 
 It takes about fifteen minutes. You need:
 
-- Node.js 20.3 or newer with npm, and git. `cavelon` itself needs no install:
-  `npx -y @cavelon/cli` runs it, and in this tutorial `cavelon` stands for
-  that, or for your alias or global install ([Installation](installation.md#install-the-cli)).
-  The plugin is optional for this tutorial;
+- `cavelon`, installed with the one-line install
+  ([Installation](installation.md#install-the-cli)), and git. With Node.js
+  20.3 or newer, `npx -y @cavelon/cli` runs it without an install, and in this
+  tutorial `cavelon` then stands for that. The plugin is optional for this
+  tutorial;
 - a Cavelon instance with personal access tokens and the operations API turned
   on, and an account that is a tenant admin of a tenant you may test in.
 

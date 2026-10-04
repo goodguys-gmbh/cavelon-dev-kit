@@ -14,10 +14,12 @@ issue.
 | `cli/` | the `cavelon` CLI and MCP server: TypeScript on Node.js 20.3 or newer |
 | `cli/src/commands/` | one file per command group; each command declares its options, help text and whether it is read-only |
 | `cli/test/` | the tests, and the fake server that serves the contract snapshots |
-| `cli/scripts/` | build helpers: copying the skills into the package, trimming and cleaning the contract snapshots, generating `docs/commands.md` |
+| `cli/scripts/` | build helpers: copying the skills into the package, building the standalone executable, trimming and cleaning the contract snapshots, generating `docs/commands.md` |
 | `plugin/` | the Cavelon plugin: `skills/` (the one source of the skills), `.mcp.json`, and a manifest each for Claude Code and Codex |
 | `.claude-plugin/`, `.agents/plugins/` | the marketplaces of Claude Code and Codex, naming `plugin/` |
 | `contracts/` | snapshots of what an instance publishes, and the list of operations the kit uses |
+| `install.sh`, `install.ps1` | the one-line installers of the standalone executable, published with each release |
+| `packaging/` | what the release workflow writes for Homebrew and winget, and the macOS signing entitlements |
 | `examples/` | solution repositories to copy: `support-faq/` (one agent and a knowledge base) and `expense-approval/` (a pipeline with an approval); the tests validate them |
 | `docs/` | the user documentation |
 
@@ -38,6 +40,35 @@ own to try it: `claude mcp add cavelon-dev -- cavelon mcp`.
 
 CI runs the same steps on Linux (Node.js 20, 22 and 24), macOS and Windows, and
 checks that the packed package carries the skills and the license.
+
+### The standalone executable
+
+The releases also carry `cavelon` as one executable per platform, built with
+[Bun](https://bun.sh) (`bun build --compile`): it bundles `dist/` and the Bun
+runtime, so it runs without Node.js. With Bun installed (CI uses the version in
+`cli/.bun-version`), build the one for your system and run its smoke test:
+
+```bash
+cd cli
+npm run build && npm run build:executable      # build/cavelon-<os>-<arch>[.exe]
+CAVELON_EXECUTABLE="$PWD/build/cavelon-linux-x64" npx vitest run test/executable.test.ts
+```
+
+`scripts/build-executable.mjs` hands the executable the version and the skills
+(`src/embedded.ts`), which the npm package reads from files beside it. Each
+executable is built on its own platform, because it carries the native
+credential store binding (`@napi-rs/keyring`) that npm installed there. Bun
+was chosen over Node.js single executable applications because it bundles the
+ES modules as they are, embeds and loads that native binding from inside the
+executable, and builds in one step. Without the binding, `cavelon` falls back
+to the user-only credentials file, as the npm package does.
+
+CI builds all five (macOS arm64 and x64, Linux x64 and arm64, Windows x64),
+runs the smoke test on each platform (`--version`, `whoami` and a `login`
+through the system's credential store against the fake server, `init --agents`
+with the embedded skills, and an MCP handshake), and tests `install.sh` and
+`install.ps1` (Windows PowerShell 5.1 and PowerShell 7) and the Homebrew
+formula against them, served from a local folder: nothing is published.
 
 ## How the kit is built
 

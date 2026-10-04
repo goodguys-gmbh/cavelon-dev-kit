@@ -47,13 +47,22 @@ access to a Cavelon instance to use it.
 
 ## Setup
 
+### Do I need Node.js?
+
+No. The one-line install puts a standalone `cavelon` into your own user folder
+on macOS, Linux and Windows, without Node.js and without administrator rights
+([Installation](installation.md#install-the-cli)). With Node.js 20.3 or newer
+you can instead run it through `npx -y @cavelon/cli`, which needs no install,
+or install it with npm ([With Node.js](installation.md#with-nodejs-npx-or-npm)).
+The plugin starts whichever you have.
+
 ### Can I use it without installing anything globally?
 
-Yes, and that is the way to start: install the plugin for your coding agent,
-which runs `cavelon` through `npx` by itself, and type
-`npx -y @cavelon/cli <command>` for the commands you run yourself, `login`
-first. Wherever the docs write `cavelon`, that is what they mean. To type
-`cavelon` anyway, define an alias or install it globally
+Yes. The one-line install writes only to your own user folder. Or, with
+Node.js, install the plugin for your coding agent, which then runs `cavelon`
+through `npx` by itself, and type `npx -y @cavelon/cli <command>` for the
+commands you run yourself, `login` first; wherever the docs write `cavelon`,
+that is what they mean then. An alias saves the typing
 ([Installation](installation.md#type-cavelon-instead-optional)).
 
 ### Where do I get a token?

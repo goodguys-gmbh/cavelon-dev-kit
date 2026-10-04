@@ -121,6 +121,16 @@ that.
   dependencies from the npm registry. Releases are published from this
   repository's release workflow with npm provenance; `npm view @cavelon/cli
   dist.attestations` shows it.
+- **GitHub releases.** The one-line install downloads the install script, the
+  executable for your system and `checksums.txt` from this repository's
+  GitHub release, and installs nothing whose SHA-256 checksum does not match.
+  The release workflow builds each executable from the tagged commit and
+  attests it; `gh attestation verify <file> --repo goodguys-gmbh/cavelon-dev-kit`
+  checks that. The install scripts send nothing else anywhere.
+- **The standalone executable** carries the same code as the npm package, with
+  the Bun runtime it runs on. Like the npm package, it reads no `.env` or
+  `bunfig.toml` from the folder it runs in, so a repository cannot change its
+  settings or point it at another instance that way.
 
 ## Files on your machine
 

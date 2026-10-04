@@ -25,8 +25,12 @@ Claude Code. See [Agents without a plugin](installation.md#agents-without-a-plug
 }
 ```
 
-With `cavelon` installed globally, `{ "command": "cavelon", "args": ["mcp"] }`
-works as well. In Claude Code: `claude mcp add cavelon -- npx -y @cavelon/cli@0.1 mcp`.
+With `cavelon` installed (the one-line install, Homebrew or `npm i -g`),
+`{ "command": "cavelon", "args": ["mcp"] }` works as well, without Node.js, and
+`cavelon init --update` keeps an entry changed to it. In Claude Code:
+`claude mcp add cavelon -- cavelon mcp`, or
+`claude mcp add cavelon -- npx -y @cavelon/cli@0.1 mcp`. The plugin's entry
+starts the installed `cavelon` when there is one, and `npx` otherwise.
 
 The entry pins the kit's minor version (`@0.1`): while the kit is in 0.x, a new
 minor version may change behaviour, and it reaches your agent only when you

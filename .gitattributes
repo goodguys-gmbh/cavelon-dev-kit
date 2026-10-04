@@ -5,3 +5,7 @@ examples/** text eol=lf
 .claude-plugin/** text eol=lf
 .agents/** text eol=lf
 docs/** text eol=lf
+# The install script runs under sh, and the release ships the files byte for byte.
+install.sh text eol=lf
+.github/scripts/*.sh text eol=lf
+packaging/** text eol=lf

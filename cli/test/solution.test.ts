@@ -298,6 +298,25 @@ describe("init", () => {
     expect(read(path.join(dir, ".codex", "config.toml"))).toBe(toml);
   });
 
+  it("--update keeps an entry changed to start the installed cavelon", async () => {
+    const dir = folder();
+    const result = await cli(sb, ["init", "--instance", server.url, "--tenant", tenant, "--agents", "claude,codex,copilot", "--json"], { cwd: dir });
+    expect(result.code, result.stdout).toBe(0);
+    const claude = `${JSON.stringify({ mcpServers: { cavelon: { command: "cavelon", args: ["mcp"] } } }, null, 2)}\n`;
+    const copilot = `${JSON.stringify({ servers: { cavelon: { type: "stdio", command: "cavelon", args: ["mcp"] } } }, null, 2)}\n`;
+    writeFileSync(path.join(dir, ".mcp.json"), claude);
+    writeFileSync(path.join(dir, ".vscode", "mcp.json"), copilot);
+    const toml = read(path.join(dir, ".codex", "config.toml")).replace(/command = "[^"]*"\nargs = \[[^\]]*\]/, 'command = "cavelon"\nargs = ["mcp"]');
+    expect(toml).toContain('command = "cavelon"\nargs = ["mcp"]');
+    writeFileSync(path.join(dir, ".codex", "config.toml"), toml);
+
+    const updated = await cli(sb, ["init", "--update", "--json"], { cwd: dir });
+    expect(updated.code, updated.stdout).toBe(0);
+    expect(read(path.join(dir, ".mcp.json"))).toBe(claude);
+    expect(read(path.join(dir, ".vscode", "mcp.json"))).toBe(copilot);
+    expect(read(path.join(dir, ".codex", "config.toml"))).toBe(toml);
+  });
+
   it("needs an instance and a login, and never prompts", async () => {
     const bare = sandbox();
     try {
