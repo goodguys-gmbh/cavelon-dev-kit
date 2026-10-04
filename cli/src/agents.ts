@@ -56,7 +56,7 @@ const jsonServer = (file: string, key = "mcpServers", extra: Record<string, unkn
 
 const tomlServer = (file: string): McpTarget => {
   const block = ({ command, args }: { command: string; args: string[] }) =>
-    ["[mcp_servers.cavelon]", `command = "${command}"`, `args = [${args.map((a) => `"${a}"`).join(", ")}]`].join("\n");
+    ["[mcp_servers.cavelon]", `command = "${command}"`, `args = [${args.map((a) => JSON.stringify(a)).join(", ")}]`].join("\n");
   return {
     file,
     format: "toml",

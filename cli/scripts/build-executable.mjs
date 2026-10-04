@@ -8,18 +8,14 @@
 // is the one npm installed for this system, which is why each executable is built
 // on its own platform rather than cross-compiled.
 //
-//   node scripts/build-executable.mjs [--outfile <path>]
-//
-// BUN names the bun binary when it is not on the PATH.
+//   node scripts/build-executable.mjs      (bun must be on the PATH)
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseArgs } from "node:util";
 
 const cli = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const dist = path.join(cli, "dist");
-const { values } = parseArgs({ options: { outfile: { type: "string" } } });
 
 const OS = { darwin: "darwin", linux: "linux", win32: "windows" }[process.platform];
 const ARCH = { x64: "x64", arm64: "arm64" }[process.arch];
@@ -36,18 +32,18 @@ function readSkills(root) {
   const names = readdirSync(root, { withFileTypes: true })
     .filter((e) => e.isDirectory())
     .map((e) => e.name)
-    .sort((a, b) => a.localeCompare(b, "en"));
+    .toSorted((a, b) => a.localeCompare(b, "en"));
   for (const name of names) {
     const files = [];
     const walk = (sub) => {
       for (const item of readdirSync(path.join(root, name, sub), { withFileTypes: true })) {
         const relative = sub ? `${sub}/${item.name}` : item.name;
         if (item.isDirectory()) walk(relative);
-        else if (item.isFile()) files.push({ path: relative, content: readFileSync(path.join(root, name, relative), "utf8").replace(/\r\n/g, "\n") });
+        else if (item.isFile()) files.push({ path: relative, content: readFileSync(path.join(root, name, relative), "utf8").replaceAll("\r\n", "\n") });
       }
     };
     walk("");
-    if (files.some((f) => f.path === "SKILL.md")) skills.push({ name, files: files.sort((a, b) => a.path.localeCompare(b.path, "en")) });
+    if (files.some((f) => f.path === "SKILL.md")) skills.push({ name, files: files.toSorted((a, b) => a.path.localeCompare(b.path, "en")) });
   }
   return skills;
 }
@@ -71,7 +67,7 @@ writeFileSync(
 // x64 Linux and Windows use Bun's baseline runtime, which runs on processors
 // without AVX2 (older machines, some virtual machines).
 const target = `bun-${OS}-${ARCH}${ARCH === "x64" && OS !== "darwin" ? "-baseline" : ""}`;
-const outfile = path.resolve(values.outfile ?? path.join(cli, "build", `cavelon-${OS}-${ARCH}${OS === "windows" ? ".exe" : ""}`));
+const outfile = path.join(cli, "build", `cavelon-${OS}-${ARCH}${OS === "windows" ? ".exe" : ""}`);
 mkdirSync(path.dirname(outfile), { recursive: true });
 
 const args = [
@@ -95,8 +91,7 @@ if (OS === "windows") {
   );
 }
 
-const bun = process.env.BUN || "bun";
-const result = spawnSync(bun, args, { cwd: cli, stdio: "inherit" });
-if (result.error) throw new Error(`Could not run ${bun}: ${result.error.message}. Install Bun (https://bun.sh) or set BUN.`);
+const result = spawnSync("bun", args, { cwd: cli, stdio: "inherit" });
+if (result.error) throw new Error(`Could not run bun: ${result.error.message}. Install Bun (https://bun.sh).`);
 if (result.status !== 0) process.exit(result.status ?? 1);
 process.stdout.write(`${outfile}\n`);

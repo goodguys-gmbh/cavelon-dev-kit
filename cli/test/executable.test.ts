@@ -3,9 +3,12 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
+import { Readable } from "node:stream";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import type { InStream, Io } from "../src/io.js";
+import { run as runNpmBuild } from "../src/main.js";
 import { startFakeServer, type FakeServer } from "./fake-server.js";
 
 /**
@@ -56,6 +59,25 @@ function run(args: string[], options: { env?: Record<string, string>; stdin?: st
   });
 }
 
+/** `login` as the npm package runs it, in this process, on the same machine: which store keeps the token. */
+async function npmBuildStore(token: string): Promise<string> {
+  let stdout = "";
+  const io: Io = {
+    stdout: { write: (s: string) => ((stdout += s), true) },
+    stderr: { write: () => true },
+    stdin: Readable.from([`${token}\n`]) as unknown as InStream,
+    env: baseEnv,
+    cwd: home,
+    now: () => new Date(),
+    sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+  };
+  const code = await runNpmBuild(["login", "--instance", server.url, "--token-stdin", "--json"], io);
+  if (code !== 0) throw new Error(`the npm build's login failed (${code}): ${stdout}`);
+  const store = (JSON.parse(stdout.trim().split("\n").pop()!) as { credential: { store: string } }).credential.store;
+  if ((await runNpmBuild(["logout", "--json"], { ...io, stdin: Readable.from([]) as unknown as InStream })) !== 0) throw new Error("the npm build's logout failed");
+  return store;
+}
+
 describe.skipIf(!EXECUTABLE)("the standalone executable", () => {
   beforeAll(async () => {
     server = await startFakeServer();
@@ -83,14 +105,13 @@ describe.skipIf(!EXECUTABLE)("the standalone executable", () => {
     expect(who.json()).toMatchObject({ tenant: { id: tenant, name: "Acme" } });
   });
 
-  it("keeps the token in the system's credential store, or in the user-only file without one, as the npm build does", async () => {
+  it("keeps the token in the store the npm build chooses on this machine: the system's credential store, else the user-only file", async () => {
     const token = server.addToken({ kind: "pat", tenantIds: [tenant], email: "ada@example.com" });
+    const expected = await npmBuildStore(token);
     const login = await run(["login", "--instance", server.url, "--token-stdin", "--json"], { stdin: `${token}\n` });
     expect(login.code, login.stderr).toBe(0);
     const store = login.json().credential.store as string;
-    // macOS and Windows always have one; a Linux machine without a Secret Service falls back to the file.
-    if (process.platform === "darwin" || process.platform === "win32") expect(store).toBe("keyring");
-    else expect(["keyring", "file"]).toContain(store);
+    expect(store, login.stderr).toBe(expected);
     expect(existsSync(path.join(home, "config", "credentials.json"))).toBe(store === "file");
 
     const who = await run(["whoami", "--json"]);

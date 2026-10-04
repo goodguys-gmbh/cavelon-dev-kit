@@ -51,7 +51,7 @@ runtime, so it runs without Node.js. With Bun installed (CI uses the version in
 ```bash
 cd cli
 npm run build && npm run build:executable      # build/cavelon-<os>-<arch>[.exe]
-CAVELON_EXECUTABLE="$PWD/build/cavelon-linux-x64" npx vitest run test/executable.test.ts
+CAVELON_EXECUTABLE="$PWD/build/cavelon-linux-x64" npm run test:executable
 ```
 
 `scripts/build-executable.mjs` hands the executable the version and the skills

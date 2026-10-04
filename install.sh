@@ -28,7 +28,10 @@ fail() {
 version="${CAVELON_VERSION:-}"
 dir="${CAVELON_INSTALL_DIR:-}"
 modify_path=1
-case "${CAVELON_NO_MODIFY_PATH:-}" in 1 | true | yes) modify_path=0 ;; esac
+case "${CAVELON_NO_MODIFY_PATH:-}" in
+  1 | true | yes) modify_path=0 ;;
+  *) ;;
+esac
 
 while [ $# -gt 0 ]; do
   case "$1" in

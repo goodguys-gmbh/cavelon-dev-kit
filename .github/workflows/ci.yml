@@ -94,7 +94,7 @@ jobs:
           CAVELON_EXECUTABLE: ${{ github.workspace }}/cli/build/${{ matrix.asset }}
         run: |
           test -f "$CAVELON_EXECUTABLE"
-          npx vitest run test/executable.test.ts
+          npm run test:executable
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset }}
@@ -139,7 +139,7 @@ jobs:
       - name: Serve it on 127.0.0.1
         shell: bash
         run: |
-          nohup node .github/scripts/serve.mjs release 8931 > serve.log 2>&1 &
+          nohup node .github/scripts/serve.mjs 8931 > serve.log 2>&1 &
           for _ in $(seq 1 50); do curl -fsS -o /dev/null http://127.0.0.1:8931/checksums.txt && exit 0; sleep 0.2; done
           cat serve.log; exit 1
       - name: shellcheck

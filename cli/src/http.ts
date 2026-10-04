@@ -3,6 +3,9 @@ import { ceilingRefusal, LIMIT_ABOVE_CEILING } from "./limits.js";
 import { CavelonError, ExitCode, type ExitCodeValue } from "./errors.js";
 import { KIT_VERSION } from "./version.js";
 
+// The standalone executable runs on Bun, the npm package on Node.js.
+const RUNTIME = process.versions.bun ? "bun/" + process.versions.bun : "node/" + process.versions.node;
+
 /**
  * The one way the kit talks to an instance. It adds the credential and the
  * tenant, bounds every request in time, and turns every failure into a
@@ -125,7 +128,7 @@ export class ApiClient {
 
   headers(options: RequestOptions = {}): Record<string, string> {
     const headers: Record<string, string> = {
-      "User-Agent": `cavelon/${KIT_VERSION} ${process.versions.bun ? `bun/${process.versions.bun}` : `node/${process.versions.node}`}`,
+      "User-Agent": `cavelon/${KIT_VERSION} ${RUNTIME}`,
       Accept: options.accept ?? "application/json",
       ...options.headers,
     };
