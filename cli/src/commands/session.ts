@@ -9,9 +9,9 @@ import { ApiClient, tokensDisabledError } from "../http.js";
 import { readAll } from "../io.js";
 import { listPreviews, readPull } from "../local-state.js";
 import type { Operation } from "../operations.js";
-import { expiryOf, readPrincipal } from "../principal.js";
+import { expiryOf, readPrincipal, readTenantless, type Tenantless } from "../principal.js";
 import { readHidden } from "../prompt.js";
-import { lookupTenantId, requireInstance, requireToken, TENANT_REF_HINT, type Session } from "../session.js";
+import { lookupTenantId, requireInstance, requireToken, tenantRequiredError, type Session } from "../session.js";
 import { loadUserConfig, saveUserConfig, tokenKind, updateInstance } from "../user-config.js";
 
 interface Me {
@@ -43,7 +43,21 @@ async function readMe(client: ApiClient): Promise<Me | undefined> {
       hint: "It may be expired or revoked; a person creates a new one on /account/access-tokens and runs `cavelon login`.",
     });
   }
+  // An instance without /meta/principal refuses a token that works only inside a tenant here too.
+  if (response.status === 403 && !client.target.tenantId) {
+    const detail = (response.data as { detail?: unknown } | undefined)?.detail;
+    throw tenantRequiredError(client.url, typeof detail === "string" ? detail : "403 Forbidden");
+  }
   return response.status === 200 ? response.data : undefined;
+}
+
+/** The tenant the instance places a token in when it names none, with the person's other tenants by name. */
+function actingTenant(tenantless: Tenantless | undefined, me: Me | undefined): { id: string; name?: string; others: string[] } | undefined {
+  const id = tenantless && !tenantless.refused ? tenantless.tenantId : (me?.context?.tenant_id ?? undefined);
+  if (!id) return undefined;
+  const tenants = [...(me?.memberships ?? []), ...(me?.accessible_tenants ?? [])];
+  const others = [...new Set(tenants.filter((t) => t.tenant_id !== id).map((t) => t.tenant_name || t.tenant_id))];
+  return { id, name: tenants.find((t) => t.tenant_id === id)?.tenant_name, others };
 }
 
 async function readToken(ctx: Context, fromStdin: boolean): Promise<string> {
@@ -70,13 +84,19 @@ export const login: CommandSpec = {
   description:
     "Asks for the token without echoing it, or reads it from standard input with --token-stdin. It is never an argument.\n" +
     "Create a personal access token (cvpat_…) on /account/access-tokens; a tenant API key (cbp_…) also works.\n" +
-    "The token is kept in the operating system's credential store, or in a file only you can read.",
+    "The token is kept in the operating system's credential store, or in a file only you can read.\n" +
+    "Without --tenant, the token acts where the instance places it: in the one tenant it is limited to, its owner's default tenant, or Platform mode. " +
+    "A token without Platform mode that the instance cannot place is refused without a tenant, and the instance then names none of its tenants: pass --tenant <tenant-id>.",
   readOnly: false,
   mcpTool: false,
   options: {
     "token-stdin": { type: "boolean", description: "Read the token from standard input." },
   },
-  examples: ["cavelon login --instance https://cavelon.example.com", "op read op://dev/cavelon/token | cavelon login --token-stdin"],
+  examples: [
+    "cavelon login --instance https://cavelon.example.com",
+    "cavelon login --instance https://cavelon.example.com --tenant 4f6174cf-3060-4ff1-bd3c-8a8e7999256b",
+    "op read op://dev/cavelon/token | cavelon login --token-stdin",
+  ],
   async run(ctx, input) {
     const session = await ctx.session();
     const url = session.url;
@@ -90,15 +110,18 @@ export const login: CommandSpec = {
     let tenant: { ref: string; id: string; name?: string } | undefined;
     if (session.tenant && kind !== "api_key") {
       const found = await lookupTenantId(client, session.tenant);
-      if (!found) {
-        throw new CavelonError(ExitCode.failure, { code: "tenant_not_found", message: `No tenant "${session.tenant}" for this token.`, hint: TENANT_REF_HINT });
-      }
       tenant = { ref: session.tenant, ...found };
       client.target.tenantId = found.id;
     }
-    // Check the token before storing it: a refused token is never kept.
-    const { caps, needsTenant } = await readCapabilities(contracts, true);
+    // Without a tenant, ask who the token is first: one without Platform mode
+    // that the instance cannot place in a tenant is refused on every route.
+    const tenantless = !tenant && kind === "personal_access_token" ? await readTenantless(client) : undefined;
+    if (tenantless?.refused) throw tenantRequiredError(url, tenantless.said, "No tenant was given");
+    // Check the token before storing it: a refused token is never kept. Who it
+    // is comes first, so a token refused without a tenant is named as that.
     const me = await readMe(client);
+    const { caps, needsTenant } = await readCapabilities(contracts, true);
+    const acting = tenant ? undefined : actingTenant(tenantless, me);
     // An instance older than the /meta routes answers them 404 before it checks
     // the caller, so neither read above proved the token. One authenticated read
     // of a long-standing route does: its 401 is thrown as a refusal.
@@ -106,7 +129,7 @@ export const login: CommandSpec = {
       await client.get("/api/v1/knowledge-bases", { query: { page_size: 1 }, allow: [400, 403, 404, 422] });
     }
     if (needsTenant && !me) {
-      throw new CavelonError(ExitCode.validation, {
+      throw new CavelonError(ExitCode.usage, {
         code: "tenant_required",
         message: "The instance needs a tenant for this token.",
         hint: "Pass --tenant <slug-or-id>.",
@@ -129,6 +152,9 @@ export const login: CommandSpec = {
     if (needsTenant) {
       ctx.warn("This token works in Platform mode; choose a tenant with `cavelon use <tenant>` before tenant commands.");
     } else {
+      if (acting && acting.others.length) {
+        ctx.warn(`Without a tenant this token acts in ${acting.name ?? acting.id}. Your other tenants: ${acting.others.join(", ")}; \`cavelon use <tenant>\` chooses one this token reaches.`);
+      }
       for (const warning of compareContracts(caps)) ctx.warn(warning);
       // Fill the contract cache now, so `api` and `docs` work offline-first.
       try {
@@ -153,14 +179,19 @@ export const login: CommandSpec = {
       instance: url,
       credential: { kind, store: store.kind },
       owner: me ? { email: me.email, name: me.display_name ?? null } : null,
-      tenant: tenant ? { ref: tenant.ref, id: tenant.id, name: tenant.name ?? null } : null,
+      tenant: tenant
+        ? { ref: tenant.ref, id: tenant.id, name: tenant.name ?? null }
+        : acting
+          ? { ref: null, id: acting.id, name: acting.name ?? null }
+          : null,
       instance_version: caps?.instance.version ?? null,
       contracts: caps?.contracts ?? null,
     };
     const who = me?.email ? ` as ${me.email}` : kind === "api_key" ? " with a tenant API key" : "";
+    const where = acting ? ` Acting in tenant ${acting.name ? `${acting.name} (${acting.id})` : acting.id}, the one the instance chooses for this token.` : "";
     return {
       data,
-      text: `Logged in to ${url}${who}. Token stored in the ${store.kind === "keyring" ? "credential store" : "user-only file"}.`,
+      text: `Logged in to ${url}${who}. Token stored in the ${store.kind === "keyring" ? "credential store" : "user-only file"}.${where}`,
     };
   },
 };
@@ -208,8 +239,12 @@ export const whoami: CommandSpec = {
     const session = await ctx.session();
     requireToken(session);
     const client = await ctx.client();
-    const { caps, needsTenant } = await readCapabilities(await ctx.contracts(), false);
+    if (!client.target.tenantId && session.tokenKind === "personal_access_token") {
+      const tenantless = await readTenantless(client);
+      if (tenantless?.refused) throw tenantRequiredError(client.url, tenantless.said);
+    }
     const me = await readMe(client);
+    const { caps, needsTenant } = await readCapabilities(await ctx.contracts(), false);
     const principal = needsTenant ? undefined : await readPrincipal(client);
     const contextTenant = me?.context?.tenant_id ?? principal?.tenant_id ?? client.target.tenantId ?? null;
     const tenants = [...(me?.memberships ?? []), ...(me?.accessible_tenants ?? [])];
@@ -303,13 +338,6 @@ export const use: CommandSpec = {
     }
     const client = await ctx.client({ tenant: false });
     const found = await lookupTenantId(client, ref);
-    if (!found) {
-      throw new CavelonError(ExitCode.failure, {
-        code: "tenant_not_found",
-        message: `No tenant "${ref}" that this token can see.`,
-        hint: TENANT_REF_HINT,
-      });
-    }
     // Ask the instance once with that tenant, so a tenant the token cannot reach fails here.
     const probe = new ApiClient({ ...client.target, tenantId: found.id }, ctx.io.env);
     await probe.get("/api/v1/meta/capabilities", { allow: [404] });

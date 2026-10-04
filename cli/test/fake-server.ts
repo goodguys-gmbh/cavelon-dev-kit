@@ -56,7 +56,11 @@ export interface TokenInfo {
   name?: string;
   /** Tenants a PAT may select; an API key's one tenant. */
   tenantIds: string[];
-  /** A PAT's tenant when no X-Tenant-Id is sent; none means Platform mode. */
+  /**
+   * A PAT's tenant when no X-Tenant-Id is sent (its owner's default tenant). Without
+   * one, a PAT limited to one tenant acts in it, a Platform-mode PAT in Platform
+   * mode, and any other is refused.
+   */
   defaultTenant?: string;
   platform?: boolean;
   /** What /meta/principal tells about the token or key. */
@@ -513,7 +517,14 @@ export async function startFakeServer(): Promise<FakeServer> {
         return send(res, 403, { detail: "This personal access token does not reach this tenant" });
       }
       tenantId = headerTenant;
-    } else tenantId = info.defaultTenant;
+    } else if (info.defaultTenant) tenantId = info.defaultTenant;
+    // A token limited to one tenant selects it when the request names none.
+    else if (!info.platform && info.tenantIds.length === 1) tenantId = info.tenantIds[0];
+    // A token without Platform mode is refused before any route, so no route
+    // (not /auth/me, not /meta/principal) says which tenants it reaches.
+    if (info.kind === "pat" && !tenantId && !info.platform && !isDocs) {
+      return send(res, 403, { detail: "This personal access token does not work in Platform mode; select a tenant with X-Tenant-Id" });
+    }
     const needTenant = () => {
       if (!tenantId) {
         send(res, 400, { detail: "No tenant context — select a tenant first" });

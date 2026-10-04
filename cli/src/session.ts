@@ -1,5 +1,5 @@
 import { CavelonError, ExitCode, notLoggedIn, usageError } from "./errors.js";
-import { ApiClient } from "./http.js";
+import { ApiClient, TENANT_ID_HINT } from "./http.js";
 import { readToken } from "./credentials.js";
 import { findProject, readEnvFile, type EnvFile, type ProjectConfig } from "./project.js";
 import { loadUserConfig, tokenKind, updateInstance, type InstanceSettings, type TokenKind } from "./user-config.js";
@@ -195,23 +195,63 @@ export const TENANT_REF_HINT =
   "Use the tenant's name or id instead: a member's token finds a tenant by its slug only where it may view the tenant's settings. `cavelon tenant list` shows the names and ids.";
 
 /**
+ * The refusal of a personal access token that works only inside a tenant,
+ * asked without one. `said` is the instance's own words.
+ */
+export function tenantRequiredError(url: string, said: string, lead = "No tenant is chosen"): CavelonError {
+  return new CavelonError(ExitCode.usage, {
+    code: "tenant_required",
+    status: 403,
+    message: `${lead}, and ${url} answers this token only inside a tenant: ${said}`,
+    hint: TENANT_ID_HINT,
+  });
+}
+
+/**
  * The id behind a tenant slug or name, from what the credential may read:
  * the person's own memberships (by name), the platform's tenant list, then
  * each membership's own detail. Memberships carry no slug and the platform
  * list is an operator's, so for a member the detail is the only published
  * place that names a slug; it needs settings.view in that tenant.
  */
-export async function lookupTenantId(client: ApiClient, ref: string): Promise<{ id: string; name?: string } | undefined> {
+export async function lookupTenantId(client: ApiClient, ref: string, from?: string): Promise<{ id: string; name?: string }> {
   if (isUuid(ref)) return { id: ref };
+  const lookup = await findTenant(client, ref);
+  if (lookup.found) return lookup.found;
+  throw tenantNotFoundError(ref, lookup.known, from);
+}
+
+/** At most this many of a person's tenants are named in a refusal. */
+const MAX_NAMED_TENANTS = 20;
+
+/** A tenant not found by its name or slug, naming the person's tenants where the instance told them. */
+function tenantNotFoundError(ref: string, known: Map<string, string>, from?: string): CavelonError {
+  const tenants = [...known].map(([id, name]) => ({ id, name: name || null }));
+  const named = tenants.slice(0, MAX_NAMED_TENANTS).map((t) => (t.name ? `${t.name} (${t.id})` : t.id));
+  if (tenants.length > MAX_NAMED_TENANTS) named.push(`and ${tenants.length - MAX_NAMED_TENANTS} more`);
+  return new CavelonError(ExitCode.failure, {
+    code: "tenant_not_found",
+    message: `No tenant "${ref}" that this token can see${from ? ` (from ${from})` : ""}.${named.length ? ` Your tenants: ${named.join(", ")}.` : ""}`,
+    hint: TENANT_REF_HINT,
+    details: tenants.length ? { tenants } : undefined,
+  });
+}
+
+async function findTenant(client: ApiClient, ref: string): Promise<{ found?: { id: string; name?: string }; known: Map<string, string> }> {
   const wanted = ref.toLowerCase();
   const memberships = new Map<string, string>();
   if (client.target.token?.startsWith("cvpat_")) {
-    const me = await client.get<MeResponse>("/api/v1/auth/me", { sendTenant: false, allow: [403, 404] });
+    const me = await client.get<MeResponse & { detail?: unknown }>("/api/v1/auth/me", { sendTenant: false, allow: [403, 404] });
+    // Refused without a tenant: no route names this token's tenants, so only an id finds one.
+    if (me.status === 403) {
+      const said = typeof me.data?.detail === "string" ? me.data.detail : "403 Forbidden";
+      throw tenantRequiredError(client.url, said, `Cannot find tenant "${ref}" by its name or slug`);
+    }
     if (me.status === 200 && me.data) {
       const tenants = [...(me.data.memberships ?? []), ...(me.data.accessible_tenants ?? [])];
       const hit = tenants.find((t) => t.tenant_name?.toLowerCase() === wanted || t.tenant_id === ref);
-      if (hit) return { id: hit.tenant_id, name: hit.tenant_name };
       for (const t of tenants) if (isUuid(t.tenant_id)) memberships.set(t.tenant_id, t.tenant_name);
+      if (hit) return { found: { id: hit.tenant_id, name: hit.tenant_name }, known: memberships };
     }
   }
   const page = await client.get<TenantPage>("/api/v1/tenants", {
@@ -221,7 +261,7 @@ export async function lookupTenantId(client: ApiClient, ref: string): Promise<{ 
   });
   if (page.status === 200) {
     const hit = page.data?.items?.find((t) => t.slug?.toLowerCase() === wanted || t.name?.toLowerCase() === wanted);
-    if (hit) return { id: hit.id, name: hit.name };
+    if (hit) return { found: { id: hit.id, name: hit.name }, known: memberships };
   }
   for (const [id, name] of [...memberships].slice(0, MAX_SLUG_LOOKUPS)) {
     // An instance without the route, or a member without settings.view there, answers 403 or 404: not this one.
@@ -230,9 +270,9 @@ export async function lookupTenantId(client: ApiClient, ref: string): Promise<{ 
       headers: { "X-Tenant-Id": id },
       allow: [400, 403, 404, 422],
     });
-    if (detail.status === 200 && detail.data?.slug?.toLowerCase() === wanted) return { id, name: detail.data.name ?? name };
+    if (detail.status === 200 && detail.data?.slug?.toLowerCase() === wanted) return { found: { id, name: detail.data.name ?? name }, known: memberships };
   }
-  return undefined;
+  return { known: memberships };
 }
 
 /** The tenant id to send, resolving and remembering a slug once per instance. */
@@ -243,14 +283,7 @@ export async function resolveTenantId(env: Env, session: Session, client: ApiCli
   const cached = session.settings.tenant_ids?.[session.tenant];
   if (cached) return cached;
   if (session.tenantSource === "use" && session.settings.tenant_id) return session.settings.tenant_id;
-  const found = await lookupTenantId(client, session.tenant);
-  if (!found) {
-    throw new CavelonError(ExitCode.failure, {
-      code: "tenant_not_found",
-      message: `No tenant "${session.tenant}" that this token can see (from ${session.tenantSource}).`,
-      hint: TENANT_REF_HINT,
-    });
-  }
+  const found = await lookupTenantId(client, session.tenant, session.tenantSource);
   const url = session.url;
   const slug = session.tenant;
   await updateInstance(env, url, (current) => ({ ...current, tenant_ids: { ...current.tenant_ids, [slug]: found.id } }));

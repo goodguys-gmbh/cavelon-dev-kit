@@ -20,6 +20,21 @@ CLI, the skills and the plugin.
   as written in bash, zsh and Windows PowerShell 5.1 (no `&&` between
   commands; what to do when PowerShell refuses to run npm's scripts).
 
+### Fixed
+
+- `cavelon login` without `--tenant` no longer fails with "does not work in
+  Platform mode" for a personal access token made for tenant work. It asks who
+  the token is before anything else: a token the instance places in a tenant
+  on its own (the one tenant it is limited to, or its owner's default) logs in
+  and says which tenant it acts in. A token the instance cannot place is
+  refused on every route without a tenant, so the instance names none of its
+  tenants: `login` and `whoami` stop with `tenant_required` (exit 2) and ask
+  for `--tenant <tenant-id>`, and any other command refused without a tenant
+  says the same in its hint. A Platform-mode token logs in as before.
+- `tenant_not_found` names your tenants by name and id (`details.tenants`
+  with `--json`), so a slug the token cannot resolve leads straight to the
+  name that works.
+
 ## [0.1.2] - 2026-10-04
 
 A security release: upgrade if your coding agent uses `cavelon mcp`. It also

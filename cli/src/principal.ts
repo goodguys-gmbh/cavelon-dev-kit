@@ -48,6 +48,33 @@ export async function readPrincipal(client: ApiClient, options: { sendTenant?: b
   return Array.isArray(permissions) ? { ...rest, permissions: permissions.filter((p) => typeof p === "string") } : rest;
 }
 
+/** How the instance answers a personal access token on a request that names no tenant. */
+export type Tenantless =
+  /** It acts in this tenant (the token reaches only it, or it is the owner's default), or in Platform mode (null). */
+  | { refused: false; tenantId: string | null }
+  /** The token works only inside a tenant; the instance's own words. */
+  | { refused: true; said: string };
+
+/**
+ * Asks `/meta/principal` without `X-Tenant-Id`. A token without Platform mode
+ * that the instance cannot place in a tenant on its own is refused there, as
+ * on every route: no route tells it which tenants it reaches. Undefined on an
+ * instance without the route.
+ */
+export async function readTenantless(client: ApiClient): Promise<Tenantless | undefined> {
+  const response = await client.get<{ mode?: unknown; tenant_id?: unknown; detail?: unknown }>("/api/v1/meta/principal", {
+    allow: [400, 403, 404, 405],
+    sendTenant: false,
+  });
+  if (response.status === 403) {
+    const detail = response.data?.detail;
+    return { refused: true, said: typeof detail === "string" && detail ? detail : "403 Forbidden" };
+  }
+  if (response.status !== 200 || (response.data?.mode !== "tenant" && response.data?.mode !== "platform")) return undefined;
+  const tenantId = response.data.tenant_id;
+  return { refused: false, tenantId: response.data.mode === "tenant" && typeof tenantId === "string" ? tenantId : null };
+}
+
 /** The person's global role from `/api/v1/auth/me` (a platform operator's), or undefined when it is not readable. */
 export async function readGlobalRole(client: ApiClient): Promise<string | null | undefined> {
   const response = await client.get<{ global_role?: unknown }>("/api/v1/auth/me", { allow: [400, 401, 403, 404], sendTenant: false });
