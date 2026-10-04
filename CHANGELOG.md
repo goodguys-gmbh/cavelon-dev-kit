@@ -7,7 +7,19 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-10-04
+
+Agents get further on their own: validate catches broken references, unknown
+fields and models before an import, the preview says what will change and
+what blocks it, re-uploading a file replaces it, the persona and the default
+route are part of authoring, test steps can check routing, and `brew install`
+works on macOS and Linux.
+
 ### Added
+
+- Homebrew: `brew install goodguys-gmbh/cavelon/cavelon` on macOS and Linux;
+  the release workflow updates the formula in goodguys-gmbh/homebrew-cavelon
+  on every release, and `brew upgrade cavelon` updates.
 
 - `cavelon harness default [solution]` (MCP tool `harness_default`) makes a
   solution the tenant's default route, the one its chat and widget answer with
