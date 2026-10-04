@@ -6,7 +6,9 @@ import { moreHint, table } from "../format.js";
 import { callStable, workflowOperation } from "../invoke.js";
 import { deref, jsonBodySchema, validateBody, type Operation } from "../openapi.js";
 import { cavelonCommand, shellWord } from "../shell.js";
+import { STATE_DIR } from "../local-state.js";
 import { listedPages } from "./docs.js";
+import { refreshInventory } from "./inventory.js";
 import { ENV_OPTION, targetFlags } from "./values.js";
 
 /**
@@ -137,8 +139,15 @@ export const modelsList: CommandSpec = {
   examples: ["cavelon models list", "cavelon models list --json"],
   async run(ctx, input) {
     const limit = intOption(input, "limit", { min: 1, max: 500, fallback: 50 })!;
-    const flags = targetFlags(await ctx.session());
+    const session = await ctx.session();
+    const flags = targetFlags(session);
     const rows = await readRows(ctx);
+    // In a solution folder, validate warns about an agent's model that is not among these.
+    if (session.project) {
+      await refreshInventory(session.project.root, "models", rows.map((r) => r.model_id), ctx.io.now()).catch((error: unknown) =>
+        ctx.warn(`Could not keep the model list for validate in ${STATE_DIR}/ (${error instanceof Error ? error.message : String(error)}).`),
+      );
+    }
     const page = pageOf(rows, limit, stringOption(input, "cursor"));
     const items = page.items.map((row) => rowView(row, rows));
     if (!items.length) {

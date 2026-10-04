@@ -61,7 +61,7 @@ export function parseIndex(text: string, base: string): DocEntry[] {
   return entries;
 }
 
-async function loadIndex(ctx: Context): Promise<{ client: ApiClient; entries: DocEntry[] }> {
+async function loadIndex(ctx: Context): Promise<{ client: ApiClient; entries: DocEntry[]; text: string }> {
   const client = await ctx.optionalClient();
   let text: string;
   if (client.target.token) {
@@ -69,7 +69,7 @@ async function loadIndex(ctx: Context): Promise<{ client: ApiClient; entries: Do
   } else {
     text = await fetchIndex(client);
   }
-  return { client, entries: parseIndex(text, client.url) };
+  return { client, entries: parseIndex(text, client.url), text };
 }
 
 /**
@@ -86,40 +86,204 @@ export async function listedPages(ctx: Context, pages: string[]): Promise<string
   }
 }
 
-function terms(query: string): string[] {
-  return query
-    .toLowerCase()
-    .split(/[^\p{L}\p{N}_]+/u)
-    .filter((t) => t.length > 1);
+/**
+ * Words that say nothing about a page, in the two languages people ask in:
+ * question words, articles, pronouns, prepositions and the verbs every
+ * question uses. Without them, "Wie lade ich Dokumente in eine Wissensbasis
+ * hoch?" matched every page with "in" in its summary.
+ */
+const STOP_WORDS = new Set(
+  (
+    "a an and are as at be by can could do does for from get got have how i in into is it its me my of on or our should so " +
+    "that the their them then there these this those to use using was we what when where which who why will with would you your " +
+    "aber alle als am an auch auf aus bei bin bis da damit dann das dass dem den der des die dies diese diesem diesen dieser " +
+    "doch du ein eine einem einen einer eines er es für geht gibt hat habe haben ich ihr im in ist ja kann kannst können man " +
+    "mein meine meinem meinen meiner mich mir mit muss müssen nach nicht noch nur ob oder sich sie sind so soll um und uns " +
+    "unser unsere vom von vor war was welche welcher welches wenn wer werden wie wird wo zu zum zur"
+  ).split(" "),
+);
+
+/**
+ * Words people ask with for the core concepts, in the English the docs are
+ * written in: German ones, as the instance's docs index is English, and "bot",
+ * which the docs call a solution. A value of two words also counts as a phrase.
+ */
+const CONCEPT_TERMS: Record<string, string> = {
+  bot: "solution",
+  bots: "solution",
+  chatbot: "solution",
+  wissensbasis: "knowledge base",
+  wissensbasen: "knowledge base",
+  wissensdatenbank: "knowledge base",
+  wissensdatenbanken: "knowledge base",
+  dokument: "document",
+  dokumente: "document",
+  dokumenten: "document",
+  datei: "file",
+  dateien: "file",
+  hochladen: "upload",
+  lade: "upload",
+  laden: "upload",
+  hoch: "upload",
+  teste: "test",
+  testen: "test",
+  testet: "test",
+  tests: "test",
+  testfall: "test case",
+  testfälle: "test case",
+  agent: "agent",
+  agenten: "agent",
+  standard: "default",
+  standardmodell: "default model",
+  standardantwort: "default answer",
+  antwort: "answer",
+  antworten: "answer",
+  nutzer: "user",
+  benutzer: "user",
+  standardmäßig: "default",
+  voreinstellung: "default",
+  modell: "model",
+  modelle: "model",
+  sprachmodell: "model",
+  werkzeug: "tool",
+  werkzeuge: "tool",
+  fähigkeit: "skill",
+  fähigkeiten: "skill",
+  lösung: "solution",
+  lösungen: "solution",
+  auslöser: "trigger",
+  geheimnis: "secret",
+  geheimnisse: "secret",
+  variablen: "variable",
+  grenze: "limit",
+  grenzen: "limit",
+  gedächtnis: "memory",
+  erinnerung: "memory",
+  übergabe: "handoff",
+  übergaben: "handoff",
+  freigabe: "approval",
+  genehmigung: "approval",
+  kanal: "channel",
+  kanäle: "channel",
+  ablaufverfolgung: "trace",
+  protokoll: "trace",
+  aktivieren: "activate",
+  veröffentlichen: "activate",
+  bereitstellen: "deploy",
+  anmelden: "login",
+  mandant: "tenant",
+  mandanten: "tenant",
+  persona: "persona",
+  leitplanken: "guardrail",
+  schleife: "loop",
+  kosten: "cost",
+  kapazität: "capacity",
+};
+
+/** A word in a simple base form, so "documents" meets "document" and "testing" meets "test". */
+function stem(word: string): string {
+  if (word.length > 5 && word.endsWith("ing")) return word.slice(0, -3);
+  if (word.length > 3 && word.endsWith("s") && !word.endsWith("ss")) return word.slice(0, -1);
+  return word;
 }
 
-export function searchIndex(entries: DocEntry[], query: string): Array<DocEntry & { score: number }> {
-  const words = terms(query);
-  const phrase = query.trim().toLowerCase();
-  return entries
-    .map((entry) => {
-      const title = entry.title.toLowerCase();
-      const description = entry.description.toLowerCase();
-      const page = entry.page.toLowerCase();
-      const section = entry.section.toLowerCase();
-      let score = 0;
-      if (phrase && title.includes(phrase)) score += 10;
-      if (phrase && description.includes(phrase)) score += 4;
-      for (const word of words) {
-        if (title.includes(word)) score += 3;
-        if (page.includes(word)) score += 2;
-        if (description.includes(word)) score += 1;
-        if (section.includes(word)) score += 1;
-      }
-      return { ...entry, score };
-    })
-    .filter((e) => e.score > 0)
-    .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title));
+function words(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean);
 }
+
+/** The query's terms: stop words dropped, German concept words in English, each in its base form. */
+export function queryTerms(query: string): { terms: string[]; phrases: string[][] } {
+  const terms: string[] = [];
+  const phrases: string[][] = [];
+  const raw = words(query).filter((w) => !STOP_WORDS.has(w));
+  for (const word of raw) {
+    const english = CONCEPT_TERMS[word];
+    const parts = english ? english.split(" ") : [word];
+    if (parts.length > 1) phrases.push(parts.map(stem));
+    for (const part of parts) if (part.length > 1 || /\p{N}/u.test(part)) terms.push(stem(part));
+  }
+  // Two terms in a row of the question are a phrase too: "knowledge base", "test suite".
+  for (let i = 0; i + 1 < terms.length; i++) phrases.push([terms[i]!, terms[i + 1]!]);
+  return { terms: [...new Set(terms)], phrases };
+}
+
+/** The base forms of a field's words, in order. */
+function fieldWords(text: string): string[] {
+  return words(text).map(stem);
+}
+
+function hasPhrase(field: string[], phrase: string[]): boolean {
+  for (let i = 0; i + phrase.length <= field.length; i++) {
+    if (phrase.every((w, j) => field[i + j] === w)) return true;
+  }
+  return false;
+}
+
+/** A page must show this much evidence to be listed: a word of the question in its title, or two in its summary or address. */
+const MIN_EVIDENCE = 2;
+/** And a fair share of the best page's score, so one shared word does not list half the index. */
+const MIN_SHARE_OF_BEST = 0.35;
+
+export function searchIndex(entries: DocEntry[], query: string): Array<DocEntry & { score: number }> {
+  const { terms, phrases } = queryTerms(query);
+  if (!terms.length) return [];
+  const fields = entries.map((entry) => ({
+    entry,
+    title: fieldWords(entry.title),
+    page: fieldWords(entry.page),
+    description: fieldWords(entry.description),
+    section: fieldWords(entry.section),
+  }));
+  // A word on few pages says more than one on many: "test" outweighs "agent".
+  const weight = new Map<string, number>();
+  for (const term of terms) {
+    const pages = fields.filter((f) => f.title.includes(term) || f.page.includes(term) || f.description.includes(term)).length;
+    weight.set(term, Math.log(1 + entries.length / (1 + pages)));
+  }
+  const scored = fields
+    .map(({ entry, title, page, description, section }) => {
+      let evidence = 0;
+      let score = 0;
+      for (const term of terms) {
+        const hits = (title.includes(term) ? 3 : 0) + (page.includes(term) ? 2 : 0) + (description.includes(term) ? 1 : 0) + (section.includes(term) ? 1 : 0);
+        evidence += hits;
+        score += hits * weight.get(term)!;
+      }
+      for (const phrase of phrases) {
+        const w = Math.max(...phrase.map((t) => weight.get(t) ?? 1));
+        if (hasPhrase(title, phrase)) score += 3 * w;
+        else if (hasPhrase(description, phrase)) score += w;
+      }
+      // A title the question names nearly whole ("Triggers", "Knowledge Bases and Retrieval") is the page it asks for.
+      const titleWords = title.filter((w) => !STOP_WORDS.has(w));
+      const named = titleWords.filter((w) => terms.includes(w));
+      if (titleWords.length && named.length / titleWords.length >= 0.5) score += (3 * named.length * Math.max(...named.map((t) => weight.get(t)!))) / titleWords.length;
+      // A page in Concepts explains the idea a beginner asks about; it goes first among near equals.
+      if (score > 0 && section.includes("concept")) score *= 1.15;
+      return { ...entry, score: Math.round(score * 100) / 100, evidence };
+    })
+    .filter((e) => e.evidence >= MIN_EVIDENCE);
+  const best = Math.max(0, ...scored.map((e) => e.score));
+  return scored
+    .filter((e) => e.score >= best * MIN_SHARE_OF_BEST)
+    .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title))
+    .map(({ evidence: _evidence, ...e }) => e);
+}
+
+/** What `docs get` takes for the whole index of pages. */
+const INDEX_REF = "index";
 
 export const docsSearch: CommandSpec = {
   name: "docs search",
   summary: "Search this instance's docs (titles and summaries).",
+  description:
+    "Ranks the pages of the instance's docs index by the words of the question in their titles, addresses and\n" +
+    "summaries, rare words counting more than common ones. Stop words (English and German) are ignored, words match\n" +
+    "whole (\"test\" finds \"testing\", not \"latest\"), and German words for the core concepts are looked up in English\n" +
+    "(Wissensbasis: knowledge base). Only pages that match well are listed.",
   readOnly: true,
   idempotent: true,
   mcpTool: "docs_search",
@@ -130,12 +294,15 @@ export const docsSearch: CommandSpec = {
     const limit = intOption(input, "limit", { min: 1, max: 100, fallback: 10 })!;
     const { entries } = await loadIndex(ctx);
     const hits = searchIndex(entries, query);
+    const { terms } = queryTerms(query);
     const items = hits.slice(0, limit).map(({ page, title, description, section }) => ({ page, title, section, description }));
+    const none =
+      `No page matches "${query}"${terms.length ? ` (looked for: ${terms.join(", ")})` : " (it has only stop words)"}. ` +
+      `The docs are in English: try English words for the concept (knowledge base, test, trigger, default), ` +
+      `or read the list of all ${entries.length} pages with: ${cavelonCommand("docs", "get", INDEX_REF)}`;
     return {
-      data: { query, items, total: hits.length },
-      text: items.length
-        ? `${table(items, ["page", "title", "description"], 70)}\n\nRead one: cavelon docs get <page>`
-        : `No page matches "${query}". The index has ${entries.length} pages.`,
+      data: { query, terms, items, total: hits.length, ...(items.length ? {} : { hint: none }) },
+      text: items.length ? `${table(items, ["page", "title", "description"], 70)}\n\nRead one: cavelon docs get <page>` : none,
     };
   },
 };
@@ -146,19 +313,29 @@ export const docsGet: CommandSpec = {
   readOnly: true,
   idempotent: true,
   mcpTool: "docs_get",
-  positionals: [{ name: "page", description: "section/slug from `docs search`, a title, or the page URL.", required: true }],
+  positionals: [{ name: "page", description: "section/slug from `docs search`, a title, the page URL, or `index` for the list of all pages.", required: true }],
   options: {
     "max-chars": { type: "string", value: "<n>", description: "Print at most n characters (default 40000)." },
     cursor: { type: "string", value: "<offset>", description: "Continue a long page where the previous output stopped." },
   },
   async run(ctx, input) {
     const ref = positional(input, "page")!;
-    const { client, entries } = await loadIndex(ctx);
+    const { client, entries, text: index } = await loadIndex(ctx);
     const wanted = ref.replace(/\.md$/, "").replace(/^\/+/, "");
     const entry =
       entries.find((e) => e.page === wanted || e.url === ref) ??
       entries.find((e) => e.title.toLowerCase() === ref.toLowerCase()) ??
       entries.find((e) => e.page.endsWith(`/${wanted}`));
+    const max = intOption(input, "max-chars", { min: 100, fallback: 40_000 })!;
+    const offset = intOption(input, "cursor", { min: 0, fallback: 0 })!;
+    if (!entry && (wanted === INDEX_REF || wanted === "llms.txt")) {
+      const chunk = index.slice(offset, offset + max);
+      const next = offset + max < index.length ? String(offset + max) : null;
+      return {
+        data: { page: INDEX_REF, title: "Docs index", url: `${client.url}/llms.txt`, markdown: chunk, next_cursor: next, length: index.length },
+        text: chunk + (next ? `\n\n… index continues: ${cavelonCommand("docs", "get", INDEX_REF, "--cursor", next)}` : ""),
+      };
+    }
     if (!entry) {
       const near = searchIndex(entries, ref.replace(/[/-]/g, " ")).slice(0, 5).map((e) => e.page);
       throw new CavelonError(ExitCode.failure, {
@@ -169,8 +346,6 @@ export const docsGet: CommandSpec = {
     }
     const response = await client.get<string>(entry.url, { accept: "text/markdown, text/plain" });
     const markdown = response.text;
-    const max = intOption(input, "max-chars", { min: 100, fallback: 40_000 })!;
-    const offset = intOption(input, "cursor", { min: 0, fallback: 0 })!;
     const chunk = markdown.slice(offset, offset + max);
     const next = offset + max < markdown.length ? String(offset + max) : null;
     return {

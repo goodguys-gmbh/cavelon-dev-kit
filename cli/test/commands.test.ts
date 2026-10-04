@@ -1,9 +1,10 @@
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { splitJsonBody } from "../src/commands/api.js";
+import { parseIndex, searchIndex } from "../src/commands/docs.js";
 import { aliasOf } from "../src/openapi.js";
-import { startFakeServer, type FakeServer } from "./fake-server.js";
+import { CONTRACTS, startFakeServer, type FakeServer } from "./fake-server.js";
 import { cli, login, sandbox, type Sandbox } from "./helpers.js";
 
 let server: FakeServer;
@@ -247,6 +248,54 @@ describe("docs", () => {
     expect(first.markdown).toHaveLength(1000);
     const rest = await cli(sb, ["docs", "get", "concepts/regression-testing", "--max-chars", "1000", "--cursor", first.next_cursor, "--json"]);
     expect(rest.json<{ markdown: string }>().markdown.slice(0, 20)).toBe(doc.markdown.slice(1000, 1020));
+  });
+
+  it("finds the concept page first for beginner questions in German and English", async () => {
+    const first = async (question: string) => {
+      const result = await cli(sb, ["docs", "search", question, "--json"]);
+      expect(result.code, result.stderr).toBe(0);
+      return result.json<{ items: Array<{ page: string }>; total: number; terms: string[] }>();
+    };
+    for (const [question, page] of [
+      ["Wie lade ich Dokumente in eine Wissensbasis hoch?", "concepts/knowledge-bases"],
+      ["Wie teste ich meinen Agenten?", "concepts/regression-testing"],
+      ["Wie mache ich meinen Bot zur Standardantwort für alle Nutzer?", "concepts/harnesses"],
+      ["how do I upload documents to a knowledge base", "concepts/knowledge-bases"],
+      ["how do I test my agent", "concepts/regression-testing"],
+      ["triggers", "concepts/triggers"],
+    ] as const) {
+      const found = await first(question);
+      expect(found.items[0]?.page, question).toBe(page);
+      // Only the pages that match well, never most of the index.
+      expect(found.total, question).toBeLessThanOrEqual(12);
+    }
+    expect((await first("Wie lade ich Dokumente in eine Wissensbasis hoch?")).terms).toEqual(["upload", "document", "knowledge", "base"]);
+  });
+
+  it("matches whole words and drops stop words", async () => {
+    const entries = parseIndex(readFileSync(path.join(CONTRACTS, "docs", "llms.txt"), "utf8"), "https://cavelon.example.com");
+    // "test" is in "latest" and "contest" as letters only.
+    const latest = { page: "x/latest", title: "The latest release", description: "What is new.", section: "Reference", url: "https://x" };
+    expect(searchIndex([latest], "test")).toEqual([]);
+    expect(searchIndex(entries, "wie ist das in der")).toEqual([]);
+    expect(searchIndex(entries, "how do I use it")).toEqual([]);
+  });
+
+  it("says so when nothing matches, with English words and the index to try", async () => {
+    const result = await cli(sb, ["docs", "search", "Quarkstrudel", "--json"]);
+    expect(result.code).toBe(0);
+    const data = result.json<{ items: unknown[]; total: number; hint: string }>();
+    expect(data).toMatchObject({ items: [], total: 0 });
+    expect(data.hint).toMatch(/^No page matches "Quarkstrudel" \(looked for: quarkstrudel\)\. The docs are in English: try English words/);
+    expect(data.hint).toContain("cavelon docs get index");
+    const text = await cli(sb, ["docs", "search", "Wie", "ist", "das?"]);
+    expect(text.stdout).toMatch(/No page matches "Wie ist das\?" \(it has only stop words\)/);
+
+    const index = await cli(sb, ["docs", "get", "index", "--max-chars", "200", "--json"]);
+    expect(index.code, index.stderr).toBe(0);
+    const head = index.json<{ page: string; markdown: string; next_cursor: string }>();
+    expect(head).toMatchObject({ page: "index", next_cursor: "200" });
+    expect(head.markdown).toMatch(/^# Cavelon Documentation/);
   });
 
   it("suggests pages for an unknown one", async () => {

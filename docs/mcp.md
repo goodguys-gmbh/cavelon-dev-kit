@@ -144,13 +144,17 @@ repeat them:
   `loop_cancel`, `sandbox_seed`, `trigger_identity`, and `api` for any
   operation that is not read-only (anything but GET, HEAD and OPTIONS), return
   what they would do (for `api`: the method, path, parameters and body) and
-  act only with `confirm: true`. The agent shows that to you first, and must
+  act only with `confirm: true`. `kb_upload` with `replace` needs it only on
+  an instance whose upload cannot replace a document itself: there it returns
+  the documents it would deactivate after the upload, and uploads nothing
+  without `confirm: true`. The agent shows that to you first, and must
   show you any preview that reaches an active solution or production.
 - **What changes without `confirm`.** `init` and `pull` write files in the
   solution folder (`pull` refuses to replace package files with uncommitted
   changes, or outside git files changed since the last pull, unless `force`), and the other tools marked changing act at once:
   `use_tenant`, `tenant_create`, `harness_new`, `harness_clone`, `activate`
-  (through the readiness gate), `variables_set`, `kb_upload`, `test_run`,
+  (through the readiness gate), `variables_set`, `kb_upload` (without
+  `replace`, or where the instance replaces itself), `test_run`,
   `loop_start`, `loop_pause`, `loop_resume`, `sandbox_validate`,
   `sandbox_refresh` and `artifacts_export`.
 - **What no tool does, even with `confirm`.** `api` refuses an operation the

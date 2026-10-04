@@ -128,6 +128,11 @@ who may decide before you test, read the node's `approvers` in
 | `package_schema_invalid` | 3 | A package file does not match the instance's package schema. Each finding names the file, line and path. |
 | `package_version_unsupported` | 3 | The instance does not accept the package version in `cavelon.yaml` and `package/manifest.yaml`. `cavelon status --json` lists the accepted versions; `cavelon pull` writes a current package. |
 | `knowledge_base_without_search_tool` | 0 (a warning) | An agent is given a knowledge base, by a skill or on a tool assignment, but no search tool reaches it, so it answers without it. Add `- tool_slug: search_documents` to the `tool_assignments` of that skill or of the agent. |
+| `package_duplicate_key` | 3 | Two entries of one section have the same slug (or name, for a knowledge base); the import would keep one. The finding names both places. |
+| `package_reference_missing` | 3 | An agent hands off to an agent that is not in the package. The finding suggests the closest slug. |
+| `package_reference_unknown` | 0 (a warning) | A skill, tool, knowledge base or solution is named that is neither in the package nor among what the tenant held at the last pull (`.cavelon/inventory.json`). Fix the name (the finding suggests the closest one), or run `cavelon pull` if it was created since. Without that list, only the package is checked. |
+| `package_field_unknown` | 0 (a warning) | A field the package schema does not have; the import ignores it. The finding suggests the field you probably meant. A required field under another name is reported once, as the missing field, with the suggestion. |
+| `package_model_unknown` | 0 (a warning) | An agent's `llm_model` is not in the tenant's model list as `pull` or `models list` last read it. An empty Model Registry is not checked: the instance's defaults serve the agents. |
 | `package_file_invalid` | 3 | A package file is not valid YAML or JSON (the finding names the line), or it is a symlink to a file outside the solution folder or to no file. A link inside the solution folder is read as the file it leads to. |
 | `project_file_invalid`, `env_file_invalid` | 3 | `cavelon.yaml` or `env/<name>.yaml` is not valid YAML or has a wrong value. |
 | `project_file_has_secret` | 3 | `cavelon.yaml` contains something that looks like a token. Remove it, revoke the token, and use `cavelon login` or `CAVELON_TOKEN`. |
@@ -188,7 +193,11 @@ Behind a proxy or a TLS-inspecting firewall, see
 ## Still stuck
 
 - Run the command with `--json` and read the whole error, including `details`.
-- `cavelon docs search <words>` searches your instance's documentation.
+- `cavelon docs search <words>` searches your instance's documentation. The
+  docs are in English: German words for the core concepts (Wissensbasis,
+  testen, Standard) are looked up in English, and other questions do best in
+  English words. When nothing matches, it says so; `cavelon docs get index`
+  lists every page.
 - Report a problem with the kit on
   [GitHub issues](https://github.com/goodguys-gmbh/cavelon-dev-kit/issues),
   with the command, its output and `cavelon --version`. Leave out tokens,

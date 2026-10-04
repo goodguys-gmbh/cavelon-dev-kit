@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { CASE_STATUSES, NOT_PASSED_COUNTS, WAITING_COUNTS } from "../src/results.js";
 import { CONTRACTS, startFakeServer, traceFixture, type FakeServer } from "./fake-server.js";
 import { cli, login, sandbox, type Sandbox } from "./helpers.js";
@@ -522,5 +522,124 @@ describe("test-case statuses that are neither pass nor fail", () => {
   it("are listed in the cavelon-testing skill", () => {
     const skill = readFileSync(path.join(CONTRACTS, "..", "..", "plugin", "skills", "cavelon-testing", "SKILL.md"), "utf8");
     for (const status of statuses) expect(skill, status).toContain(`\`${status}\``);
+  });
+});
+
+describe("kb upload of a file named like an existing document", () => {
+  const kbId = "4c1b9a3e-0000-4000-8000-00000000d0c5";
+  let folder: string;
+  let file: string;
+  /** A fresh sandbox per test, re-reading the OpenAPI, as the instance changes between them. */
+  let own: Sandbox;
+
+  type Match = { file: string; filename: string; document_id: string; plan: string; outcome?: string };
+  const active = () => server.state.documents.filter((d) => d.kb_id === kbId && !d.deleted && d.is_active);
+  const seed = (filename: string, created_at = "2026-10-01T10:00:00Z") => {
+    const id = crypto.randomUUID();
+    server.state.documents.push({ id, tenant_id: tenant, kb_id: kbId, filename, size: 10, is_active: true, deleted: false, created_at });
+    return id;
+  };
+
+  beforeAll(() => {
+    server.state.kbs.push({ id: kbId, tenant_id: tenant, name: "Bergbahn" });
+  });
+  beforeEach(async () => {
+    server.state.documents = server.state.documents.filter((d) => d.kb_id !== kbId);
+    server.state.uploadReplace = "ids";
+    own = sandbox();
+    own.env.CAVELON_CONTRACT_TTL_SECONDS = "0";
+    await login(own, server.url, server.addToken({ kind: "pat", tenantIds: [tenant], defaultTenant: tenant }));
+    folder = path.join(own.home, "faq");
+    mkdirSync(folder, { recursive: true });
+    file = path.join(folder, "bergbahn-faq.md");
+    writeFileSync(file, "# Bergbahn FAQ\n");
+    writeFileSync(path.join(folder, "new.md"), "# New\n");
+  });
+  afterEach(() => {
+    own.cleanup();
+    server.state.uploadReplace = "ids";
+  });
+
+  it("is named in the dry run and after the upload, and stays active without --replace", async () => {
+    const old = seed("bergbahn-faq.md");
+    const dry = await cli(own, ["kb", "upload", folder, "--kb", "Bergbahn", "--dry-run"]);
+    expect(dry.code, dry.stderr).toBe(0);
+    expect(dry.stdout).toContain(`bergbahn-faq.md exists (${old.slice(0, 8)}…) and stays active`);
+    expect(dry.stdout).toMatch(/--replace replaces the existing document/);
+    const dryJson = await cli(own, ["kb", "upload", folder, "--kb", "Bergbahn", "--dry-run", "--json"]);
+    expect(dryJson.json<{ existing: Match[] }>().existing).toEqual([{ file: path.join("faq", "bergbahn-faq.md"), filename: "bergbahn-faq.md", document_id: old, plan: "stays_active" }]);
+    expect(active()).toHaveLength(1);
+
+    const result = await cli(own, ["kb", "upload", folder, "--kb", "Bergbahn", "--json"]);
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.json<{ existing: Match[] }>().existing).toMatchObject([{ document_id: old, outcome: "stays_active" }]);
+    // Both versions answer now: the warning was the point.
+    expect(active().map((d) => d.filename).sort()).toEqual(["bergbahn-faq.md", "bergbahn-faq.md", "new.md"]);
+  });
+
+  it("--replace sends replace_doc_ids where the upload takes it, and needs no --confirm", async () => {
+    const old = seed("bergbahn-faq.md");
+    const dry = await cli(own, ["kb", "upload", file, "--kb", "Bergbahn", "--replace", "--dry-run"]);
+    expect(dry.stdout).toContain(`bergbahn-faq.md exists (${old.slice(0, 8)}…) and is replaced once the new file is verified`);
+    server.state.requests.length = 0;
+    const result = await cli(own, ["kb", "upload", file, "--kb", "Bergbahn", "--replace", "--json"]);
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.json<{ existing: Match[] }>().existing).toMatchObject([{ document_id: old, plan: "replace_by_id", outcome: "replace_requested" }]);
+    expect(active().map((d) => d.id)).not.toContain(old);
+    expect(server.state.requests.some((r) => r.method === "PATCH")).toBe(false);
+  });
+
+  it("reads replaced_document_ids from a newer instance, which replaces by default unless --keep-both", async () => {
+    server.state.uploadReplace = "name";
+    const old = seed("bergbahn-faq.md");
+    const dry = await cli(own, ["kb", "upload", file, "--kb", "Bergbahn", "--dry-run"]);
+    expect(dry.stdout).toContain("and is replaced by the upload (--keep-both keeps it)");
+    const replaced = await cli(own, ["kb", "upload", file, "--kb", "Bergbahn", "--json"]);
+    expect(replaced.code, replaced.stderr).toBe(0);
+    const data = replaced.json<{ existing: Match[]; documents: Array<{ replaced_document_ids?: string[] }> }>();
+    expect(data.existing).toMatchObject([{ document_id: old, plan: "replaced_by_name", outcome: "replaced" }]);
+    expect(data.documents[0]!.replaced_document_ids).toEqual([old]);
+    expect(active()).toHaveLength(1);
+
+    const kept = await cli(own, ["kb", "upload", file, "--kb", "Bergbahn", "--keep-both"]);
+    expect(kept.code, kept.stderr).toBe(0);
+    expect(kept.stdout).toMatch(/exists \(.{8}…\) and stays active/);
+    expect(kept.stdout).not.toMatch(/--replace replaces/);
+    expect(active()).toHaveLength(2);
+  });
+
+  it("falls back to deactivating the old document on an instance without replace_doc_ids, only with --confirm", async () => {
+    server.state.uploadReplace = "none";
+    const old = seed("bergbahn-faq.md");
+    const before = server.state.requests.length;
+    const preview = await cli(own, ["kb", "upload", file, "--kb", "Bergbahn", "--replace", "--json"]);
+    expect(preview.code, preview.stderr).toBe(0);
+    const shown = preview.json<{ uploaded: boolean; confirm: string; existing: Match[] }>();
+    expect(shown).toMatchObject({ uploaded: false, existing: [{ document_id: old, plan: "deactivate" }] });
+    expect(shown.confirm).toMatch(/^cavelon kb upload .*bergbahn-faq\.md --kb Bergbahn --replace --confirm$/);
+    expect(server.state.requests.slice(before).filter((r) => r.method !== "GET")).toEqual([]);
+
+    const result = await cli(own, ["kb", "upload", file, "--kb", "Bergbahn", "--replace", "--confirm", "--json"]);
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.json<{ existing: Match[] }>().existing).toMatchObject([{ document_id: old, outcome: "deactivated" }]);
+    expect(active().map((d) => d.id)).not.toContain(old);
+    expect(server.state.documents.find((d) => d.id === old)).toMatchObject({ is_active: false, deleted: false });
+  });
+
+  it("deactivates the older duplicates the instance's replacement does not reach", async () => {
+    const older = seed("bergbahn-faq.md", "2026-09-01T10:00:00Z");
+    const newer = seed("bergbahn-faq.md", "2026-10-01T10:00:00Z");
+    const preview = await cli(own, ["kb", "upload", file, "--kb", "Bergbahn", "--replace", "--json"]);
+    expect(preview.json<{ existing: Match[] }>().existing).toMatchObject([
+      { document_id: newer, plan: "replace_by_id" },
+      { document_id: older, plan: "deactivate" },
+    ]);
+    const result = await cli(own, ["kb", "upload", file, "--kb", "Bergbahn", "--replace", "--confirm", "--json"]);
+    expect(result.code, result.stderr).toBe(0);
+    expect(active().map((d) => d.filename)).toEqual(["bergbahn-faq.md"]);
+  });
+
+  it("refuses --replace with --keep-both", async () => {
+    expect((await cli(own, ["kb", "upload", file, "--kb", "Bergbahn", "--replace", "--keep-both"])).code).toBe(2);
   });
 });

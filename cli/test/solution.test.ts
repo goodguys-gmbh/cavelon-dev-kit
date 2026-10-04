@@ -3,7 +3,7 @@ import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSy
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { parse, stringify } from "yaml";
-import { CONTRACTS, startFakeServer, type FakeServer } from "./fake-server.js";
+import { CONTRACTS, modelRow, startFakeServer, type FakeServer } from "./fake-server.js";
 import { cli, login, sandbox, type Sandbox } from "./helpers.js";
 
 /**
@@ -824,6 +824,111 @@ describe("validate", () => {
     server.state.tenantFlags.clear();
   });
 
+  it("finds broken references, unknown fields and unknown models offline, one finding each with file and line", async () => {
+    server.state.models.push(modelRow(tenant, { model_id: "gpt-4.1" }));
+    try {
+      const dir = await initSolution();
+      expect((await cli(sb, ["pull"], { cwd: dir })).code).toBe(0);
+      const inventory = JSON.parse(read(path.join(dir, ".cavelon", "inventory.json"))) as { names: Record<string, string[] | null> };
+      expect(inventory.names).toMatchObject({ solutions: expect.arrayContaining(["support"]), skills: ["faq"], models: ["gpt-4.1"], tools: [], knowledge_bases: [] });
+      expect((await cli(sb, ["validate", "--offline", "--json"], { cwd: dir })).json()).toMatchObject({ valid: true, warning_count: 0 });
+
+      const skillsFile = path.join(dir, "package", "skills.yaml");
+      const agentsFile = path.join(dir, "package", "agents.yaml");
+      const skills = parse(read(skillsFile)) as Array<Record<string, unknown>>;
+      skills.push({ slug: "faq", name: "FAQ again", knowledge_base_assignments: [{ knowledge_base_name: "Handbok" }] });
+      writeFileSync(skillsFile, stringify(skills));
+      const agents = parse(read(agentsFile)) as Array<Record<string, unknown>>;
+      Object.assign(agents[0]!, {
+        temprature: 0.9,
+        llm_model: "gpt-9-ultra",
+        harness_slug: "suport",
+        skill_assignments: [{ skill_slug: "fqa" }],
+        tool_assignments: [{ tool_slug: "crn" }],
+        handoffs: [{ to_agent_slug: "billing" }, { target_agent_slug: "helper" }],
+      });
+      writeFileSync(agentsFile, stringify(agents));
+
+      const result = await cli(sb, ["validate", "--offline", "--json"], { cwd: dir });
+      expect(result.code, result.stdout).toBe(3);
+      type Found = { code: string; severity: string; file: string; line: number; path: string; message: string; suggestion?: string };
+      const findings = result.json<{ findings: Found[] }>().findings;
+      const lineOf = (f: Found) => read(path.join(dir, f.file)).split("\n")[f.line - 1];
+      const one = (code: string, at: string) => {
+        const found = findings.filter((f) => f.code === code && f.path === at);
+        expect(found, `${code} at ${at}: ${JSON.stringify(findings, null, 1)}`).toHaveLength(1);
+        return found[0]!;
+      };
+
+      const duplicate = one("package_duplicate_key", "skills[1].slug");
+      expect(duplicate).toMatchObject({ severity: "error", file: "package/skills.yaml" });
+      expect(duplicate.message).toMatch(/^Two skills have the slug "faq" \(also package\/skills\.yaml:\d+\); the import keeps one of them\.$/);
+      expect(lineOf(duplicate)).toMatch(/slug: faq/);
+
+      const kb = one("package_reference_unknown", "skills[1].knowledge_base_assignments[0].knowledge_base_name");
+      expect(kb).toMatchObject({ severity: "warning", file: "package/skills.yaml", suggestion: "Handbook" });
+      expect(kb.message).toMatch(/^The skill "faq" names the knowledge base "Handbok", which is neither in the package nor among the tenant's knowledge bases at the last pull \(.+\)\. Did you mean "Handbook"\?$/);
+      expect(lineOf(kb)).toMatch(/knowledge_base_name: Handbok/);
+
+      expect(one("package_reference_unknown", "agents[0].skill_assignments[0].skill_slug")).toMatchObject({ file: "package/agents.yaml", suggestion: "faq" });
+      expect(one("package_reference_unknown", "agents[0].tool_assignments[0].tool_slug")).toMatchObject({ suggestion: "crm" });
+      expect(one("package_reference_unknown", "agents[0].harness_slug")).toMatchObject({ suggestion: "support" });
+
+      const handoff = one("package_reference_missing", "agents[0].handoffs[0].to_agent_slug");
+      expect(handoff).toMatchObject({ severity: "error", file: "package/agents.yaml" });
+      expect(handoff.message).toBe('The agent "helper" hands off to the agent "billing", which is not in the package.');
+      expect(lineOf(handoff)).toMatch(/to_agent_slug: billing/);
+
+      const field = one("package_field_unknown", "agents[0].temprature");
+      expect(field).toMatchObject({ severity: "warning", suggestion: "temperature" });
+      expect(field.message).toBe('"temprature" is not a field of the package schema here; the import ignores it. Did you mean "temperature"?');
+      expect(lineOf(field)).toMatch(/temprature: 0\.9/);
+
+      // A required field under another name: one finding, the schema's, saying what was meant.
+      const renamed = one("package_schema_invalid", "agents[0].handoffs[1]");
+      expect(renamed).toMatchObject({ severity: "error", suggestion: "to_agent_slug" });
+      expect(renamed.message).toBe('missing required field "to_agent_slug" ("target_agent_slug" is set, which the package schema does not have; did you mean "to_agent_slug"?)');
+      expect(findings.filter((f) => f.path.startsWith("agents[0].handoffs[1]"))).toHaveLength(1);
+
+      const model = one("package_model_unknown", "agents[0].llm_model");
+      expect(model).toMatchObject({ severity: "warning", file: "package/agents.yaml" });
+      expect(model.message).toMatch(/^The agent "helper" uses the model "gpt-9-ultra", which is not in the tenant's model list \(.+\)\.$/);
+      expect(lineOf(model)).toMatch(/llm_model: gpt-9-ultra/);
+
+      // Nothing else: one finding per mistake.
+      expect(findings).toHaveLength(9);
+      for (const code of ["package_duplicate_key", "package_reference_unknown", "package_field_unknown", "package_model_unknown"]) {
+        expect((await cli(sb, ["explain", code, "--json"], { cwd: dir })).json(), code).toMatchObject({ code, kind: "kit" });
+      }
+    } finally {
+      server.state.models = [];
+    }
+  });
+
+  it("keeps the model list validate checks against fresh from models list, and checks nothing without one", async () => {
+    const dir = await initSolution();
+    expect((await cli(sb, ["pull"], { cwd: dir })).code).toBe(0);
+    const agentsFile = path.join(dir, "package", "agents.yaml");
+    const agents = parse(read(agentsFile)) as Array<Record<string, unknown>>;
+    agents[0]!.llm_model = "llama-70b";
+    writeFileSync(agentsFile, stringify(agents));
+    // An empty Model Registry: the instance's defaults serve the agents, so nothing is checked.
+    expect((await cli(sb, ["validate", "--offline", "--json"], { cwd: dir })).json()).toMatchObject({ warning_count: 0 });
+    server.state.models.push(modelRow(tenant, { model_id: "llama-3-70b", base_url: "http://vllm:8000/v1" }));
+    try {
+      expect((await cli(sb, ["models", "list"], { cwd: dir })).code).toBe(0);
+      const warned = await cli(sb, ["validate", "--offline", "--json"], { cwd: dir });
+      expect(warned.json<{ warnings: Array<{ code: string; message: string }> }>().warnings).toEqual([
+        { code: "package_model_unknown", message: expect.stringMatching(/"llama-70b", which is not in the tenant's model list \(.+\)\. Did you mean "llama-3-70b"\?$/) },
+      ]);
+      // Without the inventory, references to the tenant are not checked; those inside the package still are.
+      rmSync(path.join(dir, ".cavelon", "inventory.json"));
+      expect((await cli(sb, ["validate", "--offline", "--json"], { cwd: dir })).json()).toMatchObject({ valid: true, warning_count: 0 });
+    } finally {
+      server.state.models = [];
+    }
+  });
+
   it("warns when an agent is given a knowledge base but no search tool reaches it", async () => {
     const dir = await initSolution();
     await cli(sb, ["pull"], { cwd: dir });
@@ -865,9 +970,13 @@ describe("validate", () => {
       /warning knowledge_base_without_search_tool {2}package\/agents\.yaml:\d+ agents\[0\]\.tool_assignments\[0\]\.config_overrides\.knowledge_base_names: The agent "helper" is given the knowledge base "Handbook", but no search tool reaches it/,
     );
 
-    // A skill this package does not carry may bring the tool: no warning.
+    // A skill this package does not carry, which the tenant holds, may bring the tool: no warning.
     agents[0]!.skill_assignments = [{ skill_slug: "tenant-wide-search" }];
     writeFileSync(agentsFile, stringify(agents));
+    const inventoryFile = path.join(dir, ".cavelon", "inventory.json");
+    const inventory = JSON.parse(read(inventoryFile)) as { names: { skills: string[] } };
+    inventory.names.skills.push("tenant-wide-search");
+    writeFileSync(inventoryFile, JSON.stringify(inventory));
     expect((await cli(sb, ["validate", "--offline", "--json"], { cwd: dir })).json()).toMatchObject({ warning_count: 0, warnings: [] });
 
     const explained = await cli(sb, ["explain", "knowledge_base_without_search_tool", "--json"], { cwd: dir });
