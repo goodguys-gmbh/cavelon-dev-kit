@@ -7,6 +7,19 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Changed
+
+- Docs: the README's five-minute start, Installation, Getting started, the
+  "before you start" part of Building with a coding agent and the FAQ start
+  without a global install. With a coding agent, install the plugin, which runs
+  `cavelon` through `npx` by itself; for the commands a person types, `login`
+  first, run `npx -y @cavelon/cli <command>`. An alias (zsh, bash and a
+  PowerShell function) or `npm i -g @cavelon/cli` is optional, with the
+  `EACCES` fix for Node.js installed for the whole system. The docs say once
+  that `cavelon` stands for `npx -y @cavelon/cli`, and the commands to type work
+  as written in bash, zsh and Windows PowerShell 5.1 (no `&&` between
+  commands; what to do when PowerShell refuses to run npm's scripts).
+
 ## [0.1.2] - 2026-10-04
 
 A security release: upgrade if your coding agent uses `cavelon mcp`. It also

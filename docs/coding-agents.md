@@ -61,11 +61,16 @@ agent can do. Choose the token accordingly (next section). See also
 
 ## Before you start
 
-1. **Install and log in.** Install `cavelon` and the plugin
-   ([Installation](installation.md)), create a personal access token and run
-   `cavelon login` in your own terminal
+1. **Install the plugin and log in.** Install the plugin for your agent
+   ([Installation](installation.md#install-the-plugin)); it runs `cavelon`
+   through `npx` by itself, so nothing needs a global install. Create a
+   personal access token and log in from your own terminal with
+   `npx -y @cavelon/cli login --instance <url>`
    ([Getting started](getting-started.md#2-log-in)). The agent uses the stored
-   token through `cavelon`; it never sees it.
+   token through `cavelon`; it never sees it. Where this page writes a
+   `cavelon` command for you to type, `npx -y @cavelon/cli` runs it too, or an
+   alias or a global install
+   ([Installation](installation.md#type-cavelon-instead-optional)).
 2. **Choose the token's ceiling.** A token without **May activate** lets the
    agent build, import into test and run tests, while activation stays with a
    person in the Admin. Tick **May activate** only on a token you want to be

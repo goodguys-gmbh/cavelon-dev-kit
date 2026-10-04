@@ -17,21 +17,58 @@ your system's credential store, and your agent never sees it.
 
 ## Five-minute start
 
-You need Node.js 20.3 or newer, git, and a Cavelon instance with personal
-access tokens turned on.
+You need Node.js 20.3 or newer with npm (on Debian and Ubuntu, install the
+`npm` package too), git, and a Cavelon instance with personal access tokens
+turned on.
 
-**1. Install the CLI**, and the plugin for your agent if you use one:
+**1. Get the kit.** None of it needs a global install.
+
+*With a coding agent*, install the plugin. It starts `cavelon` through `npx` by
+itself:
 
 ```bash
-npm i -g @cavelon/cli
-claude plugin marketplace add goodguys-gmbh/cavelon-dev-kit && claude plugin install cavelon@cavelon-dev-kit   # Claude Code
-codex plugin marketplace add goodguys-gmbh/cavelon-dev-kit && codex plugin add cavelon@cavelon-dev-kit         # Codex
+claude plugin marketplace add goodguys-gmbh/cavelon-dev-kit   # Claude Code
+claude plugin install cavelon@cavelon-dev-kit
+codex plugin marketplace add goodguys-gmbh/cavelon-dev-kit    # Codex
+codex plugin add cavelon@cavelon-dev-kit
 ```
 
-If `npm i -g` fails with `EACCES`, Node.js was installed for the whole system:
-by your Linux distribution (Fedora, Ubuntu) or by the nodejs.org installer on
-macOS. Don't use `sudo`; let npm install into your home folder once, then run
-it again. On macOS (zsh):
+On native Windows, also add the plugin's MCP server yourself, as the
+[Windows notes](docs/installation.md#windows) show.
+
+*For the commands you type yourself*, `login` first, run `cavelon` through
+`npx`. It needs no install and works the same in bash, zsh and PowerShell:
+
+```bash
+npx -y @cavelon/cli --version
+```
+
+**In the rest of these docs, `cavelon` stands for `npx -y @cavelon/cli`**: where
+they write `cavelon whoami`, type `npx -y @cavelon/cli whoami`, and the same
+for a `cavelon …` command the CLI prints for you to run next. If PowerShell
+refuses `npx` because running scripts is disabled on this system, write
+`npx.cmd` instead, or allow local scripts for your user once with
+`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
+
+*Optional, if you want to type `cavelon`:* an alias does it without installing
+anything. In zsh or bash, and in your `~/.zshrc` or `~/.bashrc` to keep it:
+
+```bash
+alias cavelon='npx -y @cavelon/cli'
+```
+
+In PowerShell, and in your `$PROFILE` to keep it (the function passes on what
+you pipe into it, such as a token for `login --token-stdin`):
+
+```powershell
+function cavelon { if ($MyInvocation.ExpectingInput) { $input | npx -y @cavelon/cli @args } else { npx -y @cavelon/cli @args } }
+```
+
+Or install it globally with `npm i -g @cavelon/cli`. If that fails with
+`EACCES`, Node.js was installed for the whole system: by your Linux
+distribution (Fedora, Ubuntu) or by the nodejs.org installer on macOS. Don't
+use `sudo`; let npm install into your home folder once, then run it again. On
+macOS (zsh):
 
 ```bash
 npm config set prefix "$HOME/.local"
@@ -40,8 +77,7 @@ npm i -g @cavelon/cli
 ```
 
 On Linux with bash, write the second line to `~/.bashrc` instead. Windows and
-Node.js from Homebrew, nvm, fnm or Volta need none of this. Or skip the install
-and run every command as `npx -y @cavelon/cli <command>`. More in
+Node.js from Homebrew, nvm, fnm or Volta need none of this. More in
 [Installation](docs/installation.md#npm-i--g-fails-with-eacces).
 
 **2. Create a personal access token** in Cavelon: user menu → **Personal
@@ -51,8 +87,8 @@ may put solutions live.
 **3. Log in**, in your own terminal (not in the agent's chat):
 
 ```bash
-cavelon login --instance https://cavelon.example.com
-cavelon whoami
+npx -y @cavelon/cli login --instance https://cavelon.example.com
+npx -y @cavelon/cli whoami
 ```
 
 Replace `https://cavelon.example.com` with the address of your Cavelon
@@ -64,7 +100,7 @@ person pipes the token in from a secret store with `--token-stdin`; it is never
 an argument:
 
 ```bash
-op read op://dev/cavelon/token | cavelon login --instance https://cavelon.example.com --token-stdin
+op read op://dev/cavelon/token | npx -y @cavelon/cli login --instance https://cavelon.example.com --token-stdin
 ```
 
 In CI, setting `CAVELON_URL` and `CAVELON_TOKEN` from the CI system's secrets
@@ -73,7 +109,9 @@ works too ([Security](docs/security.md)).
 **4. Start a solution** in an empty folder:
 
 ```bash
-mkdir support-faq && cd support-faq && git init
+mkdir support-faq
+cd support-faq
+git init
 cavelon init --tenant acme --harness support-faq
 ```
 
@@ -110,7 +148,7 @@ how to review and test its work.
 
 | Page | What it covers |
 |---|---|
-| [Installation](docs/installation.md) | requirements, npm and npx, the plugin in Claude Code and Codex, other agents, updating, uninstalling, Windows/macOS/Linux, proxies |
+| [Installation](docs/installation.md) | requirements, npx, an alias or a global install, the plugin in Claude Code and Codex, other agents, updating, uninstalling, Windows/macOS/Linux, proxies |
 | [Getting started](docs/getting-started.md) | a full tutorial from an empty folder to an active solution |
 | [Building with a coding agent](docs/coding-agents.md) | briefing the agent, the loop as it runs it, what stays with you, reviewing and testing its work, prompts to copy |
 | [Concepts](docs/concepts.md) | instance, tenant, solution, package, environments, preview and confirm, operations, tests, activation, Platform mode |

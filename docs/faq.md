@@ -47,6 +47,15 @@ access to a Cavelon instance to use it.
 
 ## Setup
 
+### Can I use it without installing anything globally?
+
+Yes, and that is the way to start: install the plugin for your coding agent,
+which runs `cavelon` through `npx` by itself, and type
+`npx -y @cavelon/cli <command>` for the commands you run yourself, `login`
+first. Wherever the docs write `cavelon`, that is what they mean. To type
+`cavelon` anyway, define an alias or install it globally
+([Installation](installation.md#type-cavelon-instead-optional)).
+
 ### Where do I get a token?
 
 In Cavelon: your user menu → **Personal access tokens**
@@ -66,10 +75,6 @@ instance, `cavelon use <tenant>` chooses the default tenant, and `--tenant`,
 `CAVELON_TENANT`, `cavelon.yaml` or an environment file choose it per command
 or per folder. `cavelon whoami` shows which one applies and why.
 
-### Can I use it without installing anything globally?
-
-Yes: `npx -y @cavelon/cli <command>`. The plugin's MCP server runs that way too.
-
 ### Does it work on Windows?
 
 Yes. CI runs the tests on Windows, macOS and Linux. See the
@@ -84,7 +89,8 @@ In an empty repository:
 ```bash
 cavelon init --tenant <tenant> --harness <solution slug>
 cavelon pull
-git add -A && git commit -m "Import the solution"
+git add -A
+git commit -m "Import the solution"
 ```
 
 `pull` writes the solution into `package/` and `tests/`. From then on, change
