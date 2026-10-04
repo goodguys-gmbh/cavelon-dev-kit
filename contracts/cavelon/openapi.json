@@ -208,6 +208,98 @@
         }
       }
     },
+    "/api/v1/bot-persona": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Get Bot Persona",
+        "operationId": "get_bot_persona_api_v1_bot_persona_get",
+        "parameters": [
+          {
+            "name": "effective",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Effective"
+            }
+          },
+          {
+            "name": "harness_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Harness Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {}
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Upsert Bot Persona",
+        "operationId": "upsert_bot_persona_api_v1_bot_persona_put",
+        "parameters": [
+          {
+            "name": "harness_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Harness Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotPersonaSchema"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {}
+        }
+      }
+    },
     "/api/v1/conversations/{conversation_id}/traces": {
       "get": {
         "tags": [
@@ -663,6 +755,48 @@
         },
         "responses": {
           "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HarnessResponse"
+                }
+              }
+            }
+          },
+          "403": {},
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/harnesses/{harness_id}/default": {
+      "post": {
+        "tags": [
+          "harnesses"
+        ],
+        "summary": "Set Default Harness",
+        "operationId": "set_default_harness_api_v1_harnesses__harness_id__default_post",
+        "parameters": [
+          {
+            "name": "harness_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Harness Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
             "content": {
               "application/json": {
                 "schema": {
@@ -6634,6 +6768,346 @@
           "files"
         ],
         "title": "Body_upload_documents_api_v1_knowledge_bases__kb_id__documents_upload_post"
+      },
+      "BotPersonaSchema": {
+        "properties": {
+          "bot_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bot Name"
+          },
+          "persona_prompt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 50000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persona Prompt"
+          },
+          "greeting_message": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Greeting Message"
+          },
+          "greeting_enabled": {
+            "type": "boolean",
+            "title": "Greeting Enabled",
+            "default": true
+          },
+          "greeting_personalization_enabled": {
+            "type": "boolean",
+            "title": "Greeting Personalization Enabled",
+            "default": false
+          },
+          "greeting_personalization_tone": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Greeting Personalization Tone",
+            "default": "personal"
+          },
+          "language_hint": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language Hint"
+          },
+          "response_style": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response Style"
+          },
+          "fallback_message": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback Message"
+          },
+          "fallback_message_enabled": {
+            "type": "boolean",
+            "title": "Fallback Message Enabled",
+            "default": true
+          },
+          "source_citation_prompt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Citation Prompt"
+          },
+          "source_citation_enabled": {
+            "type": "boolean",
+            "title": "Source Citation Enabled",
+            "default": true
+          },
+          "show_processing_steps": {
+            "type": "boolean",
+            "title": "Show Processing Steps",
+            "default": false
+          },
+          "suggest_followups": {
+            "type": "boolean",
+            "title": "Suggest Followups",
+            "default": false
+          },
+          "suggestions_count": {
+            "type": "integer",
+            "maximum": 10,
+            "minimum": 1,
+            "title": "Suggestions Count",
+            "default": 3
+          },
+          "image_prompt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Prompt"
+          },
+          "image_prompt_enabled": {
+            "type": "boolean",
+            "title": "Image Prompt Enabled",
+            "default": false
+          },
+          "action_buttons_enabled": {
+            "type": "boolean",
+            "title": "Action Buttons Enabled",
+            "default": false
+          },
+          "action_buttons_prompt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Buttons Prompt"
+          },
+          "teaser_messages": {
+            "items": {
+              "type": "string",
+              "maxLength": 1000,
+              "minLength": 1
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Teaser Messages"
+          },
+          "teaser_display_count": {
+            "type": "integer",
+            "maximum": 20,
+            "minimum": 1,
+            "title": "Teaser Display Count",
+            "default": 3
+          },
+          "widget_title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Widget Title"
+          },
+          "floating_button_teaser": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Floating Button Teaser"
+          },
+          "disclaimer": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disclaimer"
+          },
+          "image_upload_enabled": {
+            "type": "boolean",
+            "title": "Image Upload Enabled",
+            "default": false
+          },
+          "realtime_voice_enabled": {
+            "type": "boolean",
+            "title": "Realtime Voice Enabled",
+            "default": false
+          },
+          "block_notice_enabled": {
+            "type": "boolean",
+            "title": "Block Notice Enabled",
+            "default": false
+          },
+          "source_citation_widget_enabled": {
+            "type": "boolean",
+            "title": "Source Citation Widget Enabled",
+            "default": false
+          },
+          "study_rating_enabled": {
+            "type": "boolean",
+            "title": "Study Rating Enabled",
+            "default": false
+          },
+          "voice_recording_enabled": {
+            "type": "boolean",
+            "title": "Voice Recording Enabled",
+            "default": false
+          },
+          "voice_answering_enabled": {
+            "type": "boolean",
+            "title": "Voice Answering Enabled",
+            "default": false
+          },
+          "voice_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Id"
+          },
+          "voice_instructions": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Instructions"
+          },
+          "widget_theme": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Widget Theme"
+          },
+          "widget_behavior": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Widget Behavior"
+          },
+          "inject_current_datetime": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inject Current Datetime"
+          },
+          "tenant_timezone": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Timezone"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "BotPersonaSchema"
       },
       "ChangeLogEntry": {
         "properties": {

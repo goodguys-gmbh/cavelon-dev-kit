@@ -1,9 +1,12 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { LineCounter, parseDocument, stringify, type Document } from "yaml";
+import { LineCounter, parseDocument, type Document } from "yaml";
 import type { PackageSchema } from "./contracts.js";
 import { CavelonError, ExitCode } from "./errors.js";
 import { readTextFile, withoutBom, writeFileAtomic } from "./fsutil.js";
+import { PERSONA_SECTION, sameSectionValue, sectionContent, sectionFields, toYaml, withoutNulls } from "./package-format.js";
+
+export { toYaml };
 
 /**
  * A solution package as files in the repository, split along the top-level
@@ -197,7 +200,6 @@ export async function readPackage(root: string, layout: Layout): Promise<Package
   const dir = path.join(root, layout.package);
   let empty = true;
   for (const name of await listFiles(dir)) {
-    empty = false;
     const section = name.replace(PACKAGE_FILE, "");
     const file = path.join(dir, name);
     if (section in sources) {
@@ -213,10 +215,14 @@ export async function readPackage(root: string, layout: Layout): Promise<Package
     if ("finding" in read) {
       sources[section] = { file: rel(root, file) };
       findings.push(read.finding);
+      empty = false;
       continue;
     }
     const parsed = parseFile(root, file, read.text);
     sources[section] = parsed.source;
+    // The persona file of placeholders only (as init writes it) sets nothing, so it sends nothing and is no package yet.
+    if (!parsed.finding && section === PERSONA_SECTION && (parsed.value === null || parsed.value === undefined)) continue;
+    empty = false;
     if (parsed.finding) findings.push(parsed.finding);
     else pkg[section] = parsed.value;
   }
@@ -323,10 +329,6 @@ export function canonical(value: unknown): string {
   });
 }
 
-export function toYaml(value: unknown): string {
-  return stringify(value, { lineWidth: 0, aliasDuplicateObjects: false });
-}
-
 async function readValue(root: string, file: string): Promise<{ value?: unknown; ok: boolean }> {
   const target = await contentPath(root, file);
   const text = target === undefined ? undefined : await readTextFile(target);
@@ -338,6 +340,13 @@ async function readValue(root: string, file: string): Promise<{ value?: unknown;
   } catch {
     return { ok: false };
   }
+}
+
+/** Whether a package file is the persona file with placeholders only, which holds nothing a write could lose. */
+export async function placeholdersOnly(root: string, relative: string): Promise<boolean> {
+  if (path.posix.basename(relative).replace(PACKAGE_FILE, "") !== PERSONA_SECTION) return false;
+  const old = await readValue(root, path.join(root, relative));
+  return old.ok && (old.value === null || old.value === undefined);
 }
 
 /** A file name for one item: its slug or name, made safe, unique in the folder. */
@@ -386,7 +395,10 @@ export async function writePackage(
   const same: Array<{ file: string; section: string }> = [];
   // Removing a link removes the link only; it never reaches the file behind it.
   const removals: string[] = [];
-  for (const [section, value] of Object.entries(pkg)) {
+  const sections = Object.entries(pkg);
+  // The persona file stays, its fields as placeholders, when the solution has no persona yet.
+  if (!(PERSONA_SECTION in pkg) && sectionFields(schema, PERSONA_SECTION)) sections.push([PERSONA_SECTION, null]);
+  for (const [section, value] of sections) {
     if (section in layout.items && Array.isArray(value)) continue;
     // The export's keys come from the instance; none of them may name a path.
     if (!safeSectionName(section)) {
@@ -396,8 +408,8 @@ export async function writePackage(
     const current = existing.get(section);
     const file = path.join(dir, current ?? `${section}.yaml`);
     const old = await readValue(root, file);
-    if (old.ok && canonical(old.value) === canonical(value)) same.push({ file, section });
-    else plans.push({ file, section, content: /\.json$/i.test(file) ? JSON.stringify(value, null, 2) + "\n" : toYaml(value) });
+    if (old.ok && sameSectionValue(section, old.value, value, canonical)) same.push({ file, section });
+    else plans.push({ file, section, content: sectionContent(section, value, schema, /\.json$/i.test(file)) });
   }
 
   for (const [section, folder] of Object.entries(layout.items)) {
@@ -414,7 +426,7 @@ export async function writePackage(
     // An item whose file already holds it keeps that file, whatever its name.
     const placed = value.map((item) => {
       for (const [name, old] of unclaimed) {
-        if (canonical(old) === canonical(item)) {
+        if (canonical(withoutNulls(old)) === canonical(withoutNulls(item))) {
           unclaimed.delete(name);
           taken.add(name);
           return name;
@@ -435,7 +447,7 @@ export async function writePackage(
   }
 
   for (const [section, name] of existing) {
-    if (section in pkg) continue;
+    if (section in pkg || section === PERSONA_SECTION) continue;
     const file = path.join(dir, name);
     if (known.has(section)) removals.push(file);
     else report.kept.push(rel(root, file));

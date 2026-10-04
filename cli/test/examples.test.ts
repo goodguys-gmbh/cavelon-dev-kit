@@ -113,6 +113,13 @@ describe.each(["support-faq", "expense-approval"])("examples/%s", (example) => {
     expect(agents.filter((a) => (a as { is_entrypoint?: boolean }).is_entrypoint).length).toBe(1);
   });
 
+  it("says who the assistant is in its persona, with a greeting and a fallback of its own", () => {
+    const persona = read<Record<string, unknown>>("package", "persona.yaml");
+    expect(persona).toMatchObject({ bot_name: expect.any(String), greeting_enabled: true, fallback_message_enabled: true });
+    expect(String(persona.greeting_message).trim()).not.toBe("");
+    expect(String(persona.fallback_message).trim()).not.toBe("");
+  });
+
   it("gives every agent with a knowledge base the search tool", () => {
     const agents = read<Agent[]>("package", "agents.yaml");
     const skills = read<Skill[]>("package", "skills.yaml");

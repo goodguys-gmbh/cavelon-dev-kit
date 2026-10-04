@@ -21,12 +21,12 @@ const GROUPS: Array<{ title: string; intro: string; names: string[] }> = [
   {
     title: "Solution as code",
     intro: "Turn a folder into a solution, check it, preview it, import it and activate it.",
-    names: ["init", "pull", "validate", "schema", "apply", "activate", "explain"],
+    names: ["init", "pull", "validate", "fmt", "schema", "apply", "activate", "explain"],
   },
   {
     title: "Tenants and solutions",
     intro: "Create and list tenants and solutions (harnesses).",
-    names: ["tenant create", "tenant list", "harness list", "harness new", "harness clone"],
+    names: ["tenant create", "tenant list", "harness list", "harness new", "harness clone", "harness default"],
   },
   {
     title: "Knowledge, tests and traces",

@@ -33,7 +33,8 @@ export interface CatalogEntry {
   code: string;
   message: string;
   hint?: string | null;
-  docs: string;
+  /** The instance's docs page; the kit's own codes have none. */
+  docs?: string;
   /** Rule codes: the rule that raises it, and why the rule exists. */
   rule?: string | null;
   explanation?: string | null;

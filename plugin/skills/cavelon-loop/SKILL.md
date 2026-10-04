@@ -67,11 +67,18 @@ use it when you parse the result.
    schema does not have (with "did you mean"), and skills, tools, knowledge
    bases, solutions and models the tenant did not hold at the last pull
    (warnings: `cavelon pull` or `cavelon models list` refreshes that list).
+   After writing files by hand, run `cavelon fmt`: it fills in the defaults
+   the export writes, so the first `pull` after the apply rewrites only what
+   changed on the instance.
 4. **Preview**: `cavelon apply --env test` (or `--harness <name or slug>`). Nothing is
    imported yet. Read the preview: what is created, updated or deleted, which
    active solutions it reaches, what the target still needs (variables and
    secrets with the command that sets each, OAuth grants, runtime bindings,
-   trigger identities), loop budgets, and what the instance ignores.
+   trigger identities), loop budgets, and what the instance ignores. A recent
+   instance also lists each field it changes (`field changes`, `object.field:
+   old → new`) and the fields it does not apply ("not applied", with the
+   command that sets each). A blocked preview names each blocker with its
+   code, package file and path, and hint; `cavelon explain <code>` says more.
 5. **Confirm** exactly that preview: `cavelon apply --confirm <preview-id>`
    (the line `apply` printed, with the same `--env` and `--tenant`). Exit 4 means the target changed since the preview:
    preview again and confirm the new id. When the error lists `blockers`, the
@@ -101,6 +108,22 @@ use it when you parse the result.
 8. **Fix** what the results and traces show, and go back to step 2. Commit
    when a step works.
 
+## The default route
+
+A tenant answers its chat and widget, where a conversation names no solution,
+with one solution: its **default route**. A fresh tenant's default is an empty
+`default` solution, so a new solution built beside it answers nobody there.
+`cavelon harness list` marks the default (DEFAULT), and `cavelon activate`
+says when the solution it activated is not the default.
+
+- **Ask the person** whether the new solution should become the default. It
+  changes live traffic; never decide it yourself.
+- With their yes: `cavelon activate --make-default` (or `cavelon harness
+  default <solution>`) shows the change, naming the current default; show it,
+  then run the same command with `--confirm`.
+- `is_default` in `harnesses.yaml` is not applied by `apply`; the preview
+  lists it under "not applied".
+
 ## Show the person before confirming
 
 Confirm on your own only for a draft solution in a test environment. Stop and
@@ -115,7 +138,9 @@ show the preview to the person, and confirm only after they agree, when:
 
 The same holds for the other commands that take `--confirm`: without it they
 only show what would happen. Show it to the person before `cavelon trigger
-identity <trigger> <key> --confirm` (it gives a trigger standing authority), and
+identity <trigger> <key> --confirm` (it gives a trigger standing authority),
+before `cavelon harness default … --confirm` or `cavelon activate
+--make-default --confirm` (it moves live traffic), and
 before `cavelon sandbox seed … --confirm` or `cavelon loop cancel … --confirm` on
 anything but a test Sandbox or a run you started yourself.
 

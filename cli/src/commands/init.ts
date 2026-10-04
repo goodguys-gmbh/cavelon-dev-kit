@@ -7,10 +7,11 @@ import { CavelonError, ExitCode, usageError } from "../errors.js";
 import { confinedPath, realPath, within } from "../paths.js";
 import { readTextFile, withoutBom, writeFileAtomic } from "../fsutil.js";
 import { git } from "../git.js";
-import { ensureStateDir, STATE_DIR } from "../local-state.js";
+import { ensureStateDir, fileDigests, rememberAppliedFiles, STATE_DIR } from "../local-state.js";
 import { isGenerated, upsertBlock, upsertJsonEntry, type BlockResult, type CommentStyle } from "../markers.js";
 import { packageVersionOf } from "../package-check.js";
-import { defaultLayoutFor, safeSectionName, schemaSections, toYaml, writePackage, type WriteReport } from "../package-files.js";
+import { PERSONA_SECTION, personaYaml, sectionFields } from "../package-format.js";
+import { defaultLayoutFor, placeholdersOnly, safeSectionName, schemaSections, toYaml, writePackage, type WriteReport } from "../package-files.js";
 import { readPrincipal, readTenantless } from "../principal.js";
 import { ENV_DIR, parseProject, PROJECT_FILE, type ProjectConfig } from "../project.js";
 import { canAsk, readLine } from "../prompt.js";
@@ -100,6 +101,22 @@ async function ownFile(root: string, relative: string, content: string): Promise
   if ((await readTextFile(file)) !== undefined) return { file: relative, action: "unchanged" };
   await writeFileAtomic(file, content);
   return { file: relative, action: "created" };
+}
+
+/**
+ * A new solution's persona file: every field the schema lists, as commented
+ * placeholders, so whoever writes the package sees that the persona exists.
+ * It sets nothing until a field is uncommented. Recorded like a pulled file,
+ * so the first pull may replace it.
+ */
+async function personaPlaceholders(ctx: Context, project: ProjectConfig): Promise<FileAction | undefined> {
+  const { schema } = await schemaFor(ctx, project.packageVersion, false).catch(() => ({ schema: null }));
+  const fields = sectionFields(schema, PERSONA_SECTION);
+  if (!fields) return undefined;
+  const relative = `${project.layout.package}/${PERSONA_SECTION}.yaml`;
+  const action = await ownFile(project.root, relative, personaYaml(null, fields));
+  if (action.action === "created") await rememberAppliedFiles(project.root, await fileDigests(project.root, [relative]));
+  return action;
 }
 
 /** A generated fallback file: created, or replaced when the kit wrote it; never someone else's. */
@@ -403,11 +420,14 @@ function envYaml(name: string, harness: string | undefined): string {
 }
 
 async function hasPackageFiles(root: string, dir: string): Promise<boolean> {
+  let names: string[];
   try {
-    return (await fs.readdir(path.join(root, dir))).some((n) => /\.(ya?ml|json)$/i.test(n));
+    names = (await fs.readdir(path.join(root, dir))).filter((n) => /\.(ya?ml|json)$/i.test(n));
   } catch {
     return false;
   }
+  for (const name of names) if (!(await placeholdersOnly(root, `${dir}/${name}`))) return true;
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -478,7 +498,7 @@ async function importPackage(ctx: Context, project: ProjectConfig, from: string,
   const planned = await writePackage(project.root, project.layout, pkg, schema, { dryRun: true });
   const overwritten: string[] = [];
   for (const file of planned.written) {
-    if ((await readTextFile(path.join(project.root, file))) !== undefined) overwritten.push(file);
+    if ((await readTextFile(path.join(project.root, file))) !== undefined && !(await placeholdersOnly(project.root, file))) overwritten.push(file);
   }
   const conflicts = [...overwritten, ...planned.removed].sort((a, b) => a.localeCompare(b, "en"));
   if (conflicts.length && !force) {
@@ -609,6 +629,8 @@ async function runInit(ctx: Context, input: Parameters<CommandSpec["run"]>[1]) {
         ...(choices.length > 10 ? [`  … and ${choices.length - 10} more (\`cavelon harness list\`)`] : []),
       );
     } else next.unshift("Bring an existing solution into package/: cavelon pull --harness <name or slug>  (or write package files, then cavelon validate)");
+    const persona = await personaPlaceholders(ctx, project);
+    if (persona) actions.push(persona);
   }
   return { root, actions, next, imported: result, harness: chosenHarness };
 }

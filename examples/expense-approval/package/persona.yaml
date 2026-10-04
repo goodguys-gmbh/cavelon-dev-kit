@@ -1,0 +1,37 @@
+# The persona: who the assistant is, shared by every agent of this solution (an agent's
+# system_prompt says what that agent does). A commented field is not set; remove its #
+# to set it. Write the greeting and fallback texts in the language the assistant answers in.
+bot_name: Brightpeak Expenses
+# persona_prompt: null
+greeting_message: Hello! Ask me about the travel and expense policy, or tell me about an expense you want to submit.
+greeting_enabled: true
+# greeting_personalization_enabled: false
+# greeting_personalization_tone: personal
+language_hint: en
+# response_style: null
+fallback_message: I cannot help with that. For anything beyond the travel and expense policy, please ask the finance team.
+fallback_message_enabled: true
+# source_citation_prompt: null
+# source_citation_enabled: true
+# show_processing_steps: false
+# suggest_followups: false
+# suggestions_count: 3
+# image_prompt: null
+# image_prompt_enabled: false
+# action_buttons_enabled: false
+# action_buttons_prompt: null
+# teaser_messages: []
+# teaser_display_count: 3
+# widget_title: null
+# floating_button_teaser: null
+# disclaimer: null
+# image_upload_enabled: false
+# realtime_voice_enabled: false
+# block_notice_enabled: false
+# source_citation_widget_enabled: false
+# voice_recording_enabled: false
+# voice_answering_enabled: false
+# voice_id: null
+# voice_instructions: null
+# metadata: null
+# translations: null

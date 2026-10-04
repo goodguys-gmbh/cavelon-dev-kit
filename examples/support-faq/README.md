@@ -13,7 +13,8 @@ support-faq/
     harnesses.yaml      the solution "support-faq", a draft
     knowledge_bases.yaml the knowledge base "Support FAQ"
     skills.yaml         "Answer from the FAQ": the search tool and the knowledge base it searches
-    agents.yaml         the one agent, its model and prompt
+    agents.yaml         the one agent, its model and prompt: what it does
+    persona.yaml        who the assistant is: its name, voice, greeting and fallback
   tests/smoke.yaml    four test cases: three the FAQ answers, one it must decline
   env/test.yaml       where `cavelon apply --env test` goes
   env/prod.yaml       where `cavelon apply --env prod` goes (empty until you promote)

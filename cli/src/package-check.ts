@@ -4,6 +4,8 @@ import type { CatalogEntry, ErrorCatalog, PackageSchema } from "./contracts.js";
 import type { PublishedLimits } from "./limits.js";
 import type { TenantInventory } from "./commands/inventory.js";
 import { locate, schemaSections, type Finding, type PackageOnDisk } from "./package-files.js";
+import { PERSONA_SECTION, sectionFields } from "./package-format.js";
+import { kitErrorEntry } from "./kit-codes.js";
 import {
   checkModels,
   checkReferences,
@@ -43,6 +45,15 @@ const SEARCH_DOCS = "/docs/reference/builtin-tools#binding-knowledge-bases-to-se
  * other names in SEARCH_TOOL_KEYS are the ones older instances searched with.
  */
 const SEARCH_TOOL = "search_documents";
+
+/** A persona that shows a greeting or a fallback whose text is empty. */
+const PERSONA_MESSAGE_CODE = "persona_message_empty";
+const PERSONA_DOCS = "/docs/concepts/personas";
+/** Each persona switch and the text it shows; checked only where the instance's schema has both fields. */
+const PERSONA_MESSAGES = [
+  { switch: "greeting_enabled", text: "greeting_message", what: "greeting", when: "when a conversation starts" },
+  { switch: "fallback_message_enabled", text: "fallback_message", what: "fallback message", when: "when the assistant has no answer" },
+];
 
 /**
  * The codes `validate` reports itself. The instance's catalog wins where it
@@ -106,6 +117,15 @@ export const KIT_CODES: CatalogEntry[] = [
     docs: SEARCH_DOCS,
   },
   {
+    code: PERSONA_MESSAGE_CODE,
+    area: "package",
+    message: "The persona turns a greeting or a fallback message on, but its text is empty.",
+    hint:
+      "Write the text in persona.yaml (greeting_message, fallback_message) in the language the assistant answers in, or set " +
+      "greeting_enabled / fallback_message_enabled to false. The persona says who the assistant is for every agent of the solution.",
+    docs: PERSONA_DOCS,
+  },
+  {
     code: DUPLICATE_CODE,
     area: "package",
     message: "Two entries of one section have the same key (slug, or name for a knowledge base).",
@@ -149,14 +169,20 @@ export const KIT_CODES: CatalogEntry[] = [
   },
 ];
 
-/** One catalog entry by code: the instance's rule codes, its API error codes, then the kit's own. */
-export function catalogEntry(catalog: ErrorCatalog | null | undefined, code: string): (CatalogEntry & { kind: "rule" | "api" | "kit" }) | undefined {
+/**
+ * One catalog entry by code: the instance's rule codes, its API error codes,
+ * then the kit's own: `validate`'s codes ("kit"), and the errors the CLI
+ * raises itself ("cli").
+ */
+export function catalogEntry(catalog: ErrorCatalog | null | undefined, code: string): (CatalogEntry & { kind: "rule" | "api" | "kit" | "cli" }) | undefined {
   const rule = catalog?.rule_codes?.find((e) => e.code === code);
   if (rule) return { ...rule, kind: "rule" };
   const api = catalog?.api_error_codes?.find((e) => e.code === code);
   if (api) return { ...api, kind: "api" };
   const kit = KIT_CODES.find((e) => e.code === code);
-  return kit ? { ...kit, kind: "kit" } : undefined;
+  if (kit) return { ...kit, kind: "kit" };
+  const cli = kitErrorEntry(code);
+  return cli ? { ...cli, kind: "cli" } : undefined;
 }
 
 /** The package format version the manifest names. */
@@ -245,6 +271,7 @@ export function checkPackage(disk: PackageOnDisk, options: CheckOptions): Findin
   findings.push(...checkUnknownFields(disk, options.schema, findings));
   findings.push(...checkReferences(disk, options.inventory));
   findings.push(...checkModels(disk, options.inventory));
+  findings.push(...checkPersonaMessages(disk, options.schema));
 
   for (const finding of findings) {
     const entry = catalogEntry(options.catalog, finding.code);
@@ -454,5 +481,33 @@ function checkKnowledgeSearch(disk: PackageOnDisk): Finding[] {
         `add ${SEARCH_TOOL} to the ${first.via ? "skill's" : "agent's"} tool_assignments.`,
     });
   });
+  return findings;
+}
+
+/**
+ * A greeting or fallback that is on with no text: the instance shows nothing,
+ * or its own wording, where the solution meant its own. A switch the file
+ * leaves out counts as the schema's default.
+ */
+function checkPersonaMessages(disk: PackageOnDisk, schema: PackageSchema): Finding[] {
+  const persona = asObject(disk.package[PERSONA_SECTION]);
+  const fields = sectionFields(schema, PERSONA_SECTION);
+  if (!persona || !fields) return [];
+  const findings: Finding[] = [];
+  for (const pair of PERSONA_MESSAGES) {
+    if (!fields[pair.switch] || !fields[pair.text]) continue;
+    const on = persona[pair.switch] ?? fields[pair.switch]!.default;
+    const text = persona[pair.text];
+    if (on !== true || (typeof text === "string" && text.trim())) continue;
+    const at = locate(disk, `/${PERSONA_SECTION}/${pair.switch in persona ? pair.switch : pair.text}`);
+    findings.push({
+      code: PERSONA_MESSAGE_CODE,
+      severity: "warning",
+      ...at,
+      message:
+        `${pair.switch} is ${pair.switch in persona ? "true" : "true by default"}, but ${pair.text} is empty: ` +
+        `the solution shows no ${pair.what} of its own ${pair.when}. Write ${pair.text}, or set ${pair.switch} to false.`,
+    });
+  }
   return findings;
 }

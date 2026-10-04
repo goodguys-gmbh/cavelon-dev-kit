@@ -142,11 +142,20 @@ who may decide before you test, read the node's `approvers` in
 | `project_file_invalid`, `env_file_invalid` | 3 | `cavelon.yaml` or `env/<name>.yaml` is not valid YAML or has a wrong value. |
 | `project_file_has_secret` | 3 | `cavelon.yaml` contains something that looks like a token. Remove it, revoke the token, and use `cavelon login` or `CAVELON_TOKEN`. |
 | `no_solution` | 2 | The command needs a solution folder: run it in a folder with `cavelon.yaml`, or `cavelon init` first. |
+| `persona_message_empty` | 0 (a warning) | The persona turns a greeting or fallback on (`greeting_enabled`, `fallback_message_enabled`; on by default) but its text is empty. Write `greeting_message` or `fallback_message` in `package/persona.yaml`, in the language the assistant answers in, or turn it off. |
 | `solution_not_found` | 1 | The solution named by `--harness`, `cavelon.yaml` or an env file does not exist in this tenant, by name, slug or id. The error names the closest solutions (`details.candidates` with `--json`); `cavelon harness list` shows those that do, with name, slug and id. |
 
 A finding with a code of the instance's rules (such as a graph rule) is
-explained by `cavelon explain <code>`. Warnings never fail `validate`;
+explained by `cavelon explain <code>`, as are `cavelon`'s own codes (the ones on
+this page). For a code it does not know, `explain` names the closest known
+ones: a typo away, or with the same start. Warnings never fail `validate`;
 errors exit 3.
+
+The first `pull` after you applied hand-written files rewrites them when the
+instance's export spells them differently (defaults filled in, fields in
+another order); the values are the same. `cavelon fmt` brings the files into
+that form before you apply, and `cavelon fmt --check` exits 3 while one is
+not.
 
 On a development build of the instance, `validate` may report a field or
 section the instance has just gained as unknown: the build keeps its version
@@ -159,6 +168,7 @@ used: cached or read now, when, and its hash.
 
 | Code | Exit | Cause and fix |
 |---|---|---|
+| (blocked preview) | 3 | The preview has blockers and no preview id. Each blocker names its code, the package file and path, and a hint where the instance sends them; `cavelon explain <code>` says more. Fix them and run `cavelon apply` again. |
 | `import_preview_stale` | 4 | The solution changed on the instance after the preview. Nothing was imported. Run `cavelon apply` again and confirm the new preview. |
 | `package_requirements_changed` | 4 | The import's own check found something the preview did not; each blocker is listed. Nothing was imported. Fix the blockers and preview again. |
 | `preview_unknown` | 2 | No open preview with that id in this folder. `cavelon status` lists the open ones. |

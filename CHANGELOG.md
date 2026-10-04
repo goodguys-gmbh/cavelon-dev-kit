@@ -9,6 +9,43 @@ CLI, the skills and the plugin.
 
 ### Added
 
+- `cavelon harness default [solution]` (MCP tool `harness_default`) makes a
+  solution the tenant's default route, the one its chat and widget answer with
+  where no solution is named. Without `--confirm` it changes nothing and names
+  the current default and the one that would replace it
+  (`default → Default (default) now; would become Support (support)`).
+- `cavelon activate` says when the solution is not the tenant's default route,
+  and `--make-default` previews making it the default; with `--confirm` as
+  well, it changes it (`default_route` in `--json`). An instance that does not
+  mark the default says nothing of it.
+- `cavelon harness list` marks the default route in a DEFAULT column; an
+  instance that does not mark it leaves the column out (`is_default: null`).
+- `cavelon fmt` (MCP tool `fmt`) brings hand-written package files into the
+  form the instance's export gives them, from the package schema, offline:
+  the defaults it fills in, its field order, block lists. The first `pull`
+  after an apply then rewrites only what changed on the instance.
+  `--check` writes nothing and exits 3 when a file would change.
+- `pull` and `init` write `package/persona.yaml` with every field the
+  instance's schema lists; a field that is not set is a comment with its
+  default, so the persona's shape is visible. A file of placeholders only sets
+  nothing and sends nothing.
+- `cavelon validate` warns when the persona turns a greeting or fallback on
+  (or leaves it on by default) with an empty text (`persona_message_empty`).
+- `cavelon explain` knows `cavelon`'s own error codes (`operation_not_found`,
+  `uncommitted_changes`, …), and adds the command that does what the instance's
+  fix asks of an API route (for `package_schema_invalid`: `cavelon validate`
+  and `cavelon schema`).
+- `cavelon apply` shows the structured preview of recent instances: each
+  blocker with its code, package file, line and path, hint and the `cavelon
+  explain` command (`blocker_details`); each field it changes as
+  `object.field: old → new` (`field_changes` in `--json` and the MCP result);
+  and the fields it does not apply, with the command that sets each
+  (`not applied: harnesses[0].is_default (set with cavelon harness default
+  support)`; `not_applied`). An instance without them keeps today's output.
+- The authoring skill has a Persona section (who the assistant is, as opposed
+  to an agent's `system_prompt`; greeting and fallback in the content
+  language), and the loop skill tells the agent to ask the person before
+  making a solution the default route.
 - `cavelon schema [section]` (MCP tool `package_schema`) shows the package
   schema the instance publishes: without a section, every section with the file
   it is kept in; with one, its fields (type, required, allowed values, default)
@@ -49,6 +86,19 @@ CLI, the skills and the plugin.
 
 ### Changed
 
+- `cavelon apply` looks at `ready` before the preview id: a blocked preview
+  (which has no id on a recent instance) prints its blockers and no longer
+  warns to update the instance.
+- `cavelon explain` suggests, for a code it does not know, the codes a typo
+  away or with the same start, never one that shares only a common word in the
+  middle; `details.similar` in `--json`.
+- `cavelon api describe` shows the item fields of a body field that is a list
+  of objects, under `<field>[]` (`array of <Item>`).
+- `cavelon api` sends the folder's solution as `harness_id` to the persona
+  operations (`get_bot_persona`, `upsert_bot_persona`, …) when none is passed,
+  and says so: without it they reach the tenant's default route.
+- `pull` counts a field spelled `null` and one left out as the same, so a file
+  keeps its bytes when only that differs.
 - `cavelon tenant create` asks the instance first whether the token may enter
   Platform mode and, there, holds `tenants.manage`. When it does not, it stops
   with exit 7 before sending anything (`platform_mode_not_allowed`,

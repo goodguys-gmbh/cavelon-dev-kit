@@ -33,7 +33,8 @@ Codex with the Cavelon plugin; any agent `cavelon setup` or
 - before confirming a preview that reaches an active solution, goes to
   production (`--env prod`), deletes anything (`--mode replace`), or needs
   secrets, grants or identities;
-- before activating a solution;
+- before activating a solution, and before making it the tenant's default
+  route (the solution the tenant's chat and widget answer with);
 - before changing any limit or quota: it shows you the old and the new value
   and its reason, and you decide;
 - before binding a trigger's execution identity, or seeding or cancelling
@@ -214,7 +215,10 @@ runs.
     `cavelon activate` reads the solution's readiness checks and activates only
     when they pass; it prints each check and every warning. With a token that
     may activate, the agent runs it after you agree; otherwise you activate in
-    the Admin.
+    the Admin. When the solution is not the tenant's default route,
+    `activate` says so, and the agent asks you whether it should become the
+    default; `cavelon activate --make-default` shows the change, and only
+    `--confirm` makes it.
 
 To go to production, the agent prepares `env/prod.yaml` and previews with
 `cavelon apply --env prod`, then shows you the preview and waits. You confirm,

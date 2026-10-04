@@ -21,11 +21,14 @@ const INSTRUCTIONS =
   "loop_start, sandbox_seed, artifacts_export) return operation ids at once; read them with operation_status, which returns " +
   `the state at once, or waits up to its timeout (at most ${MCP_MAX_WAIT_MS / 1000} s) when given one, and reports waited_ms, ` +
   "and follow a loop with loop_iterations. What needs confirmation: apply imports only with confirm set to a preview's id; " +
-  "limits_set, models_set_limit, loop_cancel, sandbox_seed, trigger_identity, and api for an operation that is not read-only, " +
-  "return what they would do and change nothing without confirm: true; show the person that first. " +
+  "limits_set, models_set_limit, loop_cancel, sandbox_seed, trigger_identity, harness_default, activate with make_default, " +
+  "and api for an operation that is not read-only, " +
+  "return what they would do and change nothing without confirm: true; show the person that first. The default route " +
+  "(harness_default, activate's make_default) decides which solution the tenant's chat and widget answer with: live traffic, " +
+  "so ask the person, and confirm only with their yes. " +
   "kb_upload names files that match an active document of the knowledge base; with replace it replaces them, and where the " +
   "instance's upload cannot, it returns what it would deactivate and uploads nothing without confirm: true. " +
-  "init and pull change nothing on the instance (pull only reads it); they write files in the solution folder without confirm " +
+  "init, pull and fmt change nothing on the instance (pull only reads it); they write files in the solution folder without confirm " +
   "(pull refuses to replace a package file that changed since the last pull or apply and is not committed, unless force), " +
   "and the other changing tools act at once. api refuses, even with confirm, an operation the instance marks for a person " +
   "(x-cavelon-person-only; its reason is in the error), or on an instance that marks none, one that changes a secret, " +

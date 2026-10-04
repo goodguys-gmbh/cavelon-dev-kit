@@ -149,6 +149,7 @@ created   env/prod.yaml
 created   .cavelon/
 created   .gitignore
 created   AGENTS.md
+created   package/persona.yaml
 
 Next:
   Write the package files in package/, then: cavelon validate
@@ -168,8 +169,9 @@ instance: https://cavelon.example.com
 tenant: acme-support  # Acme Support, 4f6174cf-3060-4ff1-bd3c-8a8e7999256b
 harness: support-faq
 ``` `env/test.yaml` says where `apply --env test`
-goes. `.cavelon/` holds local state and is ignored by git. See
-[Concepts](concepts.md#the-solution-folder) for each file.
+goes. `.cavelon/` holds local state and is ignored by git. `package/persona.yaml`
+lists every field of the solution's persona as a comment, until you set one.
+See [Concepts](concepts.md#the-solution-folder) for each file.
 
 This solution is new and empty, so take its files from the example.
 
@@ -199,13 +201,18 @@ package/
   harnesses.yaml         the solution "support-faq", a draft
   knowledge_bases.yaml   the knowledge base "Support FAQ"
   skills.yaml            "Answer from the FAQ": the search tool, the knowledge base it searches, and how to answer
-  agents.yaml            one agent, its model and its prompt
+  agents.yaml            one agent, its model and its prompt: what it does
+  persona.yaml           who the assistant is: its name, voice, greeting and fallback
 tests/
   smoke.yaml             four test cases: three the FAQ answers, one it must decline
 seeds/faq/               three FAQ pages to upload
 ```
 
-Each file under `package/` is one section of the instance's package schema.
+Each file under `package/` is one section of the instance's package schema
+(copying `package/` replaces the `persona.yaml` that `init` wrote).
+The persona says who the assistant is for every agent of the solution; an
+agent's `system_prompt` says what that agent does. See
+[Persona](concepts.md#persona).
 A knowledge base reaches the agent only through a search tool: the skill
 carries the built-in `search_documents` in its `tool_assignments`, and names the
 knowledge base it searches. `cavelon validate` warns about an agent that is
@@ -245,7 +252,14 @@ schema does not have ("did you mean temperature?"), a skill, tool, knowledge
 base or solution that is neither in the package nor among what the tenant held
 at the last pull, and a model outside the tenant's model list.
 
-`cavelon explain <code>` looks any code up in the instance's error catalog.
+`cavelon explain <code>` looks any code up in the instance's error catalog, and
+knows `cavelon`'s own codes too; for a code it does not know, it names the
+closest ones.
+
+When you write package files by hand, `cavelon fmt` brings them into the form
+the instance's export gives them (field order, the defaults it fills in), so
+the first `cavelon pull` after an apply shows only what changed on the
+instance.
 
 ## 6. Preview, then apply
 
@@ -402,6 +416,25 @@ warning; a warning does not block activation (`--json`: `checks` and
 `warnings`). A solution that is not ready exits 3 and lists its
 blockers. A token without **May activate** is refused before anything is sent
 (exit 7): a person then activates in the Admin, or creates a token that may.
+
+`activate` also says whether the solution is the tenant's **default route**,
+the one the tenant's chat and widget answer with where no solution is named:
+
+```text
+Not the default route: the tenant's chat and widget answer with Default (default) where a conversation names no solution.
+Ask the person whether Support FAQ (support-faq) should answer there; that changes live traffic. Preview: cavelon harness default support-faq
+```
+
+To make it the default, preview the change, then confirm it:
+
+```bash
+cavelon activate --make-default
+cavelon activate --make-default --confirm
+```
+
+`cavelon harness default <solution>` does the same for a solution that is
+already active, and `cavelon harness list` marks the default in its DEFAULT
+column. See [Default route](concepts.md#default-route).
 
 ## With your coding agent
 

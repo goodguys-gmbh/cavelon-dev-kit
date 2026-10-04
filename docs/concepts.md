@@ -84,6 +84,30 @@ A solution is a **draft** while you build it and **active** once it is live
 list` shows the tenant's solutions; `harness new` and `harness clone` create
 drafts.
 
+### Persona
+
+Each solution has a **persona**: who the assistant is, for every agent of the
+solution. Its name (`bot_name`), its voice and boundaries (`persona_prompt`),
+the greeting a conversation opens with, the fallback it gives when it has no
+answer, its language and the widget's copy. An agent's `system_prompt` says
+what that one agent does. The persona is `package/persona.yaml`: `pull` and
+`init` write every field the instance's schema lists, an unset one as a
+comment with its default. `cavelon validate` warns when a greeting or fallback
+is on but its text is empty (`persona_message_empty`). The instance's page
+`concepts/personas` (`cavelon docs get concepts/personas`) explains the rest.
+
+### Default route
+
+A tenant answers where a conversation names no solution (its chat, its widget)
+with one solution, its **default route**. A new tenant's default is an empty
+`default` solution, so a solution built beside it answers nobody there until it
+becomes the default. `cavelon harness list` marks it (DEFAULT); `cavelon
+activate` says when the solution it activated is not the default, and
+`cavelon harness default <solution>` (or `activate --make-default`) makes it the
+default, showing the current one first and changing it only with `--confirm`.
+That changes live traffic, so a person decides it. `is_default` in
+`harnesses.yaml` is not applied by an import.
+
 ## Package
 
 A **package** is a solution, or a whole tenant's configuration, as one
@@ -171,6 +195,12 @@ Changing a solution always takes two steps:
 2. **`cavelon apply --confirm <id>`** imports exactly that preview, even if the
    files changed since (it warns).
 
+A recent instance's preview also lists each field it would change
+(`object.field: old → new`), the fields an import does not apply (such as a
+solution's `status` or `is_default`, each with the command that sets it), and,
+when it is blocked, each blocker with its code, package file and path, and a
+hint. An older instance's preview shows what it publishes.
+
 If the target changed after the preview, the instance refuses the import
 (`import_preview_stale`, exit 4) and nothing is imported: preview again. If the
 import's own check finds something the preview did not, it refuses with its
@@ -183,8 +213,8 @@ before confirming, and the Cavelon skills make the agent do so.
 
 Other commands that delete or overwrite follow the same pattern: `limits set`,
 `models set-limit`, `variables delete`, `secrets delete`, `loop cancel`,
-`sandbox seed` and `trigger identity` show what they would do, and act only
-with `--confirm`.
+`sandbox seed`, `trigger identity`, `harness default` and `activate
+--make-default` show what they would do, and act only with `--confirm`.
 
 ## Operations and waiting
 

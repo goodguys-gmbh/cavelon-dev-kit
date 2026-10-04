@@ -23,6 +23,7 @@ expense-approval/
     knowledge_bases.yaml  the knowledge base "Expense Policy"
     skills.yaml           "Look up the policy": the search tool and the knowledge base it searches
     agents.yaml           the expense assistant (the entry point) and the policy check, both with structured output
+    persona.yaml          who the assistant is: its name, greeting and fallback
     registry_entities.yaml the pipeline: chat start, two routers, a transform, the approval and three outputs
   tests/acceptance.yaml eight cases: policy questions, an incomplete request, a compliant one,
                         two that violate a rule, and the approval step
