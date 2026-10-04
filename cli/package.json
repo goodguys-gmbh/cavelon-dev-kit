@@ -28,7 +28,7 @@
     "test": "vitest run",
     "docs:commands": "vitest run test/commands-doc.test.ts --update",
     "prepack": "npm run build",
-    "build:executable": "node scripts/build-executable.mjs",
+    "build:executable": "bun scripts/build-executable.mjs",
     "test:executable": "vitest run test/executable.test.ts"
   },
   "dependencies": {

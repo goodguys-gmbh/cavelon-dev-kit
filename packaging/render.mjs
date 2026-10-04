@@ -1,9 +1,11 @@
-// Write the package manager files for one release from its checksums.txt:
+// Write the package manager files for the release in ./release, from its
+// checksums.txt and the version in cli/package.json (which the release
+// workflow checks against the tag). Run it from the repository's root:
 //
-//   node packaging/render.mjs homebrew --version 0.1.3 --checksums checksums.txt --out <dir>
-//     <dir>/Formula/cavelon.rb, the formula for the tap goodguys-gmbh/homebrew-cavelon
-//   node packaging/render.mjs winget --version 0.1.3 --checksums checksums.txt --out <dir>
-//     <dir>/manifests/g/goodguys/Cavelon/0.1.3/*.yaml, the manifest for microsoft/winget-pkgs
+//   node packaging/render.mjs homebrew [--base-url <url>]
+//     packaging-out/homebrew/Formula/cavelon.rb, the formula for the tap goodguys-gmbh/homebrew-cavelon
+//   node packaging/render.mjs winget [--base-url <url>]
+//     packaging-out/winget/manifests/g/goodguys/Cavelon/<version>/*.yaml, the manifest for microsoft/winget-pkgs
 //
 // --base-url names the folder the executables are downloaded from (default: the
 // GitHub release of that version); CI points it at a local server to test.
@@ -17,26 +19,19 @@ const DESCRIPTION = "CLI and MCP server for building Cavelon solutions with a co
 // winget's identifier: Publisher.Package. Choose it for good before the first submission.
 const WINGET_ID = "goodguys.Cavelon";
 const WINGET_MANIFEST_VERSION = "1.9.0";
+const OUT = path.resolve("packaging-out");
 
-const { values, positionals } = parseArgs({
-  allowPositionals: true,
-  options: {
-    version: { type: "string" },
-    checksums: { type: "string" },
-    "base-url": { type: "string" },
-    out: { type: "string" },
-  },
-});
+const { values, positionals } = parseArgs({ allowPositionals: true, options: { "base-url": { type: "string" } } });
 const [kind] = positionals;
-const version = (values.version ?? "").replace(/^v/, "");
-if (!["homebrew", "winget"].includes(kind) || !/^\d+\.\d+\.\d+$/.test(version) || !values.checksums || !values.out) {
-  throw new Error("Usage: node packaging/render.mjs homebrew|winget --version X.Y.Z --checksums checksums.txt --out <dir> [--base-url <url>]");
+const version = JSON.parse(readFileSync(path.resolve("cli", "package.json"), "utf8")).version;
+if (!["homebrew", "winget"].includes(kind) || !/^\d+\.\d+\.\d+$/.test(version)) {
+  throw new Error("Usage, from the repository's root: node packaging/render.mjs homebrew|winget [--base-url <url>]");
 }
 let base = values["base-url"] ?? `${HOMEPAGE}/releases/download/v${version}`;
 while (base.endsWith("/")) base = base.slice(0, -1);
 
 const sums = new Map();
-for (const line of readFileSync(values.checksums, "utf8").split("\n")) {
+for (const line of readFileSync(path.resolve("release", "checksums.txt"), "utf8").split("\n")) {
   const [sum, name] = line.trim().split(/\s+/);
   if (sum && name) sums.set(name.replace(/^\*/, ""), sum.toLowerCase());
 }
@@ -46,10 +41,10 @@ function asset(name) {
   return { url: `${base}/${name}`, sha256: sum };
 }
 
-function write(file, content) {
-  mkdirSync(path.dirname(file), { recursive: true });
-  writeFileSync(file, content);
-  process.stdout.write(`${file}\n`);
+function write(dir, name, content) {
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(path.join(dir, name), content);
+  process.stdout.write(`${path.join(dir, name)}\n`);
 }
 
 if (kind === "homebrew") {
@@ -58,7 +53,8 @@ if (kind === "homebrew") {
     return `      url "${a.url}"\n      sha256 "${a.sha256}"`;
   };
   write(
-    path.join(values.out, "Formula", "cavelon.rb"),
+    path.join(OUT, "homebrew", "Formula"),
+    "cavelon.rb",
     `# Written by the release workflow of ${HOMEPAGE} (packaging/render.mjs).
 class Cavelon < Formula
   desc "${DESCRIPTION}"
@@ -96,10 +92,11 @@ end
   );
 } else {
   const exe = asset("cavelon-windows-x64.exe");
-  const dir = path.join(values.out, "manifests", WINGET_ID[0].toLowerCase(), ...WINGET_ID.split("."), version);
+  const dir = path.join(OUT, "winget", "manifests", WINGET_ID[0].toLowerCase(), ...WINGET_ID.split("."), version);
   const header = (type) => `# yaml-language-server: $schema=https://aka.ms/winget-manifest.${type}.${WINGET_MANIFEST_VERSION}.schema.json\n`;
   write(
-    path.join(dir, `${WINGET_ID}.yaml`),
+    dir,
+    `${WINGET_ID}.yaml`,
     `${header("version")}
 PackageIdentifier: ${WINGET_ID}
 PackageVersion: ${version}
@@ -109,7 +106,8 @@ ManifestVersion: ${WINGET_MANIFEST_VERSION}
 `,
   );
   write(
-    path.join(dir, `${WINGET_ID}.installer.yaml`),
+    dir,
+    `${WINGET_ID}.installer.yaml`,
     `${header("installer")}
 PackageIdentifier: ${WINGET_ID}
 PackageVersion: ${version}
@@ -125,7 +123,8 @@ ManifestVersion: ${WINGET_MANIFEST_VERSION}
 `,
   );
   write(
-    path.join(dir, `${WINGET_ID}.locale.en-US.yaml`),
+    dir,
+    `${WINGET_ID}.locale.en-US.yaml`,
     `${header("defaultLocale")}
 PackageIdentifier: ${WINGET_ID}
 PackageVersion: ${version}

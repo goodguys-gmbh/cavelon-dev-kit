@@ -138,9 +138,10 @@ since 2023; replace the signing step with that provider's tool then.
    **Contents: read and write** on that repository only, and store it as the
    secret `HOMEBREW_TAP_TOKEN` of the `release` environment.
 3. The next release writes `Formula/cavelon.rb` (`packaging/render.mjs
-   homebrew`) and pushes it. To publish the current release right away, run
-   that script with the release's `checksums.txt` and commit the formula by
-   hand.
+   homebrew`) and pushes it. To publish the current release right away, put
+   its `checksums.txt` into `release/`, run that script from the repository's
+   root at the release's tag, and commit `packaging-out/homebrew/Formula/cavelon.rb`
+   to the tap by hand.
 4. Announce it: the changelog, and in `docs/installation.md` drop the note that
    the tap is being prepared.
 

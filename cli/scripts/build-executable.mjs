@@ -8,7 +8,7 @@
 // is the one npm installed for this system, which is why each executable is built
 // on its own platform rather than cross-compiled.
 //
-//   node scripts/build-executable.mjs      (bun must be on the PATH)
+//   bun scripts/build-executable.mjs       (npm run build:executable)
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -91,7 +91,9 @@ if (OS === "windows") {
   );
 }
 
-const result = spawnSync("bun", args, { cwd: cli, stdio: "inherit" });
-if (result.error) throw new Error(`Could not run bun: ${result.error.message}. Install Bun (https://bun.sh).`);
+// Run by Bun, so the bun that builds is the one running this script.
+if (!process.versions.bun) throw new Error("Run this with Bun (https://bun.sh): npm run build:executable.");
+const result = spawnSync(process.execPath, args, { cwd: cli, stdio: "inherit" });
+if (result.error) throw new Error(`Could not run ${process.execPath}: ${result.error.message}.`);
 if (result.status !== 0) process.exit(result.status ?? 1);
 process.stdout.write(`${outfile}\n`);
