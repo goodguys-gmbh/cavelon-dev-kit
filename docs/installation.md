@@ -66,6 +66,15 @@ Windows, the one you installed from works at once), then check it:
 cavelon --version
 ```
 
+```text
+0.1.3
+installed with: the install script (/Users/ada/.local/bin/cavelon)
+update with: curl -fsSL https://github.com/goodguys-gmbh/cavelon-dev-kit/releases/latest/download/install.sh | sh
+```
+
+The first line is the version alone, for scripts that compare it; the others
+say how this `cavelon` was installed and how to update it.
+
 Running the line again updates `cavelon` to the latest release, and changes
 nothing else.
 
@@ -308,6 +317,34 @@ changed.
 
 ## Updating
 
+`cavelon --version` says how your `cavelon` was installed and the command that
+updates it. When a newer release is out, `cavelon` also says so after a
+command, at most once a day, with that command:
+
+```text
+cavelon 0.1.4 is out; this is 0.1.3. Update with:
+  brew upgrade cavelon
+```
+
+| Installed with | `cavelon` recognises it by | Update with |
+|---|---|---|
+| the one-line install | an executable named `cavelon` (`cavelon.exe`) | the install line again; with `--dir` (or `CAVELON_INSTALL_DIR`) when it is not in the default folder |
+| Homebrew | an executable in Homebrew's `Cellar` | `brew upgrade cavelon` |
+| winget | an executable in winget's `Packages` folder | `winget upgrade goodguys.Cavelon` |
+| a download from the release page | an executable that kept the release's file name | download the new one |
+| `npm i -g` | the package in npm's global folder | `npm i -g @cavelon/cli` |
+| `npx` | the package in npx's cache | nothing: `npx` starts the newest release each time |
+
+It looks the latest release up where that way of installing gets it from: the
+GitHub release for the executables (`api.github.com`), the npm registry for
+npm. The request carries no token and nothing about you or your solutions, waits
+at most 1.5 seconds beside the command, and its answer is kept for a day in the
+cache folder (`update-check.json`). A failed lookup stays silent and is tried
+again the next day. It never runs with `--json`, in MCP mode, in CI (with `CI`
+or another CI service's variable set), when the output is not a terminal (an
+agent running `cavelon`), for `npx` or for a build from a clone. To turn it
+off, set `CAVELON_NO_UPDATE_CHECK=1`.
+
 Run the one-line install again: it replaces `cavelon` with the latest release
 (or the one `--version` names) and changes nothing else.
 
@@ -331,7 +368,8 @@ cavelon init --update                                   # in a solution set up w
 ```
 
 Through `npx`, `cavelon` needs no update: `npx -y @cavelon/cli` looks up the
-newest release each time it starts. `cavelon --version` shows which one runs.
+newest release each time it starts (`@cavelon/cli@0.1`: the newest 0.1
+release). `cavelon --version` shows which one runs.
 
 `cavelon` learns each instance's API, package schema and docs from what the
 instance publishes, so a new Cavelon version on the server does not need a new

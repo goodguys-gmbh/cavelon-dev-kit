@@ -5,6 +5,8 @@ import { asCavelonError, CavelonError, ExitCode, usageError } from "./errors.js"
 import { blockerLines } from "./format.js";
 import type { Io } from "./io.js";
 import { KIT_VERSION } from "./version.js";
+import { currentInstall, installLabel, type Install } from "./install.js";
+import { startUpdateCheck, type UpdateCheckOptions } from "./update-check.js";
 import { COMMANDS } from "./commands/index.js";
 
 /**
@@ -12,16 +14,17 @@ import { COMMANDS } from "./commands/index.js";
  * here prompts; `login` alone reads a hidden token, and only from a terminal.
  */
 
-export async function run(argv: string[], io: Io, commands: CommandSpec[] = COMMANDS): Promise<number> {
+export async function run(argv: string[], io: Io, commands: CommandSpec[] = COMMANDS, updates: UpdateCheckOptions = {}): Promise<number> {
   const json = argv.includes("--json");
   let ctx: Context | undefined;
+  let notice: Promise<string | undefined> | undefined;
   try {
     if (argv.length === 0) {
       io.stderr.write(rootHelp(commands));
       return ExitCode.usage;
     }
     if (argv[0] === "--version" || argv[0] === "-v" || argv[0] === "version") {
-      io.stdout.write(json ? `${JSON.stringify({ version: KIT_VERSION })}\n` : `${KIT_VERSION}\n`);
+      io.stdout.write(versionText(updates.install ?? currentInstall(io.env), json));
       return ExitCode.ok;
     }
     const found = findCommand(argv, commands);
@@ -52,14 +55,40 @@ export async function run(argv: string[], io: Io, commands: CommandSpec[] = COMM
       tenant: typeof parsed.options.tenant === "string" ? parsed.options.tenant : undefined,
       solutionEnv: spec.options?.env && typeof parsed.options.env === "string" ? parsed.options.env : undefined,
     });
+    notice = startUpdateCheck({
+      io,
+      version: KIT_VERSION,
+      install: updates.install ?? currentInstall(io.env),
+      json: ctx.json,
+      command: spec.name,
+      fetch: updates.fetch,
+    });
     const result = await spec.run(ctx, parsed);
     printResult(ctx, result);
+    await printNotice(io, notice);
     return result.exitCode ?? ExitCode.ok;
   } catch (error) {
     const err = asCavelonError(error);
     printError(io, ctx?.json ?? json, err, ctx?.warnings ?? []);
+    await printNotice(io, notice);
     return err.exitCode;
   }
+}
+
+/** The version on the first line, alone, for scripts that compare it; then how it was installed. */
+function versionText(install: Install, json: boolean): string {
+  if (json) {
+    return `${JSON.stringify({ version: KIT_VERSION, install: { method: install.method, path: install.path, update: install.update ?? null } })}\n`;
+  }
+  const lines = [KIT_VERSION, `installed with: ${installLabel(install.method)} (${install.path})`];
+  if (install.update) lines.push(`update with: ${install.update}`);
+  else if (install.advice) lines.push(install.advice);
+  return `${lines.join("\n")}\n`;
+}
+
+async function printNotice(io: Io, notice: Promise<string | undefined> | undefined): Promise<void> {
+  const text = await notice;
+  if (text) io.stderr.write(`\n${text}`);
 }
 
 function findCommand(argv: string[], commands: CommandSpec[]): { spec: CommandSpec; rest: string[] } | undefined {

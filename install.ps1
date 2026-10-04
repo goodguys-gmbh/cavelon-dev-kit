@@ -115,7 +115,8 @@ function Install-Cavelon {
     }
     $ran = Invoke-Cavelon $download @('--version')
     if ($ran.Code -ne 0) { throw "The downloaded cavelon does not run on this system: $($ran.Text)" }
-    $newVersion = $ran.Text
+    # The first line is the version; later releases add how cavelon was installed.
+    $newVersion = ($ran.Text -split "`n")[0].Trim()
 
     # --- install --------------------------------------------------------------
 
@@ -126,7 +127,7 @@ function Install-Cavelon {
     $oldVersion = $null
     if (Test-Path -LiteralPath $target) {
       $ran = Invoke-Cavelon $target @('--version')
-      if ($ran.Code -eq 0) { $oldVersion = $ran.Text } else { $oldVersion = 'an earlier version' }
+      if ($ran.Code -eq 0) { $oldVersion = ($ran.Text -split "`n")[0].Trim() } else { $oldVersion = 'an earlier version' }
       # A running cavelon (an agent's MCP server) cannot be overwritten, but it
       # can be renamed; the next run removes the old file.
       Move-Item -LiteralPath $target -Destination $old -Force

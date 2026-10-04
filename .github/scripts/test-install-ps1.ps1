@@ -43,7 +43,7 @@ try {
   Write-Host "== irm | iex, in $shell $($PSVersionTable.PSVersion)"
   $out = Install-Piped
   Write-Host $out
-  Assert ((& $exe --version) -eq $Version) "installed $Version"
+  Assert (@(& $exe --version)[0] -eq $Version) "installed $Version"
   Assert ($out -match "Installed cavelon $Version") 'said what it installed'
   Assert ($out -match 'Next: ') 'printed the next step'
   Assert ((Count-InUserPath $dir) -eq 1) 'added the folder to the user PATH once'
@@ -59,7 +59,7 @@ try {
     Write-Host $out
     Assert ($out -match 'up to date') 'said it is up to date'
     Assert ((Count-InUserPath $dir) -eq 1) 'the user PATH still names the folder once'
-    Assert ((& $exe --version) -eq $Version) 'the new cavelon runs'
+    Assert (@(& $exe --version)[0] -eq $Version) 'the new cavelon runs'
   } finally {
     Stop-Process -Id $running.Id -Force -ErrorAction SilentlyContinue
   }
@@ -76,7 +76,7 @@ try {
   $other = Join-Path $env:RUNNER_TEMP "cavelon-$shell-other"
   $code = Install-File @('-InstallDir', $other, '-NoModifyPath')
   Assert ($code -eq 0) "exit code 0 (was $code)"
-  Assert ((& (Join-Path $other 'cavelon.exe') --version) -eq $Version) "installed into $other"
+  Assert (@(& (Join-Path $other 'cavelon.exe') --version)[0] -eq $Version) "installed into $other"
   Assert ((Count-InUserPath $other) -eq 0) 'did not change the user PATH'
 
   Write-Host "install.ps1 in ${shell}: all checks passed"

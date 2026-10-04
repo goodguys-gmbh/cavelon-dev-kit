@@ -706,6 +706,7 @@ an agent only with a new plugin or `init --update`. With `cavelon` installed,
 | `~/.config/cavelon/config.json` | the current instance, the tenant chosen with `use`, which store holds the token. Never a token. |
 | `~/.config/cavelon/credentials.json` | the token per instance (0600), only where there is no OS credential store |
 | `~/.cache/cavelon/<instance>/<version>/` | the instance's capabilities, OpenAPI, error catalog, package schema and docs index |
+| `~/.cache/cavelon/update-check.json` | when the latest release was last looked up and announced; `CAVELON_NO_UPDATE_CHECK=1` turns the check off |
 
 `CAVELON_CONFIG_DIR` and `CAVELON_CACHE_DIR` move them; `XDG_CONFIG_HOME` and
 `XDG_CACHE_HOME` are honoured. `CAVELON_CREDENTIAL_STORE=file` skips the OS store.
