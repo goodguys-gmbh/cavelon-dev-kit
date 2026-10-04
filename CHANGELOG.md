@@ -7,6 +7,14 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Changed
+
+- The getting-started guide and the security page say which token ceiling to
+  pick for which task (Observer, Builder, Tenant Owner, Platform mode only for
+  platform operators) and to keep **May activate** off unless the token should
+  put solutions live, and link the instance's page on personal access tokens.
+- CI pins every action by commit, like the release workflow.
+
 ## [0.1.3] - 2026-10-04
 
 The easy start: install with one line on macOS, Linux or Windows without

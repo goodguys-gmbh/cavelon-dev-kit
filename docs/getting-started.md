@@ -27,9 +27,23 @@ In Cavelon, open your user menu → **Personal access tokens** (the page
 
 - give it a name you will recognise, such as `laptop`;
 - pick an expiry;
+- pick the lowest ceiling that does the job; the token never gets more than
+  your own rights, and the dialog recommends one per task:
+
+  | Task | Ceiling |
+  |---|---|
+  | read-only checks (`status`, `limits`, `trace`) | **Observer** |
+  | building and testing a solution (this tutorial) | **Builder** |
+  | changing the tenant's limits or settings | **Tenant Owner** |
+
+  Leave **Platform mode** off unless you operate the platform;
 - tick **May activate** only if this token may put solutions live. For step 11
   of this tutorial it needs to; for day-to-day building and testing it does
   not.
+
+Your instance's page on personal access tokens explains the ceilings:
+`/docs/administration/personal-access-tokens` on your instance, or
+`cavelon docs get administration/personal-access-tokens` once you are logged in.
 
 The token starts with `cvpat_` and is shown once. Keep the page open until the
 next step.
