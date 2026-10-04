@@ -306,7 +306,7 @@ async function initTenant(ctx: Context, session: Session): Promise<InitTenant | 
   if (reach && !reach.platform && (canAsk(ctx) || !reach.tenantId)) {
     const choice = await chooseTenant(ctx, client, reach);
     if (choice.kind === "none") throw noTenantError(client.url, false);
-    if (choice.kind === "open") {
+    if (choice.kind !== "chosen") {
       throw tenantOpenError(client.url, reach, "A solution belongs to one tenant. ", {
         line: (ref) => cavelonCommand("init", "--tenant", ref),
         template: "cavelon init --tenant <name or slug>",

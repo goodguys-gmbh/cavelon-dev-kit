@@ -81,7 +81,7 @@ Store a token for an instance (a person runs this, never the agent).
 cavelon login [options]
 ```
 
-Asks for the token without echoing it, or reads it from standard input with --token-stdin. It is never an argument. Create a personal access token (cvpat_…) on /account/access-tokens; a tenant API key (cbp_…) also works. The token is kept in the operating system's credential store, or in a file only you can read. Without --tenant, login finds the tenants the token reaches: one is used; from several, a person chooses on a terminal by number or name; without a terminal the token is stored and login prints one `cavelon use` line per tenant (exit 2). An operator's token that reaches every tenant asks for part of the tenant's name. --tenant takes the tenant's name, slug or id. An older instance that lists no tenants places the token itself, or needs --tenant &lt;tenant-id&gt;.
+Asks for the token without echoing it, or reads it from standard input with --token-stdin. It is never an argument. Create a personal access token (cvpat_…) on /account/access-tokens; a tenant API key (cbp_…) also works. The token is kept in the operating system's credential store, or in a file only you can read. Without --tenant, login finds the tenants the token reaches: one is used; from several, a person chooses on a terminal by number or name; without a terminal the token is stored and login prints one `cavelon use` line per tenant (exit 2). An operator's token that reaches every tenant asks for part of the tenant's name to start in; Enter leaves the choice for later (`cavelon use`). --tenant takes the tenant's name, slug or id. An older instance that lists no tenants places the token itself, or needs --tenant &lt;tenant-id&gt;.
 
 | Option | Description |
 |---|---|

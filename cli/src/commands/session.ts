@@ -89,7 +89,7 @@ export const login: CommandSpec = {
     "The token is kept in the operating system's credential store, or in a file only you can read.\n" +
     "Without --tenant, login finds the tenants the token reaches: one is used; from several, a person chooses on a terminal by number or name; " +
     "without a terminal the token is stored and login prints one `cavelon use` line per tenant (exit 2). " +
-    "An operator's token that reaches every tenant asks for part of the tenant's name. " +
+    "An operator's token that reaches every tenant asks for part of the tenant's name to start in; Enter leaves the choice for later (`cavelon use`). " +
     "--tenant takes the tenant's name, slug or id. An older instance that lists no tenants places the token itself, or needs --tenant <tenant-id>.",
   readOnly: false,
   mcpTool: false,
@@ -134,15 +134,20 @@ export const login: CommandSpec = {
     const reach = listsTenants(tenantless) && !tenantless.platform ? tenantless : undefined;
     /** Several tenants, nobody to ask, and none the instance chooses: stored, then refused with one line per tenant. */
     let open = false;
+    /** Every tenant, and the person chose to pick one later: stored without a tenant, as without a terminal, but not refused. */
+    let later = false;
     if (reach) {
-      const choice = await chooseTenant(ctx, client, reach);
+      const choice = await chooseTenant(ctx, client, reach, { later: true });
       if (choice.kind === "none") throw noTenantError(url);
       if (choice.kind === "chosen") {
         const t = choice.tenant;
         tenant = { ref: tenantRef(t), id: t.id, ...(t.name ? { name: t.name } : {}), ...(t.slug ? { slug: t.slug } : {}) };
         chosen = choice.how;
         client.target.tenantId = t.id;
-      } else if (!reach.tenantId) open = true;
+      } else if (!reach.tenantId) {
+        open = true;
+        later = choice.kind === "later";
+      }
     }
     // Check the token before storing it: a refused token is never kept. Who it
     // is comes first, so a token refused without a tenant is named as that.
@@ -189,7 +194,15 @@ export const login: CommandSpec = {
     );
     if (ctx.io.env.CAVELON_TOKEN) ctx.warn("CAVELON_TOKEN is set and takes precedence over this login.");
     if (store.kind === "file") ctx.warn("No operating-system credential store; the token is in a file only you can read (0600).");
-    if (open) throw tenantOpenError(url, reach!, `The token is stored for ${url}, but no tenant is chosen yet. `);
+    if (open && !later) throw tenantOpenError(url, reach!, `The token is stored for ${url}, but no tenant is chosen yet. `);
+    if (later) {
+      return {
+        data: { instance: url, credential: { kind, store: store.kind }, owner: null, tenant: null, instance_version: null, contracts: null },
+        text:
+          `Logged in to ${url}. Token stored in the ${store.kind === "keyring" ? "credential store" : "user-only file"}. ` +
+          "No tenant is chosen yet: `cavelon use <name or slug>` chooses one; `cavelon tenant list --search <part of the name>` finds its slug.",
+      };
+    }
 
     if (needsTenant) {
       ctx.warn("This token works in Platform mode; choose a tenant with `cavelon use <tenant>` before tenant commands.");
@@ -435,7 +448,7 @@ export const use: CommandSpec = {
       }
       const choice = await chooseTenant(ctx, client, tenantless);
       if (choice.kind === "none") throw noTenantError(url, false);
-      if (choice.kind === "open") throw tenantOpenError(url, tenantless, "");
+      if (choice.kind !== "chosen") throw tenantOpenError(url, tenantless, "");
       const t = choice.tenant;
       ref = tenantRef(t);
       found = { id: t.id, ...(t.name ? { name: t.name } : {}), ...(t.slug ? { slug: t.slug } : {}) };

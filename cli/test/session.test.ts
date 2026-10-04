@@ -250,13 +250,43 @@ describe("login without --tenant", () => {
     const token = server.addToken({ kind: "pat", tenantIds: [], reachesAll: true, globalRole: "superadmin" });
     const result = await atTerminal(["login", "--instance", server.url], token, "demo", "long");
     expect(result.code, result.stderr).toBe(0);
-    expect(result.stderr).toContain(`This token reaches every tenant on ${server.url}.`);
-    expect(result.stderr).toContain("Which tenant? (type part of its name)");
+    expect(result.stderr).toContain(
+      `This token works in every tenant on ${server.url}, one at a time: \`cavelon use\` switches, and --tenant or \`tenant:\` in cavelon.yaml choose one per command or per solution folder.`,
+    );
+    expect(result.stderr).toContain("Which tenant to start in? (type part of its name, or press Enter to choose later)");
     expect(result.stderr).toMatch(/2 match "demo":\n {3}1 {2}Demo: Long Document Summaries {2}demo-long-document-summaries/);
     expect(result.stdout).toContain(`Using tenant Demo: Long Document Summaries (demo-long-document-summaries, ${summaries})`);
     // The search went to the instance, without a tenant.
     const searches = server.state.requests.filter((r) => r.path === "/api/v1/meta/principal" && r.query.get("search"));
     expect(searches.map((r) => [r.query.get("search"), r.headers["x-tenant-id"]])).toEqual(expect.arrayContaining([["demo", undefined]]));
+  });
+
+  it("an operator's token that reaches every tenant: Enter on a terminal logs in without a tenant, to choose one later", async () => {
+    const token = server.addToken({ kind: "pat", tenantIds: [], reachesAll: true, globalRole: "superadmin" });
+    const result = await atTerminal(["login", "--instance", server.url], token, "");
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.stderr).not.toContain("Type a number from the list");
+    expect(result.stdout).toContain(`Logged in to ${server.url}. Token stored in the user-only file. No tenant is chosen yet: \`cavelon use <name or slug>\` chooses one`);
+    expect(existsSync(credentials())).toBe(true);
+    expect(config().instances[server.url]).not.toHaveProperty("tenant_id");
+    expect(result.stdout + result.stderr).not.toContain(token);
+
+    const status = await cli(sb, ["status"]);
+    expect(status.code, status.stderr).toBe(0);
+    expect(status.stdout).toMatch(/tenant:\s+not chosen/);
+    expect((await cli(sb, ["status", "--json"])).json<{ tenant: unknown }>().tenant).toBeNull();
+  });
+
+  it("an operator's own tenants on a terminal: Enter chooses later, not the default, and the token acts where the instance places it", async () => {
+    const token = server.addToken({ kind: "pat", tenantIds: [tenantA, tenantB], defaultTenant: tenantB, reachesAll: true, globalRole: "superadmin" });
+    const result = await atTerminal(["login", "--instance", server.url], token, "");
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.stderr).toMatch(/one per command or per solution folder\.\nYours:\n {3}1 {2}Acme/);
+    expect(result.stderr).not.toContain("default, press Enter");
+    expect(result.stderr).toContain("Which tenant to start in? (type its number or part of its name, or press Enter to choose later)");
+    // As with --token-stdin: nothing stored, and the instance's default is where the token acts.
+    expect(result.stdout).toContain(`Acting in tenant Globex (globex, ${tenantB}), the one the instance chooses for this token.`);
+    expect(config().instances[server.url]).not.toHaveProperty("tenant_id");
   });
 
   it("an operator's token that reaches every tenant: --tenant and `use` find a tenant by slug or name; without a terminal it is stored and told how to choose", async () => {

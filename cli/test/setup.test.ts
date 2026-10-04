@@ -450,6 +450,18 @@ describe("login and --check", () => {
     expect(again.stdout).toMatch(/Already logged in to /);
   });
 
+  it("an operator's token that reaches every tenant: Enter at the tenant question logs in without a tenant", async () => {
+    const { env } = agentHome("linux");
+    const operator = server.addToken({ kind: "pat", tenantIds: [], reachesAll: true, globalRole: "superadmin" });
+    const result = await onPlatform("linux", () =>
+      cli(sb, ["setup", "--agents", "cursor"], { env: { ...env, NO_COLOR: "1" }, tty: true, stdin: `\n${server.url}\n${operator}\n\n` }),
+    );
+    expect(result.code, result.stderr + result.stdout).toBe(0);
+    expect(result.stderr).toContain("Which tenant to start in? (type part of its name, or press Enter to choose later)");
+    expect(result.stdout).toContain("No tenant is chosen yet: `cavelon use <name or slug>` chooses one");
+    expect(result.stdout + result.stderr).not.toContain(operator);
+  });
+
   it.skipIf(process.platform === "win32")("reports each agent, the server starting and the login", async () => {
     const { layout } = agentHome(process.platform);
     const env = pathEnv(fakeBin(["cavelon", "claude"]));

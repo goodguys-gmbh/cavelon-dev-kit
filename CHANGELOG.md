@@ -7,6 +7,18 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Changed
+
+- `cavelon login` and `cavelon setup` let an operator whose token reaches
+  every tenant choose the tenant later: Enter at the question stores the token
+  without a tenant, as `--token-stdin` does, and says how to choose one with
+  `cavelon use`. The question now reads "Which tenant to start in? (type part
+  of its name, or press Enter to choose later)", and the line above it says
+  that the token works in every tenant, one at a time, switched with
+  `cavelon use`, or chosen per command with `--tenant` and per solution folder
+  with `tenant:` in `cavelon.yaml`. A token for a list of tenants still
+  chooses one, with Enter taking the default the instance marks.
+
 ## [0.1.4] - 2026-10-04
 
 Agents keep to what is meant for them: `cavelon api` run by a coding agent

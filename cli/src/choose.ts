@@ -93,6 +93,11 @@ export interface PickOptions<T extends Named> {
   /** Chosen when the person just presses Enter. */
   preferred?: T;
   /**
+   * Enter chooses nothing now: what the hint says Enter does, e.g. "choose
+   * later". Takes the place of `preferred`.
+   */
+  later?: string;
+  /**
    * More entries than the list holds: what the person types is searched for
    * (an operator's token that reaches every tenant). Answers the matches.
    */
@@ -101,7 +106,7 @@ export interface PickOptions<T extends Named> {
   other?: { label: string; word: string };
 }
 
-export type Picked<T> = { item: T } | { other: true };
+export type Picked<T> = { item: T } | { other: true } | { later: true };
 
 function line(index: number, item: Named, extra: string | undefined, preferred: boolean): string {
   const slug = item.slug && item.slug !== item.name ? `  ${item.slug}` : "";
@@ -117,18 +122,21 @@ function line(index: number, item: Named, extra: string | undefined, preferred: 
 export async function pick<T extends Named>(ctx: Context, options: PickOptions<T>): Promise<Picked<T>> {
   const write = (text: string) => ctx.io.stderr.write(`${text}\n`);
   let shown = options.items.slice(0, MAX_LISTED);
+  const preferred = options.later ? undefined : options.preferred;
   const show = (items: T[]) => {
-    items.forEach((item, i) => write(line(i + 1, item, options.extra?.(item), item === options.preferred)));
+    items.forEach((item, i) => write(line(i + 1, item, options.extra?.(item), item === preferred)));
     if (options.other) write(`  ${String(items.length + 1).padStart(2)}  ${options.other.label}`);
   };
   write(options.intro);
   show(shown);
   if (options.items.length > shown.length) write(`  … and ${options.items.length - shown.length} more: type part of a name to find one.`);
-  const hint = shown.length || options.other ? "type its number or part of its name" : "type part of its name";
+  const typed = shown.length || options.other ? "type its number or part of its name" : "type part of its name";
+  const hint = options.later ? `${typed}, or press Enter to ${options.later}` : typed;
   for (let tries = 0; tries < MAX_TRIES; tries++) {
     const answer = await readLine(ctx.io, `${options.question} ${ctx.style.dim(`(${hint})`)} `);
     if (!answer) {
-      if (options.preferred) return { item: options.preferred };
+      if (options.later) return { later: true };
+      if (preferred) return { item: preferred };
       write("Type a number from the list, or part of a name.");
       continue;
     }
