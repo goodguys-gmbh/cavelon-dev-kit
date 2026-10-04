@@ -17,7 +17,8 @@ npm i -g @cavelon/cli
 Without Node.js, one line installs a standalone `cavelon` into your user
 folder: `curl -fsSL https://github.com/goodguys-gmbh/cavelon-dev-kit/releases/latest/download/install.sh | sh`
 on macOS and Linux, `irm https://github.com/goodguys-gmbh/cavelon-dev-kit/releases/latest/download/install.ps1 | iex`
-in Windows PowerShell.
+in Windows PowerShell. Then `cavelon setup` sets up your coding agents and logs
+you in.
 
 The full documentation is in the repository's
 [`docs/`](https://github.com/goodguys-gmbh/cavelon-dev-kit/tree/main/docs):
@@ -107,6 +108,7 @@ Every command takes `--json` (one JSON document on stdout, errors included),
 
 | Command | Marked | What it does |
 |---|---|---|
+| `setup [--agents] [--yes] [--check] [--remove]` | changing (destructive) | Set up the coding agents on this computer (the plugin for Claude Code and Codex; the MCP server and skills in the user settings of Cursor, VS Code with GitHub Copilot, Gemini CLI and Kiro) and log in. `--check` reports what works, `--remove` undoes it. A person runs this; not an MCP tool. |
 | `login [--token-stdin]` | changing | Store a token for an instance. A person runs this. |
 | `logout [--all]` | changing | Delete the stored token. |
 | `whoami` | read-only | Owner or key, tenant (name, slug and id), role, and where the credential came from. |
@@ -709,6 +711,7 @@ an agent only with a new plugin or `init --update`. With `cavelon` installed,
 |---|---|
 | `~/.config/cavelon/config.json` | the current instance, the tenant chosen with `use`, which store holds the token. Never a token. |
 | `~/.config/cavelon/credentials.json` | the token per instance (0600), only where there is no OS credential store |
+| `~/.config/cavelon/setup.json` | what `cavelon setup` changed in your coding agents, so `setup --remove` undoes exactly that (0600) |
 | `~/.cache/cavelon/<instance>/<version>/` | the instance's capabilities, OpenAPI, error catalog, package schema and docs index |
 | `~/.cache/cavelon/update-check.json` | when the latest release was last looked up and announced; `CAVELON_NO_UPDATE_CHECK=1` turns the check off |
 

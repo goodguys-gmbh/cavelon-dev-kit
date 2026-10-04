@@ -3,28 +3,41 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 
 /**
- * The git executable, found in the absolute directories of PATH only. A relative
+ * An executable found in the absolute directories of PATH only. A relative
  * entry ("", ".", "bin") names a folder in whatever repository the kit runs in,
  * and Windows would otherwise look in the working directory first, so a
- * repository could carry its own `git.exe`. Undefined when git is not installed.
+ * repository could carry its own program. On Windows each of `extensions` is
+ * tried in turn. Undefined when the program is not installed.
  */
-export async function resolveGit(env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): Promise<string | undefined> {
+export async function findProgram(
+  name: string,
+  env: Record<string, string | undefined> = process.env,
+  platform: NodeJS.Platform = process.platform,
+  extensions: string[] = [".exe"],
+): Promise<string | undefined> {
   const windows = platform === "win32";
   const pathApi = windows ? path.win32 : path.posix;
   const search = (windows ? (env.PATH ?? env.Path) : env.PATH) ?? "";
-  const name = windows ? "git.exe" : "git";
+  const names = windows ? extensions.map((ext) => name + ext) : [name];
   for (const entry of search.split(pathApi.delimiter)) {
     // Windows allows an entry in quotes.
     const dir = windows && entry.length > 1 && entry.startsWith('"') && entry.endsWith('"') ? entry.slice(1, -1) : entry;
     if (!dir || !pathApi.isAbsolute(dir)) continue;
-    const candidate = pathApi.join(dir, name);
-    const found = await fs
-      .stat(candidate)
-      .then((st) => st.isFile() && (windows || (st.mode & 0o111) !== 0))
-      .catch(() => false);
-    if (found) return candidate;
+    for (const file of names) {
+      const candidate = pathApi.join(dir, file);
+      const found = await fs
+        .stat(candidate)
+        .then((st) => st.isFile() && (windows || (st.mode & 0o111) !== 0))
+        .catch(() => false);
+      if (found) return candidate;
+    }
   }
   return undefined;
+}
+
+/** The git executable on PATH, or undefined when git is not installed. */
+export function resolveGit(env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): Promise<string | undefined> {
+  return findProgram("git", env, platform);
 }
 
 /**

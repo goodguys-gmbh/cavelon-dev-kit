@@ -26,11 +26,13 @@ with example briefs and prompts to copy.
 
 ### Which coding agents work with it?
 
-Claude Code and Codex through the plugin. Cursor, GitHub Copilot in VS Code,
-Gemini CLI and Kiro through `cavelon init --agents <name>`, which writes the
-skills and the MCP entry into the repository. Any other agent that reads
-`AGENTS.md` and runs shell commands can use the CLI directly. See
-[Installation](installation.md#agents-without-a-plugin).
+Claude Code, Codex, Cursor, GitHub Copilot in VS Code, Gemini CLI and Kiro:
+`cavelon setup` sets up each one it finds on your computer, Claude Code and
+Codex with the plugin, the others with the skills and the MCP server in their
+user settings ([Installation](installation.md#set-up-your-coding-agents)).
+`cavelon init --agents <name>` writes the same into one repository instead.
+Any other agent that reads `AGENTS.md` and runs shell commands can use the CLI
+directly. See [Installation](installation.md#agents-without-a-plugin).
 
 ### Which Cavelon versions does it support?
 
@@ -55,6 +57,18 @@ on macOS, Linux and Windows, without Node.js and without administrator rights
 you can instead run it through `npx -y @cavelon/cli`, which needs no install,
 or install it with npm ([With Node.js](installation.md#with-nodejs-npx-or-npm)).
 The plugin starts whichever you have.
+
+### What does `cavelon setup` change, and how do I undo it?
+
+For each coding agent it finds, it shows what it will change and asks first:
+it installs the Cavelon plugin through Claude Code's and Codex's own plugin
+commands, and adds the `cavelon` MCP server and the Cavelon skills to the user
+settings of Cursor, VS Code with GitHub Copilot, Gemini CLI and Kiro. In a file
+that holds your other settings it changes only its own `cavelon` entry, and it
+leaves a `cavelon` server you configured yourself alone. `cavelon setup --check`
+shows what is set up and working; `cavelon setup --remove` undoes exactly what
+`setup` did and leaves your login. See
+[Set up your coding agents](installation.md#set-up-your-coding-agents).
 
 ### Can I use it without installing anything globally?
 

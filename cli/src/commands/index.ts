@@ -5,6 +5,7 @@ import { wait, watch } from "./async.js";
 import { docsGet, docsSearch } from "./docs.js";
 import { login, logout, status, use, whoami } from "./session.js";
 import { init } from "./init.js";
+import { setup } from "./setup.js";
 import { limits } from "./limits.js";
 import { limitsSet } from "./limits-set.js";
 import { modelsList, modelsSetLimit } from "./models.js";
@@ -69,6 +70,7 @@ const mcp: CommandSpec = {
 };
 
 export const COMMANDS: CommandSpec[] = [
+  setup,
   login,
   logout,
   whoami,

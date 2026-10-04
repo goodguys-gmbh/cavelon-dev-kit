@@ -5,10 +5,14 @@ The Cavelon dev-kit has two parts, and you can use either without the other:
 - **`cavelon`**, a command-line tool that is also a local MCP server. You or your
   coding agent run it to build, test and activate Cavelon solutions.
 - **The Cavelon plugin** for Claude Code and Codex: four skills that teach the
-  agent the development loop, and the `cavelon` MCP server.
+  agent the development loop, and the `cavelon` MCP server. Other agents get
+  the same skills and server in their own settings.
 
-This page covers installing, updating and removing both. When you are done,
-continue with [Getting started](getting-started.md).
+Install `cavelon`, then run `cavelon setup`: it sets up every coding agent on
+your computer and logs you in ([Set up your coding agents](#set-up-your-coding-agents)).
+This page covers that, the ways to do each part by hand, updating and
+removing. When you are done, continue with [Getting started](getting-started.md)
+or [Building a solution with a coding agent](coding-agents.md).
 
 ## Requirements
 
@@ -19,7 +23,7 @@ continue with [Getting started](getting-started.md).
 | **A Cavelon instance** and an account on it | Its URL, for example `https://cavelon.example.com`. |
 | **Personal access tokens** turned on in that instance | `cavelon` logs in with a personal access token. The instance's operator turns them on. |
 | **The operations API** turned on, for waiting | `wait`, `watch` and every `--wait` follow work through it. Without it, the commands still start the work, but cannot wait for it. |
-| **Claude Code or Codex** (optional) | For the plugin. Other agents work too: see [Agents without a plugin](#agents-without-a-plugin). |
+| **A coding agent** (optional) | Claude Code, Codex, Cursor, VS Code with GitHub Copilot, Gemini CLI or Kiro; `cavelon setup` sets up each one it finds. Any other agent that reads `AGENTS.md` and runs shell commands works too: see [Agents without a plugin](#agents-without-a-plugin). |
 | **Node.js 20.3 or newer** (optional) | Only to run `cavelon` through `npx` or install it with npm instead: [With Node.js](#with-nodejs-npx-or-npm). |
 
 If you are not sure whether your instance has personal access tokens and the
@@ -214,9 +218,82 @@ With Node.js from nvm, fnm, Volta, Homebrew or the Windows installer, `npm i -g`
 works as it is. Or skip the global install: the one-line install, `npx` and
 the alias above need none of this.
 
+## Set up your coding agents
+
+```bash
+cavelon setup
+```
+
+`setup` finds the coding agents installed for you, by their command on the
+`PATH` or their settings folder, shows what it will change for each, asks once
+(Enter means yes) and does it. Then it logs you in if you are not yet: it asks
+for your Cavelon address and a personal access token, and lets you choose the
+tenant by name, as [`cavelon login`](getting-started.md#2-log-in) does. Last, it
+says what to do next: open an empty folder in your agent and describe what to
+build, or start a solution yourself with `cavelon init`. Restart an agent that
+was open while `setup` ran, so it loads the changes.
+
+What it changes, per agent, for your user only (never a project's files):
+
+| Agent | How | MCP server | Skills |
+|---|---|---|---|
+| Claude Code | `claude plugin marketplace add goodguys-gmbh/cavelon-dev-kit`, then `claude plugin install cavelon@cavelon-dev-kit --scope user` | from the plugin | from the plugin |
+| Codex | `codex plugin marketplace add goodguys-gmbh/cavelon-dev-kit`, then `codex plugin add cavelon@cavelon-dev-kit` | from the plugin | from the plugin |
+| Cursor | files | `~/.cursor/mcp.json` | `~/.cursor/skills/` |
+| GitHub Copilot in VS Code | files | VS Code's user `mcp.json`: `~/.config/Code/User/` on Linux, `~/Library/Application Support/Code/User/` on macOS, `%APPDATA%\Code\User\` on Windows | `~/.copilot/skills/` |
+| Gemini CLI | files | `~/.gemini/settings.json` | `~/.gemini/skills/` |
+| Kiro | files | `~/.kiro/settings/mcp.json` | `~/.kiro/skills/` |
+
+`~` is your home folder (`%USERPROFILE%` on Windows). Where Claude Code or
+Codex is there but its command is not on the `PATH` (for example only as an
+editor extension), `setup` writes its files instead: the server in
+`~/.claude.json` or `~/.codex/config.toml`, the skills in `~/.claude/skills/`
+or `~/.agents/skills/`. It follows `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and
+`GEMINI_CLI_HOME` when you set them. These are the places each agent's own
+documentation names for user-level settings: Claude Code
+([MCP](https://code.claude.com/docs/en/mcp-quickstart),
+[skills](https://code.claude.com/docs/en/skills),
+[plugins](https://code.claude.com/docs/en/discover-plugins)),
+Codex ([MCP](https://learn.chatgpt.com/docs/extend/mcp),
+[skills](https://learn.chatgpt.com/docs/build-skills),
+[commands](https://learn.chatgpt.com/docs/developer-commands?surface=cli)),
+Cursor ([MCP](https://cursor.com/docs/mcp), [skills](https://cursor.com/docs/skills)),
+VS Code ([MCP](https://code.visualstudio.com/docs/agent-customization/mcp-servers),
+[skills](https://code.visualstudio.com/docs/agent-customization/agent-skills)),
+Gemini CLI ([settings](https://geminicli.com/docs/reference/configuration),
+[skills](https://geminicli.com/docs/cli/skills)) and Kiro
+([MCP](https://kiro.dev/docs/mcp/configuration), [skills](https://kiro.dev/docs/skills)).
+
+The MCP server starts as `cavelon mcp` when a `cavelon` is on your `PATH` (on
+Windows, the one-line install's `cavelon.exe`), and as
+`npx -y @cavelon/cli@0.1 mcp` otherwise; on
+native Windows that is `cmd /c npx -y @cavelon/cli@0.1 mcp`, because an agent
+starts its servers without a shell. On native Windows, Claude Code and Codex
+also get the server in their MCP file next to the plugin, since the plugin's
+own entry needs `sh` ([Windows](#windows)).
+
+**What it never does.** In a file that holds your other settings, `setup`
+changes only its own entry: the `cavelon` server in a JSON file, written only
+when every other byte of the file stays as it is (a file with comments is left
+alone, and `setup` says what to add), or the block between `# cavelon:begin`
+and `# cavelon:end` in Codex's TOML. A `cavelon` server you configured
+yourself, or a skill file it did not write, stays. It records what it did in
+its settings folder (`setup.json`), so a second run changes nothing and
+`--remove` undoes exactly that.
+
+| Command | What it does |
+|---|---|
+| `cavelon setup --check` | Says what is set up and working: each agent's plugin or entry and skills, whether the MCP server starts (it starts it and asks it to introduce itself, as an agent does), and the login. Exit 1 when something is missing. |
+| `cavelon setup --remove` | Undoes what `setup` did: uninstalls the plugin and removes the marketplace if `setup` added them, takes its entry and block out of each file (a file it created goes when nothing else is left in it) and deletes the skill files it wrote. Your login stays; `cavelon logout` removes it. Asks first; Enter means no. |
+| `cavelon setup --agents claude,codex` | Only these agents, even one `setup` does not find. |
+| `cavelon setup --yes --instance <url>` | Without asking, for scripts. Without a terminal and without `--yes`, `setup` changes nothing and shows its plan (with `--json`, in the error's `details`). Logging in needs a terminal; without one, `setup` prints the `cavelon login` line to run. |
+
+`setup` is for people; it is not an MCP tool.
+
 ## Install the plugin
 
-The plugin adds four skills (`cavelon-loop`, `cavelon-authoring`,
+To install it by hand instead of `cavelon setup`, or for a project instead of
+for you. The plugin adds four skills (`cavelon-loop`, `cavelon-authoring`,
 `cavelon-testing`, `cavelon-long-running`) and the `cavelon` MCP server to your
 agent. The repository [goodguys-gmbh/cavelon-dev-kit](https://github.com/goodguys-gmbh/cavelon-dev-kit)
 is the plugin marketplace for both clients.
@@ -281,9 +358,12 @@ shows how to brief the agent and review its work.
 
 ## Agents without a plugin
 
-For Cursor, GitHub Copilot in VS Code, Gemini CLI, Kiro, Pi or any agent that
-reads `AGENTS.md` and runs shell commands, `cavelon init` writes the skills and
-the MCP entry into the solution folder itself:
+`cavelon setup` gives Cursor, GitHub Copilot in VS Code, Gemini CLI and Kiro
+the skills and the MCP server for your user, in every folder. To put them into
+one solution's repository instead, so everyone who clones it gets them, or for
+Pi or any other agent that reads `AGENTS.md` and runs shell commands,
+`cavelon init` writes the skills and the MCP entry into the solution folder
+itself:
 
 ```bash
 cavelon init --agents cursor,copilot
@@ -356,7 +436,8 @@ curl -fsSL https://github.com/goodguys-gmbh/cavelon-dev-kit/releases/latest/down
 irm https://github.com/goodguys-gmbh/cavelon-dev-kit/releases/latest/download/install.ps1 | iex
 ```
 
-The other ways in, and the plugin:
+Then run `cavelon setup` again: it replaces the skills it copied with the new
+release's and changes nothing else. The other ways in, and the plugin:
 
 ```bash
 npm i -g @cavelon/cli                                   # the CLI, if npm installed it
@@ -378,9 +459,11 @@ instance publishes, so a new Cavelon version on the server does not need a new
 
 ## Uninstalling
 
-First delete your stored tokens, and remove the plugin if you added it:
+First undo `cavelon setup`, delete your stored tokens, and remove the plugin
+if you added it by hand:
 
 ```bash
+cavelon setup --remove                        # what setup changed in your agents
 cavelon logout --all                          # deletes every stored token
 claude plugin uninstall cavelon@cavelon-dev-kit
 codex plugin remove cavelon@cavelon-dev-kit
@@ -438,8 +521,9 @@ npm package with Node.js, and each standalone executable on its own platform.
 - In PowerShell, quote arguments that contain spaces with single quotes:
   `cavelon kb upload seeds/faq --kb 'Support FAQ'`.
 - The plugin's MCP server is started through `sh`, which native Windows does
-  not have, so add the server yourself; the plugin's skills work as they are.
-  With `cavelon.exe` installed:
+  not have. `cavelon setup` adds the server for Claude Code and Codex in their
+  MCP files for you; by hand, add it yourself, and the plugin's skills work as
+  they are. With `cavelon.exe` installed:
 
   ```powershell
   claude mcp add --scope user cavelon -- cavelon mcp

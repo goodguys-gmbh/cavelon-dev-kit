@@ -9,16 +9,18 @@ through the Admin.
   codes and docs from what the instance publishes, so it works with every
   Cavelon version without an update.
 - **The Cavelon plugin** for Claude Code and Codex adds four skills that teach
-  the agent the development loop, and the `cavelon` MCP server. Other agents get
-  the same through `cavelon init --agents`.
+  the agent the development loop, and the `cavelon` MCP server. `cavelon setup`
+  installs it for you, and gives Cursor, GitHub Copilot in VS Code, Gemini CLI
+  and Kiro the same skills and server.
 
 Your token stays with you: `cavelon` never takes it as an argument, keeps it in
 your system's credential store, and your agent never sees it.
 
 ## Five-minute start
 
-You need git and a Cavelon instance with personal access tokens turned on.
-Nothing else: no Node.js, no administrator rights.
+You need a Cavelon instance with personal access tokens turned on, and a coding
+agent: Claude Code, Codex, Cursor, VS Code with GitHub Copilot, Gemini CLI or
+Kiro. Nothing else: no Node.js, no administrator rights.
 
 **1. Install `cavelon`** with one line. It goes into your own user folder.
 
@@ -38,66 +40,72 @@ The line downloads the `cavelon` built for your system from this
 repository's latest release, checks it against the release's checksums, puts
 it into `~/.local/bin` (on Windows, `%LOCALAPPDATA%\Programs\cavelon`), adds
 that folder to your `PATH` if it is not there yet, and says what to do next.
-Open a new terminal, then:
-
-```bash
-cavelon --version
-```
-
-Run the same line again to update. [Installation](docs/installation.md) has
-the details, Homebrew and npm, and how to remove it.
-
-**2. Give your coding agent the kit** (optional). The plugin for Claude Code
-and Codex adds the Cavelon skills and the `cavelon` MCP server. It starts the
-`cavelon` you installed:
-
-```bash
-claude plugin marketplace add goodguys-gmbh/cavelon-dev-kit   # Claude Code
-claude plugin install cavelon@cavelon-dev-kit
-codex plugin marketplace add goodguys-gmbh/cavelon-dev-kit    # Codex
-codex plugin add cavelon@cavelon-dev-kit
-```
-
-On native Windows, also add the MCP server once yourself; the plugin's skills
-work as they are:
-
-```powershell
-claude mcp add --scope user cavelon -- cavelon mcp
-codex mcp add cavelon -- cavelon mcp
-```
-
-For Cursor, GitHub Copilot, Gemini CLI and other agents, `cavelon init --agents`
-writes the skills and the MCP entry into your solution (step 5;
-[Agents without a plugin](docs/installation.md#agents-without-a-plugin)).
+Open a new terminal so it finds `cavelon`. Run the same line again to update.
+[Installation](docs/installation.md) has the details, Homebrew and npm, and how
+to remove it.
 
 *With Node.js instead:* if you have Node.js 20.3 or newer, `npx -y @cavelon/cli`
-runs the same `cavelon` without installing it, and `npm i -g @cavelon/cli`
-installs it. Wherever these docs write `cavelon`, write `npx -y @cavelon/cli`
-then. Without an installed `cavelon`, the plugin starts it through `npx` by
-itself. [Installation](docs/installation.md#with-nodejs-npx-or-npm) covers
-both, and what to do when `npm i -g` fails with `EACCES`.
+runs the same `cavelon` without installing it: type `npx -y @cavelon/cli setup`
+in the next step, and wherever these docs write `cavelon`, write
+`npx -y @cavelon/cli`. [Installation](docs/installation.md#with-nodejs-npx-or-npm)
+covers npx and `npm i -g`.
 
-**3. Create a personal access token** in Cavelon: user menu → **Personal
-access tokens** → **Create token**. Tick **May activate** only if this token
-may put solutions live.
+**2. Set up your agent and log in:**
 
-**4. Log in**, in your own terminal (not in the agent's chat):
+```bash
+cavelon setup
+```
+
+`setup` finds the coding agents on your computer, shows what it will change
+for each, and asks once; Enter means yes.
+
+- Claude Code and Codex get the Cavelon plugin through their own plugin
+  command.
+- Cursor, VS Code with GitHub Copilot, Gemini CLI and Kiro get the `cavelon`
+  MCP server in their user settings and the Cavelon skills in their skills
+  folder.
+
+It changes nothing else in those files, and `cavelon setup --remove` undoes
+what it did.
+
+Then it logs you in. Have two things ready:
+
+- **Your Cavelon address**: the URL you open Cavelon at in the browser.
+  `https://cavelon.example.com` stands for it throughout these docs.
+- **A personal access token**: in Cavelon, user menu → **Personal access
+  tokens** → **Create token**. Tick **May activate** only if this token may put
+  solutions live. Paste it when `setup` asks; it is not shown, and it is kept in
+  your system's credential store.
+
+If the token reaches several tenants, choose yours from the list by number or
+name. `cavelon setup --check` shows what is set up and working.
+
+**3. Open an empty folder in your agent** and describe what you need, for
+example: *"Build a Cavelon solution that answers our customers' questions from
+the FAQ pages in ./faq, and test it."* Restart the agent first if it was open
+during `setup`.
+
+The agent creates the solution (`cavelon init`), writes the package and the
+tests, previews and imports them into a test environment, and runs the tests.
+It stops and asks you before anything reaches production or goes live.
+
+### Doing it yourself
+
+Everything `setup` does, you can do by hand, and every step of the loop is a
+command you can type.
+
+**Log in** in your own terminal (not in the agent's chat):
 
 ```bash
 cavelon login --instance https://cavelon.example.com
 cavelon whoami
 ```
 
-Replace `https://cavelon.example.com` with the address of your Cavelon
-instance: the URL you open Cavelon at in the browser. `example.com` stands for
-it throughout these docs.
-
 `login` asks for the token, checks it and finds the tenants it reaches. With
 one, it uses it and says so. With several, it shows them as a numbered list:
 type the number, or part of the tenant's name. An operator's token that reaches
-every tenant asks for part of the name and searches. You never need to look up
-a tenant's id; `--tenant` takes a name, slug or id if you want to name it
-straight away:
+every tenant asks for part of the name and searches. `--tenant` takes a name,
+slug or id if you want to name it straight away:
 
 ```bash
 cavelon login --instance https://cavelon.example.com --tenant "Acme Support"
@@ -124,7 +132,12 @@ tenant to run next (exit 2). Pass `--tenant` to choose up front.
 In CI, setting `CAVELON_URL` and `CAVELON_TOKEN` from the CI system's secrets
 works too ([Security](docs/security.md)).
 
-**5. Start a solution** in an empty folder:
+**Set up an agent** with its own commands instead of `setup`
+([Installation](docs/installation.md#install-the-plugin)), or for one solution
+only, in its folder, with `cavelon init --agents`
+([Agents without a plugin](docs/installation.md#agents-without-a-plugin)).
+
+**Start a solution** in an empty folder:
 
 ```bash
 mkdir support-faq
@@ -144,7 +157,7 @@ with `cavelon pull`, or copy `package/`, `tests/` and `seeds/` from an example:
 knowledge base) or [`examples/expense-approval/`](examples/expense-approval/)
 (a pipeline with a router and an approval by a person).
 
-**6. Work in the loop**, yourself or through your agent:
+**Work in the loop**, yourself or through your agent:
 
 ```bash
 cavelon validate                                # the files against the instance's package schema
@@ -155,10 +168,6 @@ cavelon test run --wait --timeout 5m
 cavelon trace <run>                             # why a case passed or failed
 cavelon activate                                # through the readiness gate, never by force
 ```
-
-With the plugin, open the folder in Claude Code or Codex and describe what you
-need, for example: *"Build a Cavelon solution that answers our customers'
-questions from the FAQ pages in ./faq, and test it."*
 
 The [getting-started tutorial](docs/getting-started.md) walks through all of
 this with the ready-made example in [`examples/support-faq/`](examples/support-faq/).
@@ -171,7 +180,7 @@ how to review and test its work.
 
 | Page | What it covers |
 |---|---|
-| [Installation](docs/installation.md) | the one-line install, Homebrew, npx and npm, the plugin in Claude Code and Codex, other agents, updating, uninstalling, Windows/macOS/Linux, proxies |
+| [Installation](docs/installation.md) | the one-line install, Homebrew, npx and npm, `cavelon setup`, the plugin in Claude Code and Codex, other agents, updating, uninstalling, Windows/macOS/Linux, proxies |
 | [Getting started](docs/getting-started.md) | a full tutorial from an empty folder to an active solution |
 | [Building with a coding agent](docs/coding-agents.md) | briefing the agent, the loop as it runs it, what stays with you, reviewing and testing its work, prompts to copy |
 | [Concepts](docs/concepts.md) | instance, tenant, solution, package, environments, preview and confirm, operations, tests, activation, Platform mode |

@@ -14,7 +14,7 @@ import { findProject } from "./project.js";
 
 type Env = Record<string, string | undefined>;
 
-function home(env: Env): string {
+export function homeDir(env: Env): string {
   return env.HOME || env.USERPROFILE || os.homedir();
 }
 
@@ -22,14 +22,14 @@ export function configDir(env: Env): string {
   if (env.CAVELON_CONFIG_DIR) return env.CAVELON_CONFIG_DIR;
   if (env.XDG_CONFIG_HOME) return path.join(env.XDG_CONFIG_HOME, "cavelon");
   if (process.platform === "win32" && env.APPDATA) return path.join(env.APPDATA, "cavelon");
-  return path.join(home(env), ".config", "cavelon");
+  return path.join(homeDir(env), ".config", "cavelon");
 }
 
 export function cacheDir(env: Env): string {
   if (env.CAVELON_CACHE_DIR) return env.CAVELON_CACHE_DIR;
   if (env.XDG_CACHE_HOME) return path.join(env.XDG_CACHE_HOME, "cavelon");
   if (process.platform === "win32" && env.LOCALAPPDATA) return path.join(env.LOCALAPPDATA, "cavelon", "cache");
-  return path.join(home(env), ".cache", "cavelon");
+  return path.join(homeDir(env), ".cache", "cavelon");
 }
 
 /**

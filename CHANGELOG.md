@@ -9,6 +9,22 @@ CLI, the skills and the plugin.
 
 ### Added
 
+- `cavelon setup`: from "I have the kit" to "my coding agent can build a
+  Cavelon solution" in one guided step. It finds Claude Code, Codex, Cursor,
+  VS Code with GitHub Copilot, Gemini CLI and Kiro (their command on the `PATH`
+  or their user settings folder), shows in plain words what it will change for
+  each, asks once and does it: Claude Code and Codex get the Cavelon plugin
+  through their own plugin commands; the others get the `cavelon` MCP server in
+  their user MCP configuration and the skills in their user skills folder. The
+  server starts as `cavelon mcp` when `cavelon` is installed, otherwise through
+  `npx` (`cmd /c npx` on native Windows, where Claude Code and Codex also get
+  the server next to the plugin). It changes only its own entries, leaves a
+  `cavelon` server or skill file of yours alone, and records what it did, so a
+  second run changes nothing. Then it logs in through `login`, choosing the
+  tenant by name, and says the next step. `--check` reports each agent, starts
+  the MCP server once and checks the login; `--remove` undoes exactly what
+  setup did. `--agents`, `--instance` and `--yes` for use without a terminal;
+  it is not an MCP tool.
 - `cavelon` without Node.js: each release carries a standalone executable for
   macOS (Apple silicon and Intel), Linux (x64 and arm64) and Windows (x64),
   built with Bun from the tagged commit, with `checksums.txt` and a build
@@ -67,6 +83,10 @@ CLI, the skills and the plugin.
   version alone. `--version --json` adds `install` (`method`, `path`,
   `update`). The install scripts and the Homebrew formula's test read the first
   line.
+- Docs: the README's first steps are now install, `cavelon setup`, and open a
+  folder in your agent. Installation describes what `setup` changes for each
+  agent and system, citing each agent's documentation; Building with a coding
+  agent, Getting started, the MCP page, Security and the FAQ point to it.
 - The plugin starts the `cavelon` on the `PATH` (`cavelon mcp`) when there is
   one, and `npx -y @cavelon/cli@0.1 mcp` otherwise, through `sh`. On native
   Windows, add the MCP server yourself as before, now simply

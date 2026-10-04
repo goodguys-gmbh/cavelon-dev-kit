@@ -9,8 +9,9 @@ from it.
 
 It assumes you have done the [five-minute start](../README.md#five-minute-start)
 or followed [Installation](installation.md). The examples use Claude Code and
-Codex with the Cavelon plugin; any agent set up with `cavelon init --agents`
-works the same way (see [Claude Code, Codex and other agents](#claude-code-codex-and-other-agents)).
+Codex with the Cavelon plugin; any agent `cavelon setup` or
+`cavelon init --agents` set up works the same way (see
+[Claude Code, Codex and other agents](#claude-code-codex-and-other-agents)).
 
 ## What the agent does and what stays with you
 
@@ -61,15 +62,14 @@ agent can do. Choose the token accordingly (next section). See also
 
 ## Before you start
 
-1. **Install `cavelon` and the plugin, and log in.** Install `cavelon` with the
-   one-line install ([Installation](installation.md#install-the-cli)) and the
-   plugin for your agent ([Installation](installation.md#install-the-plugin)),
-   which starts the `cavelon` you installed, or runs it through `npx` when
-   there is none. Create a personal access token and log in from your own
-   terminal with `cavelon login --instance <url>`
-   ([Getting started](getting-started.md#2-log-in)). The agent uses the stored
-   token through `cavelon`; it never sees it. Without the one-line install,
-   `npx -y @cavelon/cli` runs every `cavelon` command this page writes
+1. **Install `cavelon`, then run `cavelon setup`.** Install `cavelon` with the
+   one-line install ([Installation](installation.md#install-the-cli)). Then
+   `cavelon setup`, in your own terminal, sets up your coding agents and logs
+   you in: it asks for your Cavelon address and a personal access token, and
+   for the tenant by name ([Set up your coding agents](installation.md#set-up-your-coding-agents)).
+   The agent uses the stored token through `cavelon`; it never sees it.
+   Without the one-line install, `npx -y @cavelon/cli` runs every `cavelon`
+   command this page writes, `setup` included
    ([With Node.js](installation.md#with-nodejs-npx-or-npm)).
 2. **Choose the token's ceiling.** A token without **May activate** lets the
    agent build, import into test and run tests, while activation stays with a
@@ -344,19 +344,26 @@ these lessons:
 
 ## Claude Code, Codex and other agents
 
-**Plugin or `cavelon init --agents`.** For Claude Code and Codex, the Cavelon
-plugin brings the skills and the MCP server
-([Install the plugin](installation.md#install-the-plugin)), and the plugin
-updates them. For Cursor, GitHub Copilot in VS Code, Gemini CLI, Kiro, Pi or any
-agent that reads `AGENTS.md`, `cavelon init --agents <list>` writes the skills
-and the MCP entry into the solution folder
+**`cavelon setup`, for you.** `cavelon setup` finds Claude Code, Codex, Cursor,
+VS Code with GitHub Copilot, Gemini CLI and Kiro on your computer and sets up
+each for your user, in every folder you open: Claude Code and Codex get the
+Cavelon plugin through their own plugin command, which also updates it; the
+others get the skills and the MCP server in their user settings, which
+`cavelon setup` refreshes after you update `cavelon`
+([Set up your coding agents](installation.md#set-up-your-coding-agents)).
+`cavelon setup --check` says what works; `cavelon setup --remove` undoes it.
+
+**`cavelon init --agents`, for a repository.** To give everyone who clones a
+solution the skills and the MCP server, or for Pi or any other agent that reads
+`AGENTS.md`, `cavelon init --agents <list>` writes them into the solution folder
 ([Agents without a plugin](installation.md#agents-without-a-plugin)); refresh
 them with `cavelon init --update` after updating `cavelon`. Both give the agent
-the same skills and tools.
+the same skills and tools; use one of them per agent, so it does not see the
+skills twice.
 
-**Project or user scope.** In Claude Code, install the plugin for yourself
-(user scope), or with `--scope project` so everyone who opens the repository is
-offered it. Codex installs plugins per user; to give everyone on a repository
+**Project or user scope.** In Claude Code, `cavelon setup` installs the plugin
+for yourself (user scope); by hand, `--scope project` offers it to everyone who
+opens the repository ([Install the plugin](installation.md#install-the-plugin)). Codex installs plugins per user; to give everyone on a repository
 the skills and the MCP server, commit what `cavelon init --agents codex` writes.
 
 **CI and cloud agents.** An agent that runs without you (in CI, or a cloud

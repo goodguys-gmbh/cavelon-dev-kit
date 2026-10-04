@@ -28,7 +28,7 @@ the environment over the files. The exit codes are listed in [Troubleshooting](t
 
 ## Contents
 
-- **Session:** [`login`](#cavelon-login), [`logout`](#cavelon-logout), [`whoami`](#cavelon-whoami), [`use`](#cavelon-use), [`status`](#cavelon-status)
+- **Session:** [`setup`](#cavelon-setup), [`login`](#cavelon-login), [`logout`](#cavelon-logout), [`whoami`](#cavelon-whoami), [`use`](#cavelon-use), [`status`](#cavelon-status)
 - **Solution as code:** [`init`](#cavelon-init), [`pull`](#cavelon-pull), [`validate`](#cavelon-validate), [`apply`](#cavelon-apply), [`activate`](#cavelon-activate), [`explain`](#cavelon-explain)
 - **Tenants and solutions:** [`tenant create`](#cavelon-tenant-create), [`tenant list`](#cavelon-tenant-list), [`harness list`](#cavelon-harness-list), [`harness new`](#cavelon-harness-new), [`harness clone`](#cavelon-harness-clone)
 - **Knowledge, tests and traces:** [`kb upload`](#cavelon-kb-upload), [`test run`](#cavelon-test-run), [`wait`](#cavelon-wait), [`watch`](#cavelon-watch), [`trace`](#cavelon-trace)
@@ -41,7 +41,35 @@ the environment over the files. The exit codes are listed in [Troubleshooting](t
 
 ## Session
 
-Log in, choose a tenant, and see where you are.
+Set up your coding agents, log in, choose a tenant, and see where you are.
+
+### cavelon setup
+
+Set up your coding agents for Cavelon and log in, in one guided step.
+
+**changing (destructive)** · MCP tool: none (run it in a terminal)
+
+```text
+cavelon setup [options]
+```
+
+Finds Claude Code, Codex, Cursor, VS Code with GitHub Copilot, Gemini CLI and Kiro, shows what it will change for each, asks once and does it: Claude Code and Codex get the Cavelon plugin through their own plugin command; the others get the `cavelon` MCP server in their user MCP configuration and the skills in their user skills folder. It touches nothing else in those files and records what it did, so --remove undoes exactly that. Then it logs in if needed, choosing the tenant by name as `login` does. The server starts as `cavelon mcp` when cavelon is installed, otherwise through npx. --check reports what is set up and working: each agent's entry, the MCP server starting, and the login. Without a terminal it changes nothing unless --yes.
+
+| Option | Description |
+|---|---|
+| `--agents <list>` | Only these agents: claude, codex, cursor, copilot, gemini, kiro, or all (comma-separated). Default: every agent found. Repeatable. |
+| `-y, --yes` | Make the changes without asking. |
+| `--check` | Report what is set up and working; change nothing. |
+| `--remove` | Undo what setup did (your login stays). |
+
+Examples:
+
+```bash
+cavelon setup
+cavelon setup --agents claude,codex --instance https://cavelon.example.com --yes
+cavelon setup --check
+cavelon setup --remove
+```
 
 ### cavelon login
 

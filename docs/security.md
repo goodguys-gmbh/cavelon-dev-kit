@@ -144,6 +144,7 @@ that.
 |---|---|---|
 | `~/.config/cavelon/config.json` | `%APPDATA%\cavelon\config.json` | the current instance, the tenant chosen with `use`, which store holds the token; never a token |
 | `~/.config/cavelon/credentials.json` | `%APPDATA%\cavelon\credentials.json` | the token per instance (`0600`), only where there is no credential store |
+| `~/.config/cavelon/setup.json` | `%APPDATA%\cavelon\setup.json` | what `cavelon setup` changed in your coding agents' settings, so `setup --remove` undoes exactly that; never a token |
 | `~/.cache/cavelon/<instance>/<version>/` | `%LOCALAPPDATA%\cavelon\cache\…` | what the instance publishes: capabilities, OpenAPI, error catalog, package schema, docs index |
 | `~/.cache/cavelon/update-check.json` | `%LOCALAPPDATA%\cavelon\cache\update-check.json` | when the latest release was last looked up, its number, and when `cavelon` last said so |
 
@@ -152,6 +153,11 @@ that.
 A development build of the instance keeps one version while what it publishes
 changes, so `cavelon` reads its copies again after a minute
 (`CAVELON_CONTRACT_TTL_SECONDS`), or checks them with the ETag the instance sent.
+
+Outside the cavelon folders, only `cavelon setup` writes, and only into your
+coding agents' user settings, as [Installation](installation.md#set-up-your-coding-agents)
+lists; it runs Claude Code's and Codex's own plugin commands, and never puts a
+token into any of those files.
 
 In a solution folder, only `init`, `pull` and `apply` write files, plus
 `artifacts export`, which writes the archive it downloads to a new file.
