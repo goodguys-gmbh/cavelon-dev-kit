@@ -8,8 +8,10 @@ says when it does not know. It uses the files of
 
 It takes about fifteen minutes. You need:
 
-- `cavelon` installed ([Installation](installation.md)); the plugin is optional
-  for this tutorial;
+- Node.js 20.3 or newer with npm, and git. `cavelon` itself needs no install:
+  `npx -y @cavelon/cli` runs it, and in this tutorial `cavelon` stands for
+  that, or for your alias or global install ([Installation](installation.md#install-the-cli)).
+  The plugin is optional for this tutorial;
 - a Cavelon instance with personal access tokens and the operations API turned
   on, and an account that is a tenant admin of a tenant you may test in.
 
@@ -36,7 +38,7 @@ next step.
 In a terminal of your own (not in the agent's chat), run:
 
 ```bash
-cavelon login --instance https://cavelon.example.com
+npx -y @cavelon/cli login --instance https://cavelon.example.com
 ```
 
 Use the address of your Cavelon instance, the URL you open Cavelon at in the
@@ -51,7 +53,7 @@ Logged in to https://cavelon.example.com as ada@example.com. Token stored in the
 
 `cavelon` never takes a token as a command-line argument, so it never lands in
 your shell history, and your coding agent never sees it. To paste it from a
-password manager instead, pipe it: `op read op://dev/cavelon/token | cavelon
+password manager instead, pipe it: `op read op://dev/cavelon/token | npx -y @cavelon/cli
 login --instance https://cavelon.example.com --token-stdin`.
 
 Check who you are:
@@ -78,7 +80,8 @@ If your account belongs to several tenants, choose the one to work in:
 ## 3. Create the solution folder
 
 ```bash
-mkdir support-faq && cd support-faq
+mkdir support-faq
+cd support-faq
 git init
 cavelon init --tenant acme --harness support-faq
 ```
@@ -116,6 +119,13 @@ this repository or from the
 ```bash
 git clone --depth 1 https://github.com/goodguys-gmbh/cavelon-dev-kit.git /tmp/cavelon-dev-kit
 cp -r /tmp/cavelon-dev-kit/examples/support-faq/{package,tests,seeds} .
+```
+
+In PowerShell:
+
+```powershell
+git clone --depth 1 https://github.com/goodguys-gmbh/cavelon-dev-kit.git $env:TEMP\cavelon-dev-kit
+Copy-Item -Recurse $env:TEMP\cavelon-dev-kit\examples\support-faq\package, $env:TEMP\cavelon-dev-kit\examples\support-faq\tests, $env:TEMP\cavelon-dev-kit\examples\support-faq\seeds .
 ```
 
 You now have:
@@ -293,7 +303,8 @@ or the cases in `tests/smoke.yaml`, then run the loop again: `validate`,
 ## 10. Commit
 
 ```bash
-git add -A && git commit -m "Support FAQ solution"
+git add -A
+git commit -m "Support FAQ solution"
 ```
 
 The repository is now the source of the solution. `cavelon status` shows the

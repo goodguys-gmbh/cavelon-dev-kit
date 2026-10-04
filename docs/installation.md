@@ -14,7 +14,7 @@ continue with [Getting started](getting-started.md).
 
 | What | Why |
 |---|---|
-| **Node.js 20.3 or newer**, with npm | `cavelon` is a Node.js program. `node --version` shows yours. |
+| **Node.js 20.3 or newer**, with npm | `cavelon` is a Node.js program, and `npx`, which comes with npm, runs it without an install. `node --version` shows yours. |
 | **git** | A solution lives in a git repository; `pull` refuses to overwrite uncommitted changes. |
 | **A Cavelon instance** and an account on it | Its URL, for example `https://cavelon.example.com`. |
 | **Personal access tokens** turned on in that instance | `cavelon` logs in with a personal access token. The instance's operator turns them on. |
@@ -28,32 +28,59 @@ what each refusal means.
 
 ## Install the CLI
 
-### With npm (recommended)
+Nothing needs a global install. With a coding agent, the plugin starts
+`cavelon` by itself ([Install the plugin](#install-the-plugin)); for the
+commands you type yourself, `npx` runs it.
+
+### Run it through npx
+
+```bash
+npx -y @cavelon/cli --version
+npx -y @cavelon/cli login --instance https://cavelon.example.com
+```
+
+`npx` comes with npm and downloads the package into npm's cache (in your home
+folder) the first time, so it needs no root. On Debian and Ubuntu, Node.js from
+the system packages comes without npm; install the `npm` package too.
+
+Wherever the documentation says `cavelon`, write `npx -y @cavelon/cli`, and
+the same for a `cavelon …` command the CLI prints for you to run next. To stay
+on one release line, name it: `npx -y @cavelon/cli@0.1 whoami`. On Windows, if
+PowerShell refuses `npx`, see [Windows](#windows).
+
+### Type `cavelon` instead (optional)
+
+An alias gives you the short name without installing anything. In zsh or bash,
+and in your `~/.zshrc` or `~/.bashrc` to keep it:
+
+```bash
+alias cavelon='npx -y @cavelon/cli'
+```
+
+In PowerShell, and in your `$PROFILE` to keep it:
+
+```powershell
+function cavelon { if ($MyInvocation.ExpectingInput) { $input | npx -y @cavelon/cli @args } else { npx -y @cavelon/cli @args } }
+```
+
+The function passes on what you pipe into it, such as a token for
+`login --token-stdin`; a plain `function cavelon { npx -y @cavelon/cli @args }`
+would not. An alias works in your interactive shell only: in scripts and CI,
+write `npx -y @cavelon/cli`.
+
+Or install it globally:
 
 ```bash
 npm i -g @cavelon/cli
 cavelon --version
 ```
 
-### Without installing: npx
-
-Every command also runs through `npx`, which downloads the package into npm's
-cache the first time:
-
-```bash
-npx -y @cavelon/cli --version
-npx -y @cavelon/cli whoami
-```
-
-Wherever the documentation says `cavelon`, you can write `npx -y @cavelon/cli`.
-To stay on one release line, name it: `npx -y @cavelon/cli@0.1 whoami`.
-
-### `npm i -g` fails with `EACCES`
+#### `npm i -g` fails with `EACCES`
 
 When Node.js was installed for the whole system, global installs need root:
 on Linux distributions where Node.js comes from the system packages, and on
-macOS with the installer from nodejs.org. Instead of `sudo`, give npm a folder in your home directory
-once:
+macOS with the installer from nodejs.org. Instead of `sudo`, give npm a folder
+in your home directory once:
 
 ```bash
 npm config set prefix "$HOME/.local"
@@ -62,7 +89,8 @@ npm i -g @cavelon/cli
 ```
 
 With Node.js from nvm, fnm, Volta, Homebrew or the Windows installer, `npm i -g`
-works as it is.
+works as it is. Or skip the global install: `npx` and the alias above need
+none of this.
 
 ## Install the plugin
 
@@ -114,7 +142,8 @@ skills and the MCP server, write them into the repository with
 ### How the plugin runs `cavelon`
 
 The plugin starts the MCP server as `npx -y @cavelon/cli@0.1 mcp`: the latest
-0.1 release, whether or not you installed `cavelon` globally. The pin keeps a
+0.1 release, whether or not you installed `cavelon` globally, so with the
+plugin you need nothing else. The pin keeps a
 release that may change behaviour (0.2) away until you update the plugin.
 
 Both clients also accept the path of a local clone instead of
@@ -155,11 +184,16 @@ repository gets the same.
 ## Updating
 
 ```bash
-npm i -g @cavelon/cli                                   # the CLI
-claude plugin marketplace update cavelon-dev-kit && claude plugin update cavelon@cavelon-dev-kit
-codex plugin marketplace upgrade cavelon-dev-kit && codex plugin add cavelon@cavelon-dev-kit
+npm i -g @cavelon/cli                                   # the CLI, if you installed it globally
+claude plugin marketplace update cavelon-dev-kit       # Claude Code
+claude plugin update cavelon@cavelon-dev-kit
+codex plugin marketplace upgrade cavelon-dev-kit        # Codex
+codex plugin add cavelon@cavelon-dev-kit
 cavelon init --update                                   # in a solution set up with --agents
 ```
+
+Through `npx`, `cavelon` needs no update: `npx -y @cavelon/cli` looks up the
+newest release each time it starts.
 
 `cavelon` learns each instance's API, package schema and docs from what the
 instance publishes, so a new Cavelon version on the server does not need a new
@@ -172,7 +206,7 @@ instance publishes, so a new Cavelon version on the server does not need a new
 cavelon logout --all                          # deletes every stored token
 claude plugin uninstall cavelon@cavelon-dev-kit
 codex plugin remove cavelon@cavelon-dev-kit
-npm uninstall -g @cavelon/cli
+npm uninstall -g @cavelon/cli                 # if you installed it globally
 ```
 
 `logout` deletes the tokens from your machine; they remain valid in Cavelon
@@ -186,8 +220,15 @@ also delete the configuration and cache folders listed in
 
 ### Windows
 
-- Use PowerShell, Windows Terminal or cmd; `npm i -g @cavelon/cli` puts
-  `cavelon` on your `PATH`.
+- Use PowerShell, Windows Terminal or cmd; `npx -y @cavelon/cli` works in each,
+  and `npm i -g @cavelon/cli` puts `cavelon` on your `PATH`.
+- If PowerShell refuses `npx` (or `cavelon`) because running scripts is
+  disabled on this system, it found npm's PowerShell script. Write `npx.cmd`
+  instead, or allow local scripts for your user once:
+  `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`. Your `$PROFILE`, and
+  the alias function in it, needs that setting too.
+- Windows PowerShell 5.1 does not accept `&&` between commands; where the docs
+  join two with it, run them one after the other.
 - The token is kept in the **Windows Credential Manager**.
 - Settings are in `%APPDATA%\cavelon`, the cache in `%LOCALAPPDATA%\cavelon\cache`.
 - Commands that `cavelon` prints for you to copy are quoted for the shell it runs

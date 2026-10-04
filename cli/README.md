@@ -6,11 +6,12 @@ learns each instance's API, features and docs from what the instance publishes
 (its OpenAPI, `/api/v1/meta/capabilities`, `/api/v1/meta/error-catalog` and
 `/llms.txt`), so a new core release needs no new `cavelon` release.
 
-Node.js 20.3 or newer. Install it from npm, or run it as `npx -y @cavelon/cli`:
+Node.js 20.3 or newer. Run it through `npx`, which needs no install; to type
+`cavelon`, install it globally (or define an alias for the `npx` command):
 
 ```bash
+npx -y @cavelon/cli --help
 npm i -g @cavelon/cli
-cavelon --help
 ```
 
 The full documentation is in the repository's
