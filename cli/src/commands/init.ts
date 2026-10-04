@@ -625,6 +625,9 @@ export const init: CommandSpec = {
     "file that holds something else unless --force, and names the sections the instance's schema does not know.",
   readOnly: false,
   destructive: true,
+  mcpEffect:
+    "Changes nothing on the instance (as a tool it never creates a solution). Writes files in the solution folder; never overwrites a " +
+    "file it did not create, and changes only the blocks between its markers in AGENTS.md, CLAUDE.md and .gitignore.",
   idempotent: true,
   mcpTool: "init",
   options: {

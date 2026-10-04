@@ -9,6 +9,7 @@ import { ApiClient, tokensDisabledError } from "../http.js";
 import { readAll } from "../io.js";
 import { listPreviews, readPull } from "../local-state.js";
 import type { Operation } from "../operations.js";
+import { solutionState, solutionStateLines, type SolutionState } from "./solution.js";
 import { expiryOf, readPrincipal, readTenantless, type Tenantless } from "../principal.js";
 import { readHidden } from "../prompt.js";
 import { isUuid, lookupTenantId, requireInstance, requireToken, tenantRequiredError, type FoundTenant, type Session } from "../session.js";
@@ -292,6 +293,23 @@ function credentialSource(session: Session): string {
   return session.tokenStore === "file" ? "login (user-only file)" : "login (credential store)";
 }
 
+/** Whether the token may enter Platform mode, with the ceiling that bounds it. */
+function platformModeText(token: { platform_mode_allowed: boolean; ceiling_role: string }): string {
+  const ceiling = token.ceiling_role ? ` (ceiling ${token.ceiling_role})` : "";
+  return token.platform_mode_allowed
+    ? `allowed${ceiling}`
+    : `not allowed${ceiling}; creating tenants and other platform routes need a token that allows it`;
+}
+
+/** Which tenants the token reaches, as the instance lists them. */
+function reachText(reach: Reach): string {
+  if (reach.reachesAll) {
+    const own = reach.tenants.length;
+    return `every tenant (as operator; ${own ? `${own} membership${own === 1 ? "" : "s"} of your own` : "no memberships of your own"})`;
+  }
+  return `${reach.tenants.length} tenant${reach.tenants.length === 1 ? "" : "s"} (\`cavelon tenant list\`)`;
+}
+
 export const whoami: CommandSpec = {
   name: "whoami",
   summary: "Show who the token acts as, in which tenant, and where the token came from.",
@@ -312,7 +330,9 @@ export const whoami: CommandSpec = {
     // A token that acts in no tenant yet: only /meta/principal answers it.
     const nowhere = Boolean(reach && !reach.tenantId && !reach.platform);
     const me = nowhere ? undefined : await readMe(client);
-    const { caps, needsTenant } = nowhere ? { caps: null, needsTenant: false } : await readCapabilities(await ctx.contracts(), false);
+    const contracts = await ctx.contracts();
+    const { caps, needsTenant } = nowhere ? { caps: null, needsTenant: false } : await readCapabilities(contracts, false);
+    const versionCachedAt = caps ? contracts.cachedAt : undefined;
     const principal = needsTenant ? undefined : await readPrincipal(client);
     const contextTenant = me?.context?.tenant_id ?? principal?.tenant_id ?? client.target.tenantId ?? null;
     const tenants = [...(me?.memberships ?? []), ...(me?.accessible_tenants ?? [])];
@@ -320,6 +340,11 @@ export const whoami: CommandSpec = {
     // The slug from the token's tenants, where neither /auth/me nor the stored choice names it.
     if (contextTenant && pat && !reach && !membership?.tenant_slug && session.settings.tenant_id !== contextTenant) {
       const tenantless = await readTenantless(client);
+      if (listsTenants(tenantless)) reach = tenantless;
+    }
+    // Which tenants the token reaches, for its own line; an older instance does not say.
+    if (pat && !reach) {
+      const tenantless = await readTenantless(client).catch(() => undefined);
       if (listsTenants(tenantless)) reach = tenantless;
     }
     const listed = reach?.tenants.find((t) => t.id === contextTenant);
@@ -336,7 +361,13 @@ export const whoami: CommandSpec = {
     const expiry = expiryOf(principal, ctx.io.now());
     if (expiry.warning) ctx.warn(expiry.warning);
     const data = {
-      instance: { url: session.url, source: session.urlSource, version: caps?.instance.version ?? null },
+      instance: {
+        url: session.url,
+        source: session.urlSource,
+        version: caps?.instance.version ?? null,
+        // When the version is the cached one, when it was read; it may be behind the instance by up to the cache's time-to-live.
+        ...(versionCachedAt ? { version_cached_at: versionCachedAt } : {}),
+      },
       credential: {
         kind: principal?.kind ?? session.tokenKind,
         source: session.tokenSource,
@@ -347,6 +378,7 @@ export const whoami: CommandSpec = {
         expires_in_days: expiry.days_left,
         may_activate: principal?.token ? principal.token.may_activate : null,
         ceiling_role: principal?.token?.ceiling_role ?? null,
+        platform_mode_allowed: principal?.token?.platform_mode_allowed ?? null,
         scopes: principal?.api_key?.scopes ?? null,
         // False only when the instance is too old to say who the credential is.
         published: Boolean(principal),
@@ -393,7 +425,10 @@ export const whoami: CommandSpec = {
         ["credential", `${session.tokenKind === "api_key" ? "tenant API key" : session.tokenKind === "personal_access_token" ? "personal access token" : "token"}${tokenName} from ${credentialSource(session)}`],
         ["expires", expires],
         ["may activate", principal?.token ? (principal.token.may_activate ? "yes" : "no (a person activates in the Admin)") : undefined],
-        ["version", data.instance.version ?? undefined],
+        // An instance that does not say whether the token allows Platform mode gets no line.
+        ["platform mode", typeof principal?.token?.platform_mode_allowed === "boolean" ? platformModeText(principal.token) : undefined],
+        ["reaches", reach ? reachText(reach) : undefined],
+        ["version", data.instance.version ? `${data.instance.version}${versionCachedAt ? ` (cached at ${versionCachedAt})` : ""}` : undefined],
       ]),
     };
   },
@@ -512,13 +547,14 @@ function capacityLine(capacity: Limit[]): string {
     .join("; ");
 }
 
-type LimitsState = { published: boolean | null; unavailable?: string };
+type LimitsState = { published: boolean | null; unavailable?: string; quotas_unavailable?: string };
 
 function limitsLine(state: LimitsState, near: Quota[]): string {
   if (state.published === null) return `not readable: ${state.unavailable}`;
   if (!state.published) return "not published by this instance";
-  if (!near.length) return "none close to a quota (`cavelon limits` lists them)";
-  return `close to a quota: ${near.map((q) => `${q.key} ${formatQuota(q)}`).join("; ")}`;
+  const quotas = state.quotas_unavailable ? `\n  quotas not readable: ${state.quotas_unavailable}` : "";
+  if (!near.length) return `${state.quotas_unavailable ? "quotas unknown" : "none close to a quota"} (\`cavelon limits\` lists them)${quotas}`;
+  return `close to a quota: ${near.map((q) => `${q.key} ${formatQuota(q)}`).join("; ")}${quotas}`;
 }
 
 export const status: CommandSpec = {
@@ -554,12 +590,23 @@ export const status: CommandSpec = {
     let published: PublishedLimits | undefined;
     let reachError: string | undefined;
     let client: ApiClient | undefined;
+    if (offline && session.url) {
+      // Offline, the version is the one cached last, and says so.
+      const cached = await new Contracts(new ApiClient({ url: session.url }, ctx.io.env), ctx.io.env, ctx.io.now)
+        .cachedOnly<Capabilities>("capabilities.json")
+        .catch(() => undefined);
+      if (cached?.value?.instance?.version) {
+        data.instance_version = cached.value.instance.version;
+        data.instance_version_cached_at = cached.fetched_at;
+      }
+    }
     if (!offline && session.url && session.token) {
       try {
         client = await ctx.client();
         if (client.target.tenantId) (data.tenant as Record<string, unknown>).id = client.target.tenantId;
         const contracts = await ctx.contracts();
-        const caps = await contracts.capabilities();
+        // Read now, never from the cache: status is where a person checks which version the instance runs.
+        const caps = await contracts.liveCapabilities();
         data.instance_version = caps?.instance.version ?? null;
         if (contracts.needsTenant) {
           data.operations = { unavailable: "No tenant chosen; operations belong to a tenant." };
@@ -581,6 +628,8 @@ export const status: CommandSpec = {
           capacity = limits.capacity;
           published = limits.published;
           data.limits = limits.data;
+          const ref = session.envFile?.harness ?? session.project?.harness;
+          if (session.project && ref) (data.solution as Record<string, unknown>).state = await solutionState(ctx, ref);
         }
       } catch (error) {
         reachError = error instanceof Error ? error.message : String(error);
@@ -599,8 +648,13 @@ export const status: CommandSpec = {
       ["solution", session.project ? session.project.file : "none (no cavelon.yaml here or above)"],
     ];
     if (session.project) {
-      const solution = data.solution as { last_pull: { at: string; harness: { slug: string } | null } | null; open_previews: Array<{ preview_id: string; env: string | null; created_at: string }> };
+      const solution = data.solution as {
+        last_pull: { at: string; harness: { slug: string } | null } | null;
+        open_previews: Array<{ preview_id: string; env: string | null; created_at: string }>;
+        state?: SolutionState;
+      };
       if (session.project.harness) lines.push(["harness", session.project.harness]);
+      if (solution.state) lines.push(...solutionStateLines(solution.state));
       lines.push(["last pull", solution.last_pull ? `${solution.last_pull.at}${solution.last_pull.harness ? ` (${solution.last_pull.harness.slug})` : ""}` : "never"]);
       lines.push([
         "open previews",
@@ -609,7 +663,10 @@ export const status: CommandSpec = {
           : "none",
       ]);
     }
-    if (data.instance_version) lines.push(["version", data.instance_version]);
+    if (data.instance_version) {
+      const cachedAt = data.instance_version_cached_at as string | null | undefined;
+      lines.push(["version", `${data.instance_version}${cachedAt !== undefined ? ` (cached at ${cachedAt ?? "an unknown time"}; not read now)` : ""}`]);
+    }
     if (data.limits) lines.push(["limits", limitsLine(data.limits as LimitsState, near ?? [])]);
     if (capacity.length) lines.push(["run capacity", capacityLine(capacity)]);
     if (reachError) lines.push(["instance error", reachError]);

@@ -119,7 +119,11 @@ schema, offline once the schema is cached.
 `pull` never loses your work silently. In a git repository it refuses to
 overwrite package files with uncommitted changes; outside one, it refuses to
 overwrite or remove a package file that changed since the last pull (an edit,
-or a test suite you have not applied yet). `--force` discards them.
+or a test suite you have not applied yet). A file exactly as the last `pull`
+wrote it or the last confirmed `apply` imported it counts as unchanged in both
+cases, committed or not: `.cavelon/pulled-files.json` keeps a digest of each,
+so a `pull` right after an `apply` goes ahead in a repository without a commit.
+`--force` discards the others.
 
 A package file may be a symlink to a file elsewhere in the solution folder:
 `validate` and `apply` read the file it leads to, and `pull` writes through the
@@ -280,14 +284,22 @@ platform admin), and sent without a tenant.
 `cavelon` uses Platform mode only where it is needed:
 
 - `cavelon tenant create <slug>` creates a tenant (the role needs
-  `tenants.manage`);
+  `tenants.manage`). It asks the instance first whether the token may enter
+  Platform mode and, there, holds `tenants.manage`, and stops with exit 7
+  before sending anything when it does not. `--use` switches to the new tenant
+  only once the instance confirms the token acts in it;
 - `cavelon limits set <key> <value> --tenant <tenant>` sends an operator's
   limit change in Platform mode, after checking that the token's role is one
   the change names. See [Limits](limits.md#operators-changes).
 
 A Platform-mode token reaches no tenant by default; choose one with
 `cavelon use <name or slug>` before tenant commands. `cavelon whoami` shows
-`tenant: none (Platform mode)` until you do.
+`tenant: none (Platform mode)` until you do. Its `platform mode` line says
+whether the token may enter Platform mode at all, with its ceiling
+(`not allowed (ceiling tenant_builder)`), and `reaches` says which tenants it
+reaches (`every tenant (as operator)` for an operator's token without a tenant
+allowlist). A 403 from a platform route never sends you to check the tenant:
+it says that the route needs a token that allows Platform mode.
 
 ## Built for agents
 

@@ -43,7 +43,8 @@ export async function run(argv: string[], io: Io, commands: CommandSpec[] = COMM
       );
     }
     const { spec, rest } = found;
-    const args = spec.preprocess ? spec.preprocess(rest) : rest;
+    const early: string[] = [];
+    const args = spec.preprocess ? spec.preprocess(rest, (message) => early.push(message)) : rest;
     const parsed = parse(spec, args);
     if (parsed.options.help === true) {
       io.stdout.write(commandHelp(spec));
@@ -55,6 +56,7 @@ export async function run(argv: string[], io: Io, commands: CommandSpec[] = COMM
       tenant: typeof parsed.options.tenant === "string" ? parsed.options.tenant : undefined,
       solutionEnv: spec.options?.env && typeof parsed.options.env === "string" ? parsed.options.env : undefined,
     });
+    for (const message of early) ctx.warn(message);
     notice = startUpdateCheck({
       io,
       version: KIT_VERSION,
@@ -144,7 +146,16 @@ function parse(spec: CommandSpec, args: string[]): Input {
       positionals: string[];
     });
   } catch (error) {
-    throw usageError(error instanceof Error ? error.message : String(error), `Run \`cavelon ${spec.name} --help\`.`);
+    const message = error instanceof Error ? error.message : String(error);
+    // `api` takes an operation's parameters as name=value; `--harness_id x` is the likely slip.
+    const unknown = /Unknown option '--([^'=\s]+)/.exec(message)?.[1];
+    if (unknown && spec.positionals?.some((p) => p.variadic && p.name === "params")) {
+      throw usageError(
+        `Unknown option '--${unknown}'.`,
+        `${spec.name} takes an operation's parameters as name=value: pass ${unknown}=<value> (or -p ${unknown}=<value>). Run \`cavelon ${spec.name} --help\`.`,
+      );
+    }
+    throw usageError(message, `Run \`cavelon ${spec.name} --help\`.`);
   }
   if (values.help === true) return { positionals: {}, options: { help: true } };
   const named: Input["positionals"] = {};

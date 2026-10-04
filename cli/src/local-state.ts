@@ -38,6 +38,8 @@ export interface StoredPreview {
   harness: { id: string; slug: string; created: boolean } | null;
   /** The package files' content when previewed, to tell when they changed since. */
   package_digest: string;
+  /** Each package file's digest when previewed; absent in a preview an older kit stored. */
+  file_digests?: Record<string, string>;
   request: ImportRequest;
   preview: Record<string, unknown>;
 }
@@ -64,6 +66,7 @@ export async function readPull(root: string): Promise<PullRecord | undefined> {
   return readJsonFile<PullRecord>(path.join(stateDir(root), "pull.json"));
 }
 
+/** The package files' digests as the last pull or apply left them (the name is older than the apply). */
 const PULLED_FILES = "pulled-files.json";
 
 /** The SHA-256 of a file's bytes, through a symlink; undefined when there is no file. */
@@ -72,19 +75,35 @@ export async function fileDigest(file: string): Promise<string | undefined> {
   return bytes && createHash("sha256").update(bytes).digest("hex");
 }
 
-/**
- * The package files as the last pull left them, by digest. Outside git it is
- * the only way to tell a local edit from what the instance sent.
- */
-export async function writePulledFiles(root: string, files: string[]): Promise<void> {
+/** The digests of files in a solution folder, by their path relative to it; a missing file is left out. */
+export async function fileDigests(root: string, files: string[]): Promise<Record<string, string>> {
   const digests: Record<string, string> = {};
   for (const file of files) {
     const value = await fileDigest(path.join(root, file));
     if (value) digests[file] = value;
   }
-  await writeState(root, PULLED_FILES, JSON.stringify({ digests }, null, 2));
+  return digests;
 }
 
+/**
+ * The package files as the last pull left them, by digest. Outside git, and
+ * for files not committed yet, it is the only way to tell a local edit from
+ * what the instance holds.
+ */
+export async function writePulledFiles(root: string, files: string[]): Promise<void> {
+  await writeState(root, PULLED_FILES, JSON.stringify({ digests: await fileDigests(root, files) }, null, 2));
+}
+
+/**
+ * Add the files an apply imported, as they were when previewed: the instance
+ * holds them now, so a later pull may replace them like files it wrote.
+ */
+export async function rememberAppliedFiles(root: string, digests: Record<string, string>): Promise<void> {
+  const known = await readPulledFiles(root);
+  await writeState(root, PULLED_FILES, JSON.stringify({ digests: { ...known, ...digests } }, null, 2));
+}
+
+/** The package files' digests as the last pull or apply left them. */
 export async function readPulledFiles(root: string): Promise<Record<string, string>> {
   const stored = await readJsonFile<{ digests?: Record<string, string> }>(path.join(stateDir(root), PULLED_FILES));
   return stored?.digests && typeof stored.digests === "object" ? stored.digests : {};

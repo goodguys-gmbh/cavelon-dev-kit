@@ -130,6 +130,7 @@ describe("cavelon mcp", () => {
         "models_list",
         "models_set_limit",
         "operation_status",
+        "package_schema",
         "pull",
         "secrets_list",
         "status",
@@ -217,8 +218,37 @@ describe("cavelon mcp", () => {
     const started = payload(await client.callTool({ name: "test_run", arguments: { suite: ["smoke"] } }));
     expect(started.operation_ids).toHaveLength(1);
     const status = payload(await client.callTool({ name: "operation_status", arguments: { operation: started.operation_ids } }));
-    expect(status).toMatchObject({ settled: false, exit_code: 6 });
+    // Without a timeout it reads the state once: it did not wait, so it did not time out.
+    expect(status).toMatchObject({ settled: false, timed_out: false, timeout_ms: 0, exit_code: 6 });
+    expect(status.waited_ms).toBeLessThan(1000);
     expect(status.operations[0].status).toBe("running");
+  });
+
+  it("operation_status waits up to its timeout, reports waited_ms, and caps a long timeout", async () => {
+    const op = server.addOperation("document_ingestion", tenant, ["queued", "running", "running", "running", "succeeded"]);
+    const waited = payload(await client.callTool({ name: "operation_status", arguments: { operation: [op.id], timeout: "20s" } }));
+    expect(waited).toMatchObject({ settled: true, timed_out: false, timeout_ms: 20_000 });
+    expect(waited.operations[0].status).toBe("succeeded");
+    expect(waited.waited_ms).toBeGreaterThan(0);
+
+    const capped = server.addOperation("document_ingestion", tenant, ["running", "succeeded"]);
+    const long = payload(await client.callTool({ name: "operation_status", arguments: { operation: [capped.id], timeout: "90s" } }));
+    expect(long).toMatchObject({ settled: true, timeout_ms: 50_000 });
+    expect(long.warnings.join()).toMatch(/waits at most 50 s, not 90s/);
+
+    const { tools } = await client.listTools();
+    const tool = tools.find((t) => t.name === "operation_status")!;
+    expect(tool.description).toMatch(/returns the state at once unless given a timeout, and waits at most 50 s/);
+  });
+
+  it("describes init and pull as changing local files only, never the instance", async () => {
+    const { tools } = await client.listTools();
+    for (const name of ["init", "pull"]) {
+      const tool = tools.find((t) => t.name === name)!;
+      expect(tool.description).not.toMatch(/Changes the instance/);
+      expect(tool.description).toMatch(/changes nothing (on the instance|there)/i);
+    }
+    expect(tools.find((t) => t.name === "pull")!.description).toMatch(/Reads the instance/);
   });
 
   it("starts a loop and an export without blocking, and downloads the export by job later", async () => {

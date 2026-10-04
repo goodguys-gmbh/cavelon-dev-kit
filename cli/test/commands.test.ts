@@ -108,6 +108,36 @@ describe("api", () => {
     expect(unauth.json<{ error: { status: number } }>().error.status).toBe(401);
   });
 
+  it("finds an operation by a looser spelling and says which one it took", async () => {
+    const described = await cli(sb, ["api", "describe", "createTenant", "--json"]);
+    expect(described.code, described.stderr).toBe(0);
+    expect(described.json()).toMatchObject({ operation: "create_tenant", method: "POST", path: "/api/v1/tenants" });
+    expect(described.stderr).toMatch(/"createTenant" is taken as create_tenant/);
+    expect((await cli(sb, ["api", "describe", "list-harnesses", "--json"])).json()).toMatchObject({ operation: "list_harnesses" });
+    const missing = await cli(sb, ["api", "describe", "createTenantNow"]);
+    expect(missing.code).toBe(2);
+    expect(missing.stderr).toMatch(/Did you mean: create_tenant/);
+  });
+
+  it("takes the body with --body; --json <body> still works, with a deprecation warning", async () => {
+    const body = await cli(sb, ["api", "create_harness", "--body", '{"slug":"by-body","name":"By body"}', "--json"]);
+    expect(body.code, body.stderr).toBe(0);
+    expect(body.stderr).not.toMatch(/deprecated/);
+    const alias = await cli(sb, ["api", "create_harness", "--json", '{"slug":"by-alias","name":"By alias"}']);
+    expect(alias.code, alias.stderr).toBe(0);
+    expect(alias.stderr).toMatch(/`--json <body>` as the request body is deprecated/);
+    const warned: string[] = [];
+    splitJsonBody(["op", "--json", "{}"], (m) => warned.push(m));
+    splitJsonBody(["op", "--json"], (m) => warned.push(m));
+    expect(warned).toHaveLength(1);
+  });
+
+  it("says to pass a parameter as name=value when it was given as an option", async () => {
+    const result = await cli(sb, ["api", "get_harness_by_slug", "--slug", "support", "--json"]);
+    expect(result.code).toBe(2);
+    expect(result.json<{ error: { hint: string } }>().error.hint).toMatch(/pass slug=<value> \(or -p slug=<value>\)/);
+  });
+
   it("bounds a long list response", async () => {
     for (let i = 0; i < 5; i++) await cli(sb, ["harness", "new", `bulk-${i}`]);
     const result = await cli(sb, ["api", "list_harnesses", "--limit", "2", "--json"]);
@@ -175,6 +205,99 @@ describe("tenant", () => {
   it("reports the server's validation error (exit 3)", async () => {
     const result = await cli(platformSb, ["tenant", "create", "Bad Slug!"]);
     expect(result.code).toBe(3);
+  });
+
+  /** An operator's token that reaches every tenant but may not enter Platform mode, as an instance names its ceiling. */
+  const operatorEnv = () => ({
+    CAVELON_URL: server.url,
+    CAVELON_TOKEN: server.addToken({ kind: "pat", tenantIds: [], reachesAll: true, ceilingRole: "tenant_builder", tokenName: "operator" }),
+  });
+
+  it("refuses before sending when the token may not enter Platform mode, and names the remedy (exit 7)", async () => {
+    server.state.requests.length = 0;
+    const result = await cli(sb, ["tenant", "create", "blocked", "--json"], { env: operatorEnv() });
+    expect(result.code).toBe(7);
+    const error = result.json<{ error: { code: string; message: string; hint: string; details: { sent: boolean } } }>().error;
+    expect(error.code).toBe("platform_mode_not_allowed");
+    expect(error.message).toMatch(/may not enter Platform mode \(ceiling tenant_builder\)/);
+    expect(error.hint).toMatch(/Allow Platform mode/);
+    expect(error.hint).toMatch(/in the Admin/);
+    expect(error.hint).not.toMatch(/cavelon whoami/);
+    expect(error.details.sent).toBe(false);
+    expect(server.state.requests.some((r) => r.method === "POST" && r.path === "/api/v1/tenants")).toBe(false);
+  });
+
+  it("refuses before sending when Platform mode lacks tenants.manage (exit 7)", async () => {
+    const env = { CAVELON_URL: server.url, CAVELON_TOKEN: server.addToken({ kind: "pat", tenantIds: [], platform: true, permissions: ["platform.maintenance"] }) };
+    server.state.requests.length = 0;
+    const result = await cli(sb, ["tenant", "create", "blocked", "--json"], { env });
+    expect(result.code).toBe(7);
+    expect(result.json<{ error: { code: string } }>().error.code).toBe("permission_missing");
+    expect(server.state.requests.some((r) => r.method === "POST" && r.path === "/api/v1/tenants")).toBe(false);
+  });
+
+  it("an instance whose /meta/principal does not say whether the token allows Platform mode: sends, and the route decides", async () => {
+    server.state.principalWithoutPlatformMode = true;
+    try {
+      server.state.requests.length = 0;
+      const result = await cli(sb, ["tenant", "create", "unsaid", "--json"], { env: operatorEnv() });
+      expect(result.code).toBe(7);
+      expect(result.json<{ error: { status: number } }>().error.status).toBe(403);
+      expect(server.state.requests.some((r) => r.method === "POST" && r.path === "/api/v1/tenants")).toBe(true);
+      const created = await cli(platformSb, ["tenant", "create", "unsaid-ok", "--json"]);
+      expect(created.code, created.stdout).toBe(0);
+    } finally {
+      server.state.principalWithoutPlatformMode = undefined;
+    }
+  });
+
+  it("an instance without /meta/principal: sends, and the refusal's hint is about Platform mode, not the tenant", async () => {
+    server.state.servePrincipal = false;
+    try {
+      const env = { CAVELON_URL: server.url, CAVELON_TOKEN: server.addToken({ kind: "pat", tenantIds: [tenant], defaultTenant: tenant }) };
+      const result = await cli(sb, ["tenant", "create", "blocked", "--json"], { env });
+      expect(result.code).toBe(7);
+      const error = result.json<{ error: { status: number; hint: string } }>().error;
+      expect(error.status).toBe(403);
+      expect(error.hint).toMatch(/platform route/);
+      expect(error.hint).toMatch(/tenants\.manage/);
+      expect(error.hint).not.toMatch(/Check the tenant/);
+    } finally {
+      server.state.servePrincipal = true;
+    }
+  });
+
+  it("--use switches only when the token acts in the new tenant", async () => {
+    const env = { CAVELON_URL: server.url, CAVELON_TOKEN: server.addToken({ kind: "pat", tenantIds: [], platform: true, platformOnly: true }) };
+    const created = await cli(sb, ["tenant", "create", "kept-out", "--use", "--json"], { env });
+    expect(created.code, created.stdout + created.stderr).toBe(0);
+    const data = created.json<{ slug: string; used: boolean; warnings: string[] }>();
+    expect(data).toMatchObject({ slug: "kept-out", used: false });
+    expect(data.warnings.join()).toMatch(/does not act in the new tenant/);
+    const status = await cli(sb, ["status", "--offline", "--json"], { env });
+    expect(status.json<{ tenant: { ref: string } | null }>().tenant?.ref).not.toBe("kept-out");
+  });
+
+  it("an operator's token without memberships: tenant list says so and how to find any tenant", async () => {
+    const env = operatorEnv();
+    const text = await cli(sb, ["tenant", "list"], { env });
+    expect(text.code).toBe(0);
+    expect(text.stdout).toMatch(/^No memberships of your own; this token reaches every tenant/);
+    expect(text.stdout).toContain("cavelon tenant list --search <part of the name>");
+    const json = await cli(sb, ["tenant", "list", "--json"], { env });
+    expect(json.json()).toMatchObject({ items: [], total: 0, reaches_all_tenants: true, listed: "own_memberships", note: expect.stringMatching(/total count only your own/) });
+  });
+
+  it("whoami says whether the token may enter Platform mode and which tenants it reaches", async () => {
+    const env = operatorEnv();
+    const text = await cli(sb, ["whoami"], { env });
+    expect(text.code, text.stderr).toBe(0);
+    expect(text.stdout).toMatch(/platform mode:\s+not allowed \(ceiling tenant_builder\)/);
+    expect(text.stdout).toMatch(/reaches:\s+every tenant \(as operator; no memberships of your own\)/);
+    const json = await cli(sb, ["whoami", "--json"], { env });
+    expect(json.json()).toMatchObject({ credential: { platform_mode_allowed: false, ceiling_role: "tenant_builder" }, reaches: { every_tenant: true } });
+    const platform = await cli(platformSb, ["whoami"]);
+    expect(platform.stdout).toMatch(/platform mode:\s+allowed/);
   });
 });
 

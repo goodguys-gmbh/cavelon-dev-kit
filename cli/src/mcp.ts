@@ -1,6 +1,7 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListToolsRequestSchema, type Tool } from "@modelcontextprotocol/sdk/types.js";
 import type { CommandSpec, Input } from "./command.js";
+import { MCP_MAX_WAIT_MS } from "./commands/async.js";
 import { createContext, withWarnings } from "./context.js";
 import { asCavelonError, usageError } from "./errors.js";
 import type { Io } from "./io.js";
@@ -9,18 +10,21 @@ import { KIT_VERSION } from "./version.js";
 /**
  * `cavelon mcp`: the workflow commands as coarse MCP tools over stdio, never
  * one tool per API operation. Each tool runs the command's own code, carries
- * its read-only or destructive annotation, and never blocks: work that takes
- * time returns an operation id, and `operation_status` reads it.
+ * its read-only or destructive annotation, and never blocks for long: work
+ * that takes time returns an operation id, and `operation_status` reads it,
+ * waiting only when asked to and never past MCP_MAX_WAIT_MS.
  */
 
 const INSTRUCTIONS =
   "Tools for one Cavelon instance, acting with the token a person stored with `cavelon login` " +
   "(or CAVELON_TOKEN). You never see or pass the token. Tools that start work (kb_upload, test_run, " +
-  "loop_start, sandbox_seed, artifacts_export) return operation ids at once; read them with operation_status, " +
+  "loop_start, sandbox_seed, artifacts_export) return operation ids at once; read them with operation_status, which returns " +
+  `the state at once, or waits up to its timeout (at most ${MCP_MAX_WAIT_MS / 1000} s) when given one, and reports waited_ms, ` +
   "and follow a loop with loop_iterations. What needs confirmation: apply imports only with confirm set to a preview's id; " +
   "limits_set, models_set_limit, loop_cancel, sandbox_seed, trigger_identity, and api for an operation that is not read-only, " +
   "return what they would do and change nothing without confirm: true; show the person that first. " +
-  "init and pull write files in the solution folder without confirm (pull refuses to replace package files with uncommitted changes unless force), " +
+  "init and pull change nothing on the instance (pull only reads it); they write files in the solution folder without confirm " +
+  "(pull refuses to replace a package file that changed since the last pull or apply and is not committed, unless force), " +
   "and the other changing tools act at once. api refuses, even with confirm, an operation the instance marks for a person " +
   "(x-cavelon-person-only; its reason is in the error), or on an instance that marks none, one that changes a secret, " +
   "creates or revokes a credential (tokens, API keys, sign-in) or decides an approval; it also refuses a body that sets a field " +
@@ -74,7 +78,8 @@ export function inputSchema(spec: CommandSpec): JsonSchema {
 }
 
 export function toolFor(spec: CommandSpec): Tool {
-  const marked = spec.readOnly ? "Read-only." : spec.destructive ? "Changes the instance; may delete or overwrite." : "Changes the instance.";
+  const marked =
+    spec.mcpEffect ?? (spec.readOnly ? "Read-only." : spec.destructive ? "Changes the instance; may delete or overwrite." : "Changes the instance.");
   return {
     name: toolName(spec)!,
     description: [spec.summary, spec.description, marked].filter(Boolean).join("\n"),

@@ -179,7 +179,9 @@ export class ApiClient {
     if (!response.ok && !options.allow?.includes(response.status)) {
       // A tenant call sent without a tenant, because none is chosen: a token without Platform mode is refused for that alone.
       const tenantless = options.sendTenant !== false && !this.headers(options)["X-Tenant-Id"] && Boolean(this.target.token?.startsWith("cvpat_"));
-      throw await this.refusal(response.status, data, `${method} ${new URL(response.url || this.resolve(path)).pathname}`, response.headers, { tenantless });
+      const pathname = new URL(response.url || this.resolve(path)).pathname;
+      const platform = options.sendTenant === false || isPlatformRoute(pathname);
+      throw await this.refusal(response.status, data, `${method} ${pathname}`, response.headers, { tenantless, platform });
     }
     return { status: response.status, headers: response.headers, data: data as T, text };
   }
@@ -275,7 +277,30 @@ const BARE_CODE = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/;
 export interface RefusalContext {
   /** A personal access token's tenant call sent without X-Tenant-Id. */
   tenantless?: boolean;
+  /** A platform route (sent without a tenant, or one that manages tenants or the platform): the tenant is not the problem there. */
+  platform?: boolean;
 }
+
+/**
+ * Whether a path is a platform route, outside any one tenant: the tenants
+ * themselves (`/api/v1/tenants`, `/api/v1/tenants/{id}…`, but not
+ * `/api/v1/tenants/current/…`), the platform's settings and the
+ * administration routes. Only a refusal's hint reads it.
+ */
+export function isPlatformRoute(pathname: string): boolean {
+  const words = pathname.split("/").filter(Boolean);
+  const at = words.indexOf("v1");
+  const first = at < 0 ? undefined : words[at + 1];
+  if (!first) return false;
+  if (first.startsWith("platform") || first === "admin") return true;
+  return first === "tenants" && words[at + 2] !== "current";
+}
+
+/** Said where a platform route refused a token: what it takes, and where to look; never the tenant. */
+export const PLATFORM_ROUTE_HINT =
+  "This is a platform route, outside any tenant: it needs a personal access token that allows Platform mode, with a ceiling and " +
+  "an owner's global role that grant the permission (creating a tenant needs tenants.manage). `cavelon whoami` shows whether " +
+  "this token may enter Platform mode; a platform operator can also do this in the Admin.";
 
 /** Said where a personal access token was refused without a tenant. */
 export const TENANT_ID_HINT =
@@ -347,9 +372,11 @@ export function errorFromResponse(status: number, body: unknown, what: string, h
     hint =
       status === 401
         ? "The token is missing, expired or revoked. A person runs `cavelon login` with a new one."
-        : sent.tenantless
-          ? `No tenant was named. ${TENANT_ID_HINT} Otherwise check the token's permission ceiling.`
-          : "The token does not reach this. Check the tenant (`cavelon whoami`) and the token's permission ceiling.";
+        : sent.platform
+          ? PLATFORM_ROUTE_HINT
+          : sent.tenantless
+            ? `No tenant was named. ${TENANT_ID_HINT} Otherwise check the token's permission ceiling.`
+            : "The token does not reach this. Check the tenant (`cavelon whoami`) and the token's permission ceiling.";
   }
   return new CavelonError(exitCode, {
     code: code ?? defaultCode(status),

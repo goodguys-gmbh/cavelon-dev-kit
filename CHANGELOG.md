@@ -7,7 +7,67 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Added
+
+- `cavelon schema [section]` (MCP tool `package_schema`) shows the package
+  schema the instance publishes: without a section, every section with the file
+  it is kept in; with one, its fields (type, required, allowed values, default)
+  and the smallest entry that has every required field, as YAML to copy into
+  the file. It reads the schema as `validate` does, the cached copy first, and
+  works with `--offline`.
+- `cavelon whoami` says whether the token may enter Platform mode, with its
+  ceiling (`platform mode: not allowed (ceiling tenant_builder)`), and which
+  tenants it reaches (`reaches: every tenant (as operator; …)`);
+  `credential.platform_mode_allowed` in `--json`.
+- `cavelon status` shows the solution's state: draft or active, whether it is
+  ready to activate (or the blockers), and its latest test run, from the
+  readiness the instance publishes (`solution.state` in `--json`). An instance
+  whose readiness does not name the latest run says so.
+
 ### Changed
+
+- `cavelon tenant create` asks the instance first whether the token may enter
+  Platform mode and, there, holds `tenants.manage`. When it does not, it stops
+  with exit 7 before sending anything (`platform_mode_not_allowed`,
+  `permission_missing`) and names the remedy: a token with **Allow Platform
+  mode** and a platform ceiling, or the Admin. `--use` switches to the new
+  tenant only once the instance confirms the token acts in it, and says so
+  otherwise.
+- A 403 from a platform route (the tenants, the platform's settings, the
+  administration routes) no longer tells you to check the tenant: its hint says
+  the route needs a token that allows Platform mode and points to
+  `cavelon whoami`.
+- `cavelon tenant list` with an operator's token that reaches every tenant
+  says "No memberships of your own; …" with the `--search` to find any tenant,
+  and its `--json` marks the list as the person's own memberships
+  (`listed: "own_memberships"`, with a `note` on what `total` counts).
+- `cavelon api` and `cavelon api describe` find an operation by a looser
+  spelling (`createTenant` or `create-tenant` for `create_tenant`) and say
+  which one they took; a near miss names the closest operations. A parameter
+  passed as an option (`--harness_id x`) gets the hint to pass `harness_id=x`.
+- `cavelon api` takes the request body with `--body`. `--json <body>` still
+  sends it, with a warning, and will be removed in a later release; `--json`
+  alone prints JSON as on every command.
+- `pull` no longer refuses files as the last pull wrote them or the last
+  confirmed `apply` imported them, in a git repository without a commit as
+  outside git: `.cavelon/pulled-files.json` now holds the digests of both.
+  Files git lists are matched in a solution that sits in a subfolder of the
+  repository too.
+- The MCP tool `operation_status` waits when given a `timeout`, until the
+  operations settle or the time passes, at most 50 seconds (a longer timeout is
+  cut there, with a warning); without one it returns the state at once.
+  `wait` and `operation_status` report `timeout_ms` and `waited_ms`, and
+  `timed_out` is true only when the whole timeout was waited, never for a
+  state read once. The tool's description and the server's instructions say
+  the same.
+- The MCP descriptions of `init` and `pull` say that they change nothing on
+  the instance (`pull` only reads it) and write files in the solution folder,
+  instead of "Changes the instance; may delete or overwrite."
+- `cavelon status` reads the instance's version now instead of from the
+  cache, and offline marks the cached one with when it was read; `whoami`
+  marks a cached version too. Its text shows the quotas it cannot read, and a
+  403 on the quota usage says that the token's ceiling (named) does not read
+  them and who does, instead of the raw refusal; `limits` says the same.
 
 - `cavelon login` and `cavelon setup` let an operator whose token reaches
   every tenant choose the tenant later: Enter at the question stores the token
