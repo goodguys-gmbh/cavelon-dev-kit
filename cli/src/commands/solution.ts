@@ -30,6 +30,7 @@ import { pairOrderHint, pairOrderPointer } from "../pair-order.js";
 import { readPackage, writePackage, type Finding, type PackageOnDisk } from "../package-files.js";
 import { readPrincipal } from "../principal.js";
 import type { ProjectConfig } from "../project.js";
+import { CASE_STATUSES, caseStatus, TESTING_PAGE, type CaseStatus } from "../results.js";
 import { isUuid, requireInstance, type Session } from "../session.js";
 import { listedPages } from "./docs.js";
 import { writeInventory } from "./inventory.js";
@@ -827,18 +828,50 @@ function processingStepCapHint(limits: PublishedLimits | undefined): string {
   return `monthly_processing_step_cap is ${value}${used} (state: ${cap.state}).${resets} ${raise}`;
 }
 
+/** What a test-case status that is neither pass nor fail means, and what to do next. */
+async function caseStatusAnswer(ctx: Context, status: CaseStatus) {
+  const instance = (await ctx.session().catch(() => undefined))?.url;
+  const page = `/docs/${TESTING_PAGE}#${status.section}`;
+  const data = {
+    code: status.status,
+    kind: "test_case_status",
+    message: status.meaning,
+    hint: status.next,
+    summary_counts: status.counts,
+    docs: instance ? `${instance}${page}` : page,
+    read: [{ page: TESTING_PAGE, command: cavelonCommand("docs", "get", TESTING_PAGE) }],
+  };
+  return {
+    data,
+    text: keyValues([
+      ["code", status.status],
+      ["kind", "test-case status (neither pass nor fail)"],
+      ["meaning", status.meaning],
+      ["next", status.next],
+      ["counted as", status.counts.join(", ")],
+      ["docs", data.docs],
+      ["read", data.read[0]!.command],
+    ]),
+  };
+}
+
 export const explain: CommandSpec = {
   name: "explain",
   summary: "Look a code up in the instance's error catalog: what it means and how to fix it.",
-  description: "Rule codes come from the package and graph checks, API error codes from failed requests. Uses the cached catalog first.",
+  description:
+    "Rule codes come from the package and graph checks, API error codes from failed requests. Uses the cached catalog first.\n" +
+    `Also explains the test-case statuses that are neither pass nor fail: ${CASE_STATUSES.map((s) => s.status).join(", ")}.`,
   readOnly: true,
   idempotent: true,
   mcpTool: "explain",
-  positionals: [{ name: "code", description: "The code, e.g. from `cavelon validate` or an error's code.", required: true }],
+  positionals: [{ name: "code", description: "The code, e.g. from `cavelon validate` or an error's code, or a test-case status.", required: true }],
   async run(ctx, input) {
     const code = positional(input, "code")!.trim();
-    let catalog = await catalogFor(ctx, false);
+    const status = caseStatus(code);
+    // A test-case status needs no instance; a catalog that lists the same name still wins.
+    let catalog = status ? await catalogFor(ctx, false).catch(() => null) : await catalogFor(ctx, false);
     let entry = catalogEntry(catalog, code) ?? looseEntry(catalog, code);
+    if (!entry && status) return caseStatusAnswer(ctx, status);
     if (!entry || entry.kind === "kit") {
       // A newer instance may know a code the cached catalog does not.
       catalog = await (await ctx.contracts()).errorCatalog({ refresh: true }).catch(() => catalog);
@@ -852,7 +885,7 @@ export const explain: CommandSpec = {
       });
     }
     if (!entry) {
-      const all = [...(catalog?.rule_codes ?? []), ...(catalog?.api_error_codes ?? []), ...KIT_CODES].map((e) => e.code);
+      const all = [...(catalog?.rule_codes ?? []), ...(catalog?.api_error_codes ?? []), ...KIT_CODES, ...CASE_STATUSES.map((s) => ({ code: s.status }))].map((e) => e.code);
       const words = code.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 2);
       const similar = all.filter((c) => words.some((w) => c.toLowerCase().includes(w))).slice(0, 8);
       throw new CavelonError(ExitCode.failure, {
