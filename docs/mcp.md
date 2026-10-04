@@ -8,8 +8,14 @@ same checks, against the instance and tenant you logged in to.
 
 ## Setting it up
 
-**With the Cavelon plugin** for Claude Code or Codex, there is nothing to do:
-the plugin starts the server. See [Installation](installation.md#install-the-plugin).
+**With `cavelon setup`**, there is nothing to do: it installs the Cavelon
+plugin for Claude Code and Codex, which starts the server, and adds the server
+to the user settings of Cursor, VS Code with GitHub Copilot, Gemini CLI and
+Kiro. `cavelon setup --check` starts it once to show that it works. See
+[Set up your coding agents](installation.md#set-up-your-coding-agents).
+
+**With the Cavelon plugin** installed by hand for Claude Code or Codex, the
+plugin starts the server. See [Installation](installation.md#install-the-plugin).
 
 **With `cavelon init --agents <list>`**, the entry is written into the
 solution folder for Cursor, GitHub Copilot in VS Code, Gemini CLI, Kiro and

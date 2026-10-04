@@ -159,13 +159,15 @@ export async function bundledSkills(): Promise<Skill[]> {
 }
 
 /**
- * A skill file as `init` writes it into a solution: marked as generated, so
- * `init --update` may replace it and nothing else. The mark goes after a
+ * A skill file as `init` writes it into a solution, or `setup` into an
+ * agent's user folder: marked as generated, so the kit may replace or remove
+ * it and nothing else. The mark goes after a
  * SKILL.md's front matter, which must stay first.
  */
-export function generatedCopy(file: SkillFile): string {
+export function generatedCopy(file: SkillFile, by: "init" | "setup" = "init"): string {
   if (!file.path.endsWith(".md")) return file.content;
-  const mark = `<!-- ${GENERATED_TOKEN}: written by \`cavelon init --agents\` (cavelon ${KIT_VERSION}); \`cavelon init --update\` replaces this file. Put your own notes in another file. -->`;
+  const how = by === "init" ? "`cavelon init --agents` (cavelon " + KIT_VERSION + "); `cavelon init --update` replaces this file" : "`cavelon setup` (cavelon " + KIT_VERSION + "); `cavelon setup` replaces it and `cavelon setup --remove` removes it";
+  const mark = `<!-- ${GENERATED_TOKEN}: written by ${how}. Put your own notes in another file. -->`;
   const front = /^---\r?\n[\s\S]*?\r?\n---\r?\n/.exec(file.content);
   if (front) return `${front[0]}${mark}\n${file.content.slice(front[0].length)}`;
   return `${mark}\n${file.content}`;

@@ -11,8 +11,8 @@ It takes about fifteen minutes. You need:
 - `cavelon`, installed with the one-line install
   ([Installation](installation.md#install-the-cli)), and git. With Node.js
   20.3 or newer, `npx -y @cavelon/cli` runs it without an install, and in this
-  tutorial `cavelon` then stands for that. The plugin is optional for this
-  tutorial;
+  tutorial `cavelon` then stands for that. Your coding agent, set up with
+  `cavelon setup`, is optional for this tutorial;
 - a Cavelon instance with personal access tokens and the operations API turned
   on, and an account that is a tenant admin of a tenant you may test in.
 
@@ -35,6 +35,9 @@ The token starts with `cvpat_` and is shown once. Keep the page open until the
 next step.
 
 ## 2. Log in
+
+If you ran `cavelon setup`, it logged you in this way already: run
+`cavelon whoami` to see as whom, and go on with step 3.
 
 In a terminal of your own (not in the agent's chat), run:
 
@@ -371,9 +374,9 @@ blockers. A token without **May activate** is refused before anything is sent
 
 ## With your coding agent
 
-Every step above is one your coding agent can run for you. With the plugin
-installed, open the folder in Claude Code or Codex and describe what you want,
-for example: *"Add a question about shipping costs to the smoke tests and make
+Every step above is one your coding agent can run for you. Once
+`cavelon setup` has set it up, open the folder in your agent and describe what
+you want, for example: *"Add a question about shipping costs to the smoke tests and make
 it pass."*
 
 [Building a solution with a coding agent](coding-agents.md) explains how to

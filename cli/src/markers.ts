@@ -75,6 +75,26 @@ export function upsertBlock(
   return next === existing ? { outcome: "unchanged" } : { outcome: "updated", content: next };
 }
 
+/**
+ * The file's content without the block, as it was before `upsertBlock`
+ * appended it: the markers, what is between them and the blank line that
+ * separated the block from the rest go. `empty` when nothing else is left.
+ */
+export function removeBlock(existing: string | undefined, style: CommentStyle): BlockResult & { empty?: boolean } {
+  if (existing === undefined) return { outcome: "unchanged" };
+  const eol = lineEnding(existing);
+  const lines = existing.split(/\r?\n/);
+  const found = locate(lines, style);
+  if (!found) return { outcome: "unchanged" };
+  if ("error" in found) return { outcome: "skipped", reason: found.error };
+  let begin = found.begin;
+  if (begin > 0 && lines[begin - 1]!.trim() === "") begin--;
+  const rest = [...lines.slice(0, begin), ...lines.slice(found.end + 1)];
+  const content = rest.join(eol);
+  if (!content.trim()) return { outcome: "updated", content: "", empty: true };
+  return { outcome: "updated", content };
+}
+
 /** True when a whole file was written by the kit and may be replaced by it. */
 export function isGenerated(content: string | undefined): boolean {
   return content !== undefined && content.includes(GENERATED_TOKEN);
@@ -118,6 +138,45 @@ export function upsertJsonEntry(existing: string | undefined, keys: string[], va
   }
   setPath(parsed as Record<string, unknown>, keys, value);
   return { outcome: current === undefined ? "appended" : "updated", content: serialize(parsed) };
+}
+
+/**
+ * The JSON file without the entry at `keys`, when it holds exactly `value`.
+ * Parents left empty go too, except the first `keep` keys (those the file had
+ * before the kit added the entry); `empty` when the whole file is then `{}`.
+ * Like `upsertJsonEntry`, the file is changed only when every other byte stays.
+ */
+export function removeJsonEntry(
+  existing: string | undefined,
+  keys: string[],
+  matches: (value: unknown) => boolean,
+  keep = 0,
+): BlockResult & { empty?: boolean } {
+  if (existing === undefined) return { outcome: "unchanged" };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(existing);
+  } catch {
+    return { outcome: "skipped", reason: "it is not plain JSON (comments or a syntax error)" };
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return { outcome: "skipped", reason: "it is not a JSON object" };
+  const current = getPath(parsed, keys);
+  if (current === undefined) return { outcome: "unchanged" };
+  if (!matches(current)) return { outcome: "skipped", reason: `its "${keys.join(".")}" was changed since cavelon wrote it` };
+  const indent = detectIndent(existing);
+  const eol = lineEnding(existing);
+  const serialize = (v: unknown) => {
+    const text = JSON.stringify(v, null, indent).replace(/\n/g, eol);
+    return /\r?\n$/.test(existing) ? text + eol : text;
+  };
+  if (serialize(parsed) !== existing) return { outcome: "skipped", reason: "rewriting it would change its formatting" };
+  for (let depth = keys.length; depth > 0; depth--) {
+    const parent = (depth === 1 ? parsed : getPath(parsed, keys.slice(0, depth - 1))) as Record<string, unknown>;
+    const key = keys[depth - 1]!;
+    if (depth < keys.length && (depth <= keep || Object.keys(parent[key] as object).length > 0)) break;
+    delete parent[key];
+  }
+  return { outcome: "updated", content: serialize(parsed), empty: Object.keys(parsed).length === 0 };
 }
 
 function detectIndent(text: string): number | string {

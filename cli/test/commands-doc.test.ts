@@ -15,8 +15,8 @@ import { usageLine } from "../src/main.js";
 const GROUPS: Array<{ title: string; intro: string; names: string[] }> = [
   {
     title: "Session",
-    intro: "Log in, choose a tenant, and see where you are.",
-    names: ["login", "logout", "whoami", "use", "status"],
+    intro: "Set up your coding agents, log in, choose a tenant, and see where you are.",
+    names: ["setup", "login", "logout", "whoami", "use", "status"],
   },
   {
     title: "Solution as code",
