@@ -7,6 +7,41 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-04
+
+A security release: upgrade if your coding agent uses `cavelon mcp`. It also
+carries the fixes from a review of the whole CLI.
+
+### Security
+
+Upgrade to this version if your coding agent uses `cavelon mcp`.
+
+- Over MCP, the `api` tool returns what it would send (method, path,
+  parameters, body) and sends an operation that is not read-only only with
+  `confirm: true`. It refuses, even with `confirm`, an operation that changes a
+  secret, creates or revokes a credential (personal access tokens, API keys,
+  sign-in) or decides an approval (`operation_for_a_person`). The CLI's
+  `cavelon api` is unchanged. The server's instructions, `docs/mcp.md` and
+  `docs/security.md` now say exactly which tools need `confirm` and which act
+  at once.
+- Over MCP, every path a tool takes (`api`'s `file` and `body` `@file`,
+  `loop_start`'s `input` `@file`, `kb_upload`'s folder, `sandbox_seed`'s
+  source, `artifacts_export`'s `out`, `init`'s `from`) must lead, after
+  symlinks, into the solution folder (`path_outside_solution`), and never into
+  `cavelon`'s config or cache directory (`path_in_kit_directory`). The CLI
+  still takes any path.
+- Every request URL is resolved before its origin is compared with the
+  instance's (`foreign_url`), whatever its spelling, and a relative path
+  outside the instance's base path is refused too.
+
+### Added
+
+- `cavelon validate --verbose` says which copy of the package schema it used:
+  cached or read from the instance now, when, the instance version and the
+  copy's hash; `--json` carries the same as `schema`.
+- `docs/troubleshooting.md` has an Approvals section: the refusals of a
+  decision by someone an approver rule does not name, and by the requester.
+
 ### Changed
 
 - Over MCP, the `api` tool now refuses exactly the operations the instance
@@ -19,6 +54,22 @@ CLI, the skills and the plugin.
   with `confirm` like any other. An instance that marks no operation keeps the
   previous check by the words of the path. The contract snapshots are
   refreshed from a current instance.
+- `examples/expense-approval/`: the approval says who may decide, by the
+  policy's rule R8.1 and the amount (`approvers` in tiers: team leads, department
+  heads, management), and that nobody decides their own request
+  (`forbid_self_approval: true`). Its offline test checks both against the
+  package schema.
+- `docs/coding-agents.md`: the lesson "Enforce an approval rule through who may
+  decide" now puts the rule on the Approval node (`approvers`,
+  `forbid_self_approval`), tests that each tier reaches the approval, and lets
+  a person decide once per branch; the example brief and the testing section
+  say the same. The `cavelon-authoring` and `cavelon-testing` skills say it
+  too.
+- The contract snapshot is refreshed: the package schema types each node's,
+  edge's and trigger's config and a test suite's settings, and the error
+  catalog has the refusals of an approver rule
+  (`approval_approver_rule_not_met`) and of self-approval
+  (`approval_requester_cannot_decide`), which `cavelon explain` explains.
 
 ### Fixed
 
@@ -117,40 +168,6 @@ CLI, the skills and the plugin.
   Run on Windows, it now writes `cmd /c npx …`, and `init --update` keeps an
   entry written on another system. The installation guide shows how to add
   the server on Windows when the plugin's `npx` entry cannot start.
-
-## [0.1.2] - 2026-10-03
-
-A security release: upgrade if your coding agent uses `cavelon mcp`.
-
-### Added
-
-- `cavelon validate --verbose` says which copy of the package schema it used:
-  cached or read from the instance now, when, the instance version and the
-  copy's hash; `--json` carries the same as `schema`.
-- `docs/troubleshooting.md` has an Approvals section: the refusals of a
-  decision by someone an approver rule does not name, and by the requester.
-
-### Changed
-
-- `examples/expense-approval/`: the approval says who may decide, by the
-  policy's rule R8.1 and the amount (`approvers` in tiers: team leads, department
-  heads, management), and that nobody decides their own request
-  (`forbid_self_approval: true`). Its offline test checks both against the
-  package schema.
-- `docs/coding-agents.md`: the lesson "Enforce an approval rule through who may
-  decide" now puts the rule on the Approval node (`approvers`,
-  `forbid_self_approval`), tests that each tier reaches the approval, and lets
-  a person decide once per branch; the example brief and the testing section
-  say the same. The `cavelon-authoring` and `cavelon-testing` skills say it
-  too.
-- The contract snapshot is refreshed: the package schema types each node's,
-  edge's and trigger's config and a test suite's settings, and the error
-  catalog has the refusals of an approver rule
-  (`approval_approver_rule_not_met`) and of self-approval
-  (`approval_requester_cannot_decide`), which `cavelon explain` explains.
-
-### Fixed
-
 - On a development build of the instance, which keeps one version while its
   package schema changes, `cavelon validate` used the schema it cached first
   until the cache was removed. It now reads a development build's schema,
@@ -169,28 +186,6 @@ A security release: upgrade if your coding agent uses `cavelon mcp`.
   `error_count` joins it, and `errors` keeps its number. The MCP tool
   `validate` returns the same. Every other command's `warnings` was already a
   list of messages; the command reference now says so.
-
-### Security
-
-Upgrade to this version if your coding agent uses `cavelon mcp`.
-
-- Over MCP, the `api` tool returns what it would send (method, path,
-  parameters, body) and sends an operation that is not read-only only with
-  `confirm: true`. It refuses, even with `confirm`, an operation that changes a
-  secret, creates or revokes a credential (personal access tokens, API keys,
-  sign-in) or decides an approval (`operation_for_a_person`). The CLI's
-  `cavelon api` is unchanged. The server's instructions, `docs/mcp.md` and
-  `docs/security.md` now say exactly which tools need `confirm` and which act
-  at once.
-- Over MCP, every path a tool takes (`api`'s `file` and `body` `@file`,
-  `loop_start`'s `input` `@file`, `kb_upload`'s folder, `sandbox_seed`'s
-  source, `artifacts_export`'s `out`, `init`'s `from`) must lead, after
-  symlinks, into the solution folder (`path_outside_solution`), and never into
-  `cavelon`'s config or cache directory (`path_in_kit_directory`). The CLI
-  still takes any path.
-- Every request URL is resolved before its origin is compared with the
-  instance's (`foreign_url`), whatever its spelling, and a relative path
-  outside the instance's base path is refused too.
 
 ## [0.1.1] - 2026-10-03
 
