@@ -7,6 +7,12 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-10-04
+
+The easy start: install with one line on macOS, Linux or Windows without
+Node.js, `cavelon setup` sets up your coding agents and logs you in, and
+tenants and solutions are chosen by name.
+
 ### Added
 
 - `cavelon setup`: from "I have the kit" to "my coding agent can build a
