@@ -13,6 +13,8 @@ export interface InstanceSettings {
   /** Its id, resolved when it was chosen. */
   tenant_id?: string;
   tenant_name?: string;
+  /** The chosen tenant's slug, when the instance told it. */
+  tenant_slug?: string;
   /** Where `login` stored the token. */
   credential_store?: "keyring" | "file";
   token_kind?: TokenKind;

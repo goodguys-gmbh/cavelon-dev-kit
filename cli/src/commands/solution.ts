@@ -9,6 +9,7 @@ import { clip, keyValues } from "../format.js";
 import { readTextFile, writeFileAtomic } from "../fsutil.js";
 import { uncommitted } from "../git.js";
 import { callStable } from "../invoke.js";
+import { harnessNotFoundError, lookupHarness } from "../harness-ref.js";
 import { ceilingHint, LIMIT_ABOVE_CEILING, parseLimits, readLimits, type PublishedLimits } from "../limits.js";
 import {
   deletePreview,
@@ -43,7 +44,7 @@ import { secretSetCommand, targetFlags, variableSetCommand } from "./values.js";
  * operations the plan names (export, preview, import, readiness, activate).
  */
 
-const HARNESS_OPTION = { type: "string" as const, value: "<slug>", description: "The solution (harness); default: env file, then cavelon.yaml." };
+const HARNESS_OPTION = { type: "string" as const, value: "<harness>", description: "The solution (harness): its name, slug or id; default: env file, then cavelon.yaml." };
 const ENV_OPTION = { type: "string" as const, value: "<name>", description: "Use env/<name>.yaml: its tenant, solution and runtime bindings." };
 
 interface Harness {
@@ -58,7 +59,7 @@ export function requireSolution(session: Session): ProjectConfig {
     throw new CavelonError(ExitCode.usage, {
       code: "no_solution",
       message: "This folder is not a Cavelon solution (no cavelon.yaml here or above).",
-      hint: "Run `cavelon init` for a new solution, then `cavelon pull --harness <slug>` for an existing one.",
+      hint: "Run `cavelon init`: it asks which solution, or a new one, on a terminal. `cavelon harness list` shows the solutions.",
     });
   }
   return session.project;
@@ -73,29 +74,10 @@ function harnessRef(session: Session, input: Parameters<CommandSpec["run"]>[1]):
   return {};
 }
 
-async function findHarness(ctx: Context, ref: string): Promise<Harness | undefined> {
-  if (isUuid(ref)) {
-    try {
-      return await callStable<Harness>(ctx, "GET", "/api/v1/harnesses/{harness_id}", "reading solutions", { params: { harness_id: [ref] } });
-    } catch (error) {
-      if (error instanceof CavelonError && error.status === 404) return undefined;
-      throw error;
-    }
-  }
-  try {
-    return await callStable<Harness>(ctx, "GET", "/api/v1/harnesses/by-slug/{slug}", "finding solutions by slug", { params: { slug: [ref] } });
-  } catch (error) {
-    if (error instanceof CavelonError && error.status === 404) return undefined;
-    throw error;
-  }
-}
-
-function harnessNotFound(ref: string, source?: string): CavelonError {
-  return new CavelonError(ExitCode.failure, {
-    code: "solution_not_found",
-    message: `No solution "${ref}" in this tenant${source ? ` (from ${source})` : ""}.`,
-    hint: "`cavelon harness list` shows them; `cavelon harness new <slug>` creates one, and an env file's harness is created by `apply`.",
-  });
+async function findHarness(ctx: Context, ref: string, source?: string): Promise<Harness> {
+  const { harness, candidates } = await lookupHarness<Harness>(ctx, ref);
+  if (!harness) throw harnessNotFoundError(ref, candidates, source);
+  return harness;
 }
 
 /** Which copy of the package schema a command checked against. */
@@ -257,7 +239,7 @@ export const pull: CommandSpec = {
   idempotent: true,
   mcpTool: "pull",
   options: {
-    harness: { type: "string", value: "<slug>", description: "The solution to export; recorded in cavelon.yaml when it names none." },
+    harness: { type: "string", value: "<harness>", description: "The solution to export, by name, slug or id; its slug is recorded in cavelon.yaml when it names none." },
     force: { type: "boolean", description: "Overwrite package files that have uncommitted changes (outside git: changes since the last pull)." },
   },
   examples: ["cavelon pull --harness support", "cavelon pull && git diff -- package tests"],
@@ -274,7 +256,6 @@ export const pull: CommandSpec = {
     let harness: Harness | undefined;
     if (ref) {
       harness = await findHarness(ctx, ref);
-      if (!harness) throw harnessNotFound(ref);
     }
     const scope = harness ? "agent_graph" : "full_config";
     const exported = await callStable<Record<string, unknown>>(ctx, "GET", "/api/v1/agent-graph/export", "exporting packages", {
@@ -673,9 +654,9 @@ async function applyTarget(
 ): Promise<(Harness & { created: boolean }) | undefined> {
   const { ref, source } = harnessRef(session, input);
   if (!ref) return undefined;
-  const found = await findHarness(ctx, ref);
+  const { harness: found, candidates } = await lookupHarness<Harness>(ctx, ref);
   if (found) return { ...found, created: false };
-  if (!source?.startsWith("env/") || isUuid(ref)) throw harnessNotFound(ref, source);
+  if (!source?.startsWith("env/") || isUuid(ref)) throw harnessNotFoundError(ref, candidates, source);
   const name = packageHarnessName(pkg, ref) ?? ref;
   const created = await callStable<Harness>(ctx, "POST", "/api/v1/harnesses", "creating solutions", { body: { slug: ref, name } });
   ctx.warn(`Created the draft solution ${created.name} (${created.slug}) that ${source} names.`);
@@ -739,7 +720,7 @@ export const apply: CommandSpec = {
     if (mode !== "overwrite" && mode !== "replace") throw usageError(`--mode must be overwrite or replace, got "${mode}".`);
 
     const { disk, findings } = await validatePackage(ctx, project, false);
-    if (disk.empty) throw usageError(`No package files in ${project.layout.package}/.`, "Run `cavelon pull --harness <slug>` first, or write the package files.");
+    if (disk.empty) throw usageError(`No package files in ${project.layout.package}/.`, "Run `cavelon pull --harness <name or slug>` first (`cavelon harness list` shows them), or write the package files.");
     const errors = findings.filter((f) => f.severity === "error");
     if (errors.length) {
       return {
@@ -984,7 +965,7 @@ export const activate: CommandSpec = {
   async run(ctx, input) {
     const session = await ctx.session();
     const { ref, source } = harnessRef(session, input);
-    if (!ref) throw usageError("Which solution?", "Pass --harness <slug>, or set harness in cavelon.yaml or the env file.");
+    if (!ref) throw usageError("Which solution?", "Pass --harness <name or slug> (`cavelon harness list` shows them), or set harness in cavelon.yaml or the env file.");
     const client = await ctx.client();
     const principal = await readPrincipal(client);
     if (principal?.kind === "personal_access_token" && principal.token && !principal.token.may_activate) {
@@ -994,8 +975,7 @@ export const activate: CommandSpec = {
         hint: "A person activates the solution in the Admin, or creates a token with \"may activate\" on /account/access-tokens.",
       });
     }
-    const harness = await findHarness(ctx, ref);
-    if (!harness) throw harnessNotFound(ref, source);
+    const harness = await findHarness(ctx, ref, source);
     if (harness.status === "active") {
       return { data: { activated: false, already_active: true, harness }, text: `${harness.name} (${harness.slug}) is already active.` };
     }

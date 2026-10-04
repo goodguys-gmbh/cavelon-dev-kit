@@ -51,9 +51,13 @@ This page is a compact reference.
    standard input instead. **`cavelon` never takes a token as an argument**, so it
    stays out of shell history. Run it in a terminal of your own: an agent's
    shell (`!` in Claude Code) has no terminal to type the token into.
-3. `cavelon whoami` shows who the token acts as, its name and when it expires (it
-   warns from seven days before), and whether it may activate solutions. With a
-   token that reaches several tenants, choose one: `cavelon use <tenant>`.
+   `login` finds the tenants the token reaches: it uses the only one, or asks
+   you to choose by number or part of a name. Without a terminal it stores the
+   token and prints one `cavelon use <tenant>` line per tenant (exit 2).
+3. `cavelon whoami` shows who the token acts as, in which tenant (name, slug
+   and id), its name and when it expires (it warns from seven days before), and
+   whether it may activate solutions. `cavelon use` chooses another tenant from
+   the same list.
 
 The token goes into the operating system's credential store (Keychain, Windows
 Credential Manager, Secret Service). Where there is none, it goes into
@@ -73,14 +77,14 @@ Environment variables replace the login:
 |---|---|
 | `CAVELON_URL` | the instance URL |
 | `CAVELON_TOKEN` | a personal access token (`cvpat_…`) or a tenant API key (`cbp_…`); needs `CAVELON_URL` |
-| `CAVELON_TENANT` | the tenant slug or id, for a personal token that reaches several tenants |
+| `CAVELON_TENANT` | the tenant's name, slug or id, for a personal token that reaches several tenants |
 
 ### Which instance, token and tenant
 
 Highest first:
 
-1. command-line options: `--instance <url>`, `--tenant <tenant>` (there is no
-   token option);
+1. command-line options: `--instance <url>`, `--tenant <name, slug or id>`
+   (there is no token option);
 2. `CAVELON_URL`, `CAVELON_TOKEN`, `CAVELON_TENANT`;
 3. the nearest `cavelon.yaml` from the current directory upwards (instance URL
    and tenant, never a token);
@@ -105,20 +109,20 @@ Every command takes `--json` (one JSON document on stdout, errors included),
 |---|---|---|
 | `login [--token-stdin]` | changing | Store a token for an instance. A person runs this. |
 | `logout [--all]` | changing | Delete the stored token. |
-| `whoami` | read-only | Owner or key, tenant, role, and where the credential came from. |
-| `use <tenant>` / `use --clear` | changing | Choose the tenant for this instance. |
+| `whoami` | read-only | Owner or key, tenant (name, slug and id), role, and where the credential came from. |
+| `use [<tenant>]` / `use --clear` | changing | Choose the tenant for this instance, by name, slug or id, or from a list. |
 | `status [--offline]` | read-only | Instance, credential, tenant, solution folder, running operations, quotas close to full. |
 | `limits [--key <key>] [--source <source>]` | read-only | The instance's limits for this tenant by source, who changes each and how; the tenant's quotas with their use (the monthly Processing Step cap among them); branch concurrency. |
 | `limits set <key> <value> [--confirm]` | changing (destructive) | Change a limit through the operation the instance names: a tenant admin's, a quota of the Tenant Owner's (inference budget, Processing Step cap), or an operator's run cap with a Platform-mode token; without `--confirm`, shows the old and new value. |
 | `models list` | read-only | The tenant's Model Registry rows with their endpoint and `max_concurrent_requests`; never a key. |
 | `models set-limit <model> <n\|none> [--confirm]` | changing (destructive) | Set or clear a row's `max_concurrent_requests`; without `--confirm`, shows the old and new value. |
 | `tenant create <slug> [--name] [--use]` | changing | Create a tenant (personal token in Platform mode with `tenants.manage`). |
-| `tenant list [--search]` | read-only | Tenants the token can see. |
-| `harness list [--readiness]` | read-only | The tenant's solutions. |
+| `tenant list [--search]` | read-only | Tenants the token can see, with name, slug, role and id. |
+| `harness list [--readiness]` | read-only | The tenant's solutions, with slug, name, status and id. |
 | `harness new <slug> [--name] [--description]` | changing | Create an empty draft solution. |
 | `harness clone <source> [--slug] [--name] [--no-tests] [--no-triggers]` | changing | Copy a solution into a new draft. |
 | `activate [--harness] [--env]` | changing | Activate through the readiness gate only, never by force. |
-| `init [--harness] [--agents <list>] [--hook] [--update] [--from <file> [--force]]` | changing (files) | Make this folder a solution: `cavelon.yaml`, `package/`, `tests/`, `env/`, `.cavelon/`; `--from` writes a package file into it. |
+| `init [--harness] [--agents <list>] [--hook] [--update] [--from <file> [--force]]` | changing (files) | Make this folder a solution: `cavelon.yaml`, `package/`, `tests/`, `env/`, `.cavelon/`; on a terminal it asks for the tenant and the solution (or a new one by name); `--from` writes a package file into it. |
 | `pull [--harness] [--force]` | changing (files) | Write the instance's package into `package/` and `tests/`, the inventory into `.cavelon/`. |
 | `validate [--offline]` | read-only | Check the package files against the cached package schema. |
 | `apply [--env] [--harness] [--mode]` | changing | Preview the files against the instance; prints and stores a preview id. |

@@ -24,7 +24,7 @@ import { isUuid } from "../session.js";
 import { cavelonCommand } from "../shell.js";
 import { archiveFrom } from "../tar.js";
 import { TIMEOUT_OPTION, timeoutMs, waitAndReport } from "./async.js";
-import { resolveHarnessId } from "./tenants.js";
+import { resolveHarnessId } from "../harness-ref.js";
 
 /**
  * Sandboxes: inspect them, seed them, take results out. Each Sandbox runs in
@@ -52,7 +52,7 @@ const WAIT_OPTION = { type: "boolean" as const, description: "Wait for the job t
 const HARNESS_OPTION = {
   type: "string" as const,
   value: "<harness>",
-  description: "The solution the Sandbox is read for (default: cavelon.yaml's, or the Sandbox's only allowed one).",
+  description: "The solution the Sandbox is read for, by name, slug or id (default: cavelon.yaml's, or the Sandbox's only allowed one).",
 };
 const REVISION_OPTION = {
   type: "string" as const,

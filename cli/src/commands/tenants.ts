@@ -13,7 +13,11 @@ import { CavelonError, ExitCode, usageError } from "../errors.js";
 import { keyValues, moreHint, table } from "../format.js";
 import { callStable } from "../invoke.js";
 import { formatQuota, limitError, limitsOrWarn, readQuotas } from "../limits.js";
-import { isUuid, requireInstance } from "../session.js";
+import { containing } from "../choose.js";
+import { readTenantless } from "../principal.js";
+import { requireInstance } from "../session.js";
+import { listsTenants, searchTenants } from "../tenant-choice.js";
+import { resolveHarnessId } from "../harness-ref.js";
 import { cavelonCommand } from "../shell.js";
 import { rememberTenant } from "./session.js";
 
@@ -91,12 +95,15 @@ export const tenantCreate: CommandSpec = {
 };
 
 interface Me {
-  memberships?: Array<{ tenant_id: string; tenant_name: string; role?: string }>;
+  memberships?: Array<{ tenant_id: string; tenant_name: string; tenant_slug?: string | null; role?: string }>;
 }
 
 export const tenantList: CommandSpec = {
   name: "tenant list",
-  summary: "List the tenants this token can see.",
+  summary: "List the tenants this token can see, with name, slug and id.",
+  description:
+    "A personal access token in Platform mode sees every tenant; any other sees the tenants it reaches. " +
+    "An operator's token that reaches every tenant lists the person's own and finds any other with --search.",
   readOnly: true,
   idempotent: true,
   mcpTool: "tenant_list",
@@ -112,16 +119,19 @@ export const tenantList: CommandSpec = {
     }
     const limit = intOption(input, "limit", { min: 1, max: 200, fallback: 50 })!;
     const cursor = stringOption(input, "cursor");
+    const search = stringOption(input, "search");
     const offset = cursor === undefined ? 0 : Number(cursor);
     if (!Number.isInteger(offset) || offset < 0) throw usageError(`--cursor "${cursor}" is not a cursor from a previous page.`);
     const client = await ctx.client({ tenant: false });
-    // A platform operator sees every tenant; anyone else sees their memberships.
+    // A platform operator sees every tenant; anyone else sees the tenants the token reaches.
     const listing = await client.get<{ items: Tenant[]; total: number }>("/api/v1/tenants", {
-      query: { limit, offset, search: stringOption(input, "search") },
+      query: { limit, offset, search },
       sendTenant: false,
       allow: [403],
     });
-    let page: { items: Array<Record<string, unknown>>; next_cursor: string | null; total: number; source: string };
+    let page: { items: Array<Record<string, unknown>>; next_cursor: string | null; total: number; source: string; reaches_all_tenants?: boolean };
+    let note = "";
+    const reach = listing.status === 200 ? undefined : await readTenantless(client);
     if (listing.status === 200) {
       const items = listing.data.items.map((t) => ({ id: t.id, slug: t.slug, name: t.name, status: t.status ?? null, plan: t.plan ?? null }));
       page = {
@@ -130,18 +140,27 @@ export const tenantList: CommandSpec = {
         total: listing.data.total,
         source: "platform",
       };
+    } else if (listsTenants(reach)) {
+      const found = search && reach.reachesAll ? await searchTenants(client, search) : search ? containing(reach.tenants, search) : reach.tenants;
+      const all = found.map((t) => ({ id: t.id, slug: t.slug, name: t.name, role: t.role, is_default: t.is_default }));
+      page = { ...pageOf(all, limit, cursor), source: "token", reaches_all_tenants: reach.reachesAll };
+      if (reach.reachesAll && !search) {
+        note = `\nThis token reaches every tenant on ${client.url}${all.length ? "; these are your own" : ""}. Find any other: cavelon tenant list --search <part of the name>`;
+      }
     } else {
       const me = await client.get<Me>("/api/v1/auth/me", { sendTenant: false });
-      const search = stringOption(input, "search")?.toLowerCase();
+      const wanted = search?.toLowerCase();
       const all = (me.data.memberships ?? [])
-        .filter((m) => !search || m.tenant_name.toLowerCase().includes(search))
-        .map((m) => ({ id: m.tenant_id, slug: null, name: m.tenant_name, role: m.role ?? null }));
+        .filter((m) => !wanted || m.tenant_name.toLowerCase().includes(wanted) || Boolean(m.tenant_slug?.toLowerCase().includes(wanted)))
+        .map((m) => ({ id: m.tenant_id, slug: m.tenant_slug ?? null, name: m.tenant_name, role: m.role ?? null }));
       page = { ...pageOf(all, limit, cursor), source: "memberships" };
     }
-    const columns = page.source === "platform" ? ["slug", "name", "status", "id"] : ["name", "role", "id"];
+    const columns = page.source === "platform" ? ["name", "slug", "status", "id"] : ["name", "slug", "role", "id"];
+    const empty = search ? `No tenant's name or slug contains "${search}".` : note ? "" : "No tenants.";
+    const next = page.items.length ? `\nChoose one: cavelon use <slug>  (or \`cavelon use\` to pick from a list)` : "";
     return {
       data: page,
-      text: (table(page.items, columns) || "No tenants.") + moreHint(page.next_cursor, "cavelon tenant list"),
+      text: ((table(page.items, columns) || empty) + moreHint(page.next_cursor, "cavelon tenant list") + note + next).trimStart(),
     };
   },
 };
@@ -232,6 +251,12 @@ async function checkHarnessCapacity(ctx: Context, slug: string): Promise<void> {
   }
 }
 
+/** A new draft solution, refused before sending when the published limits already rule it out. */
+export async function createHarness(ctx: Context, body: { slug: string; name: string; description?: string }, idempotencyKey?: string): Promise<Harness> {
+  await checkHarnessCapacity(ctx, body.slug);
+  return callStable<Harness>(ctx, "POST", "/api/v1/harnesses", "creating solutions", { body, headers: idempotency(idempotencyKey) });
+}
+
 export const harnessNew: CommandSpec = {
   name: "harness new",
   summary: "Create an empty draft solution (harness).",
@@ -245,14 +270,10 @@ export const harnessNew: CommandSpec = {
   },
   async run(ctx, input) {
     const slug = positional(input, "slug")!;
-    const body: Record<string, unknown> = { slug, name: stringOption(input, "name") ?? slug };
+    const body: { slug: string; name: string; description?: string } = { slug, name: stringOption(input, "name") ?? slug };
     const description = stringOption(input, "description");
     if (description) body.description = description;
-    await checkHarnessCapacity(ctx, slug);
-    const harness = await callStable<Harness>(ctx, "POST", "/api/v1/harnesses", "creating solutions", {
-      body,
-      headers: idempotency(stringOption(input, "idempotency-key")),
-    });
+    const harness = await createHarness(ctx, body, stringOption(input, "idempotency-key"));
     return {
       data: harness,
       text: keyValues([
@@ -264,21 +285,12 @@ export const harnessNew: CommandSpec = {
   },
 };
 
-/** A harness id from an id or a slug. */
-export async function resolveHarnessId(ctx: Parameters<CommandSpec["run"]>[0], ref: string): Promise<string> {
-  if (isUuid(ref)) return ref;
-  const harness = await callStable<Harness>(ctx, "GET", "/api/v1/harnesses/by-slug/{slug}", "finding solutions by slug", {
-    params: { slug: [ref] },
-  });
-  return harness.id;
-}
-
 export const harnessClone: CommandSpec = {
   name: "harness clone",
   summary: "Copy a solution into a new draft solution.",
   readOnly: false,
   mcpTool: "harness_clone",
-  positionals: [{ name: "source", description: "Slug or id of the solution to copy.", required: true }],
+  positionals: [{ name: "source", description: "Name, slug or id of the solution to copy.", required: true }],
   options: {
     slug: { type: "string", value: "<slug>", description: "The copy's slug." },
     name: { type: "string", value: "<name>", description: "The copy's display name." },

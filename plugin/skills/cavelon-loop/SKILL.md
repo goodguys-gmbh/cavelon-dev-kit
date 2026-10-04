@@ -38,12 +38,17 @@ use it when you parse the result.
   or tell the person who to ask instead of working around it. `cavelon status`
   says when a quota is close to full.
 - No `cavelon.yaml` here or above: for a new solution run
-  `cavelon init --instance <url> --tenant <tenant> --harness <slug>`; for an
-  existing one add `cavelon pull --harness <slug>` after it. To start from a
-  package file (a blueprint, an export from another instance), run
+  `cavelon init --instance <url> --tenant <tenant> --harness <solution>`, where
+  the tenant and the solution are each a name, slug or id; for an existing one
+  add `cavelon pull` after it. To start from a package file (a blueprint, an
+  export from another instance), run
   `cavelon init --instance <url> --tenant <tenant> --from <file>` instead of
-  splitting it by hand or importing it in the Admin. Ask the person for the
-  instance and tenant if you do not know them; do not guess.
+  splitting it by hand or importing it in the Admin. Never guess a tenant or a
+  solution, and never ask the person for an id they would have to look up:
+  `cavelon tenant list --json` and `cavelon harness list --json` list the
+  names, slugs and ids to choose from, and the person names one by its name.
+  In their own terminal, a plain `cavelon init` asks them. Ask for the instance
+  URL if you do not know it.
 
 ## The loop
 
@@ -55,7 +60,7 @@ use it when you parse the result.
    (one file per test suite). See the cavelon-authoring skill.
 3. **Validate** offline: `cavelon validate`. Fix every error; `cavelon explain
    <code>` says what a code means and how to fix it.
-4. **Preview**: `cavelon apply --env test` (or `--harness <slug>`). Nothing is
+4. **Preview**: `cavelon apply --env test` (or `--harness <name or slug>`). Nothing is
    imported yet. Read the preview: what is created, updated or deleted, which
    active solutions it reaches, what the target still needs (variables and
    secrets with the command that sets each, OAuth grants, runtime bindings,

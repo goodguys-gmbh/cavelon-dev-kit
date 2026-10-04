@@ -77,8 +77,10 @@ agent can do. Choose the token accordingly (next section). See also
    able to put solutions live, and only for the tenant you mean. Use a test
    tenant, or at least a draft solution, for building.
 3. **One solution per folder, in a git repository.** Create the folder, run
-   `git init`, then `cavelon init --tenant <tenant> --harness <slug>`, or let
-   the agent run it. `cavelon init` writes `cavelon.yaml`, `package/`, `tests/`,
+   `git init`, then `cavelon init`: in your terminal it asks for the tenant and
+   the solution by name. An agent runs it with `--tenant` and `--harness` (a
+   name, slug or id each), taken from `cavelon tenant list` and
+   `cavelon harness list`. `cavelon init` writes `cavelon.yaml`, `package/`, `tests/`,
    `env/` and an `AGENTS.md` block the agent reads first. To work on a solution
    that already exists, add `cavelon pull`.
 4. **Put the material in the folder.** Everything the solution must know or
@@ -380,7 +382,7 @@ draft of your own with `cavelon harness clone <slug>`.
 Open the solution folder in your agent and adapt these:
 
 - *"Start a Cavelon solution from this folder. Read the files in `policies/`
-  and `seeds/`, use the tenant `acme` and the solution slug `expense-approval`,
+  and `seeds/`, use the tenant Acme Support and the solution Expense Approval,
   and write a test suite for it. Work in the test environment."*
 - *"Add a test for a customer who asks about an order that is not theirs, and
   make it pass."*

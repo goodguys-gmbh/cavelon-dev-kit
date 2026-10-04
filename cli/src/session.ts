@@ -1,6 +1,9 @@
 import { CavelonError, ExitCode, notLoggedIn, usageError } from "./errors.js";
 import { ApiClient, TENANT_ID_HINT } from "./http.js";
 import { readToken } from "./credentials.js";
+import { exactMatch } from "./choose.js";
+import { readTenantless, type ReachableTenant } from "./principal.js";
+import { listsTenants, searchTenants, tenantMissError, type Reach } from "./tenant-choice.js";
 import { findProject, readEnvFile, type EnvFile, type ProjectConfig } from "./project.js";
 import { loadUserConfig, tokenKind, updateInstance, type InstanceSettings, type TokenKind } from "./user-config.js";
 
@@ -173,8 +176,8 @@ export function requireToken(session: Session): string {
 }
 
 interface MeResponse {
-  memberships?: Array<{ tenant_id: string; tenant_name: string }>;
-  accessible_tenants?: Array<{ tenant_id: string; tenant_name: string }>;
+  memberships?: Array<{ tenant_id: string; tenant_name: string; tenant_slug?: string | null }>;
+  accessible_tenants?: Array<{ tenant_id: string; tenant_name: string; tenant_slug?: string | null }>;
 }
 
 interface TenantPage {
@@ -207,18 +210,54 @@ export function tenantRequiredError(url: string, said: string, lead = "No tenant
   });
 }
 
+/** A tenant found by name, slug or id; name and slug when the instance told them. */
+export interface FoundTenant {
+  id: string;
+  name?: string;
+  slug?: string;
+}
+
 /**
- * The id behind a tenant slug or name, from what the credential may read:
- * the person's own memberships (by name), the platform's tenant list, then
- * each membership's own detail. Memberships carry no slug and the platform
- * list is an operator's, so for a member the detail is the only published
- * place that names a slug; it needs settings.view in that tenant.
+ * The tenant behind a name, slug or id. A recent instance lists the tenants
+ * a personal access token reaches without a tenant, and an operator's token
+ * that reaches every tenant searches them, so the match comes from there. An
+ * older instance lists none: then from what the credential may read, the
+ * person's own memberships (by name), the platform's tenant list, then each
+ * membership's own detail, where a member finds a slug only with
+ * settings.view in that tenant.
  */
-export async function lookupTenantId(client: ApiClient, ref: string, from?: string): Promise<{ id: string; name?: string }> {
+export async function lookupTenantId(client: ApiClient, ref: string, from?: string): Promise<FoundTenant> {
   if (isUuid(ref)) return { id: ref };
+  if (client.target.token?.startsWith("cvpat_")) {
+    const reach = await readTenantless(client);
+    // A Platform-mode token lists only its owner's memberships here, and finds every tenant in the platform's list below.
+    if (listsTenants(reach) && !reach.platform) return findInReach(client, reach, ref, from);
+  }
   const lookup = await findTenant(client, ref);
   if (lookup.found) return lookup.found;
   throw tenantNotFoundError(ref, lookup.known, from);
+}
+
+function foundOf(tenant: ReachableTenant): FoundTenant {
+  return { id: tenant.id, ...(tenant.name ? { name: tenant.name } : {}), ...(tenant.slug ? { slug: tenant.slug } : {}) };
+}
+
+async function findInReach(client: ApiClient, reach: Reach, ref: string, from?: string): Promise<FoundTenant> {
+  const own = exactMatch(reach.tenants, ref);
+  if (own) return foundOf(own);
+  const pool = [...reach.tenants];
+  if (reach.reachesAll) {
+    // Each word too, so "acme support" still finds "acme-support" through its name.
+    const words = [ref, ...ref.split(/[\s_-]+/).filter((w) => w.length >= 3 && w !== ref)].slice(0, 4);
+    for (const word of words) {
+      const found = await searchTenants(client, word);
+      const hit = exactMatch(found, ref);
+      if (hit) return foundOf(hit);
+      for (const t of found) if (!pool.some((p) => p.id === t.id)) pool.push(t);
+      if (pool.length > reach.tenants.length) break;
+    }
+  }
+  throw tenantMissError(ref, pool, reach.reachesAll, from);
 }
 
 /** At most this many of a person's tenants are named in a refusal. */
@@ -237,7 +276,7 @@ function tenantNotFoundError(ref: string, known: Map<string, string>, from?: str
   });
 }
 
-async function findTenant(client: ApiClient, ref: string): Promise<{ found?: { id: string; name?: string }; known: Map<string, string> }> {
+async function findTenant(client: ApiClient, ref: string): Promise<{ found?: FoundTenant; known: Map<string, string> }> {
   const wanted = ref.toLowerCase();
   const memberships = new Map<string, string>();
   if (client.target.token?.startsWith("cvpat_")) {
@@ -249,9 +288,9 @@ async function findTenant(client: ApiClient, ref: string): Promise<{ found?: { i
     }
     if (me.status === 200 && me.data) {
       const tenants = [...(me.data.memberships ?? []), ...(me.data.accessible_tenants ?? [])];
-      const hit = tenants.find((t) => t.tenant_name?.toLowerCase() === wanted || t.tenant_id === ref);
+      const hit = tenants.find((t) => t.tenant_name?.toLowerCase() === wanted || t.tenant_slug?.toLowerCase() === wanted || t.tenant_id === ref);
       for (const t of tenants) if (isUuid(t.tenant_id)) memberships.set(t.tenant_id, t.tenant_name);
-      if (hit) return { found: { id: hit.tenant_id, name: hit.tenant_name }, known: memberships };
+      if (hit) return { found: { id: hit.tenant_id, name: hit.tenant_name, ...(hit.tenant_slug ? { slug: hit.tenant_slug } : {}) }, known: memberships };
     }
   }
   const page = await client.get<TenantPage>("/api/v1/tenants", {
@@ -261,7 +300,7 @@ async function findTenant(client: ApiClient, ref: string): Promise<{ found?: { i
   });
   if (page.status === 200) {
     const hit = page.data?.items?.find((t) => t.slug?.toLowerCase() === wanted || t.name?.toLowerCase() === wanted);
-    if (hit) return { found: { id: hit.id, name: hit.name }, known: memberships };
+    if (hit) return { found: { id: hit.id, name: hit.name, slug: hit.slug }, known: memberships };
   }
   for (const [id, name] of [...memberships].slice(0, MAX_SLUG_LOOKUPS)) {
     // An instance without the route, or a member without settings.view there, answers 403 or 404: not this one.
@@ -270,7 +309,7 @@ async function findTenant(client: ApiClient, ref: string): Promise<{ found?: { i
       headers: { "X-Tenant-Id": id },
       allow: [400, 403, 404, 422],
     });
-    if (detail.status === 200 && detail.data?.slug?.toLowerCase() === wanted) return { found: { id, name: detail.data.name ?? name }, known: memberships };
+    if (detail.status === 200 && detail.data?.slug?.toLowerCase() === wanted) return { found: { id, name: detail.data.name ?? name, slug: detail.data.slug }, known: memberships };
   }
   return { known: memberships };
 }

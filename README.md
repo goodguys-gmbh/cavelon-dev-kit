@@ -92,18 +92,22 @@ Replace `https://cavelon.example.com` with the address of your Cavelon
 instance: the URL you open Cavelon at in the browser. `example.com` stands for
 it throughout these docs.
 
-`--tenant` is optional. Without it, a token limited to one tenant, or one whose
-owner has a default tenant, acts there, and `login` says which tenant that is.
-A token for several tenants that the instance cannot place is refused without
-a tenant, and the instance then names none of its tenants: `login` stops with
-`tenant_required` and asks for the tenant's id. Log in again with it:
+`login` asks for the token, checks it and finds the tenants it reaches. With
+one, it uses it and says so. With several, it shows them as a numbered list:
+type the number, or part of the tenant's name. An operator's token that reaches
+every tenant asks for part of the name and searches. You never need to look up
+a tenant's id; `--tenant` takes a name, slug or id if you want to name it
+straight away:
 
 ```bash
-cavelon login --instance https://cavelon.example.com --tenant 4f6174cf-3060-4ff1-bd3c-8a8e7999256b
+cavelon login --instance https://cavelon.example.com --tenant "Acme Support"
 ```
 
-An operator copies a tenant's id in **Platform › Tenants**. A token limited to
-one tenant (**Tenants** on the token form) needs no `--tenant` at all.
+Later, `cavelon use` lets you choose another tenant from the same list, and
+`cavelon tenant list` shows each tenant's name, slug and id.
+An older Cavelon instance does not tell a token which tenants it reaches; there
+`login` asks for `--tenant <tenant-id>` when it needs one (an operator copies
+the id in **Platform › Tenants**).
 
 Where nothing can ask for it, in CI or for an agent that runs unattended, a
 person pipes the token in from a secret store with `--token-stdin`; it is never
@@ -112,6 +116,10 @@ an argument:
 ```bash
 op read op://dev/cavelon/token | cavelon login --instance https://cavelon.example.com --token-stdin
 ```
+
+Without a terminal there is nobody to choose a tenant: a token for several
+tenants is stored, and `login` prints one ready `cavelon use <tenant>` line per
+tenant to run next (exit 2). Pass `--tenant` to choose up front.
 
 In CI, setting `CAVELON_URL` and `CAVELON_TOKEN` from the CI system's secrets
 works too ([Security](docs/security.md)).
@@ -122,8 +130,13 @@ works too ([Security](docs/security.md)).
 mkdir support-faq
 cd support-faq
 git init
-cavelon init --tenant acme --harness support-faq
+cavelon init
 ```
+
+`init` asks which of the tenant's solutions this folder holds, or the name of a
+new one, and writes the tenant's and the solution's slugs into `cavelon.yaml`.
+To answer up front, name them: `cavelon init --tenant "Acme Support" --harness
+"Support FAQ"` (a name, slug or id each).
 
 Then let your agent write the package files, bring an existing solution in
 with `cavelon pull`, or copy `package/`, `tests/` and `seeds/` from an example:

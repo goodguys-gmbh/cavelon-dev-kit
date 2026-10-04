@@ -80,9 +80,10 @@ for commands that do not import packages.
 ### Can I use it with several instances or tenants?
 
 Yes. Log in once per instance (`cavelon login --instance <url>`). Within an
-instance, `cavelon use <tenant>` chooses the default tenant, and `--tenant`,
-`CAVELON_TENANT`, `cavelon.yaml` or an environment file choose it per command
-or per folder. `cavelon whoami` shows which one applies and why.
+instance, `cavelon use` lists the tenants your token reaches and stores the one
+you choose; `--tenant` (a name, slug or id), `CAVELON_TENANT`, `cavelon.yaml`
+or an environment file choose it per command or per folder. `cavelon whoami`
+shows which one applies and why.
 
 ### Does it work on Windows?
 
@@ -96,7 +97,7 @@ Yes. CI runs the tests on Windows, macOS and Linux. See the
 In an empty repository:
 
 ```bash
-cavelon init --tenant <tenant> --harness <solution slug>
+cavelon init      # asks for the tenant (if your token reaches several) and the solution
 cavelon pull
 git add -A
 git commit -m "Import the solution"

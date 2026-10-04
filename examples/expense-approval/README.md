@@ -70,7 +70,7 @@ git init
 ```
 
 Edit two lines of `cavelon.yaml`: `instance` is your Cavelon URL, `tenant` your
-tenant's slug (`cavelon whoami` shows it). The approval names three access
+tenant's slug, name or id (`cavelon tenant list` shows all three). The approval names three access
 groups: create them in your tenant and add the approvers' chat users, with
 their verified email (`cavelon docs get administration/chat-users-and-groups`),
 or name your own groups or tenant roles in `package/registry_entities.yaml`. Both agents use the model `gpt-4.1`
