@@ -20,6 +20,8 @@ export interface OptionSpec {
   value?: string;
   /** Hidden from the MCP tool (for example --wait, which would block). */
   cliOnly?: boolean;
+  /** A boolean in the MCP tool, for a string option (api's --confirm <token>, `confirm: true` over MCP). */
+  mcpBoolean?: boolean;
 }
 
 export interface PositionalSpec {

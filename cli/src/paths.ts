@@ -53,17 +53,19 @@ export function instanceKey(url: string): string {
  * hold the stored token and the instance's contracts), wherever those are.
  * An agent that reads a web page or a document can be told to name any path;
  * the solution is the only place a tool needs. The CLI is a person, who may
- * name any file, so there the path is only resolved.
+ * name any file, so there the path is only resolved, unless the caller
+ * confines it because a coding agent runs the CLI (`cavelon api`).
  */
-export async function confinedPath(ctx: Context, raw: string, what: string): Promise<string> {
+export async function confinedPath(ctx: Context, raw: string, what: string, confine = ctx.mode === "mcp"): Promise<string> {
   const resolved = path.resolve(ctx.io.cwd, raw);
-  if (ctx.mode !== "mcp") return resolved;
+  if (!confine) return resolved;
   const root = (await findProject(ctx.io.cwd))?.root ?? ctx.io.cwd;
   const real = await realPath(resolved);
   if (!within(await realPath(root), real)) {
+    const who = ctx.mode === "mcp" ? "over MCP a tool" : "run by a coding agent, cavelon";
     throw new CavelonError(ExitCode.usage, {
       code: "path_outside_solution",
-      message: `${what} ${raw} is outside the solution folder ${root}; over MCP a tool reads and writes only there.`,
+      message: `${what} ${raw} is outside the solution folder ${root}; ${who} reads and writes only there.`,
       hint: "Name a file inside the solution folder, or ask the person to run the command in their terminal.",
     });
   }

@@ -104,6 +104,24 @@ identity <trigger> <key> --confirm` (it gives a trigger standing authority), and
 before `cavelon sandbox seed … --confirm` or `cavelon loop cancel … --confirm` on
 anything but a test Sandbox or a run you started yourself.
 
+**`cavelon api` from your shell has the guards of the MCP `api` tool**, since
+`cavelon` sees that a coding agent runs it (`CLAUDECODE`, `CODEX_THREAD_ID`, `CODEX_SANDBOX`,
+`CURSOR_AGENT`, `GEMINI_CLI`, `COPILOT_CLI`, `COPILOT_AGENT`, `AI_AGENT` or
+`CAVELON_AGENT=1`):
+
+- For an operation that is not read-only, it prints the request and a confirm
+  token and sends nothing. Show the request to the person when the rules above
+  say so, then run the same command again with `--confirm <token>`; it sends
+  exactly that request. A changed body or parameter needs a new preview (exit 4).
+- It refuses an operation the instance keeps for a person
+  (`operation_for_a_person`) and a body that sets a field the instance marks as
+  a secret value (`secret_field_for_a_person`), with or without `--confirm`.
+  Tell the person what the error's hint says; for a secret field, send the rest
+  without it and let the person enter the value (`cavelon secrets set <name>`
+  or the Admin). Never work around a refusal, by unsetting the variable or by
+  any other way.
+- Its `@file` body, `--file` and `--output` stay inside the solution folder.
+
 `activate` goes through the readiness gate only, and only with a token that
 may activate. It never forces: activating without the evidence stays a person's
 decision in the Admin, so do not ask for it as a shortcut.

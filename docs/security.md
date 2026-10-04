@@ -94,14 +94,69 @@ activates. Over MCP, `cavelon` limits it further:
   instance that marks no operation, `api` refuses by the words of the path an
   operation that changes a secret, creates or revokes a credential (personal
   access tokens, API keys, sign-in) or decides an approval.
+- `api` refuses, even with `confirm`, a body that sets a field the instance
+  marks as holding a secret value (`"x-cavelon-secret": true`, published with
+  `"writeOnly": true`: provider keys, passwords, one-time codes), at any depth
+  of the body, in nested objects and arrays too (`secret_field_for_a_person`).
+  The error names the field, never its value, and points to
+  `cavelon secrets set` or the Admin; the agent can send the rest without the
+  field. A field set to `null`, which clears it, passes. On an instance whose
+  OpenAPI marks no field, bodies are checked as before. A secret typed into a
+  free-form map, such as a headers or settings object, carries no marker and
+  cannot be detected.
 - A tool reads and writes files only inside the solution folder (the folder
   of `cavelon.yaml`, or the one the server started in), following symlinks,
   and never in `cavelon`'s config or cache directory, which hold the stored
   token.
 
-These limits apply to the MCP tools. An agent that runs shell commands has
-whatever your shell allows it; your agent client's permission settings decide
-that.
+### When the agent runs `cavelon` in its shell
+
+An agent with a shell can run `cavelon api` itself instead of calling the MCP
+tool. When `cavelon` runs under a coding agent, `cavelon api` applies the same
+guards as the `api` tool:
+
+- an operation kept for a person, and a body with a field marked
+  `x-cavelon-secret`, are refused, with or without `--confirm`; the error says
+  how a person runs it (`operation_for_a_person`,
+  `secret_field_for_a_person`);
+- an operation that is not read-only prints the request it would send
+  (method, path, query, headers, body, files) and a confirm token, and sends
+  nothing (`sent: false`). Run again with `--confirm <token>`, it sends exactly
+  that request. The token is a hash of the request, the instance and the
+  tenant, so a changed body, parameter or file needs a new preview; a token
+  that does not match sends nothing and exits 4;
+- the body `@file`, `--file` attachments and `--output` stay inside the
+  solution folder, never in `cavelon`'s config or cache directory
+  (`path_outside_solution`, `path_in_kit_directory`).
+
+`cavelon` runs under a coding agent when one of these variables, which the
+agents set for the commands their shell tool runs, is set (and is not empty,
+`0` or `false`):
+
+| Variable | Set by |
+|---|---|
+| `CLAUDECODE` | Claude Code |
+| `CODEX_THREAD_ID`, `CODEX_SANDBOX` | Codex (`CODEX_SANDBOX` only inside its macOS sandbox) |
+| `CURSOR_AGENT` | Cursor's agent terminal and `cursor-agent` |
+| `GEMINI_CLI` | Gemini CLI's shell tool |
+| `COPILOT_CLI` | GitHub Copilot CLI |
+| `COPILOT_AGENT` | GitHub Copilot's agent terminals in VS Code |
+| `AI_AGENT` | the shared variable newer agents set |
+| `CAVELON_AGENT=1` | you, for an agent that sets none of the above |
+
+Kiro documents no such variable: set `CAVELON_AGENT=1` in the environment
+its commands run in, if you can. The Claude Code extensions for VS Code and
+JetBrains set `CLAUDECODE` in their integrated terminals too, so `cavelon api`
+typed there is guarded; run it in another terminal. A person in a plain
+terminal is unaffected: `cavelon api` sends at once, takes any path and sends
+any field.
+
+These guards keep an agent from doing by mistake what is meant for a person;
+they are not a boundary. An agent that unsets the variable, or calls the API
+some other way, has whatever your shell and the token allow it. Your agent
+client's permission settings decide what it may run, and the instance enforces
+the token's role and ceiling on every request. The other commands run by an
+agent's shell act as they do in your terminal.
 
 ## What is sent where
 

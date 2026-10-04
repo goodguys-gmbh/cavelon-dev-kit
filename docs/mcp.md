@@ -164,6 +164,23 @@ repeat them:
   by the words of the path instead and refuses an operation that changes a
   secret, creates or revokes a credential (personal access tokens, API keys,
   sign-in) or decides an approval.
+- **No secret value in a body.** `api` also refuses, even with `confirm`, a
+  body that sets a field the instance marks as holding a secret value
+  (`"x-cavelon-secret": true`, with `"writeOnly": true`), in nested objects
+  and arrays too (`secret_field_for_a_person`). The error names the field and
+  points to `cavelon secrets set` or the Admin; the agent can send the rest
+  without the field. A field set to `null` passes, and an instance whose
+  OpenAPI marks no field is checked as before. A secret typed into a free-form
+  map, such as a headers or settings object, cannot be detected.
+- **The same guards in the agent's shell.** When a coding agent runs
+  `cavelon api` in its shell (`CLAUDECODE`, `CODEX_THREAD_ID`, `CODEX_SANDBOX`, `CURSOR_AGENT`,
+  `GEMINI_CLI`, `COPILOT_CLI`, `COPILOT_AGENT`, `AI_AGENT` or
+  `CAVELON_AGENT=1` is set), the rules of the `api` tool hold there too: it
+  refuses what the tool refuses, keeps its files in the solution folder, and
+  for an operation that is not read-only prints the request and a token and
+  sends it only when run again with `--confirm <token>`.
+  [Security](security.md#when-the-agent-runs-cavelon-in-its-shell) lists the
+  variables and the limits of this guard.
 - **Files stay in the solution folder.** Every path a tool takes (`api`'s
   `file` and `body` `@file`, `loop_start`'s `input` `@file`, `kb_upload`'s
   folder, `sandbox_seed`'s source, `artifacts_export`'s `out`, `init`'s
@@ -171,7 +188,8 @@ repeat them:
   folder the server started in when there is none (`path_outside_solution`),
   and never into cavelon's own config or cache directory, which hold the
   stored token (`path_in_kit_directory`). In your terminal, `cavelon` takes
-  any path you name.
+  any path you name; `cavelon api` run by a coding agent confines its paths as
+  the tool does.
 - **Limits are read, not changed.** The agent reads `limits` before planning a
   solution. It never changes a limit on its own: it proposes the old and new
   value and lets you decide; an operator's limit goes to the operator.

@@ -23,7 +23,10 @@ const INSTRUCTIONS =
   "init and pull write files in the solution folder without confirm (pull refuses to replace package files with uncommitted changes unless force), " +
   "and the other changing tools act at once. api refuses, even with confirm, an operation the instance marks for a person " +
   "(x-cavelon-person-only; its reason is in the error), or on an instance that marks none, one that changes a secret, " +
-  "creates or revokes a credential (tokens, API keys, sign-in) or decides an approval. Tools read and write files only " +
+  "creates or revokes a credential (tokens, API keys, sign-in) or decides an approval; it also refuses a body that sets a field " +
+  "the instance marks as a secret value (x-cavelon-secret): leave the field out and let a person enter the value. " +
+  "`cavelon api` run from your shell applies the same guards, and sends a changing operation only with --confirm and the token " +
+  "its preview printed. Tools read and write files only " +
   "inside the solution folder (the folder of cavelon.yaml, or the one the server started in), never in cavelon's own " +
   "config or cache directory. Read limits before planning a solution: it lists what the " +
   "instance allows this tenant (upload sizes and types, run and tool limits, timeouts, quotas) and who changes each. " +
@@ -58,7 +61,7 @@ export function inputSchema(spec: CommandSpec): JsonSchema {
   for (const [name, option] of Object.entries(spec.options ?? {})) {
     if (option.cliOnly) continue;
     properties[name] =
-      option.type === "boolean"
+      option.type === "boolean" || option.mcpBoolean
         ? { type: "boolean", description: option.description }
         : option.multiple
           ? { type: "array", items: { type: "string" }, description: option.description }
@@ -97,7 +100,7 @@ function inputFrom(spec: CommandSpec, args: Record<string, unknown>): Input {
     if (option.cliOnly) continue;
     const value = args[name];
     if (value === undefined || value === null) continue;
-    if (option.type === "boolean") input.options[name] = value === true || value === "true";
+    if (option.type === "boolean" || option.mcpBoolean) input.options[name] = value === true || value === "true";
     else if (option.multiple) input.options[name] = Array.isArray(value) ? value.map(String) : [String(value)];
     else input.options[name] = String(value);
   }

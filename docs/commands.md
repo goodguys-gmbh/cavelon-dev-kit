@@ -1388,7 +1388,7 @@ Call any operation the instance publishes in its OpenAPI.
 cavelon api <operation> [params...] [options]
 ```
 
-The operation is its operationId or the short name before FastAPI's path suffix (list_harnesses). Parameters: -p name=value or name=value. Body: --json '&lt;json&gt;', --json @file.json or --json - (stdin). The body is checked against the operation's schema before it is sent. As an MCP tool, an operation that changes something returns what it would send and sends it only with confirm; one the instance marks for a person only (x-cavelon-person-only) is refused, as are files outside the solution folder. On an instance that marks none, one that changes a secret, creates or revokes a credential or decides an approval is refused.
+The operation is its operationId or the short name before FastAPI's path suffix (list_harnesses). Parameters: -p name=value or name=value. Body: --json '&lt;json&gt;', --json @file.json or --json - (stdin). The body is checked against the operation's schema before it is sent. As an MCP tool, or run by a coding agent (CLAUDECODE, CODEX_THREAD_ID, CODEX_SANDBOX, CURSOR_AGENT, GEMINI_CLI, COPILOT_CLI, COPILOT_AGENT, AI_AGENT or CAVELON_AGENT=1 is set), an operation that changes something returns what it would send and sends it only with confirm (as an MCP tool) or --confirm &lt;token&gt; (the token the preview printed). Run by an agent, one the instance marks for a person only (x-cavelon-person-only) is refused, as is a body that sets a field the instance marks as a secret value (x-cavelon-secret) and a file outside the solution folder. On an instance that marks no operation, one that changes a secret, creates or revokes a credential or decides an approval is refused. A person's own terminal sends at once.
 
 | Argument | Description |
 |---|---|
@@ -1401,7 +1401,7 @@ The operation is its operationId or the short name before FastAPI's path suffix 
 | `--body <json|@file|->` | The request body (also accepted as --json &lt;body&gt;). | yes |
 | `--file <field=path>` | Attach a file to a multipart body. Repeatable. | yes |
 | `--output <file>` | Write the response body to a file instead of printing it. | CLI only |
-| `--confirm` | As an MCP tool: send an operation that changes something; without it, nothing is sent. The CLI sends at once. | yes |
+| `--confirm <token>` | Send an operation that changes something: run by a coding agent, the token its preview printed; as an MCP tool, true. Without it, nothing is sent. A person's terminal sends at once. | yes |
 | `--limit <n>` | Show at most n items of a list response (default 50, 0 for all). | yes |
 
 Examples:

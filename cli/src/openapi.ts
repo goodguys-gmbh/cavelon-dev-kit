@@ -231,6 +231,53 @@ export function validateBody(doc: OpenApiDoc, op: Operation, body: unknown): voi
   }
 }
 
+/**
+ * The fields a body sets that the instance marks as holding a secret value
+ * (`x-cavelon-secret: true`, published with `writeOnly`), as paths such as
+ * `credentials.api_key` or `headers[0].value`. It follows the body, not the
+ * schema, so only fields that are present count, and one set to null (which
+ * clears it) does not. A secret typed into a free-form map has no marker and
+ * cannot be found. The walk is bounded: a schema may refer to itself.
+ */
+export function secretFields(doc: OpenApiDoc, schema: unknown, body: unknown): string[] {
+  const found = new Set<string>();
+  let budget = 10_000;
+  const list = (value: unknown) => (Array.isArray(value) ? (value as unknown[]) : []);
+  const walk = (raw: unknown, value: unknown, where: string, depth: number): void => {
+    if (value === undefined || value === null || depth > 64 || --budget < 0) return;
+    const node = deref(doc, raw);
+    if (!node || typeof node !== "object") return;
+    const s = node as Record<string, unknown>;
+    if (s["x-cavelon-secret"] === true) {
+      found.add(where || "(body)");
+      return;
+    }
+    for (const key of ["allOf", "anyOf", "oneOf"]) for (const sub of list(s[key])) walk(sub, value, where, depth + 1);
+    if (Array.isArray(value)) {
+      const prefix = list(s.prefixItems);
+      value.forEach((item, i) => walk(prefix[i] ?? s.items, item, `${where}[${i}]`, depth + 1));
+    } else if (typeof value === "object") {
+      const props = (s.properties ?? {}) as Record<string, unknown>;
+      const patterns = Object.entries((s.patternProperties ?? {}) as Record<string, unknown>);
+      for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+        const named = Object.hasOwn(props, key) ? [props[key]] : patterns.filter(([pattern]) => matches(pattern, key)).map(([, sub]) => sub);
+        const subs = named.length ? named : [s.additionalProperties];
+        for (const sub of subs) walk(sub, item, where ? `${where}.${key}` : key, depth + 1);
+      }
+    }
+  };
+  walk(schema, body, "", 0);
+  return [...found];
+}
+
+function matches(pattern: string, key: string): boolean {
+  try {
+    return new RegExp(pattern, "u").test(key);
+  } catch {
+    return false;
+  }
+}
+
 /** Convert a text argument to the parameter's schema type. */
 export function coerceParameter(param: Parameter, raw: string): unknown {
   const types = schemaTypes(param.schema);
