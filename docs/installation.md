@@ -50,8 +50,9 @@ To stay on one release line, name it: `npx -y @cavelon/cli@0.1 whoami`.
 
 ### `npm i -g` fails with `EACCES`
 
-On Linux distributions where Node.js comes from the system packages, global
-installs need root. Instead of `sudo`, give npm a folder in your home directory
+When Node.js was installed for the whole system, global installs need root:
+on Linux distributions where Node.js comes from the system packages, and on
+macOS with the installer from nodejs.org. Instead of `sudo`, give npm a folder in your home directory
 once:
 
 ```bash
