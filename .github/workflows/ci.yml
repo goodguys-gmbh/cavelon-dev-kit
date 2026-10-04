@@ -88,28 +88,6 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run build
       - run: npm run build:executable
-      - name: TEMPORARY keyring probe
-        if: matrix.asset == 'cavelon-darwin-x64'
-        continue-on-error: true
-        shell: bash
-        run: |
-          cat > probe.mjs <<'JS'
-          try {
-            const m = await import("@napi-rs/keyring");
-            console.log("loaded", typeof m.Entry, process.arch, process.versions.bun ?? "node");
-            const e = new m.Entry("cavelon-probe", "x");
-            try { e.setPassword("v"); console.log("set ok"); } catch (err) { console.log("set failed", err); }
-            try { console.log("get", e.getPassword()); } catch (err) { console.log("get failed", err); }
-            try { console.log("delete", e.deletePassword()); } catch (err) { console.log("delete failed", err); }
-          } catch (err) { console.log("import failed", err); }
-          JS
-          echo "== node"; node probe.mjs
-          echo "== bun"; bun probe.mjs
-          echo "== bun compiled (default target)"; bun build probe.mjs --compile --outfile probe-default >/dev/null && ./probe-default
-          echo "== bun compiled (bun-darwin-x64)"; bun build probe.mjs --compile --target=bun-darwin-x64 --outfile probe-x64 >/dev/null && ./probe-x64
-          echo "== bun compiled (bun-darwin-x64), ad-hoc signed"; codesign --force --sign - probe-x64 && ./probe-x64
-          codesign -dv build/cavelon-darwin-x64 2>&1 | head -5
-          uname -m; sysctl -n machdep.cpu.brand_string; file build/cavelon-darwin-x64; ls node_modules/@napi-rs/
       - name: Smoke test the executable (--version, whoami, login, init --agents, MCP)
         shell: bash
         env:

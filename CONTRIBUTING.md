@@ -61,7 +61,9 @@ credential store binding (`@napi-rs/keyring`) that npm installed there. Bun
 was chosen over Node.js single executable applications because it bundles the
 ES modules as they are, embeds and loads that native binding from inside the
 executable, and builds in one step. Without the binding, `cavelon` falls back
-to the user-only credentials file, as the npm package does.
+to the user-only credentials file, as the npm package does. On macOS the
+script signs the executable ad hoc: the Keychain refuses an unsigned program
+the token it stored, and Bun signs only its Apple silicon builds.
 
 CI builds all five (macOS arm64 and x64, Linux x64 and arm64, Windows x64),
 runs the smoke test on each platform (`--version`, `whoami` and a `login`

@@ -425,7 +425,11 @@ npm package with Node.js, and each standalone executable on its own platform.
 
 ### macOS
 
-- The token is kept in the **Keychain**.
+- The token is kept in the **Keychain**. The Keychain gives it back only to
+  the program that stored it. Until the executables are signed with the
+  company's Developer ID, each release is a different program to it, so after
+  an update macOS may ask once whether `cavelon` may use its stored token:
+  choose **Always Allow**, or run `cavelon login` again.
 - Settings are in `~/.config/cavelon`, the cache in `~/.cache/cavelon`.
 
 ### Linux
