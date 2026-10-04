@@ -28,6 +28,20 @@ claude plugin marketplace add goodguys-gmbh/cavelon-dev-kit && claude plugin ins
 codex plugin marketplace add goodguys-gmbh/cavelon-dev-kit && codex plugin add cavelon@cavelon-dev-kit         # Codex
 ```
 
+If `npm i -g` fails with `EACCES` (Node.js installed by your Linux distribution,
+as on Fedora or Ubuntu), don't use `sudo`. Let npm install into your home folder
+once, then run it again:
+
+```bash
+npm config set prefix "$HOME/.local"
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && export PATH="$HOME/.local/bin:$PATH"
+npm i -g @cavelon/cli
+```
+
+(With zsh, write to `~/.zshrc` instead.) Or skip the install and run every
+command as `npx -y @cavelon/cli <command>`. More in
+[Installation](docs/installation.md#npm-i--g-fails-with-eacces).
+
 **2. Create a personal access token** in Cavelon: user menu → **Personal
 access tokens** → **Create token**. Tick **May activate** only if this token
 may put solutions live.
