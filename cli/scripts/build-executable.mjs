@@ -96,4 +96,13 @@ if (!process.versions.bun) throw new Error("Run this with Bun (https://bun.sh): 
 const result = spawnSync(process.execPath, args, { cwd: cli, stdio: "inherit" });
 if (result.error) throw new Error(`Could not run ${process.execPath}: ${result.error.message}.`);
 if (result.status !== 0) process.exit(result.status ?? 1);
+
+// macOS's keychain gives an item back only to a program with a code signature
+// (an unsigned one fails with "The user name or passphrase you entered is not
+// correct"). Bun signs ad hoc on Apple silicon only; sign every macOS build so.
+// The release signs it again with the company's Developer ID.
+if (OS === "darwin") {
+  const signed = spawnSync("/usr/bin/codesign", ["--force", "--sign", "-", outfile], { stdio: "inherit" });
+  if (signed.status !== 0) process.exit(signed.status ?? 1);
+}
 process.stdout.write(`${outfile}\n`);

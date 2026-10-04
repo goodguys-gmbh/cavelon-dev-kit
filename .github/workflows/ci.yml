@@ -107,7 +107,8 @@ jobs:
           echo "== bun"; bun probe.mjs
           echo "== bun compiled (default target)"; bun build probe.mjs --compile --outfile probe-default >/dev/null && ./probe-default
           echo "== bun compiled (bun-darwin-x64)"; bun build probe.mjs --compile --target=bun-darwin-x64 --outfile probe-x64 >/dev/null && ./probe-x64
-          echo "== bun compiled (bun-darwin-x64-baseline)"; bun build probe.mjs --compile --target=bun-darwin-x64-baseline --outfile probe-baseline >/dev/null && ./probe-baseline
+          echo "== bun compiled (bun-darwin-x64), ad-hoc signed"; codesign --force --sign - probe-x64 && ./probe-x64
+          codesign -dv build/cavelon-darwin-x64 2>&1 | head -5
           uname -m; sysctl -n machdep.cpu.brand_string; file build/cavelon-darwin-x64; ls node_modules/@napi-rs/
       - name: Smoke test the executable (--version, whoami, login, init --agents, MCP)
         shell: bash
