@@ -83,6 +83,28 @@ CLI, the skills and the plugin.
   A finding carries the closest name as `suggestion`; a required field under
   another name is reported once, as the missing field, with the suggestion.
 - `cavelon docs get index` prints the instance's whole docs index.
+- `cavelon trace` shows what the agent recorded a knowledge search found:
+  `knowledge_outcome` (`usable_evidence`, `content_gap`, `unusable_hits`,
+  `retrieval_fault`, `deliberately_unanswerable`) on the search's tool span
+  and its retrieval span, in a KNOWLEDGE_OUTCOME column and in `--json`. For a
+  test run it names the agent that answered each step (AGENT, `agent` in
+  `--json`), and a case that did not pass says `Answered by: <agent>`. An
+  instance that records neither shows neither.
+- The cavelon-testing skill teaches the step assertions `tool_called`,
+  `tool_not_called`, `answered_by` and `handoff_to`, with an example for a
+  solution with a handoff, so routing becomes part of the regression.
+- `cavelon validate` warns `test_assertion_unchecked`, once per suite file,
+  when a test step has assertions (criteria with a `type`) and the instance's
+  package schema does not describe a step's criteria: it cannot check them,
+  and an instance that does not know a type grades it as a judge criterion.
+  Where the schema describes them, each assertion is checked like any other
+  field.
+- `cavelon apply --confirm` shows the structured blockers of an import its own
+  check refuses, as a preview does: code, package file and line, path, hint
+  and the `cavelon explain` command (`blocker_details` in `--json` and the MCP
+  result), for a `409 package_requirements_changed` and for a 422 of an import
+  blocked when it applies. An instance that sends only the `blockers`
+  sentences keeps today's output.
 
 ### Changed
 
@@ -161,6 +183,18 @@ CLI, the skills and the plugin.
   `cavelon use`, or chosen per command with `--tenant` and per solution folder
   with `tenant:` in `cavelon.yaml`. A token for a list of tenants still
   chooses one, with Enter taking the default the instance marks.
+
+### Fixed
+
+- `cavelon fmt` no longer adds a judge criterion's `dimension` to a test
+  step's assertions (`{type: handoff_to, value: …}`) on an instance that
+  describes a step's criteria; the instance refuses an assertion with a field
+  it does not take. Where a value can take several shapes, `fmt` now picks the
+  one whose `type` matches, and leaves a value that fits none as written.
+- `cavelon validate` reports, where a value can take several shapes, only what
+  the closest shape says (`missing required field "value"`) instead of every
+  shape's complaint, and names a field that is not allowed (`field "agent" is
+  not allowed here`).
 
 ## [0.1.4] - 2026-10-04
 

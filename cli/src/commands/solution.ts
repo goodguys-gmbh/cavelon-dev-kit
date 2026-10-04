@@ -33,7 +33,7 @@ import { cliFix, similarCodes } from "../code-hints.js";
 import { KIT_ERROR_CODES } from "../kit-codes.js";
 import { pairOrderHint, pairOrderPointer } from "../pair-order.js";
 import { readPackage, writePackage, type Finding, type PackageOnDisk } from "../package-files.js";
-import { blockerDetails, blockerLines, changeLines, fieldChanges, notApplied, notAppliedLines } from "../preview-report.js";
+import { blockerDetails, blockerLines, changeLines, fieldChanges, locateBlockers, notApplied, notAppliedLines } from "../preview-report.js";
 import { readPrincipal } from "../principal.js";
 import type { ProjectConfig } from "../project.js";
 import { CASE_STATUSES, caseStatus, TESTING_PAGE, type CaseStatus } from "../results.js";
@@ -652,10 +652,12 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
     if (still.secrets.length || still.variables.length) data.set_commands = still;
     return { data, text };
   } catch (error) {
-    if (error instanceof CavelonError && error.code === REQUIREMENTS_CHANGED && error.blockers?.length) {
+    if (error instanceof CavelonError && error.code === REQUIREMENTS_CHANGED && (error.blockers?.length || error.blockerDetails?.length)) {
       await deletePreview(project.root, stored.preview_id);
-      throw requirementsChanged(error, stored, session, await catalogFor(ctx, false));
+      throw requirementsChanged(error, stored, session, await catalogFor(ctx, false), disk);
     }
+    // A refused import with structured blockers: each with its package file and line, as a preview shows them.
+    if (error instanceof CavelonError && error.blockerDetails?.length) throw withBlockersLocated(error, disk, stored, session);
     if (error instanceof CavelonError && (error.code === "import_preview_stale" || (error.status === 409 && /preview/i.test(error.message)))) {
       await deletePreview(project.root, stored.preview_id);
       throw new CavelonError(ExitCode.conflict, {
@@ -678,8 +680,9 @@ const REQUIREMENTS_CHANGED = "package_requirements_changed";
  * preview words it, and the kit adds its hint for a code it knows. An instance
  * without `blockers` reads as a stale preview.
  */
-function requirementsChanged(error: CavelonError, stored: StoredPreview, session: Session, catalog: ErrorCatalog | null): CavelonError {
-  const blockers = error.blockers ?? [];
+function requirementsChanged(error: CavelonError, stored: StoredPreview, session: Session, catalog: ErrorCatalog | null, disk: PackageOnDisk): CavelonError {
+  const details = locateBlockers(error.blockerDetails ?? [], disk);
+  const blockers = error.blockers?.length ? error.blockers : details.map((b) => b.message);
   const known = new Map<string, string>();
   for (const blocker of blockers) {
     const pair = pairOrderHint(catalog, [blocker]);
@@ -692,6 +695,21 @@ function requirementsChanged(error: CavelonError, stored: StoredPreview, session
     hint: [...known.values(), `Run \`${previewAgain(stored, session)}\` again, show the new preview, and confirm its id.`].join(" "),
     docs: error.docs,
     blockers,
+    blockerDetails: details.length ? details : undefined,
+  });
+}
+
+/** The same refusal, its structured blockers located in the package files. */
+function withBlockersLocated(error: CavelonError, disk: PackageOnDisk, stored: StoredPreview, session: Session): CavelonError {
+  return new CavelonError(error.exitCode, {
+    code: error.code,
+    message: `The import's own check refused preview ${stored.preview_id} when it applied; nothing was imported.`,
+    hint: error.hint ?? `Fix what each blocker names, run \`${previewAgain(stored, session)}\` again, show the new preview, and confirm its id.`,
+    docs: error.docs,
+    status: error.status,
+    details: error.details,
+    blockers: error.blockers,
+    blockerDetails: locateBlockers(error.blockerDetails ?? [], disk),
   });
 }
 

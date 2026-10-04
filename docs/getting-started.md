@@ -351,11 +351,11 @@ cavelon trace 82f8a0a7-3ef7-4dc2-9e24-b89e3e7d5303
 ```
 
 ```text
-CASE            STEP  STATUS  SCORE  CONVERSATION_ID
-Opening hours   1     pass    0.9    11111111-1111-4111-8111-111111111111
-Return window   1     pass    0.95   22222222-2222-4222-8222-222222222222
-Refund time     1     pass    0.9    33333333-3333-4333-8333-333333333333
-Not in the FAQ  1     pass    1      44444444-4444-4444-8444-444444444444
+CASE            STEP  STATUS  SCORE  AGENT      CONVERSATION_ID
+Opening hours   1     pass    0.9    faq-agent  11111111-1111-4111-8111-111111111111
+Return window   1     pass    0.95   faq-agent  22222222-2222-4222-8222-222222222222
+Refund time     1     pass    0.9    faq-agent  33333333-3333-4333-8333-333333333333
+Not in the FAQ  1     pass    1      faq-agent  44444444-4444-4444-8444-444444444444
 
 Judge's reasoning:
   Opening hours (step 1)  pass  score 0.9
@@ -370,13 +370,16 @@ Judge's reasoning:
 A case's traces, by the conversation_id in its row: cavelon trace 11111111-1111-4111-8111-111111111111 --kind conversation
 ```
 
-For a test run, `trace` lists each case with its score and, where the instance
-sent it, the judge's reasoning; a case that did not pass also shows its error.
+For a test run, `trace` lists each case with its score, the agent that
+answered it and, where the instance sent it, the judge's reasoning; a case that
+did not pass also shows its error.
 Each command `trace` prints works as printed: it carries the id its route
 needs. A case's traces are under its conversation id, so `cavelon trace
 <conversation_id> --kind conversation` opens one case's conversation: its
 traces, then with `--trace <trace_id>` their spans (model calls, retrievals,
-tool calls), each level with the command that shows the next. A test run's id
+tool calls), each level with the command that shows the next. A knowledge
+search's spans show what the agent recorded the search found, in a
+KNOWLEDGE_OUTCOME column, on an instance that records it. A test run's id
 where a conversation id belongs answers with a hint naming the id to use.
 
 Change the prompt in `package/agents.yaml`, the skill in `package/skills.yaml`

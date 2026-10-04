@@ -4,6 +4,7 @@ import { createContext, withWarnings } from "./context.js";
 import { asCavelonError, CavelonError, ExitCode, usageError } from "./errors.js";
 import { blockerLines } from "./format.js";
 import type { Io } from "./io.js";
+import { blockerLines as detailedBlockerLines } from "./preview-report.js";
 import { KIT_VERSION } from "./version.js";
 import { currentInstall, installLabel, type Install } from "./install.js";
 import { startUpdateCheck, type UpdateCheckOptions } from "./update-check.js";
@@ -204,7 +205,11 @@ function printError(io: Io, json: boolean, err: CavelonError, warnings: string[]
     return;
   }
   const lines = [`error: ${err.message}`];
-  if (err.blockers?.length) lines.push(blockerLines(err.blockers));
+  if (err.blockerDetails?.length) {
+    const more = err.blockerDetails.length - 10;
+    lines.push(`blockers:${detailedBlockerLines(err.blockerDetails.slice(0, 10))}${more > 0 ? `\n  … ${more} more (--json)` : ""}`);
+  }
+  else if (err.blockers?.length) lines.push(blockerLines(err.blockers));
   if (err.hint) lines.push(`hint: ${err.hint}`);
   if (err.docs) lines.push(`docs: ${err.docs}`);
   io.stderr.write(`${lines.join("\n")}\n`);

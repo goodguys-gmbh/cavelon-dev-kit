@@ -22,10 +22,61 @@ Write cases for:
 
 - the questions the solution exists for, with the facts a good answer needs;
 - edge cases: out of scope, ambiguous, a follow-up in the same conversation;
-- the tools it must call, and the ones it must not;
-- what it must refuse or hand over;
+- the tools it must call, and the ones it must not (`tool_called`,
+  `tool_not_called`, below);
+- what it must refuse or hand over, and to which agent (`handoff_to`,
+  `answered_by`);
 - in a pipeline with an approval: the cases that must reach it, and the ones
   that must not.
+
+## Assertions: tools and routing
+
+A step's `evaluation_criteria` can hold, besides the judge's criteria (plain
+sentences), **assertions**: objects with a `type` and a `value`, checked in
+code before the judge runs. A failed assertion fails the step whatever the
+judge says, so use them for facts with one right answer:
+
+| Type | Value | Passes when |
+|---|---|---|
+| `tool_called` | tool slug | the step called the tool |
+| `tool_not_called` | tool slug | the step did not call it |
+| `answered_by` | agent slug | that agent produced the answer (it made the step's last model call) |
+| `handoff_to` | agent slug | the step handed the turn to that agent |
+
+The answer text cannot show which agent wrote it, so make routing part of the
+regression wherever a solution has a handoff. For an entry agent that should
+hand price questions to a ticket agent:
+
+```yaml
+test_cases:
+  - name: Family ticket price goes to the ticket agent
+    steps:
+      - user_message: What does a family ticket cost?
+        evaluation_criteria:
+          - States the price of the family ticket.
+          - {type: handoff_to, value: ticket-agent}
+          - {type: answered_by, value: ticket-agent}
+          - {type: tool_called, value: search_documents}
+  - name: Opening hours stay with the front desk
+    steps:
+      - user_message: When are you open?
+        evaluation_criteria:
+          - States the opening hours.
+          - {type: answered_by, value: front-desk}
+```
+
+`answered_by` with the entry agent's slug checks the opposite: that a question
+stays where it is. A consulted agent is a tool call of the agent that consulted
+it, which still answers, so check a consultation with `tool_called` and the
+consult tool's name, not with `handoff_to`. Use the slugs from
+`package/agents.yaml`.
+
+`cavelon validate` checks the assertions against the instance's package
+schema where the schema describes a step's criteria. Where it does not, it
+warns `test_assertion_unchecked`: an instance that does not know a type grades
+it as a judge criterion instead of checking it, so read `cavelon docs get
+concepts/regression-testing` for the types the instance knows before relying on
+`answered_by` or `handoff_to`.
 
 ## Testing an approval
 
@@ -92,13 +143,29 @@ carries the id its route needs. A case's traces are under its
 under the test run's id; a wrong id answers with a hint naming the right one.
 A low-scoring pass shows the judge's reasoning too.
 
+Each step names the agent that answered it (AGENT, `agent` in `--json`), and a
+case that did not pass says `Answered by: <agent>` under its reason: the first
+thing to check when a routing assertion failed. A failed assertion's reason is
+the case's reason, and `--json` carries each assertion's result in
+`judge_breakdown.deterministic_criteria` (expected, observed, reasoning). A
+knowledge search's spans show what the agent recorded the search found
+(`knowledge_outcome`: `usable_evidence`, `content_gap`, `unusable_hits`,
+`retrieval_fault` or `deliberately_unanswerable`) on the search's tool span
+and its retrieval span; a search without one is one the agent did not
+classify. An instance that records none shows no such column.
+
 ## Optimizing
 
 Change one thing at a time, then run the same suite again and compare:
 
 - **Wrong or missing facts:** check retrieval first (which chunks came back in
-  the retrieval span). Fix the documents or the knowledge base's settings
-  before the prompt.
+  the retrieval span, and its `knowledge_outcome`: `content_gap` means the
+  knowledge base lacks the answer, `unusable_hits` that what came back did not
+  answer it, `retrieval_fault` that the search failed). Fix the documents or
+  the knowledge base's settings before the prompt.
+- **Wrong agent answered:** the handoff instructions of the entry agent, and
+  the target agent's description, decide where a question goes; fix those, and
+  keep the `answered_by` and `handoff_to` assertions that caught it.
 - **Wrong tool, or a tool called with bad arguments:** sharpen the tool's
   description and parameters, then the agent's instructions about when to use it.
 - **Right facts, poor answer:** adjust the agent's instructions; keep them short

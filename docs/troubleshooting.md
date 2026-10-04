@@ -130,7 +130,7 @@ who may decide before you test, read the node's `approvers` in
 
 | Code | Exit | Cause and fix |
 |---|---|---|
-| `package_schema_invalid` | 3 | A package file does not match the instance's package schema. Each finding names the file, line and path. |
+| `package_schema_invalid` | 3 | A package file does not match the instance's package schema. Each finding names the file, line and path. Where a value can take several shapes (a test step's criterion is a text, a judge criterion or an assertion by `type`), only what the closest shape says is reported. |
 | `package_version_unsupported` | 3 | The instance does not accept the package version in `cavelon.yaml` and `package/manifest.yaml`. `cavelon status --json` lists the accepted versions; `cavelon pull` writes a current package. |
 | `knowledge_base_without_search_tool` | 0 (a warning) | An agent is given a knowledge base, by a skill or on a tool assignment, but no search tool reaches it, so it answers without it. Add `- tool_slug: search_documents` to the `tool_assignments` of that skill or of the agent. |
 | `package_duplicate_key` | 3 | Two entries of one section have the same slug (or name, for a knowledge base); the import would keep one. The finding names both places. |
@@ -143,6 +143,7 @@ who may decide before you test, read the node's `approvers` in
 | `project_file_has_secret` | 3 | `cavelon.yaml` contains something that looks like a token. Remove it, revoke the token, and use `cavelon login` or `CAVELON_TOKEN`. |
 | `no_solution` | 2 | The command needs a solution folder: run it in a folder with `cavelon.yaml`, or `cavelon init` first. |
 | `persona_message_empty` | 0 (a warning) | The persona turns a greeting or fallback on (`greeting_enabled`, `fallback_message_enabled`; on by default) but its text is empty. Write `greeting_message` or `fallback_message` in `package/persona.yaml`, in the language the assistant answers in, or turn it off. |
+| `test_assertion_unchecked` | 0 (a warning) | A test step has assertions (criteria with a `type`, such as `handoff_to`), and the instance's package schema does not describe a step's criteria, so `validate` cannot check them. An instance that knows the type checks it in code; one that does not grades it as a judge criterion. A newer instance publishes the criterion shapes, and `validate` then checks each assertion like any other field. Said once per suite file. |
 | `solution_not_found` | 1 | The solution named by `--harness`, `cavelon.yaml` or an env file does not exist in this tenant, by name, slug or id. The error names the closest solutions (`details.candidates` with `--json`); `cavelon harness list` shows those that do, with name, slug and id. |
 
 A finding with a code of the instance's rules (such as a graph rule) is

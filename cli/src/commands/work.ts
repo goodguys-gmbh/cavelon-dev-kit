@@ -920,7 +920,32 @@ function summarizeTrace(t: TraceSummary) {
   };
 }
 
-function summarizeSpan(s: Span) {
+/** The `knowledge_outcome` a span's attributes carry, if any. */
+function outcomeOf(s: Span): string | null {
+  const attributes = s.attributes_json;
+  const outcome = attributes && typeof attributes === "object" ? (attributes as Record<string, unknown>).knowledge_outcome : undefined;
+  return typeof outcome === "string" && outcome ? outcome : null;
+}
+
+/**
+ * What the agent recorded each knowledge search found, by span id. The
+ * agent's outcome call leaves no span of its own: it writes
+ * `knowledge_outcome` onto the search's retrieval span, so the search's tool
+ * span above it shows the outcome too. An instance that records none leaves
+ * this empty.
+ */
+function knowledgeOutcomes(spans: Span[]): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const s of spans) {
+    const outcome = outcomeOf(s);
+    if (!outcome) continue;
+    out.set(s.id, outcome);
+    if (s.span_type === "retrieval" && s.parent_span_id && !out.has(s.parent_span_id)) out.set(s.parent_span_id, outcome);
+  }
+  return out;
+}
+
+function summarizeSpan(s: Span, outcomes?: Map<string, string>) {
   const error = s.error_json ? clip(typeof s.error_json === "string" ? s.error_json : JSON.stringify(s.error_json), 200) : null;
   return {
     span_id: s.id,
@@ -930,6 +955,7 @@ function summarizeSpan(s: Span) {
     agent: s.agent_slug ?? null,
     status: s.status ?? null,
     duration_ms: s.duration_ms ?? null,
+    knowledge_outcome: outcomeOf(s) ?? outcomes?.get(s.id) ?? null,
     error,
   };
 }
@@ -993,6 +1019,8 @@ function notPassedLines(r: TestResultState, max: number): string[] {
   const lines = [`  ${caseLabel(c)}  ${c.status}`];
   if (c.reason) lines.push(`    ${c.reason}`);
   if (r.llm_judge_reasoning && r.llm_judge_reasoning !== r.error_message) lines.push(`    Judge: ${clip(r.llm_judge_reasoning, max)}`);
+  // Whether the right agent answered is often why a routing assertion failed.
+  if (r.agent_slug) lines.push(`    Answered by: ${r.agent_slug}`);
   const open = caseTraceCommand(r);
   if (open) lines.push(`    Its traces (${open.label}): ${open.command}`);
   return lines;
@@ -1013,6 +1041,8 @@ async function testRunView(ctx: Context, id: string, results: TestResultState[],
     step: r.step_order ?? null,
     status: r.status,
     score: r.llm_judge_score ?? null,
+    // The agent that answered the step: on recent instances the one that made its last model call.
+    agent: r.agent_slug ?? null,
     conversation_id: r.conversation_id ?? null,
     run_id: r.agent_run_id ?? null,
     error: r.error_message ? clip(r.error_message, 200) : null,
@@ -1033,7 +1063,7 @@ async function testRunView(ctx: Context, id: string, results: TestResultState[],
   return {
     data: { kind: "test", run_id: id, results: { ...page, items } },
     text:
-      table(items, ["case", "step", "status", "score", ...(items.some((r) => r.run_id) ? ["run_id"] : []), "conversation_id"]) +
+      table(items, ["case", "step", "status", "score", ...(items.some((r) => r.agent) ? ["agent"] : []), ...(items.some((r) => r.run_id) ? ["run_id"] : []), "conversation_id"]) +
       moreHint(page.next_cursor, cavelonCommand("trace", id, "--kind", "test")) +
       (notPassed.length ? `\n\nDid not pass:\n${notPassed.flatMap((r) => notPassedLines(r, max)).join("\n")}` : "") +
       (judged.length ? `\n\nJudge's reasoning:\n${judged.flatMap((r) => judgedLines(r, options.full ? max : 300)).join("\n")}` : "") +
@@ -1108,12 +1138,13 @@ export const trace: CommandSpec = {
         }
       }
       const spans = (detail.spans ?? []).slice().sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+      const outcomes = knowledgeOutcomes(spans);
       if (spanId) {
         const span = spans.find((s) => s.id === spanId);
         if (!span) throw new CavelonError(ExitCode.failure, { code: "span_not_found", message: `No span ${spanId} in trace ${traceId}.` });
         const full = boolOption(input, "full");
         const data = {
-          ...summarizeSpan(span),
+          ...summarizeSpan(span, outcomes),
           model: span.model ?? null,
           parent_span_id: span.parent_span_id ?? null,
           input: detailOf(span.input_json, full),
@@ -1124,13 +1155,17 @@ export const trace: CommandSpec = {
         };
         return { data, text: JSON.stringify(data, null, 2) };
       }
-      const page = pageOf(spans.map(summarizeSpan), limit, cursor);
+      const page = pageOf(
+        spans.map((s) => summarizeSpan(s, outcomes)),
+        limit,
+        cursor,
+      );
       const base = cavelonCommand("trace", id, ...(kind ? ["--kind", kind] : []), "--trace", traceId);
       return {
         data: { trace: summarizeTrace(detail), spans: page },
         text:
           `${keyValues(Object.entries(summarizeTrace(detail)))}\n\n` +
-          table(page.items, ["seq", "type", "name", "status", "duration_ms", "span_id"]) +
+          table(page.items, ["seq", "type", "name", "status", ...(outcomes.size ? ["knowledge_outcome"] : []), "duration_ms", "span_id"]) +
           moreHint(page.next_cursor, base) +
           (page.items.length ? `\n\nOne span in full, by the span_id in its row: ${base} --span ${shellWord(page.items[0]!.span_id)}` : ""),
       };
