@@ -803,6 +803,65 @@ describe("status", () => {
     expect(text.stdout).toContain(op.id);
   });
 
+  it("shows the solution's state, whether it may activate, its latest test run, and quotas it cannot read", async () => {
+    const token = server.addToken({ kind: "pat", tenantIds: [tenantA], defaultTenant: tenantA, ceilingRole: "tenant_builder" });
+    await login(sb, server.url, token);
+    expect((await cli(sb, ["harness", "new", "faq-state"])).code).toBe(0);
+    const dir = path.join(sb.home, "sol-state");
+    mkdirSync(path.join(dir, ".cavelon", "previews"), { recursive: true });
+    writeFileSync(path.join(dir, "cavelon.yaml"), `instance: ${server.url}
+harness: faq-state
+`);
+    writeFileSync(
+      path.join(dir, ".cavelon", "previews", "pv_1.json"),
+      JSON.stringify({ preview_id: "pv_1", created_at: "2026-10-04T10:00:00Z", env: "test", harness: null }),
+    );
+    server.state.ready = false;
+    server.state.failures = [{ method: "GET", path: /\/quota-usage$/, status: 403 }];
+    try {
+      const none = await cli(sb, ["status"], { cwd: dir });
+      expect(none.code, none.stderr).toBe(0);
+      expect(none.stdout).toMatch(/state:\s+draft, not ready to activate \(A passing test run\)/);
+      expect(none.stdout).toMatch(/last test run:\s+none yet/);
+      expect(none.stdout).toMatch(/open previews:\s+\n\s+pv_1\s+env test/);
+      expect(none.stdout).toMatch(/quotas not readable: this token \(ceiling tenant_builder\) may not read the tenant's quota usage/);
+      expect(none.stdout).toMatch(/version:\s+\S+\n/);
+      expect(none.stdout).not.toMatch(/cached at/);
+
+      server.state.ready = true;
+      server.state.latestTestRun = {
+        id: "run-1",
+        status: "completed",
+        summary: { passed: 7, failed: 0, total_cases: 7 },
+        created_at: "2026-10-04T10:00:00Z",
+        completed_at: "2026-10-04T10:02:00Z",
+      };
+      const json = await cli(sb, ["status", "--json"], { cwd: dir });
+      const data = json.json<Record<string, any>>();
+      expect(data.solution.state).toMatchObject({
+        harness: { slug: "faq-state", status: "draft" },
+        ready_to_activate: true,
+        latest_test_run: { id: "run-1", status: "completed", passed: 7, failed: 0, total: 7 },
+      });
+      expect(data.limits.quotas_unavailable).toMatch(/403/);
+      const text = await cli(sb, ["status"], { cwd: dir });
+      expect(text.stdout).toMatch(/state:\s+draft, ready to activate/);
+      expect(text.stdout).toMatch(/last test run:\s+completed: 7 of 7 passed \(2026-10-04T10:02:00Z\)\s+run-1/);
+
+      // An instance whose readiness does not name the latest run says so, and offline the version is marked as cached.
+      server.state.readinessWithoutLatestRun = true;
+      expect((await cli(sb, ["status"], { cwd: dir })).stdout).toMatch(/last test run:\s+not published by this instance/);
+      const offline = await cli(sb, ["status", "--offline"], { cwd: dir });
+      expect(offline.stdout).toMatch(/version:\s+\S+ \(cached at [^;]+; not read now\)/);
+      expect(offline.stdout).not.toMatch(/state:/);
+    } finally {
+      server.state.ready = true;
+      server.state.failures = [];
+      server.state.latestTestRun = undefined;
+      server.state.readinessWithoutLatestRun = undefined;
+    }
+  });
+
   it("explains a token in Platform mode instead of reporting an error", async () => {
     await login(sb, server.url, server.addToken({ kind: "pat", tenantIds: [], platform: true }));
     const result = await cli(sb, ["status", "--json"]);

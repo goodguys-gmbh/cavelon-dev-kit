@@ -97,6 +97,8 @@ export interface TokenInfo {
   globalRole?: string;
   /** The token's ceiling role; the global role in Platform mode, tenant_admin otherwise, by default. */
   ceilingRole?: string;
+  /** A Platform-mode token that enters only the tenants it lists, and is not given one it creates. */
+  platformOnly?: boolean;
 }
 
 export interface TenantConfig {
@@ -208,6 +210,12 @@ export interface FakeState {
   readinessWarnings?: Array<{ key: string; label: string; state: string; detail: string; href: string }>;
   /** An older instance's readiness, without `checks`. */
   readinessWithoutChecks?: boolean;
+  /** The latest test run readiness names; none by default. */
+  latestTestRun?: Record<string, unknown> | null;
+  /** An instance whose /meta/principal does not say whether a token allows Platform mode. */
+  principalWithoutPlatformMode?: boolean;
+  /** An instance whose readiness does not name the latest test run. */
+  readinessWithoutLatestRun?: boolean;
   servePrincipal: boolean;
   /** False is an instance older than the /api/v1/meta routes: they answer 404 before any check of the caller, as unknown routes do. */
   serveMeta: boolean;
@@ -368,7 +376,7 @@ function permissionsOf(info: TokenInfo, tenantId: string | undefined): string[] 
   if (!tenantId) {
     // A Platform-mode token carries its global role's permissions.
     const role = effectiveRole(info);
-    return role === "platform_support" ? ["platform.maintenance"] : role ? ["limits.manage", "platform.maintenance"] : [];
+    return role === "platform_support" ? ["platform.maintenance"] : role ? ["limits.manage", "platform.maintenance", "tenants.manage"] : [];
   }
   return tenantPermissions();
 }
@@ -542,7 +550,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     let tenantId: string | undefined;
     if (info.kind === "key") tenantId = info.tenantIds[0];
     else if (headerTenant) {
-      if (!info.tenantIds.includes(headerTenant) && !info.platform && !info.reachesAll) {
+      if (!info.tenantIds.includes(headerTenant) && !(info.platform && !info.platformOnly) && !info.reachesAll) {
         return send(res, 403, { detail: "This personal access token does not reach this tenant" });
       }
       tenantId = headerTenant;
@@ -616,7 +624,7 @@ export async function startFakeServer(): Promise<FakeServer> {
                 prefix,
                 expires_at: info.expiresAt ?? new Date(Date.now() + 60 * 86_400_000).toISOString(),
                 ceiling_role: ceilingRole(info),
-                platform_mode_allowed: Boolean(info.platform),
+                ...(state.principalWithoutPlatformMode ? {} : { platform_mode_allowed: Boolean(info.platform) }),
                 may_activate: info.mayActivate ?? false,
               }
             : null,
@@ -672,7 +680,7 @@ export async function startFakeServer(): Promise<FakeServer> {
         if (state.tenants.some((t) => t.slug === b.slug)) return send(res, 409, { detail: "Tenant slug already exists" });
         const tenant = { id: randomUUID(), slug: b.slug, name: b.name, plan: b.plan ?? "starter", status: "active", created_at: now() };
         state.tenants.push(tenant);
-        info.tenantIds.push(tenant.id);
+        if (!info.platformOnly) info.tenantIds.push(tenant.id);
         return send(res, 201, tenant);
       }
       const search = url.searchParams.get("search")?.toLowerCase();
@@ -732,7 +740,7 @@ export async function startFakeServer(): Promise<FakeServer> {
         ...(state.readinessWithoutChecks ? {} : { checks: state.readinessChecks ?? [] }),
         blockers: state.ready ? [] : (state.readinessBlockers ?? [{ key: "test_run", label: "A passing test run", state: "missing", detail: "Run the regression suite.", href: null }]),
         warnings: state.readinessWarnings ?? [],
-        latest_test_run: null,
+        ...(state.readinessWithoutLatestRun ? {} : { latest_test_run: state.latestTestRun ?? null }),
         activation_override: null,
       };
       if (m[2] === "/readiness" && method === "GET") return send(res, 200, readiness);

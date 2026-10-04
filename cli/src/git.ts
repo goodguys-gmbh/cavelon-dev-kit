@@ -55,12 +55,25 @@ export async function git(args: string[], cwd: string): Promise<string | undefin
   });
 }
 
-/** Paths under `paths` (relative to `cwd`) with uncommitted changes, or undefined outside git. */
+/**
+ * Paths under `paths` with uncommitted changes, relative to `cwd` with forward
+ * slashes, or undefined outside git. Git names them from the repository's
+ * root, so a solution in a subfolder strips its own prefix; `-z` keeps names
+ * with spaces or quotes as they are.
+ */
 export async function uncommitted(cwd: string, paths: string[]): Promise<string[] | undefined> {
-  const out = await git(["status", "--porcelain", "--untracked-files=all", "--", ...paths], cwd);
+  const out = await git(["status", "--porcelain", "-z", "--untracked-files=all", "--", ...paths], cwd);
   if (out === undefined) return undefined;
-  return out
-    .split("\n")
-    .map((line) => line.slice(3).trim())
-    .filter(Boolean);
+  const prefix = ((await git(["rev-parse", "--show-prefix"], cwd)) ?? "").trim();
+  const entries = out.split("\0");
+  const files: string[] = [];
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i]!;
+    if (entry.length < 4) continue;
+    // A rename or copy is followed by the name it had before, as an entry of its own.
+    if ("RC".includes(entry[0]!) || "RC".includes(entry[1]!)) i++;
+    const file = entry.slice(3);
+    files.push(prefix && file.startsWith(prefix) ? file.slice(prefix.length) : file);
+  }
+  return files;
 }

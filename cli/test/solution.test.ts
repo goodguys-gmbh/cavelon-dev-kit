@@ -637,6 +637,50 @@ describe("pull", () => {
     expect(existsSync(draft)).toBe(false);
   });
 
+  it.runIf(gitAvailable())("pull after apply in a repository without a commit: files as the last pull or apply left them are not refused", async () => {
+    // The solution sits in a subfolder of the repository, so git names its files with a prefix.
+    const repo = folder("repo");
+    gitIn(repo, "init", "-q");
+    const dir = path.join(repo, "solution");
+    mkdirSync(dir);
+    expect((await cli(sb, ["init", "--instance", server.url, "--tenant", tenant, "--harness", "support"], { cwd: dir })).code).toBe(0);
+    expect((await cli(sb, ["pull"], { cwd: dir })).code).toBe(0);
+    // Nothing was committed: every pulled file is untracked, and the next pull still takes the instance's.
+    const again = await cli(sb, ["pull"], { cwd: dir });
+    expect(again.code, again.stderr).toBe(0);
+
+    // A local edit that is neither committed nor applied is refused, by its path inside the solution.
+    const agentsFile = path.join(dir, "package", "agents.yaml");
+    writeFileSync(agentsFile, read(agentsFile).replace("temperature: 0.2", "temperature: 0.6"));
+    const refused = await cli(sb, ["pull", "--json"], { cwd: dir });
+    expect(refused.code).toBe(4);
+    expect(refused.json<{ error: { details: { files: string[] } } }>().error.details.files).toEqual(["package/agents.yaml"]);
+
+    // Once applied, the instance holds it: pull goes ahead without --force, and keeps the edit the instance now has.
+    const preview = (await cli(sb, ["apply", "--json"], { cwd: dir })).json<{ preview_id: string }>();
+    expect((await cli(sb, ["apply", "--confirm", preview.preview_id], { cwd: dir })).code).toBe(0);
+    const afterApply = await cli(sb, ["pull"], { cwd: dir });
+    expect(afterApply.code, afterApply.stderr + afterApply.stdout).toBe(0);
+    expect(read(agentsFile)).toContain("temperature: 0.6");
+
+    // A later edit is refused again.
+    writeFileSync(agentsFile, read(agentsFile).replace("temperature: 0.6", "temperature: 0.9"));
+    const later = await cli(sb, ["pull", "--json"], { cwd: dir });
+    expect(later.code).toBe(4);
+    expect(later.json<{ error: { details: { files: string[] } } }>().error.details.files).toEqual(["package/agents.yaml"]);
+  });
+
+  it("outside git, a file an apply imported counts as the instance's, so pull replaces it without --force", async () => {
+    const dir = await initSolution();
+    expect((await cli(sb, ["pull"], { cwd: dir })).code).toBe(0);
+    const suite = path.join(dir, "tests", "smoke.yaml");
+    writeFileSync(suite, stringify({ name: "Smoke", cases: [] }));
+    const preview = (await cli(sb, ["apply", "--json"], { cwd: dir })).json<{ preview_id: string }>();
+    expect((await cli(sb, ["apply", "--confirm", preview.preview_id], { cwd: dir })).code).toBe(0);
+    const pulled = await cli(sb, ["pull"], { cwd: dir });
+    expect(pulled.code, pulled.stderr + pulled.stdout).toBe(0);
+  });
+
   it("refuses to overwrite package files outside git when no earlier pull recorded them", async () => {
     const dir = await initSolution();
     expect((await cli(sb, ["pull"], { cwd: dir })).code).toBe(0);

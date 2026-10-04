@@ -8,8 +8,13 @@ import { readEvents } from "../sse.js";
 /** Long-running work: bounded waits that resume, and a live stream. */
 
 export const DEFAULT_WAIT = "90s";
-/** An MCP tool never blocks; it returns the state at once. */
+/** An MCP tool that starts work never blocks; it returns the state at once. */
 const MCP_TIMEOUT_MS = 0;
+/**
+ * The longest `operation_status` waits when asked to: below the minute after
+ * which MCP clients commonly give up on a request.
+ */
+export const MCP_MAX_WAIT_MS = 50_000;
 
 export const TIMEOUT_OPTION = {
   type: "string" as const,
@@ -27,11 +32,26 @@ function intervalMs(ctx: Context): number {
   return Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : 1000;
 }
 
+/**
+ * How long `wait` waits. As the MCP tool `operation_status` it returns the
+ * state at once unless given a timeout, and waits at most MCP_MAX_WAIT_MS.
+ */
+function waitTimeoutMs(ctx: Context, raw: string | undefined): number {
+  if (ctx.mode !== "mcp") return parseDuration(raw ?? DEFAULT_WAIT);
+  if (raw === undefined || raw === "") return 0;
+  const asked = parseDuration(raw);
+  if (asked > MCP_MAX_WAIT_MS) {
+    ctx.warn(`operation_status waits at most ${MCP_MAX_WAIT_MS / 1000} s, not ${raw}; call it again to keep waiting.`);
+    return MCP_MAX_WAIT_MS;
+  }
+  return asked;
+}
+
 /** Wait for operations and shape the answer every waiting command prints. */
 export async function waitAndReport(ctx: Context, ids: string[], timeout: number) {
   const client = await ctx.client();
   const progress = !ctx.json && ctx.io.stderr.isTTY && ctx.mode === "cli";
-  const { operations, timedOut } = await waitFor(ctx, client, ids, {
+  const { operations, timedOut, waitedMs } = await waitFor(ctx, client, ids, {
     timeoutMs: timeout,
     intervalMs: intervalMs(ctx),
     onChange: progress ? (op) => ctx.io.stderr.write(`${ctx.style.dim(describe(op).split("\n")[0]!)}\n`) : undefined,
@@ -49,6 +69,8 @@ export async function waitAndReport(ctx: Context, ids: string[], timeout: number
     operations,
     settled: pending.length === 0,
     timed_out: timedOut,
+    timeout_ms: timeout,
+    waited_ms: waitedMs,
     ...(pending.length ? { resume: `cavelon wait ${pending.join(" ")}` } : {}),
     ...(waits.length ? { capacity_waits: waits } : {}),
     ...(refusals.length ? { capacity_refusals: refusals } : {}),
@@ -75,19 +97,26 @@ export const wait: CommandSpec = {
   summary: "Wait until operations finish, need a person, or the timeout passes.",
   description:
     "Exit 0 when all succeeded, 1 when one failed or was cancelled, 5 when one needs a person,\n" +
-    "6 when the timeout passed first. A test run that finished with failed cases counts as failed, and its cases are named.\n" +
-    "The state is printed in every case, and a second `wait` resumes.",
+    "6 when one still runs at the end (timed_out says whether it waited the whole timeout; --timeout 0 reads the state once).\n" +
+    "A test run that finished with failed cases counts as failed, and its cases are named.\n" +
+    "The state is printed in every case with waited_ms, and a second `wait` resumes. As the MCP tool operation_status it\n" +
+    `returns the state at once unless given a timeout, and waits at most ${MCP_MAX_WAIT_MS / 1000} s.`,
   readOnly: true,
   idempotent: true,
   mcpTool: "operation_status",
   positionals: [{ name: "operation", description: "Operation ids (op_…).", required: true, variadic: true }],
   options: {
-    timeout: TIMEOUT_OPTION,
+    timeout: {
+      ...TIMEOUT_OPTION,
+      description:
+        `Stop waiting after this long (90s, 5m; default ${DEFAULT_WAIT}). The work goes on; run wait again to resume. ` +
+        `As an MCP tool: none by default (returns at once), at most ${MCP_MAX_WAIT_MS / 1000}s.`,
+    },
   },
   examples: ["cavelon wait op_test_run_0f…", "cavelon wait op_a op_b --timeout 5m --json"],
   async run(ctx, input) {
     const ids = (input.positionals.operation as string[]).filter(Boolean);
-    return waitAndReport(ctx, [...new Set(ids)], timeoutMs(ctx, stringOption(input, "timeout")));
+    return waitAndReport(ctx, [...new Set(ids)], waitTimeoutMs(ctx, stringOption(input, "timeout")));
   },
 };
 

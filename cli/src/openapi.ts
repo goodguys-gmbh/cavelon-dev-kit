@@ -125,9 +125,19 @@ export function findOperation(doc: OpenApiDoc, name: string): Operation {
       hint: `Use the full operationId: ${byAlias.map((o) => o.operationId).join(", ")}`,
     });
   }
+  // A name as people and other tools spell it: createTenant, create-tenant or CREATE_TENANT for create_tenant.
+  const wanted = looseName(name);
+  const loose = all.filter((o) => looseName(o.alias) === wanted || looseName(o.operationId) === wanted);
+  if (loose.length === 1) return loose[0]!;
   const needle = name.toLowerCase();
-  const similar = all
-    .filter((o) => o.alias.toLowerCase().includes(needle) || needle.includes(o.alias.toLowerCase()))
+  const similar = [
+    ...loose,
+    ...all.filter(
+      (o) =>
+        !loose.includes(o) &&
+        (o.alias.toLowerCase().includes(needle) || needle.includes(o.alias.toLowerCase()) || looselyContains(looseName(o.alias), wanted)),
+    ),
+  ]
     .slice(0, 5)
     .map((o) => o.alias);
   throw new CavelonError(ExitCode.usage, {
@@ -135,6 +145,21 @@ export function findOperation(doc: OpenApiDoc, name: string): Operation {
     message: `This instance publishes no operation "${name}".`,
     hint: similar.length ? `Did you mean: ${similar.join(", ")}? (\`cavelon api list --search <text>\`)` : "Find it with `cavelon api list --search <text>`.",
   });
+}
+
+/** A name without case, underscores or dashes, for a loose match. */
+function looseName(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+/** Whether one loose name holds the other, for names long enough to mean something. */
+function looselyContains(a: string, b: string): boolean {
+  return a.length > 3 && b.length > 3 && (a.includes(b) || b.includes(a));
+}
+
+/** Whether an operation was found by a looser spelling than its own names; the caller says which one it took. */
+export function matchedLoosely(op: Operation, name: string): boolean {
+  return name !== op.operationId && name !== op.alias;
 }
 
 /** The operation at a method and path template, for the workflow commands. */

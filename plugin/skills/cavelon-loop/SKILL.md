@@ -14,8 +14,10 @@ use it when you parse the result.
 ## Before anything
 
 - `cavelon status` says which instance, tenant and solution this folder is
-  bound to, the last pull and the open previews. `cavelon whoami` says who the
-  token acts as and when it expires.
+  bound to, the solution's state (draft or active, whether it is ready to
+  activate, its latest test run), the last pull and the open previews.
+  `cavelon whoami` says who the token acts as, when it expires, whether it may
+  enter Platform mode and which tenants it reaches.
 - **Never handle a token.** If a command exits 7 (not authorised) or says no
   token, ask the person to run `cavelon login --instance <url>` themselves (in a
   terminal, or with a `!` prefix where your client offers one). Never ask them
@@ -54,8 +56,9 @@ use it when you parse the result.
 
 1. **Pull** what is live: `cavelon pull`. It refuses when `package/` has
    uncommitted changes (outside git: files changed since the last pull);
-   commit or apply them first. `git diff` then shows what someone changed
-   in the Admin.
+   commit or apply them first. A file as the last pull or confirmed apply left
+   it counts as unchanged, so a pull right after an apply goes ahead without a
+   commit. `git diff` then shows what someone changed in the Admin.
 2. **Edit** the files in `package/` (one file per schema section) and `tests/`
    (one file per test suite). See the cavelon-authoring skill.
 3. **Validate** offline: `cavelon validate`. Fix every error; `cavelon explain
@@ -155,8 +158,10 @@ return operation ids at once. `cavelon wait <ids> --timeout 90s` returns the
 state when the time is up (exit 6 means still running; the same `wait` again
 resumes). Keep each wait under your shell's command time limit, and run longer
 waits in the background if your client can. Over MCP, the `operation_status`
-tool reads an operation without blocking. Exit 5 means a person must act (an
-approval, a paused loop): tell them, with the link `wait` prints.
+tool returns the state at once, or, given a `timeout`, waits up to it (at most
+50 seconds) and reports `waited_ms`; `timed_out` is true only when it waited
+the whole timeout. Exit 5 means a person must act (an approval, a paused
+loop): tell them, with the link `wait` prints.
 
 **Never approve anything.** An approval is decided by a person, or by an API
 key an owner granted the explicit scope `approvals.decide`; never by you, and
