@@ -7,7 +7,45 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Added
+
+- `cavelon` without Node.js: each release carries a standalone executable for
+  macOS (Apple silicon and Intel), Linux (x64 and arm64) and Windows (x64),
+  built with Bun from the tagged commit, with `checksums.txt` and a build
+  provenance attestation per file (`gh attestation verify`). The executable
+  keeps the token in the system's credential store, or in the user-only file
+  where there is none, as the npm package does, and reads no `.env` or
+  `bunfig.toml` from the folder it runs in.
+- One-line install: `curl -fsSL https://github.com/goodguys-gmbh/cavelon-dev-kit/releases/latest/download/install.sh | sh`
+  on macOS and Linux, `irm https://github.com/goodguys-gmbh/cavelon-dev-kit/releases/latest/download/install.ps1 | iex`
+  in Windows PowerShell 5.1 or 7. The scripts pick the executable for the
+  system, check its checksum, install it into the user's folder
+  (`~/.local/bin`, `%LOCALAPPDATA%\Programs\cavelon`) without root, add that
+  folder to the `PATH` once and say where, and print the next step. Running
+  them again updates `cavelon`; `--version` (or `CAVELON_VERSION`) installs a
+  given release. No telemetry.
+- The release workflow builds, smoke-tests and attests the executables after
+  staging the npm package, creates the GitHub release, and updates a Homebrew
+  tap and writes a winget manifest once those are set up. macOS signing and
+  notarisation and Windows signing run once their secrets are set
+  (RELEASING.md); until then the executables are unsigned, and
+  `docs/installation.md` says what macOS and Windows show for a file
+  downloaded in a browser, and what to do.
+
 ### Changed
+
+- The plugin starts the `cavelon` on the `PATH` (`cavelon mcp`) when there is
+  one, and `npx -y @cavelon/cli@0.1 mcp` otherwise, through `sh`. On native
+  Windows, add the MCP server yourself as before, now simply
+  `claude mcp add --scope user cavelon -- cavelon mcp` with the installed
+  `cavelon.exe`.
+- `cavelon init --update` keeps an MCP entry changed to start the installed
+  `cavelon` (`cavelon mcp`) instead of `npx`, for a team without Node.js.
+- Docs: the README's five-minute start begins with the one-line install per
+  system, then the plugin, with `npx` and npm as the alternatives.
+  Installation covers every way in (the one-line install with its options,
+  checking the download, Homebrew and winget, npx and npm), updating and
+  uninstalling each, and the proxy settings of the standalone `cavelon`.
 
 - Docs: the README's five-minute start, Installation, Getting started, the
   "before you start" part of Building with a coding agent and the FAQ start

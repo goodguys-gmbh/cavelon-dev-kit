@@ -14,6 +14,11 @@ npx -y @cavelon/cli --help
 npm i -g @cavelon/cli
 ```
 
+Without Node.js, one line installs a standalone `cavelon` into your user
+folder: `curl -fsSL https://github.com/goodguys-gmbh/cavelon-dev-kit/releases/latest/download/install.sh | sh`
+on macOS and Linux, `irm https://github.com/goodguys-gmbh/cavelon-dev-kit/releases/latest/download/install.ps1 | iex`
+in Windows PowerShell.
+
 The full documentation is in the repository's
 [`docs/`](https://github.com/goodguys-gmbh/cavelon-dev-kit/tree/main/docs):
 [installation](https://github.com/goodguys-gmbh/cavelon-dev-kit/blob/main/docs/installation.md)

@@ -12,6 +12,11 @@ export default tseslint.config(
     },
   },
   {
+    // Build scripts run on Node.js.
+    files: ["scripts/**/*.mjs"],
+    languageOptions: { globals: { process: "readonly" } },
+  },
+  {
     // Tests read loosely typed JSON output.
     files: ["test/**/*.ts"],
     rules: { "@typescript-eslint/no-explicit-any": "off" },

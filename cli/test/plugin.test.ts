@@ -1,4 +1,6 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -9,8 +11,8 @@ import { MCP_COMMAND } from "../src/agents.js";
  * The plugin for Claude Code and Codex: one
  * folder, plugin/, that both marketplaces at the repository's root name, with
  * the skills in plugin/skills/ (their one source) and the `cavelon mcp` entry
- * in plugin/.mcp.json, started through npx at this version's minor. One version
- * for the binary and the plugin.
+ * in plugin/.mcp.json: the `cavelon` on the PATH, else through npx at this
+ * version's minor. One version for the binary and the plugin.
  */
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -77,11 +79,35 @@ describe("the plugin", () => {
     expect(inPlugin(codex.mcpServers!)).toBe(path.join(PLUGIN, ".mcp.json"));
   });
 
-  it("starts `cavelon mcp` through npx, pinned to this version's minor, as init --agents writes it", () => {
+  it("starts the `cavelon mcp` on the PATH, else through npx pinned to this version's minor, as init --agents writes it", () => {
     const mcp = json<{ mcpServers: Record<string, { command: string; args: string[] }> }>("plugin", ".mcp.json");
     const minor = version.split(".").slice(0, 2).join(".");
-    expect(mcp.mcpServers).toEqual({ cavelon: { command: "npx", args: ["-y", `@cavelon/cli@${minor}`, "mcp"] } });
-    expect(mcp.mcpServers.cavelon).toEqual(MCP_COMMAND);
+    expect(MCP_COMMAND).toEqual({ command: "npx", args: ["-y", `@cavelon/cli@${minor}`, "mcp"] });
+    const npx = [MCP_COMMAND.command, ...MCP_COMMAND.args].join(" ");
+    expect(mcp.mcpServers).toEqual({
+      cavelon: { command: "sh", args: ["-c", `if command -v cavelon >/dev/null 2>&1; then exec cavelon mcp; else exec ${npx}; fi`] },
+    });
+  });
+
+  it.skipIf(process.platform === "win32")("prefers a cavelon on the PATH and falls back to npx", () => {
+    const mcp = json<{ mcpServers: Record<string, { command: string; args: string[] }> }>("plugin", ".mcp.json");
+    const bin = mkdtempSync(path.join(os.tmpdir(), "cavelon-plugin-"));
+    try {
+      const fake = (name: string) => {
+        writeFileSync(path.join(bin, name), `#!/bin/sh\necho "${name} $*"\n`);
+        chmodSync(path.join(bin, name), 0o755);
+      };
+      const start = () => {
+        const shell = spawnSync(mcp.mcpServers.cavelon!.command, mcp.mcpServers.cavelon!.args, { env: { PATH: `${bin}:/usr/bin:/bin` }, encoding: "utf8" });
+        return shell.stdout.trim();
+      };
+      fake("npx");
+      expect(start()).toBe(`npx ${MCP_COMMAND.args.join(" ")}`);
+      fake("cavelon");
+      expect(start()).toBe("cavelon mcp");
+    } finally {
+      rmSync(bin, { recursive: true, force: true });
+    }
   });
 
   it("carries every skill of plugin/skills/, each named after its folder", () => {

@@ -56,3 +56,132 @@ jobs:
             grep -q "dist/skills/$skill/SKILL.md" pack.txt
           done
           grep -q "dist/LICENSE" pack.txt
+
+  # The standalone executable (scripts/build-executable.mjs), built on each
+  # platform it is released for, and run there against the fake server.
+  executable:
+    name: executable (${{ matrix.asset }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, asset: cavelon-linux-x64 }
+          - { os: ubuntu-24.04-arm, asset: cavelon-linux-arm64 }
+          - { os: macos-latest, asset: cavelon-darwin-arm64 }
+          - { os: macos-15-intel, asset: cavelon-darwin-x64 }
+          - { os: windows-latest, asset: cavelon-windows-x64.exe }
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: cli/package-lock.json
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: cli/.bun-version
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - run: npm run build:executable
+      - name: Smoke test the executable (--version, whoami, login, init --agents, MCP)
+        shell: bash
+        env:
+          CAVELON_EXECUTABLE: ${{ github.workspace }}/cli/build/${{ matrix.asset }}
+        run: |
+          test -f "$CAVELON_EXECUTABLE"
+          npm run test:executable
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: cli/build/${{ matrix.asset }}
+          if-no-files-found: error
+          retention-days: 3
+
+  # install.sh, install.ps1 and the Homebrew formula against a release folder
+  # served on 127.0.0.1 from the executables above; nothing is published.
+  install:
+    name: install scripts (${{ matrix.os }})
+    needs: executable
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: cavelon-*
+          path: release
+          merge-multiple: true
+      - name: Lay out the release as the release workflow does
+        shell: bash
+        run: |
+          cp install.sh install.ps1 release/
+          cd release
+          chmod +x cavelon-*
+          if command -v sha256sum >/dev/null; then sha256sum cavelon-*; else shasum -a 256 cavelon-*; fi > checksums.txt
+          cat checksums.txt
+          # A copy whose checksums do not match its executables.
+          mkdir tampered
+          cp cavelon-* install.sh install.ps1 tampered/
+          sed 's/^[0-9a-f]*/0000000000000000000000000000000000000000000000000000000000000000/' checksums.txt > tampered/checksums.txt
+          echo "VERSION=$(node -p "require('../cli/package.json').version")" >> "$GITHUB_ENV"
+      - name: Serve it on 127.0.0.1
+        shell: bash
+        run: |
+          nohup node .github/scripts/serve.mjs 8931 > serve.log 2>&1 &
+          for _ in $(seq 1 50); do curl -fsS -o /dev/null http://127.0.0.1:8931/checksums.txt && exit 0; sleep 0.2; done
+          cat serve.log; exit 1
+      - name: shellcheck
+        if: runner.os == 'Linux'
+        run: shellcheck install.sh .github/scripts/test-install-sh.sh
+      - name: install.sh
+        if: runner.os != 'Windows'
+        run: bash .github/scripts/test-install-sh.sh http://127.0.0.1:8931 "$VERSION"
+      - name: install.ps1 in Windows PowerShell 5.1
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: .github/scripts/test-install-ps1.ps1 -Base http://127.0.0.1:8931 -Version $env:VERSION
+      - name: install.ps1 in PowerShell 7
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: .github/scripts/test-install-ps1.ps1 -Base http://127.0.0.1:8931 -Version $env:VERSION
+      - name: The Homebrew formula installs and passes its test
+        if: runner.os == 'macOS'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_ANALYTICS: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
+        run: |
+          brew tap-new --no-git cavelon-test/local
+          tap="$(brew --repository)/Library/Taps/cavelon-test/homebrew-local"
+          node packaging/render.mjs homebrew --base-url http://127.0.0.1:8931
+          mkdir -p "$tap/Formula" && cp packaging-out/homebrew/Formula/cavelon.rb "$tap/Formula/"
+          brew install cavelon-test/local/cavelon
+          brew test cavelon-test/local/cavelon
+          test "$("$(brew --prefix)/bin/cavelon" --version)" = "$VERSION"
+          brew uninstall cavelon-test/local/cavelon
+          brew untap cavelon-test/local
+      - name: The winget manifest
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          node packaging/render.mjs winget
+          $manifest = Get-ChildItem -Recurse -Directory packaging-out/winget/manifests | Where-Object { Get-ChildItem $_.FullName -Filter *.yaml } | Select-Object -First 1
+          Get-ChildItem $manifest.FullName | ForEach-Object { Write-Host "--- $($_.Name)"; Get-Content $_.FullName | Write-Host }
+          if (Get-Command winget -ErrorAction SilentlyContinue) {
+            winget validate --manifest $manifest.FullName
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } else {
+            Write-Host "winget is not on this runner; the manifest was not validated."
+          }

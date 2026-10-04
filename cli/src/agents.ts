@@ -1,6 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { embeddedContent } from "./embedded.js";
 import { usageError } from "./errors.js";
 import { GENERATED_TOKEN } from "./markers.js";
 import { KIT_VERSION } from "./version.js";
@@ -15,6 +16,10 @@ import { KIT_VERSION } from "./version.js";
 // is this version's minor: in 0.x a minor release may break, and it must not
 // reach a solution's MCP entry unannounced. A release of a new minor moves both.
 export const MCP_COMMAND = { command: "npx", args: ["-y", "@cavelon/cli@0.1", "mcp"] };
+
+// The installed executable (one-line install, Homebrew or npm i -g), for a team
+// without Node.js: `init` does not write it, but keeps an entry changed to it.
+export const INSTALLED_MCP_COMMAND = { command: "cavelon", args: ["mcp"] };
 
 /**
  * How an agent on `platform` starts the MCP server. On native Windows `npx` is
@@ -36,7 +41,8 @@ export interface AgentTarget {
 }
 
 // A solution's MCP files are shared through git, and one person's system must
-// not rewrite another's working entry: the other system's form counts as current.
+// not rewrite another's working entry: the other system's form counts as
+// current, and so does the installed cavelon.
 const PLATFORMS: NodeJS.Platform[] = ["win32", "linux"];
 const otherPlatforms = () => PLATFORMS.filter((p) => (p === "win32") !== (process.platform === "win32"));
 
@@ -45,15 +51,18 @@ const jsonServer = (file: string, key = "mcpServers", extra: Record<string, unkn
   format: "json",
   keys: [key, "cavelon"],
   entry: { ...extra, ...mcpCommand() },
-  others: otherPlatforms().map((p) => ({ ...extra, ...mcpCommand(p) })),
+  others: [...otherPlatforms().map((p) => ({ ...extra, ...mcpCommand(p) })), { ...extra, ...INSTALLED_MCP_COMMAND }],
 });
 
 const tomlServer = (file: string): McpTarget => {
-  const block = (platform: NodeJS.Platform) => {
-    const { command, args } = mcpCommand(platform);
-    return ["[mcp_servers.cavelon]", `command = "${command}"`, `args = [${args.map((a) => `"${a}"`).join(", ")}]`].join("\n");
+  const block = ({ command, args }: { command: string; args: string[] }) =>
+    ["[mcp_servers.cavelon]", `command = "${command}"`, `args = [${args.map((a) => JSON.stringify(a)).join(", ")}]`].join("\n");
+  return {
+    file,
+    format: "toml",
+    block: block(mcpCommand()),
+    others: [...otherPlatforms().map((p) => block(mcpCommand(p))), block(INSTALLED_MCP_COMMAND)],
   };
-  return { file, format: "toml", block: block(process.platform), others: otherPlatforms().map(block) };
 };
 
 /** An agent whose MCP entry is made when it is written, for the system the command runs on. */
@@ -112,7 +121,8 @@ export interface Skill {
 
 /**
  * The skills shipped with this binary: `dist/skills/` in the package, the
- * repository's `plugin/skills/` when running from a checkout.
+ * repository's `plugin/skills/` when running from a checkout, or the copy a
+ * standalone executable carries.
  */
 export function skillsSource(): string[] {
   const here = path.dirname(fileURLToPath(import.meta.url));
@@ -120,6 +130,8 @@ export function skillsSource(): string[] {
 }
 
 export async function bundledSkills(): Promise<Skill[]> {
+  const embedded = embeddedContent();
+  if (embedded) return embedded.skills;
   for (const dir of skillsSource()) {
     let entries;
     try {
