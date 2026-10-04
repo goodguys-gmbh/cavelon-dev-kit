@@ -327,31 +327,48 @@ export function isArrayParameter(param: Parameter): boolean {
   return schemaTypes(param.schema).includes("array");
 }
 
-/** A compact description of a schema for `api describe`: top-level fields and types. */
-export function describeSchema(doc: OpenApiDoc, schema: Record<string, unknown> | undefined): unknown {
+/**
+ * The object schema of an array field's items, through `$ref` and a
+ * nullable `anyOf`; undefined when the field is no array of objects.
+ */
+function arrayItemObject(doc: OpenApiDoc, field: Record<string, unknown>): Record<string, unknown> | undefined {
+  const options = [field, ...((field.anyOf ?? field.oneOf ?? []) as Array<Record<string, unknown>>).map((b) => deref(doc, b) as Record<string, unknown>)];
+  const array = options.find((o) => o?.type === "array" && o.items);
+  if (!array) return undefined;
+  const items = deref(doc, array.items) as Record<string, unknown> | undefined;
+  return items && typeof items.properties === "object" ? (array.items as Record<string, unknown>) : undefined;
+}
+
+/**
+ * A compact description of a schema for `api describe`: top-level fields and
+ * types, and for a field that is an array of objects, its items' fields under
+ * `<field>[]` (a few levels deep), so a body such as `updates: [{id, …}]` shows
+ * what each item needs.
+ */
+export function describeSchema(doc: OpenApiDoc, schema: Record<string, unknown> | undefined, depth = 0): unknown {
   if (!schema) return null;
   const resolved = deref(doc, schema) as Record<string, unknown>;
   const props = resolved.properties as Record<string, Record<string, unknown>> | undefined;
   const ref = typeof schema.$ref === "string" ? schema.$ref.split("/").pop() : undefined;
   if (!props) {
-    if (resolved.type === "array" && resolved.items) return { type: "array", items: describeSchema(doc, resolved.items as Record<string, unknown>) };
+    if (resolved.type === "array" && resolved.items) return { type: "array", items: describeSchema(doc, resolved.items as Record<string, unknown>, depth + 1) };
     return { ...(ref ? { name: ref } : {}), type: resolved.type ?? (schemaTypes(resolved).join("|") || "any") };
   }
   const required = new Set((resolved.required as string[] | undefined) ?? []);
-  return {
-    ...(ref ? { name: ref } : {}),
-    type: "object",
-    fields: Object.fromEntries(
-      Object.entries(props).map(([name, p]) => {
-        const sub = deref(doc, p) as Record<string, unknown>;
-        const subRef = typeof p.$ref === "string" ? p.$ref.split("/").pop() : undefined;
-        const type = subRef ?? (schemaTypes(sub).filter((t) => t !== "null").join("|") || "object");
-        const parts = [type];
-        if (required.has(name)) parts.push("required");
-        if (Array.isArray(sub.enum)) parts.push(`one of ${(sub.enum as unknown[]).join(", ")}`);
-        if (sub.default !== undefined) parts.push(`default ${JSON.stringify(sub.default)}`);
-        return [name, parts.join(", ")];
-      }),
-    ),
-  };
+  const fields: Record<string, unknown> = {};
+  for (const [name, p] of Object.entries(props)) {
+    const sub = deref(doc, p) as Record<string, unknown>;
+    const subRef = typeof p.$ref === "string" ? p.$ref.split("/").pop() : undefined;
+    const items = arrayItemObject(doc, sub);
+    const itemName = items && typeof items.$ref === "string" ? items.$ref.split("/").pop() : undefined;
+    const type = subRef ?? (items ? `array of ${itemName ?? "object"}` : schemaTypes(sub).filter((t) => t !== "null").join("|") || "object");
+    const parts = [type];
+    if (required.has(name)) parts.push("required");
+    if (Array.isArray(sub.enum)) parts.push(`one of ${(sub.enum as unknown[]).join(", ")}`);
+    if (sub.default !== undefined) parts.push(`default ${JSON.stringify(sub.default)}`);
+    fields[name] = parts.join(", ");
+    // Three levels are enough for a body, and stop a schema that refers to itself.
+    if (items && depth < 3) fields[`${name}[]`] = describeSchema(doc, items, depth + 1);
+  }
+  return { ...(ref ? { name: ref } : {}), type: "object", fields };
 }

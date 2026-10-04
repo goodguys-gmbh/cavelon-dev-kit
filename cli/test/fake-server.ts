@@ -192,6 +192,10 @@ export interface FakeState {
   dropStreams: number;
   /** Each tenant's configuration, as export returns it and import replaces it. */
   configs: Map<string, TenantConfig>;
+  /** Each solution's persona, by harness id, as GET/PUT /bot-persona read and write it. */
+  personas: Map<string, Record<string, unknown>>;
+  /** An older instance whose solution list has no is_default. */
+  harnessesWithoutDefault: boolean;
   /** Merged into every import preview (impact, target_needs, loop_budgets). */
   previewExtras: Record<string, unknown>;
   previewBlockers: string[];
@@ -451,6 +455,8 @@ export async function startFakeServer(): Promise<FakeServer> {
     configs: new Map(),
     previewExtras: {},
     previewBlockers: [],
+    personas: new Map(),
+    harnessesWithoutDefault: false,
     importRequirementsChanged: null,
     ready: true,
     servePrincipal: true,
@@ -719,7 +725,9 @@ export async function startFakeServer(): Promise<FakeServer> {
     if (tenantLimitsRoute && method === "PATCH") return handleInferenceBudget(res, tenantLimitsRoute[1]!, tid, body.json, info);
 
     if (p === "/api/v1/harnesses" && method === "GET") {
-      return send(res, 200, state.harnesses.filter((h) => h.tenant_id === tid));
+      const listed = state.harnesses.filter((h) => h.tenant_id === tid);
+      if (state.harnessesWithoutDefault) return send(res, 200, listed.map(({ is_default: _d, ...h }) => h));
+      return send(res, 200, listed);
     }
     if (p === "/api/v1/harnesses" && method === "POST") {
       const b = body.json as Record<string, unknown>;
@@ -759,6 +767,22 @@ export async function startFakeServer(): Promise<FakeServer> {
     if (m) {
       const h = state.harnesses.find((x) => x.tenant_id === tid && x.slug === decodeURIComponent(m![1]!));
       return h ? send(res, 200, h) : send(res, 404, { detail: "Harness not found" });
+    }
+    m = /^\/api\/v1\/harnesses\/([^/]+)\/default$/.exec(p);
+    if (m && method === "POST") {
+      const h = state.harnesses.find((x) => x.tenant_id === tid && x.id === m![1]);
+      if (!h) return send(res, 404, { detail: "Harness not found." });
+      // One default route per tenant: the instance moves it.
+      for (const other of state.harnesses) if (other.tenant_id === tid) other.is_default = other.id === h.id;
+      return send(res, 200, h);
+    }
+    if (p === "/api/v1/bot-persona" && (method === "GET" || method === "PUT")) {
+      // Without harness_id, the tenant's default route, as the instance answers.
+      const wanted = url.searchParams.get("harness_id") ?? state.harnesses.find((h) => h.tenant_id === tid && h.is_default)?.id;
+      const h = state.harnesses.find((x) => x.tenant_id === tid && x.id === wanted);
+      if (!h) return send(res, 404, { detail: "Harness not found." });
+      if (method === "PUT") state.personas.set(h.id, { ...(body.json as Record<string, unknown>) });
+      return send(res, 200, { harness_id: h.id, ...(state.personas.get(h.id) ?? {}) });
     }
     m = /^\/api\/v1\/harnesses\/([^/]+)\/clone$/.exec(p);
     if (m && method === "POST") {

@@ -5,13 +5,14 @@ import { wait, watch } from "./async.js";
 import { docsGet, docsSearch } from "./docs.js";
 import { login, logout, status, use, whoami } from "./session.js";
 import { init } from "./init.js";
+import { fmt } from "./fmt.js";
 import { setup } from "./setup.js";
 import { limits } from "./limits.js";
 import { limitsSet } from "./limits-set.js";
 import { modelsList, modelsSetLimit } from "./models.js";
 import { activate, apply, explain, pull, validate } from "./solution.js";
 import { schema } from "./schema.js";
-import { harnessClone, harnessList, harnessNew, tenantCreate, tenantList } from "./tenants.js";
+import { harnessClone, harnessDefault, harnessList, harnessNew, tenantCreate, tenantList } from "./tenants.js";
 import { kbUpload, testRun, trace } from "./work.js";
 import { secretsDelete, secretsList, secretsSet, variablesDelete, variablesGet, variablesList, variablesSet } from "./values.js";
 import { loopCancel, loopIterations, loopPause, loopResume, loopStart, loopWatch, triggerIdentity } from "./loops.js";
@@ -84,12 +85,14 @@ export const COMMANDS: CommandSpec[] = [
   tenantCreate,
   tenantList,
   harnessList,
+  harnessDefault,
   harnessNew,
   harnessClone,
   activate,
   init,
   pull,
   validate,
+  fmt,
   schema,
   apply,
   explain,

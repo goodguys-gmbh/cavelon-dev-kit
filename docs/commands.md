@@ -29,8 +29,8 @@ the environment over the files. The exit codes are listed in [Troubleshooting](t
 ## Contents
 
 - **Session:** [`setup`](#cavelon-setup), [`login`](#cavelon-login), [`logout`](#cavelon-logout), [`whoami`](#cavelon-whoami), [`use`](#cavelon-use), [`status`](#cavelon-status)
-- **Solution as code:** [`init`](#cavelon-init), [`pull`](#cavelon-pull), [`validate`](#cavelon-validate), [`schema`](#cavelon-schema), [`apply`](#cavelon-apply), [`activate`](#cavelon-activate), [`explain`](#cavelon-explain)
-- **Tenants and solutions:** [`tenant create`](#cavelon-tenant-create), [`tenant list`](#cavelon-tenant-list), [`harness list`](#cavelon-harness-list), [`harness new`](#cavelon-harness-new), [`harness clone`](#cavelon-harness-clone)
+- **Solution as code:** [`init`](#cavelon-init), [`pull`](#cavelon-pull), [`validate`](#cavelon-validate), [`fmt`](#cavelon-fmt), [`schema`](#cavelon-schema), [`apply`](#cavelon-apply), [`activate`](#cavelon-activate), [`explain`](#cavelon-explain)
+- **Tenants and solutions:** [`tenant create`](#cavelon-tenant-create), [`tenant list`](#cavelon-tenant-list), [`harness list`](#cavelon-harness-list), [`harness new`](#cavelon-harness-new), [`harness clone`](#cavelon-harness-clone), [`harness default`](#cavelon-harness-default)
 - **Knowledge, tests and traces:** [`kb upload`](#cavelon-kb-upload), [`test run`](#cavelon-test-run), [`wait`](#cavelon-wait), [`watch`](#cavelon-watch), [`trace`](#cavelon-trace)
 - **Variables and secrets:** [`variables list`](#cavelon-variables-list), [`variables get`](#cavelon-variables-get), [`variables set`](#cavelon-variables-set), [`variables delete`](#cavelon-variables-delete), [`secrets list`](#cavelon-secrets-list), [`secrets set`](#cavelon-secrets-set), [`secrets delete`](#cavelon-secrets-delete)
 - **Limits and capacity:** [`limits`](#cavelon-limits), [`limits set`](#cavelon-limits-set), [`models list`](#cavelon-models-list), [`models set-limit`](#cavelon-models-set-limit)
@@ -240,6 +240,30 @@ With --json, `warnings` is always a list of `{code, message}` objects: the warni
 | `--limit <n>` | Print at most n findings (default 50). | yes |
 | `--verbose` | Also say which copy of the package schema was used: cached or read now, when, and its hash. | yes |
 
+### cavelon fmt
+
+Bring the package files into the export's form (field order and defaults from the package schema), offline.
+
+**changing** · MCP tool: `fmt`
+
+```text
+cavelon fmt [options]
+```
+
+A file whose value the export would spell differently is rewritten: each field in the schema's order, and each field it leaves out set to the schema's default, as the export writes it (the instance applies the same defaults, so nothing changes in what apply sends but the spelling). Lists become block lists; the persona file shows every field, the unset ones as comments. Comments in a rewritten file are not kept, as pull does not keep them. A file already in that form keeps its bytes, and so do the files of sections the schema does not know. Run it after writing package files by hand and before `apply`, so the next `pull` shows only what changed on the instance. --check writes nothing and exits 3 when a file would change. Uses the cached package schema (as validate does); --offline never contacts the instance.
+
+| Option | Description | MCP |
+|---|---|---|
+| `--check` | Write nothing; exit 3 when a file would change. | yes |
+| `--offline` | Never contact the instance, even when no schema is cached. | yes |
+
+Examples:
+
+```bash
+cavelon fmt
+cavelon fmt --check
+```
+
 ### cavelon schema
 
 Show the package schema the instance publishes: its sections, or one section's fields with a minimal example.
@@ -297,7 +321,7 @@ cavelon apply --env prod --json
 
 ### cavelon activate
 
-Activate a solution through the readiness gate (never by force).
+Activate a solution through the readiness gate (never by force); says whether it is the tenant's default route.
 
 **changing** · MCP tool: `activate`
 
@@ -305,12 +329,22 @@ Activate a solution through the readiness gate (never by force).
 cavelon activate [options]
 ```
 
-Only when every readiness check passes, and with a personal access token only when it was created with "may activate". Activating without the evidence stays a person's decision in the Admin.
+Only when every readiness check passes, and with a personal access token only when it was created with "may activate". Activating without the evidence stays a person's decision in the Admin. Afterwards it says whether the solution is the tenant's default route (the one the tenant's chat and widget answer with where no solution is named). --make-default previews making it the default; with --confirm as well, it changes it. That changes live traffic: show the preview to a person and confirm only with their yes. `cavelon harness default` does the same for an active solution.
 
 | Option | Description | MCP |
 |---|---|---|
 | `--harness <harness>` | The solution (harness): its name, slug or id; default: env file, then cavelon.yaml. | yes |
 | `--env <name>` | Use env/&lt;name&gt;.yaml: its tenant, solution and runtime bindings. | yes |
+| `--make-default` | Also make it the tenant's default route: previews the change; with --confirm, makes it. | yes |
+| `--confirm` | With --make-default: change the default route (after a person saw the preview). | yes |
+
+Examples:
+
+```bash
+cavelon activate
+cavelon activate --make-default
+cavelon activate --make-default --confirm
+```
 
 ### cavelon explain
 
@@ -322,7 +356,7 @@ Look a code up in the instance's error catalog: what it means and how to fix it.
 cavelon explain <code>
 ```
 
-Rule codes come from the package and graph checks, API error codes from failed requests. Uses the cached catalog first. Also explains the test-case statuses that are neither pass nor fail: calibration_required, pending_review, not_run, not_evaluated, skip.
+Rule codes come from the package and graph checks, API error codes from failed requests; cavelon's own codes (validate's findings, and errors the CLI raises itself, such as operation_not_found or uncommitted_changes) are known too. Uses the cached catalog first. Where the instance's fix names an API route, the command that does the same is added. An unknown code gets the closest known ones (a typo away, the same start). Also explains the test-case statuses that are neither pass nor fail: calibration_required, pending_review, not_run, not_evaluated, skip.
 
 | Argument | Description |
 |---|---|
@@ -375,13 +409,15 @@ A personal access token in Platform mode sees every tenant; any other sees the t
 
 ### cavelon harness list
 
-List the tenant's solutions (harnesses).
+List the tenant's solutions (harnesses), marking the default route.
 
 **read-only** · MCP tool: `harness_list`
 
 ```text
 cavelon harness list [options]
 ```
+
+DEFAULT marks the tenant's default route: the solution that answers where a conversation names none (the tenant's chat and widget). An instance that does not say which one it is leaves the column out; `is_default` in --json is null then.
 
 | Option | Description | MCP |
 |---|---|---|
@@ -432,6 +468,33 @@ cavelon harness clone <source> [options]
 | `--no-tests` | Do not copy the test suites. | yes |
 | `--no-triggers` | Do not copy the triggers. | yes |
 | `--idempotency-key <key>` | Send an Idempotency-Key, so a retry does not create a second one. | yes |
+
+### cavelon harness default
+
+Make a solution the tenant's default route; previews first, --confirm changes it.
+
+**changing** · MCP tool: `harness_default`
+
+```text
+cavelon harness default [solution] [options]
+```
+
+The default route is the solution that answers where a conversation names none: the tenant's chat and widget. A new tenant's default is an empty `default` solution, so a solution built beside it answers nobody there until it becomes the default. Without --confirm nothing changes: the preview names the current default and the one that would replace it. This changes live traffic, so show the preview to a person and confirm only with their yes. `is_default` in harnesses.yaml is not applied by `apply`; this is the way to set it.
+
+| Argument | Description |
+|---|---|
+| `solution` | Name, slug or id of the solution; default: cavelon.yaml's harness. |
+
+| Option | Description | MCP |
+|---|---|---|
+| `--confirm` | Change the default route (after a person saw the preview). | yes |
+
+Examples:
+
+```bash
+cavelon harness default support
+cavelon harness default support --confirm
+```
 
 ## Knowledge, tests and traces
 
@@ -1416,7 +1479,7 @@ Call any operation the instance publishes in its OpenAPI.
 cavelon api <operation> [params...] [options]
 ```
 
-The operation is its operationId or the short name before FastAPI's path suffix (list_harnesses). Parameters: -p name=value or name=value (not --name). Body: --body '&lt;json&gt;', --body @file.json or --body - (stdin); --json &lt;body&gt; still works for now but is deprecated: --json alone prints JSON, as on every command. The body is checked against the operation's schema before it is sent. As an MCP tool, or run by a coding agent (CLAUDECODE, CODEX_THREAD_ID, CODEX_SANDBOX, CURSOR_AGENT, GEMINI_CLI, COPILOT_CLI, COPILOT_AGENT, AI_AGENT or CAVELON_AGENT=1 is set), an operation that changes something returns what it would send and sends it only with confirm (as an MCP tool) or --confirm &lt;token&gt; (the token the preview printed). Run by an agent, one the instance marks for a person only (x-cavelon-person-only) is refused, as is a body that sets a field the instance marks as a secret value (x-cavelon-secret) and a file outside the solution folder. On an instance that marks no operation, one that changes a secret, creates or revokes a credential or decides an approval is refused. A person's own terminal sends at once.
+The operation is its operationId or the short name before FastAPI's path suffix (list_harnesses). Parameters: -p name=value or name=value (not --name). Body: --body '&lt;json&gt;', --body @file.json or --body - (stdin); --json &lt;body&gt; still works for now but is deprecated: --json alone prints JSON, as on every command. The body is checked against the operation's schema before it is sent. As an MCP tool, or run by a coding agent (CLAUDECODE, CODEX_THREAD_ID, CODEX_SANDBOX, CURSOR_AGENT, GEMINI_CLI, COPILOT_CLI, COPILOT_AGENT, AI_AGENT or CAVELON_AGENT=1 is set), an operation that changes something returns what it would send and sends it only with confirm (as an MCP tool) or --confirm &lt;token&gt; (the token the preview printed). Run by an agent, one the instance marks for a person only (x-cavelon-person-only) is refused, as is a body that sets a field the instance marks as a secret value (x-cavelon-secret) and a file outside the solution folder. On an instance that marks no operation, one that changes a secret, creates or revokes a credential or decides an approval is refused. A person's own terminal sends at once. In a solution folder, the persona operations (get_bot_persona, upsert_bot_persona, …) get the folder's solution as harness_id when none is passed, since without it they reach the tenant's default route.
 
 | Argument | Description |
 |---|---|

@@ -318,7 +318,7 @@ describe("harness", () => {
     const slugs = list.json<{ items: Array<{ slug: string }> }>().items.map((h) => h.slug);
     expect(slugs).toEqual(expect.arrayContaining(["support", "support-v2"]));
     const text = await cli(sb, ["harness", "list"]);
-    expect(text.stdout).toMatch(/^SLUG\s+NAME\s+STATUS\s+ID/);
+    expect(text.stdout).toMatch(/^SLUG\s+NAME\s+STATUS\s+DEFAULT\s+ID/);
   });
 
   it("says which source is unknown", async () => {

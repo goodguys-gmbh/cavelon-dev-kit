@@ -438,9 +438,11 @@ describe("init --from", () => {
     const result = await cli(sb, ["init", "--instance", server.url, "--tenant", tenant, "--from", "../counter-parent.json", "--json"], { cwd: dir });
     expect(result.code, result.stderr + result.stdout).toBe(0);
     const data = result.json<{ imported: { files: { written: string[]; removed: string[] }; ignored: string[]; package_version: string }; next: string[] }>();
+    // The blueprint holds no persona: its file shows every field as a placeholder.
     expect(data.imported.files.written).toEqual([
       "package/harnesses.yaml",
       "package/manifest.yaml",
+      "package/persona.yaml",
       "package/registry_entities.yaml",
       "package/runtime_requirements.yaml",
       "tests/counter-loop.yaml",
@@ -1221,7 +1223,7 @@ describe("explain", () => {
     expect(kit.json()).toMatchObject({ code: "package_schema_invalid", kind: expect.stringMatching(/^(kit|api)$/) });
     const unknown = await cli(sb, ["explain", "fanout_mystery", "--json"], { cwd: dir });
     expect(unknown.code).toBe(1);
-    expect(unknown.json<{ error: { hint: string } }>().error.hint).toMatch(/agent_pipeline_fanout_unsupported/);
+    expect(unknown.json<{ error: { hint: string } }>().error.hint).toMatch(/Similar codes: \w*fanout/);
   });
 
   it("explains a decision an Approval node's approver rule or self-approval refused", async () => {
@@ -1294,6 +1296,9 @@ describe("activate shows the readiness it went through", () => {
         "  warning   Description and outcome: The outcome is undefined.",
         "Warnings:",
         "  - Description and outcome: The outcome is undefined.",
+        // This tenant has no default route; a real one always has, so the line names it then.
+        "Not the default route: the tenant has none where a conversation names no solution.",
+        "Ask the person whether checked should answer there; that changes live traffic. Preview: cavelon harness default checked",
         "",
       ].join("\n"),
     );

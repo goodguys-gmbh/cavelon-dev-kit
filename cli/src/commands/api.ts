@@ -23,6 +23,7 @@ import { callOperation, previewRequest, type CallArguments } from "../invoke.js"
 import { confinedPath } from "../paths.js";
 import { describeSchema, findOperation, jsonBodySchema, matchedLoosely, operations, schemaTypes, secretFields, type Operation } from "../openapi.js";
 import { canonical } from "../package-files.js";
+import { harnessNotFoundError, lookupHarness } from "../harness-ref.js";
 import { cavelonCommand } from "../shell.js";
 
 /** Said once when `--json` carried the body: the alias goes away in a later release. */
@@ -247,6 +248,34 @@ function truncate(data: unknown, limit: number): { data: unknown; total?: number
   return { data };
 }
 
+/**
+ * The persona routes: without `harness_id` they read and write the persona of
+ * the tenant's default route, which in a solution folder is rarely the
+ * solution being built, so a new persona looked as if it had not arrived.
+ */
+const PERSONA_ROUTE = "/api/v1/bot-persona";
+
+/**
+ * In a solution folder, a persona operation that is not given `harness_id`
+ * gets the folder's solution (env file, then cavelon.yaml), and says so. The
+ * caller's own `harness_id` always wins.
+ */
+async function solutionForPersona(ctx: Context, op: Operation, params: Record<string, string[]>): Promise<void> {
+  if (op.path !== PERSONA_ROUTE && !op.path.startsWith(`${PERSONA_ROUTE}/`)) return;
+  if (params.harness_id || !op.parameters.some((p) => p.name === "harness_id" && p.in === "query")) return;
+  const session = await ctx.session();
+  const ref = session.envFile?.harness ?? session.project?.harness;
+  if (!ref) return;
+  const source = session.envFile?.harness ? `env/${session.envFile.name}.yaml` : "cavelon.yaml";
+  const { harness, candidates } = await lookupHarness(ctx, ref);
+  if (!harness) throw harnessNotFoundError(ref, candidates, source, (slug) => `harness_id=<id of ${slug}>`);
+  params.harness_id = [harness.id];
+  ctx.warn(
+    `Sent harness_id=${harness.id}, the solution ${harness.slug} from ${source}: without it, ${op.alias} reaches the tenant's default route. ` +
+      "Pass harness_id=<id> for another solution.",
+  );
+}
+
 export const api: CommandSpec = {
   name: "api",
   summary: "Call any operation the instance publishes in its OpenAPI.",
@@ -262,7 +291,9 @@ export const api: CommandSpec = {
     "Run by an agent, one the instance marks for a person only (x-cavelon-person-only) is refused, as is a body that\n" +
     "sets a field the instance marks as a secret value (x-cavelon-secret) and a file outside the solution folder. On an\n" +
     "instance that marks no operation, one that changes a secret, creates or revokes a credential or decides an\n" +
-    "approval is refused. A person's own terminal sends at once.",
+    "approval is refused. A person's own terminal sends at once.\n" +
+    "In a solution folder, the persona operations (get_bot_persona, upsert_bot_persona, …) get the folder's solution as\n" +
+    "harness_id when none is passed, since without it they reach the tenant's default route.",
   readOnly: false,
   destructive: true,
   mcpTool: "api",
@@ -300,6 +331,7 @@ export const api: CommandSpec = {
     const driven = drivenByAgent(ctx);
     const confine = driven !== undefined;
     const args: CallArguments = { params: parseParams(input) };
+    await solutionForPersona(ctx, op, args.params!);
     const rawBody = stringOption(input, "body");
     if (rawBody !== undefined) args.body = await readBody(ctx, rawBody, confine);
     for (const spec of listOption(input, "file")) {

@@ -10,6 +10,7 @@ import { readTextFile, writeFileAtomic } from "../fsutil.js";
 import { uncommitted } from "../git.js";
 import { callStable } from "../invoke.js";
 import { harnessNotFoundError, lookupHarness } from "../harness-ref.js";
+import { defaultChangeLine, defaultCommands, named, readDefaultRoute, setDefaultRoute } from "../default-route.js";
 import { ceilingHint, LIMIT_ABOVE_CEILING, parseLimits, readLimits, type PublishedLimits } from "../limits.js";
 import {
   deletePreview,
@@ -28,8 +29,11 @@ import {
   type StoredPreview,
 } from "../local-state.js";
 import { catalogEntry, checkPackage, KIT_CODES, packageVersionOf } from "../package-check.js";
+import { cliFix, similarCodes } from "../code-hints.js";
+import { KIT_ERROR_CODES } from "../kit-codes.js";
 import { pairOrderHint, pairOrderPointer } from "../pair-order.js";
 import { readPackage, writePackage, type Finding, type PackageOnDisk } from "../package-files.js";
+import { blockerDetails, blockerLines, changeLines, fieldChanges, notApplied, notAppliedLines } from "../preview-report.js";
 import { readPrincipal } from "../principal.js";
 import type { ProjectConfig } from "../project.js";
 import { CASE_STATUSES, caseStatus, TESTING_PAGE, type CaseStatus } from "../results.js";
@@ -445,7 +449,12 @@ interface Preview {
   summary?: { creates?: Record<string, number>; updates?: Record<string, number>; deletes?: Record<string, number>; references?: Record<string, number> };
   warnings?: string[];
   blockers?: string[];
-  ignored?: { sections?: string[]; fields?: string[]; count?: number };
+  /** Recent instances: each blocker with its code, package path and hint. */
+  blocker_details?: unknown;
+  /** Recent instances: the per-field diff. */
+  changes?: unknown;
+  /** `not_applied` (recent instances): fields the import leaves as they are, with how to set them. */
+  ignored?: { sections?: string[]; fields?: string[]; count?: number; not_applied?: unknown };
   impact?: {
     changed_tools?: string[];
     changed_knowledge_bases?: string[];
@@ -526,7 +535,13 @@ function needsLines(needs: NonNullable<Preview["target_needs"]>, flags: string):
   return lines;
 }
 
-export function previewText(p: Preview, flags = ""): string {
+/** What `apply` reads beside the preview: the package files, for the file and line of a blocker, and the solution. */
+interface PreviewContext {
+  disk?: PackageOnDisk;
+  harness?: string;
+}
+
+export function previewText(p: Preview, flags = "", context: PreviewContext = {}): string {
   const lines: Array<[string, unknown]> = [["ready", p.ready ? "yes" : "no"]];
   const s = p.summary ?? {};
   for (const [label, map] of [["creates", s.creates], ["updates", s.updates], ["deletes", s.deletes]] as const) {
@@ -534,10 +549,16 @@ export function previewText(p: Preview, flags = ""): string {
     if (text) lines.push([label, text]);
   }
   if (lines.length === 1) lines.push(["changes", "none"]);
-  if (p.blockers?.length) lines.push(["blockers", p.blockers.map((b) => `\n  - ${clip(b, 300)}`).join("")]);
+  const changes = fieldChanges(p.changes);
+  if (changes.length) lines.push(["field changes", changeLines(changes)]);
+  const details = blockerDetails(p.blocker_details, context.disk);
+  if (details.length) lines.push(["blockers", blockerLines(details)]);
+  else if (p.blockers?.length) lines.push(["blockers", p.blockers.map((b) => `\n  - ${clip(b, 300)}`).join("")]);
   if (p.warnings?.length) lines.push(["warnings", p.warnings.slice(0, 10).map((w) => `\n  - ${clip(w, 300)}`).join("") + (p.warnings.length > 10 ? `\n  … ${p.warnings.length - 10} more` : "")]);
   const ignored = [...(p.ignored?.sections ?? []), ...(p.ignored?.fields ?? [])];
   if (ignored.length) lines.push(["ignored", list(ignored)]);
+  const skipped = notApplied(p.ignored?.not_applied, context.disk?.package, context.harness);
+  if (skipped.length) lines.push(["not applied", notAppliedLines(skipped)]);
   const impact = p.impact ?? {};
   const active = (impact.active_harnesses ?? []).map((h) => {
     const via = [...(h.tools ?? []), ...(h.knowledge_bases ?? []), ...(h.sandboxes ?? [])];
@@ -551,6 +572,18 @@ export function previewText(p: Preview, flags = ""): string {
   }
   lines.push(...needsLines(p.target_needs ?? {}, flags));
   return keyValues(lines);
+}
+
+/** The structured parts of a preview, read once for --json and the MCP tool's result; empty on an instance without them. */
+function previewReport(p: Preview, context: PreviewContext): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  const details = blockerDetails(p.blocker_details, context.disk);
+  if (details.length) out.blocker_details = details;
+  const changes = fieldChanges(p.changes);
+  if (changes.length) out.field_changes = changes;
+  const skipped = notApplied(p.ignored?.not_applied, context.disk?.package, context.harness);
+  if (skipped.length) out.not_applied = skipped;
+  return out;
 }
 
 /** The package files a package on disk was read from, relative to the solution folder. */
@@ -703,9 +736,12 @@ function packageHarnessName(pkg: Record<string, unknown>, slug: string): string 
   return name ? name.slice(0, 255) : undefined;
 }
 
-/** Whether a preview needs a person's look before it is confirmed, and why. */
+/** Whether a preview needs a person's look before it is confirmed, and why; naming the active solutions it reaches. */
 function personReason(preview: Preview, harness: Harness | undefined, mode: string, env: string | undefined): string | undefined {
-  if (preview.impact?.active_harnesses?.length || harness?.status === "active") return "reaches an active solution";
+  const active = (preview.impact?.active_harnesses ?? []).map((h) => h.harness_slug ?? h.name).filter((n): n is string => Boolean(n));
+  if (harness?.status === "active" && !active.includes(harness.slug)) active.unshift(harness.slug);
+  if (active.length) return `reaches the active solution${active.length === 1 ? "" : "s"} ${list(active, 5)}`;
+  if (preview.impact?.active_harnesses?.length) return "reaches an active solution";
   if (counts(preview.summary?.deletes) || mode === "replace") return "deletes";
   if (env === "prod") return "goes to env/prod";
   return undefined;
@@ -774,23 +810,29 @@ export const apply: CommandSpec = {
     const flags = targetFlags(session);
     const commands = setCommands(preview, flags);
     if (commands.secrets.length || commands.variables.length) data.set_commands = commands;
-    if (!preview.preview_id) {
-      ctx.warn("This instance's preview returns no preview id, so `apply --confirm` cannot import exactly it; update the instance.");
-    }
+    const context: PreviewContext = { disk, harness: harness?.slug };
+    Object.assign(data, previewReport(preview, context));
+    // A blocked preview has no id on recent instances: its blockers come first, never a call to update the instance.
     if (!preview.ready) {
       // A Masterloop pair applied out of order: say which step, and the order.
-      const pair = pairOrderHint(await catalogFor(ctx, false), preview.blockers ?? []);
+      const pair = pairOrderHint(await catalogFor(ctx, false), [
+        ...(preview.blockers ?? []),
+        ...blockerDetails(preview.blocker_details).map((b) => `${b.code ?? ""}: ${b.message}`),
+      ]);
       if (pair) data.hint = pair.hint;
       return {
         data,
         text: [
-          previewText(preview, flags),
+          previewText(preview, flags, context),
           "",
           ...(pair ? [`hint: ${pair.hint}`] : []),
           "The preview has blockers; fix them and run `cavelon apply` again.",
         ].join("\n"),
         exitCode: ExitCode.validation,
       };
+    }
+    if (!preview.preview_id) {
+      ctx.warn("This instance's preview returns no preview id, so `apply --confirm` cannot import exactly it; update the instance.");
     }
     if (preview.preview_id) {
       const stored: StoredPreview = {
@@ -812,7 +854,7 @@ export const apply: CommandSpec = {
     const confirmLine = preview.preview_id ? `${cavelonCommand("apply", "--confirm", preview.preview_id)}${flags}` : undefined;
     const text = [
       `Preview of ${project.layout.package}/ for ${harness ? `solution ${harness.slug}${harness.status ? ` (${harness.status})` : ""}` : "the tenant"}${envFile ? ` [env ${envFile.name}]` : ""}:`,
-      previewText(preview, flags),
+      previewText(preview, flags, context),
       "",
       ...(preview.preview_id ? [`preview id: ${preview.preview_id}`] : []),
       ...(reason ? [`This ${reason}: show this preview to a person before confirming.`] : []),
@@ -885,7 +927,10 @@ export const explain: CommandSpec = {
   name: "explain",
   summary: "Look a code up in the instance's error catalog: what it means and how to fix it.",
   description:
-    "Rule codes come from the package and graph checks, API error codes from failed requests. Uses the cached catalog first.\n" +
+    "Rule codes come from the package and graph checks, API error codes from failed requests; cavelon's own codes (validate's\n" +
+    "findings, and errors the CLI raises itself, such as operation_not_found or uncommitted_changes) are known too. Uses the\n" +
+    "cached catalog first. Where the instance's fix names an API route, the command that does the same is added. An unknown\n" +
+    "code gets the closest known ones (a typo away, the same start).\n" +
     `Also explains the test-case statuses that are neither pass nor fail: ${CASE_STATUSES.map((s) => s.status).join(", ")}.`,
   readOnly: true,
   idempotent: true,
@@ -898,7 +943,7 @@ export const explain: CommandSpec = {
     let catalog = status ? await catalogFor(ctx, false).catch(() => null) : await catalogFor(ctx, false);
     let entry = catalogEntry(catalog, code) ?? looseEntry(catalog, code);
     if (!entry && status) return caseStatusAnswer(ctx, status);
-    if (!entry || entry.kind === "kit") {
+    if (!entry || entry.kind === "kit" || entry.kind === "cli") {
       // A newer instance may know a code the cached catalog does not.
       catalog = await (await ctx.contracts()).errorCatalog({ refresh: true }).catch(() => catalog);
       entry = catalogEntry(catalog, code) ?? looseEntry(catalog, code) ?? entry;
@@ -911,13 +956,19 @@ export const explain: CommandSpec = {
       });
     }
     if (!entry) {
-      const all = [...(catalog?.rule_codes ?? []), ...(catalog?.api_error_codes ?? []), ...KIT_CODES, ...CASE_STATUSES.map((s) => ({ code: s.status }))].map((e) => e.code);
-      const words = code.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 2);
-      const similar = all.filter((c) => words.some((w) => c.toLowerCase().includes(w))).slice(0, 8);
+      const all = [
+        ...(catalog?.rule_codes ?? []),
+        ...(catalog?.api_error_codes ?? []),
+        ...KIT_CODES,
+        ...KIT_ERROR_CODES,
+        ...CASE_STATUSES.map((s) => ({ code: s.status })),
+      ].map((e) => e.code);
+      const similar = similarCodes(code, all);
       throw new CavelonError(ExitCode.failure, {
         code: "code_unknown",
-        message: `"${code}" is not in this instance's error catalog.`,
+        message: `"${code}" is neither in this instance's error catalog nor one of cavelon's own codes.`,
         hint: similar.length ? `Similar codes: ${similar.join(", ")}.` : `Try \`cavelon docs search ${code}\`.`,
+        details: { similar },
       });
     }
     const docs = entry.docs?.startsWith("/") ? `${requireInstance(await ctx.session())}${entry.docs}` : entry.docs;
@@ -936,7 +987,9 @@ export const explain: CommandSpec = {
     // The instance's own pages on capacity, where it lists them; an endpoint's limit is planned in the tutorial.
     const pages = capacity === MODEL_ENDPOINT_BUSY ? [CAPACITY_TUTORIAL_PAGE, CAPACITY_CONCEPT_PAGE] : [CAPACITY_CONCEPT_PAGE, CAPACITY_TUTORIAL_PAGE];
     const read = capacity ? (await listedPages(ctx, pages)).map((page) => ({ page, command: cavelonCommand("docs", "get", page) })) : [];
-    const data = { ...entry, docs, ...(kitHint ? { kit_hint: kitHint } : {}), ...(read.length ? { read } : {}) };
+    // The instance's fix may name an API route; the command that does the same is easier to follow.
+    const cli = entry.kind === "cli" ? undefined : cliFix(entry);
+    const data = { ...entry, docs, ...(cli ? { cli_fix: cli } : {}), ...(kitHint ? { kit_hint: kitHint } : {}), ...(read.length ? { read } : {}) };
     return {
       data,
       text: keyValues([
@@ -947,10 +1000,13 @@ export const explain: CommandSpec = {
             ? `rule code${entry.rule ? ` (rule ${entry.rule})` : ""}`
             : entry.kind === "kit"
               ? "cavelon validate code"
-              : `API error code${entry.area ? ` (${entry.area})` : ""}`,
+              : entry.kind === "cli"
+                ? "cavelon error code (raised by the CLI, not the instance)"
+                : `API error code${entry.area ? ` (${entry.area})` : ""}`,
         ],
         ["meaning", entry.message],
         ["fix", entry.hint ?? undefined],
+        ["with the CLI", cli],
         [capacity || stepCap || ceiling ? "raise" : "order", kitHint],
         ["why", entry.explanation ? clip(entry.explanation.replace(/\s+/g, " "), 600) : undefined],
         ["docs", docs],
@@ -1086,20 +1142,83 @@ function readinessText(checks: ReturnType<typeof readinessChecks>, warnings: str
   ];
 }
 
+/**
+ * After an activation: whether the solution is the tenant's default route,
+ * and, with --make-default, the change of it, previewed until --confirm. Never
+ * fails the activation: a default route that cannot be read is a warning.
+ */
+async function defaultRouteAfterActivation(
+  ctx: Context,
+  harness: Harness,
+  input: Parameters<CommandSpec["run"]>[1],
+): Promise<{ data: Record<string, unknown>; lines: string[]; failed?: boolean }> {
+  const make = boolOption(input, "make-default");
+  let route;
+  try {
+    route = await readDefaultRoute(ctx);
+  } catch (error) {
+    ctx.warn(`Could not read the tenant's default route: ${error instanceof Error ? error.message : String(error)}`);
+    return { data: {}, lines: [] };
+  }
+  const current = route.current ? { id: route.current.id, slug: route.current.slug, name: route.current.name } : null;
+  if (route.current?.id === harness.id) return { data: { default_route: { is_default: true, current } }, lines: [`${named(harness)} is the tenant's default route.`] };
+  const commands = defaultCommands(harness.slug);
+  if (make && boolOption(input, "confirm")) {
+    try {
+      await setDefaultRoute(ctx, harness.id);
+    } catch (error) {
+      // The activation stands; only the default route stayed as it was.
+      const said = error instanceof Error ? error.message : String(error);
+      const code = error instanceof CavelonError ? error.code : undefined;
+      ctx.warn(`The default route was not changed: ${said}`);
+      return {
+        data: { default_route: { is_default: false, changed: false, current, error: { code: code ?? null, message: said } } },
+        lines: [`The default route stays ${current ? named(current) : "as it was"}: ${said}`],
+        failed: true,
+      };
+    }
+    return {
+      data: { default_route: { is_default: true, changed: true, previous: current } },
+      lines: [`Default route: ${named(harness)}${current ? ` (was ${named(current)})` : ""}.`],
+    };
+  }
+  if (!route.known && !make) return { data: { default_route: { is_default: null, known: false } }, lines: [] };
+  const lines = make
+    ? [defaultChangeLine(harness, route), `Show this to a person; with their yes: ${cavelonCommand("activate", "--harness", harness.slug, "--make-default", "--confirm")}`]
+    : [
+        `Not the default route: ${current ? `the tenant's chat and widget answer with ${named(current)}` : "the tenant has none"} where a conversation names no solution.`,
+        `Ask the person whether ${named(harness)} should answer there; that changes live traffic. Preview: ${commands.preview}`,
+      ];
+  return { data: { default_route: { is_default: false, known: route.known, current, preview: commands.preview, confirm: commands.confirm } }, lines };
+}
+
 export const activate: CommandSpec = {
   name: "activate",
-  summary: "Activate a solution through the readiness gate (never by force).",
+  summary: "Activate a solution through the readiness gate (never by force); says whether it is the tenant's default route.",
   description:
     "Only when every readiness check passes, and with a personal access token only when it was created with \"may activate\".\n" +
-    "Activating without the evidence stays a person's decision in the Admin.",
+    "Activating without the evidence stays a person's decision in the Admin.\n" +
+    "Afterwards it says whether the solution is the tenant's default route (the one the tenant's chat and widget answer with\n" +
+    "where no solution is named). --make-default previews making it the default; with --confirm as well, it changes it. That\n" +
+    "changes live traffic: show the preview to a person and confirm only with their yes. `cavelon harness default` does the\n" +
+    "same for an active solution.",
   readOnly: false,
   idempotent: true,
   mcpTool: "activate",
-  options: { harness: HARNESS_OPTION, env: ENV_OPTION },
+  options: {
+    harness: HARNESS_OPTION,
+    env: ENV_OPTION,
+    "make-default": { type: "boolean", description: "Also make it the tenant's default route: previews the change; with --confirm, makes it." },
+    confirm: { type: "boolean", description: "With --make-default: change the default route (after a person saw the preview)." },
+  },
+  examples: ["cavelon activate", "cavelon activate --make-default", "cavelon activate --make-default --confirm"],
   async run(ctx, input) {
     const session = await ctx.session();
     const { ref, source } = harnessRef(session, input);
     if (!ref) throw usageError("Which solution?", "Pass --harness <name or slug> (`cavelon harness list` shows them), or set harness in cavelon.yaml or the env file.");
+    if (boolOption(input, "confirm") && !boolOption(input, "make-default")) {
+      throw usageError("--confirm only applies to --make-default.", "Activation itself needs no confirmation; the default route does.");
+    }
     const client = await ctx.client();
     const principal = await readPrincipal(client);
     if (principal?.kind === "personal_access_token" && principal.token && !principal.token.may_activate) {
@@ -1111,7 +1230,12 @@ export const activate: CommandSpec = {
     }
     const harness = await findHarness(ctx, ref, source);
     if (harness.status === "active") {
-      return { data: { activated: false, already_active: true, harness }, text: `${harness.name} (${harness.slug}) is already active.` };
+      const route = await defaultRouteAfterActivation(ctx, harness, input);
+      return {
+        data: { activated: false, already_active: true, harness, ...route.data },
+        text: [`${harness.name} (${harness.slug}) is already active.`, ...route.lines].join("\n"),
+        ...(route.failed ? { exitCode: ExitCode.failure } : {}),
+      };
     }
     const readiness = await callStable<Readiness>(ctx, "GET", "/api/v1/harnesses/{harness_id}/readiness", "reading readiness", {
       params: { harness_id: [harness.id] },
@@ -1138,10 +1262,12 @@ export const activate: CommandSpec = {
       params: { harness_id: [harness.id] },
       body: { force: false },
     });
+    const route = await defaultRouteAfterActivation(ctx, activated, input);
     return {
-      data: { activated: true, harness: activated, checks, warnings, readiness },
-      text: [`Activated ${activated.name} (${activated.slug}); status ${activated.status}.`, ...readinessText(checks, warnings)].join("\n"),
+      data: { activated: true, harness: activated, checks, warnings, readiness, ...route.data },
+      text: [`Activated ${activated.name} (${activated.slug}); status ${activated.status}.`, ...readinessText(checks, warnings), ...route.lines].join("\n"),
+      // Activated, but the default route the person asked for did not change.
+      ...(route.failed ? { exitCode: ExitCode.failure } : {}),
     };
   },
 };
-
