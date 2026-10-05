@@ -7,6 +7,14 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Changed
+
+- **The MCP server refuses the CLI's spelling of a tool argument.** Since
+  0.1.6 the tools spell their arguments in snake_case and took the CLI's
+  spelling (`make-default`) with a warning; that grace period is over. A call
+  with `make-default` now fails with `unknown_argument`, does nothing, and
+  names `make_default`.
+
 ## [0.1.7] - 2026-10-05
 
 Fixes from a second round of agent tests: hints keep the tenant you named,

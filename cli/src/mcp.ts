@@ -124,9 +124,9 @@ export function toolFor(spec: CommandSpec): Tool {
  * list is refused, naming the closest one, rather than dropped: an
  * `activate` that lost `make_default` would activate without the preview it
  * was asked for. The CLI's spelling of a multi-word option (`make-default`)
- * is still taken for one release, with a warning.
+ * is refused like any other, naming the snake_case property.
  */
-function argumentsOf(spec: CommandSpec, args: Record<string, unknown>, warn: (message: string) => void): Record<string, unknown> {
+function argumentsOf(spec: CommandSpec, args: Record<string, unknown>): Record<string, unknown> {
   const properties = Object.keys((inputSchema(spec).properties as Record<string, unknown>) ?? {});
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(args)) {
@@ -135,12 +135,7 @@ function argumentsOf(spec: CommandSpec, args: Record<string, unknown>, warn: (me
       continue;
     }
     const spelled = propertyName(key);
-    if (spelled !== key && properties.includes(spelled)) {
-      warn(`"${key}" is spelled "${spelled}" in this tool's schema; "${key}" is still taken for now and will be refused in a later release.`);
-      if (!(spelled in args)) out[spelled] = value;
-      continue;
-    }
-    const near = closest(key, properties);
+    const near = spelled !== key && properties.includes(spelled) ? spelled : closest(key, properties);
     throw new CavelonError(ExitCode.usage, {
       code: "unknown_argument",
       message: `${spec.mcpTool} has no argument "${key}"; nothing was done.${near ? ` Did you mean "${near}"?` : ""}`,
@@ -198,10 +193,9 @@ export function createMcpServer(io: Io, commands: CommandSpec[]): Server {
       content: [{ type: "text" as const, text: JSON.stringify({ error: asCavelonError(error).toJSON() }) }],
     });
     if (!spec) return fail(new Error(`Unknown tool ${request.params.name}.`));
-    const spelling: string[] = [];
     let args: Record<string, unknown>;
     try {
-      args = argumentsOf(spec, given, (message) => spelling.push(message));
+      args = argumentsOf(spec, given);
     } catch (error) {
       return fail(error);
     }
@@ -212,7 +206,6 @@ export function createMcpServer(io: Io, commands: CommandSpec[]): Server {
     const tenant = !ownsTenant(spec) && typeof args.tenant === "string" ? args.tenant : undefined;
     const solutionEnv = spec.options?.env && typeof args.env === "string" ? args.env : undefined;
     const ctx = createContext(mcpIo(io), { json: true, tenant, solutionEnv }, "mcp");
-    for (const message of spelling) ctx.warn(message);
     try {
       const result = await spec.run(ctx, inputFrom(spec, args));
       let data = result.data;
