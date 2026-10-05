@@ -138,7 +138,7 @@ describe("MCP tool arguments", () => {
   }
   const payload = (result: Awaited<ReturnType<Client["callTool"]>>) => JSON.parse((result.content as Array<{ text: string }>)[0]!.text) as Record<string, any>;
 
-  it("are spelled in snake_case, take the CLI's spelling for now with a warning, and refuse an unknown one naming the closest", async () => {
+  it("are spelled in snake_case, and refuse the CLI's spelling or an unknown one naming the closest, doing nothing", async () => {
     const dir = await initSolution();
     const c = await client(dir);
     try {
@@ -155,9 +155,16 @@ describe("MCP tool arguments", () => {
       expect(changes(before)).toEqual([]);
       expect(harness("support").status).toBe("draft");
 
-      const kebab = payload(await c.callTool({ name: "activate", arguments: { "make-default": true } }));
-      expect(kebab).toMatchObject({ activated: true, default_route: { is_default: false, confirm_token: expect.stringMatching(/^[0-9a-f]{12}$/) } });
-      expect(kebab.warnings).toEqual([expect.stringMatching(/"make-default" is spelled "make_default" in this tool's schema/)]);
+      const kebab = await c.callTool({ name: "activate", arguments: { "make-default": true } });
+      expect(kebab.isError).toBe(true);
+      expect(payload(kebab).error).toMatchObject({
+        code: "unknown_argument",
+        exit_code: 2,
+        message: expect.stringMatching(/activate has no argument "make-default"; nothing was done\. Did you mean "make_default"\?/),
+        details: { argument: "make-default", suggestion: "make_default" },
+      });
+      expect(changes(before)).toEqual([]);
+      expect(harness("support").status).toBe("draft");
     } finally {
       await c.close();
     }

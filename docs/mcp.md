@@ -128,8 +128,7 @@ Options marked "CLI only" there, such as `--wait`, are not offered to the
 agent. A call with an argument the tool's schema does not list is refused
 (`unknown_argument`, exit code 2) and nothing is done; the error names the
 closest argument. The CLI's spelling of a multi-word option (`make-default`)
-is still taken in this release, with a warning, and will be refused in a later
-one.
+is refused the same way, naming its snake_case form (`make_default`).
 
 ### What is not a tool
 
