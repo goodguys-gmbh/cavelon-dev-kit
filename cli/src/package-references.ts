@@ -15,11 +15,20 @@ export const REFERENCE_UNKNOWN_CODE = "package_reference_unknown";
 export const FIELD_UNKNOWN_CODE = "package_field_unknown";
 export const MODEL_UNKNOWN_CODE = "package_model_unknown";
 
-/**
- * The built-in tool that searches knowledge bases, under its current and older
- * names: agents name it without the package or the tool list carrying it.
- */
+/** The built-in tool that searches knowledge bases, under its current and older names. */
 export const SEARCH_TOOL_KEYS = new Set(["search_documents", "search_knowledge_base", "search_kb"]);
+
+/**
+ * The built-in tools that read a knowledge base a binding names: the search,
+ * and `list_documents` (with `list_kb_docs`, the older name it absorbed),
+ * which lists and filters its documents for `read_document` to read by id.
+ * The instance's docs (reference/builtin-tools) name them; no contract
+ * publishes them as data yet.
+ */
+export const KNOWLEDGE_TOOL_KEYS = new Set([...SEARCH_TOOL_KEYS, "list_documents", "list_kb_docs"]);
+
+/** The built-in document tools, which an agent names without the package or the tenant's tool list carrying them. */
+const DOCUMENT_TOOL_KEYS = new Set([...KNOWLEDGE_TOOL_KEYS, "read_document", "save_document"]);
 
 const asObject = (v: unknown) => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : undefined);
 const list = (v: unknown): Array<Record<string, unknown> | undefined> => (Array.isArray(v) ? v.map(asObject) : []);
@@ -90,7 +99,7 @@ interface Target {
 
 const AGENT: Target = { label: "agent", section: "agents", key: "slug" };
 const SKILL: Target = { label: "skill", section: "skills", key: "slug", inventory: "skills" };
-const TOOL: Target = { label: "tool", section: "tools", key: "slug", inventory: "tools", builtin: SEARCH_TOOL_KEYS };
+const TOOL: Target = { label: "tool", section: "tools", key: "slug", inventory: "tools", builtin: DOCUMENT_TOOL_KEYS };
 const KNOWLEDGE_BASE: Target = { label: "knowledge base", section: "knowledge_bases", key: "name", inventory: "knowledge_bases" };
 const SOLUTION: Target = { label: "solution", section: "harnesses", key: "slug", inventory: "solutions" };
 /** The sections whose entries must differ in their key: two with one key import as one. */

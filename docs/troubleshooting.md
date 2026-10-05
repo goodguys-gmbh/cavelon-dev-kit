@@ -68,6 +68,7 @@ came from. The order is in [Concepts](concepts.md#tenant).
 | `unauthorized` (401) | 7 | The token is missing, expired or revoked. Create a new one on `/account/access-tokens` and run `cavelon login` again. `cavelon whoami` shows when a token expires and warns seven days before. |
 | `forbidden` (403) | 7 | The token does not reach this: another tenant, or a permission your role or the token's ceiling lacks. Check the tenant with `cavelon whoami`; the message names the permission where the instance publishes it. On a platform route (creating tenants, the platform's settings) the tenant does not matter: the hint says the route needs a token that allows Platform mode, and `cavelon whoami` shows whether this one does. |
 | `token_activation_refused` | 7 | The token was created without **May activate**. A person activates in the Admin, or creates a token that may. |
+| `default_route_deactivate` | 5 | `cavelon deactivate` refused the tenant's default route; nothing was sent. Ask the person which solution should answer in the tenant's chat and widget instead, make it the default with `cavelon harness default <solution>` (previews first), then deactivate. |
 | `secret_needs_a_person` | 7 | Secrets are set by a person with a personal access token, never with a tenant API key. |
 | `api_key_cannot_create_tenants` | 7 | Creating a tenant needs a personal access token in Platform mode. |
 | `platform_mode_not_allowed` | 7 | `tenant create` asked the instance first: this personal access token may not enter Platform mode (the message names its ceiling), so nothing was sent. Create a token with **Allow Platform mode** and a platform ceiling, owned by someone with `tenants.manage`, and log in with it; or create the tenant in the Admin. |
@@ -189,6 +190,7 @@ used: cached or read now, when, and its hash.
 | (blocked preview) | 3 | The preview has blockers and no preview id. Each blocker names its code, the package file and path, and a hint where the instance sends them; `cavelon explain <code>` says more. Fix them and run `cavelon apply` again. |
 | `import_preview_stale` | 4 | The solution changed on the instance after the preview. Nothing was imported. Run `cavelon apply` again and confirm the new preview. |
 | `package_requirements_changed` | 4 | The import's own check found something the preview did not; each blocker is listed. Nothing was imported. Fix the blockers and preview again. |
+| `solution_not_found` | 1 | The solution the env file, `cavelon.yaml` or `--harness` names is not in this tenant. `apply` previews into an existing solution and never creates one: create the draft with the `cavelon harness new <slug>` the hint names (with `--name` when the package's `harnesses.yaml` has an entry with that slug), then preview again. `cavelon harness list` shows the tenant's solutions. |
 | `preview_unknown` | 2 | No open preview with that id in this folder. `cavelon status` lists the open ones. |
 | `preview_files_changed` | 4 | The package files changed in what they hold since the preview; the error names them. Nothing was imported. Run `cavelon apply` again and confirm the new preview, or add `--allow-stale` to the confirm to import what the old preview showed. |
 | `preview_expired` | 4 | The preview is more than a day old. Nothing was imported, and the stored preview is removed. Run `cavelon apply` again and confirm the new preview. |
@@ -196,6 +198,16 @@ used: cached or read now, when, and its hash.
 | `uncommitted_changes` | 4 | `pull` would overwrite package files with uncommitted changes. Outside a git repository: it would overwrite or remove a package file that changed since the last pull, such as your edit or a test suite you have not applied. A file as the last pull or confirmed apply left it is never listed. The files are listed. Commit them, apply them, or use `--force` to discard them. |
 | `package_file_outside` | 4 | `pull` or `init --from` would write a package file that is a symlink to a file outside the solution folder. Nothing was written. Move the file into the solution folder, or replace the link with the file. |
 | `package_files_differ` | 4 | `init --from` would change or remove package files that hold something else. The files are listed; `--force` replaces them. |
+
+**My active solution does not answer in the chat or widget.** The tenant's
+chat and widget answer only with its default route. `cavelon harness list`
+shows which solution that is (DEFAULT). Try yours by name with
+`cavelon chat "<message>" --harness <solution>`; to make it answer there,
+`cavelon harness default <solution>` previews the change, and a person
+confirms it with `--confirm`. To take a solution out of live traffic,
+`cavelon deactivate --harness <solution>` previews, and `--confirm`
+deactivates; the default route is refused until another solution is the
+default.
 
 ## Network
 

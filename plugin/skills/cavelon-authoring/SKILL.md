@@ -230,12 +230,28 @@ and fill the field in to set it. A file of comments only sets nothing.
   The preview names them with the Admin path where a person sets them.
 - **Knowledge-base documents** are not in the repository: the package declares
   the knowledge bases; `cavelon kb upload` brings the documents.
-- **A knowledge base reaches an agent only through a search tool.** Naming it
-  in a skill's `knowledge_base_assignments` only scopes the search; the skill
-  (or the agent) also needs the built-in search tool in its `tool_assignments`
-  (`cavelon docs get reference/builtin-tools` names it). Without one the agent
-  answers from memory; `cavelon validate` warns
+- **A knowledge base reaches an agent only through a tool that reads it.**
+  Naming it in a skill's `knowledge_base_assignments` only scopes the tools;
+  the skill (or the agent) also needs a built-in that reads a knowledge base in
+  its `tool_assignments`: `search_documents` searches it, `list_documents`
+  lists its documents by their metadata, and `read_document` reads one by the
+  id a search or list returned (`cavelon docs get reference/builtin-tools`).
+  A tenant tool whose `builtin_key` is one of them counts too; naming
+  `knowledge_base_names` on any other tool (a webhook, an MCP tool) reaches
+  nothing. Without such a tool the
+  agent answers from memory; `cavelon validate` warns
   (`knowledge_base_without_search_tool`).
+- **The model comes from the tenant.** Set an agent's `llm_model` and
+  `llm_provider` to a row of `cavelon models list` (MODEL_ID, PROVIDER); the
+  models differ per instance and tenant, and the preview blocks one the tenant
+  does not have. On a reasoning model (the GPT-5 family, the o-series) from
+  OpenAI, Azure OpenAI or Anthropic the instance sends no `temperature` (the
+  schema still requires one: keep the default 0.4, and the preview flags any
+  other value); the reasoning level is what tunes such a model. Ask the
+  person to set it in the agent's **Model** tab in the Admin (Node
+  Workbench), then `cavelon pull` brings what the instance stored into
+  `package/agents.yaml`. `cavelon docs get concepts/choosing-models` says which
+  models take a temperature.
 - **Who approves goes on the Approval node, not into the memo.** When the
   brief says who approves, or that nobody approves their own request, set the
   node's `approvers` (tenant roles or access groups, directly or in `tiers`

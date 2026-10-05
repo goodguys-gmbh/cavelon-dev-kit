@@ -37,14 +37,33 @@ git init
 ```
 
 Edit two lines of `cavelon.yaml`: `instance` is your Cavelon URL, `tenant` your
-tenant's slug, name or id (`cavelon tenant list` shows all three). The agent uses the model `gpt-4.1`
-from `openai`; `cavelon models list` shows the models your tenant has, so change
-`llm_model` and `llm_provider` in `package/agents.yaml` if it has another.
+tenant's slug, name or id (`cavelon tenant list` shows all three).
+
+Pick the model: the agent uses `gpt-5.4-mini` from `openai`, and the models a
+tenant has differ per instance. `cavelon models list` shows yours; set
+`llm_model` and `llm_provider` in `package/agents.yaml` to one of them. The
+agent's `temperature` is 0.4, the instance's default, because the package
+schema requires one. On a reasoning model (the GPT-5 family, the o-series) from
+OpenAI, Azure OpenAI or Anthropic the instance does not send it; set the
+reasoning level in the agent's **Model** tab in the Admin instead, and
+`cavelon pull` brings it into the file.
+
+If someone in your tenant has tried the example already, copy it under your
+own name, because knowledge bases are matched by name across the tenant and
+two copies would share one. Change the solution's slug in `cavelon.yaml` and
+`env/test.yaml`, its `slug` and `name` in `package/harnesses.yaml`,
+`harness_slug` in `package/agents.yaml` and `tests/smoke.yaml`, the knowledge
+base's `name` in `package/knowledge_bases.yaml` and `knowledge_base_name` in
+`package/skills.yaml`, and use that name with `kb upload --kb` below.
+
+`apply` previews into a solution that exists and never creates one, so create
+the draft first:
 
 ```bash
+cavelon harness new support-faq --name "Support FAQ"   # the empty draft solution
 cavelon validate                                  # the files against your instance's package schema
 cavelon apply --env test                          # a preview, and its id
-cavelon apply --env test --confirm <preview-id>   # creates the draft solution and its knowledge base
+cavelon apply --env test --confirm <preview-id>   # imports the agent, skill, knowledge base and tests
 cavelon kb upload seeds/faq --kb "Support FAQ" --wait
 cavelon test run --suite Smoke --wait --timeout 5m
 cavelon trace <run>                               # why a case did or did not pass

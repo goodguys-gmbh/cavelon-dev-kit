@@ -69,6 +69,16 @@ function withUploadReplace(text: string, kind: FakeState["uploadReplace"]): stri
   if (kind === "none") delete form.properties.replace_doc_ids;
   return JSON.stringify(doc);
 }
+/** The OpenAPI without these operations ("METHOD /path"), as an instance older than them publishes it. */
+function withoutOperations(text: string, operations: string[]): string {
+  if (!operations.length) return text;
+  const doc = JSON.parse(text) as { paths: Record<string, Record<string, unknown>> };
+  for (const entry of operations) {
+    const [method, route] = entry.split(" ");
+    delete doc.paths[route!]?.[method!.toLowerCase()];
+  }
+  return JSON.stringify(doc);
+}
 const readContract = (name: string) => readFileSync(path.join(CONTRACTS, name), "utf8");
 export const FIXTURES = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
 /** A small solution package that matches the package schema snapshot (checked in contract.test.ts). */
@@ -215,6 +225,10 @@ export interface FakeState {
    * OpenAPI without any marker, as an instance older than the marker.
    */
   personOnly: Record<string, string | false> | null;
+  /** Operations ("METHOD /path") the served OpenAPI leaves out, as an instance older than them. */
+  openapiWithout: string[];
+  /** The chat turns the instance answered: the solution, the message and the session. */
+  chats: Array<{ harness_id: string; message: string; session_id: string }>;
   /**
    * Body fields marked `x-cavelon-secret` beside the snapshot's own, by
    * component schema; `null` serves the OpenAPI without any, as an instance
@@ -504,6 +518,8 @@ export async function startFakeServer(): Promise<FakeServer> {
     rootPathsReachApi: true,
     serveOpenapi: true,
     personOnly: {},
+    openapiWithout: [],
+    chats: [],
     secretFields: {},
     interruptions: [],
     failures: [],
@@ -594,7 +610,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     }
     if (p === "/openapi.json" || (p === "/api/v1/openapi.json" && !state.rootPathsReachApi)) {
       res.writeHead(200, { "content-type": "application/json" });
-      return res.end(withUploadReplace(withMarkers(state.personOnly, state.secretFields), state.uploadReplace));
+      return res.end(withoutOperations(withUploadReplace(withMarkers(state.personOnly, state.secretFields), state.uploadReplace), state.openapiWithout));
     }
 
     // Auth: every API and docs route needs a known bearer token.
@@ -823,6 +839,29 @@ export async function startFakeServer(): Promise<FakeServer> {
         h.status = "active";
         return send(res, 200, h);
       }
+    }
+    m = /^\/api\/v1\/harnesses\/([0-9a-f-]{36})\/deactivate$/.exec(p);
+    if (m && method === "POST") {
+      const h = state.harnesses.find((x) => x.tenant_id === tid && x.id === m![1]);
+      if (!h) return send(res, 404, { detail: "Harness not found." });
+      h.status = "draft";
+      return send(res, 200, h);
+    }
+    if (p === "/api/v1/chat" && method === "POST") {
+      const b = (body.json ?? {}) as { message?: string; harness_id?: string | null; session_id?: string | null };
+      if (!b.message) return send(res, 422, { detail: [{ loc: ["body", "message"], msg: "Field required", type: "missing" }] });
+      const h = b.harness_id
+        ? state.harnesses.find((x) => x.tenant_id === tid && x.id === b.harness_id)
+        : state.harnesses.find((x) => x.tenant_id === tid && x.is_default);
+      if (!h) return send(res, 404, { detail: "Harness not found." });
+      if (!b.harness_id && h.status !== "active") {
+        return send(res, 409, { detail: "Nothing in this tenant is live to answer yet.", code: "chat_route_not_live" });
+      }
+      // A draft answers a person as a Playground run, never an API key.
+      if (h.status !== "active" && info.kind !== "pat") return send(res, 409, { detail: "The selected solution is not active." });
+      const session = b.session_id ?? randomUUID();
+      state.chats.push({ harness_id: h.id, message: b.message, session_id: session });
+      return send(res, 200, { response: `${h.name} answers: ${b.message}`, session_id: session, conversation_id: randomUUID(), agent_run_id: null, ui_directives: null });
     }
     m = /^\/api\/v1\/harnesses\/by-slug\/([^/]+)$/.exec(p);
     if (m) {
@@ -1772,6 +1811,24 @@ function runView(run: { id: string; suite_id: string; summary: Record<string, un
   };
 }
 
+/**
+ * A row of a test result's `tool_calls`, as the instance records it; a recent
+ * instance adds the knowledge search's `knowledge_outcome`, an older one
+ * leaves it out.
+ */
+export function toolCallRow(knowledgeOutcome?: string, name = "search_documents") {
+  return {
+    name,
+    type: "builtin",
+    status: "ok",
+    arguments: { query: "opening hours" },
+    result_count: knowledgeOutcome === "content_gap" ? 0 : 3,
+    duration_ms: 85,
+    error: null,
+    ...(knowledgeOutcome ? { knowledge_outcome: knowledgeOutcome } : {}),
+  };
+}
+
 function resultView(runId: string, name: string, status: string, conversationId: string | null) {
   return {
     id: randomUUID(),
@@ -1787,7 +1844,8 @@ function resultView(runId: string, name: string, status: string, conversationId:
     response_latency_ms: 120,
     token_count: 42,
     retrieval_chunks: null,
-    tool_calls: null,
+    // An older instance's row: no knowledge_outcome.
+    tool_calls: [toolCallRow()],
     guardrail_events: null,
     llm_judge_score: 0.9,
     llm_judge_reasoning: null,

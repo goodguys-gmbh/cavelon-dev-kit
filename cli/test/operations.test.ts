@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { CASE_STATUSES, NOT_PASSED_COUNTS, WAITING_COUNTS } from "../src/results.js";
-import { CONTRACTS, startFakeServer, traceFixture, type FakeServer } from "./fake-server.js";
+import { CONTRACTS, startFakeServer, toolCallRow, traceFixture, type FakeServer } from "./fake-server.js";
 import { cli, login, sandbox, type Sandbox } from "./helpers.js";
 
 let server: FakeServer;
@@ -494,6 +494,15 @@ describe("trace", () => {
         { name: "Refund limit", status: "pass", conversation_id: conversation, agent_run_id: caseRun, llm_judge_score: 0.55, llm_judge_reasoning: "Names the limit but not the approver." },
         { name: "Greets", status: "pass", llm_judge_score: 0.9 },
         { name: "Escalates", status: "fail", llm_judge_score: 0.1, llm_judge_reasoning: "Did not escalate." },
+        // A recent instance's rows: what each knowledge search found, beside a tool that searches nothing.
+        {
+          name: "Holiday hours",
+          status: "fail",
+          llm_judge_score: 0.2,
+          llm_judge_reasoning: "Says it does not know.",
+          tool_calls: [toolCallRow("content_gap"), toolCallRow(undefined, "compute"), toolCallRow("unusable_hits"), toolCallRow("content_gap")],
+        },
+        { name: "Return window", status: "pass", tool_calls: [toolCallRow("usable_evidence")] },
       ];
     });
     afterAll(() => {
@@ -535,7 +544,7 @@ describe("trace", () => {
 
       const json = await cli(sb, ["trace", runId, "--json"]);
       const items = json.json<{ results: { items: Array<{ case: string; trace_command: string | null }> } }>().results.items;
-      expect(items.map((r) => r.trace_command)).toEqual([`cavelon trace ${conversation} --kind conversation`, null, null]);
+      expect(items.map((r) => r.trace_command)).toEqual([`cavelon trace ${conversation} --kind conversation`, null, null, null, null]);
     });
 
     it("show the judge's reasoning for every judged case, a pass too", async () => {
@@ -551,6 +560,25 @@ describe("trace", () => {
         ["Refund limit", "Names the limit but not the approver."],
         ["Greets", null],
         ["Escalates", "Did not escalate."],
+        ["Holiday hours", "Says it does not know."],
+        ["Return window", null],
+      ]);
+    });
+
+    it("name each case's knowledge outcomes from its tool calls, and nothing for an older instance's rows", async () => {
+      const runId = await testRunId();
+      const view = await cli(sb, ["trace", runId]);
+      expect(view.stdout).toMatch(/ {2}Holiday hours \(step 1\) {2}fail\n(?: {4}.*\n)*? {4}Knowledge: content_gap, unusable_hits\n/);
+      // Rows without the field (an older instance) and a case without rows add no line.
+      expect(view.stdout.match(/Knowledge:/g)).toHaveLength(1);
+      const json = await cli(sb, ["trace", runId, "--json"]);
+      const items = json.json<{ results: { items: Array<{ case: string; knowledge_outcomes: string[] | null }> } }>().results.items;
+      expect(items.map((r) => [r.case, r.knowledge_outcomes])).toEqual([
+        ["Refund limit", null],
+        ["Greets", null],
+        ["Escalates", null],
+        ["Holiday hours", ["content_gap", "unusable_hits"]],
+        ["Return window", ["usable_evidence"]],
       ]);
     });
 

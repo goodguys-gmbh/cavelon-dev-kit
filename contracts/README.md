@@ -12,7 +12,9 @@ no licence entitlement, and an empty billing month. Refreshed on 2026-10-05
 from an instance that publishes a test step's criterion shapes (judge criteria
 and assertions by `type`), marks secret body fields (`x-cavelon-secret`), and
 replaces a same-named document on upload (`replace_existing`); its
-capabilities differ from the snapshot's only in settings, so that file stays. The tests switch features
+capabilities differ from the snapshot's only in settings, so that file stays. The chat
+and deactivate operations were added the same day, trimmed from an instance
+whose other operations match the snapshot. The tests switch features
 on in the fake server where a command needs them (personal access tokens, the
 operations API, Sandboxes, Masterloop, archive uploads); the snapshot keeps
 the defaults.

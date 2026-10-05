@@ -11,7 +11,7 @@ import { clip, keyValues } from "../format.js";
 import { readTextFile, writeFileAtomic } from "../fsutil.js";
 import { uncommitted } from "../git.js";
 import { callStable } from "../invoke.js";
-import { harnessNotFoundError, lookupHarness } from "../harness-ref.js";
+import { harnessNotFoundError, lookupHarness, SLUG } from "../harness-ref.js";
 import { defaultChangeLine, defaultCommands, named, readDefaultRoute, setDefaultRoute } from "../default-route.js";
 import { ceilingHint, LIMIT_ABOVE_CEILING, parseLimits, readLimits, type PublishedLimits } from "../limits.js";
 import {
@@ -892,44 +892,49 @@ function withBlockersLocated(error: CavelonError, disk: PackageOnDisk, stored: S
   });
 }
 
-/**
- * The solution an apply imports into. One that an env file names and that
- * does not exist yet is created as a draft; one named on the command line
- * never is, so a typo cannot create a solution.
- */
 /** The `apply` that previews the same target again, in the same tenant. */
 function previewAgain(stored: StoredPreview, session: Session): string {
   const harness = !stored.env && stored.harness ? ` --harness ${shellWord(stored.harness.slug)}` : "";
   return `cavelon apply${harness}${targetFlags(session, stored.env)}`;
 }
 
+/**
+ * The solution an apply imports into. A preview changes nothing, so it never
+ * creates one: a slug an env file names that is not on the instance yet gets
+ * the command that creates it as a draft (`init` does the same when it is
+ * given the solution).
+ */
 async function applyTarget(
   ctx: Context,
   session: Session,
   input: Parameters<CommandSpec["run"]>[1],
   pkg: Record<string, unknown>,
-): Promise<(Harness & { created: boolean }) | undefined> {
+): Promise<Harness | undefined> {
   const { ref, source } = harnessRef(session, input);
   if (!ref) return undefined;
   const { harness: found, candidates } = await lookupHarness<Harness>(ctx, ref);
-  if (found) return { ...found, created: false };
-  if (!source?.startsWith("env/") || isUuid(ref)) throw harnessNotFoundError(ref, candidates, source);
+  if (found) return found;
+  if (!source || source === "option" || isUuid(ref) || !SLUG.test(ref)) throw harnessNotFoundError(ref, candidates, source);
   const name = packageHarnessName(pkg, ref) ?? ref;
-  const created = await callStable<Harness>(ctx, "POST", "/api/v1/harnesses", "creating solutions", { body: { slug: ref, name } });
-  ctx.warn(`Created the draft solution ${created.name} (${created.slug}) that ${source} names.`);
-  return { ...created, created: true };
+  const create = cavelonCommand("harness", "new", ref, ...(name !== ref ? ["--name", name] : []));
+  throw new CavelonError(ExitCode.failure, {
+    code: "solution_not_found",
+    message: `Solution ${ref}, which ${source} names, is not on the instance yet; apply previews into an existing solution and creates none.`,
+    hint: `Create it as a draft: ${create}, then run \`${cavelonCommand("apply")}${targetFlags(session)}\` again.`,
+    details: { slug: ref, name, create },
+  });
 }
 
 /**
- * The name the package gives the solution a draft is created for: the entry of
- * its harnesses section with that slug, else its only entry. None when the
- * package holds no harness, or several and none with the slug.
+ * The name the package gives the solution: its harnesses entry with that
+ * slug. None when no entry has the slug, so a copied package never names
+ * someone else's solution.
  */
 function packageHarnessName(pkg: Record<string, unknown>, slug: string): string | undefined {
   const entries = (Array.isArray(pkg.harnesses) ? pkg.harnesses : []).filter(
     (h): h is Record<string, unknown> => Boolean(h) && typeof h === "object" && !Array.isArray(h),
   );
-  const entry = entries.find((h) => h.slug === slug) ?? (entries.length === 1 ? entries[0] : undefined);
+  const entry = entries.find((h) => h.slug === slug);
   const name = typeof entry?.name === "string" ? entry.name.trim() : "";
   return name ? name.slice(0, 255) : undefined;
 }
@@ -951,8 +956,9 @@ export const apply: CommandSpec = {
   description:
     "Without --confirm nothing is imported: the preview shows what changes, which active solutions it reaches, what the target\n" +
     "still needs (secrets and variables with the command that sets each, grants, runtime bindings, trigger identities), loop\n" +
-    "budgets and ignored sections, and is stored in .cavelon/. When the env file names a solution that does not exist yet,\n" +
-    "apply creates it as a draft first. A person sets the secrets (`cavelon secrets set <name>`), never the agent.\n" +
+    "budgets and ignored sections, and is stored in .cavelon/. A preview never creates the solution: one the env file names\n" +
+    "that is not on the instance yet gets the `cavelon harness new` command that creates it as a draft. A person sets the\n" +
+    "secrets (`cavelon secrets set <name>`), never the agent.\n" +
     "Show a preview that reaches an active solution or env/prod to a person before confirming. A stale preview exits 4 and\n" +
     "imports nothing: one whose target changed on the instance since, one whose package files changed since (what they\n" +
     "hold, not their formatting; --allow-stale imports what the preview showed anyway), and one older than a day. So does\n" +
@@ -1019,7 +1025,7 @@ export const apply: CommandSpec = {
       body: request,
       timeoutMs: 120_000,
     });
-    const target = harness ? { id: harness.id, slug: harness.slug, created: harness.created } : null;
+    const target = harness ? { id: harness.id, slug: harness.slug } : null;
     const data: Record<string, unknown> = { previewed: true, ...preview, env: envFile?.name ?? null, harness: target };
     const flags = targetFlags(session);
     const commands = setCommands(preview, flags);

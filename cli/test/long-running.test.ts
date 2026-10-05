@@ -577,3 +577,42 @@ describe("the archive", () => {
     expect(first.bytes.length % 512).toBe(0);
   });
 });
+
+describe("status in a solution folder", () => {
+  it("leaves another solution's running loop out, by its trigger or by the solution the run names", async () => {
+    const mine = addHarness("status-mine");
+    addTrigger("status-mine-loop", mine, { iterations: 50 });
+    addTrigger("status-theirs-loop", addHarness("status-theirs"), { iterations: 50 });
+    const start = async (trigger: string) => {
+      const started = await cli(sb, ["loop", "start", trigger, "--json"]);
+      expect(started.code, started.stdout).toBe(0);
+      return started.json<{ run_id: string; operation_id: string }>();
+    };
+    const ours = await start("status-mine-loop");
+    const theirs = await start("status-theirs-loop");
+    const dir = path.join(sb.home, "status-mine");
+    mkdirSync(dir, { recursive: true });
+    expect((await cli(sb, ["init", "--instance", server.url, "--tenant", tenant, "--harness", "status-mine"], { cwd: dir })).code).toBe(0);
+
+    const listed = async () => {
+      const status = await cli(sb, ["status", "--json"], { cwd: dir });
+      expect(status.code, status.stdout).toBe(0);
+      return status.json<{ operations: { items: Array<{ id: string }>; scope: string; other_solutions?: number } }>().operations;
+    };
+    // The run names its trigger only: the trigger names the solution, read once per trigger.
+    let ops = await listed();
+    expect(ops.items.map((o) => o.id)).toContain(ours.operation_id);
+    expect(ops.items.map((o) => o.id)).not.toContain(theirs.operation_id);
+    expect(ops).toMatchObject({ scope: "solution", other_solutions: 1 });
+
+    // An instance that names the solution on the run: no trigger is read.
+    for (const run of server.state.lr.runs) if ([ours.run_id, theirs.run_id].includes(run.id)) run.namesSolution = true;
+    const before = requestsTo("GET", "/api/v1/triggers/").filter((r) => !r.path.includes("/runs")).length;
+    ops = await listed();
+    expect(ops.items.map((o) => o.id)).not.toContain(theirs.operation_id);
+    expect(ops).toMatchObject({ other_solutions: 1 });
+    expect(requestsTo("GET", "/api/v1/triggers/").filter((r) => !r.path.includes("/runs")).length).toBe(before);
+
+    for (const id of [ours.run_id, theirs.run_id]) await cli(sb, ["loop", "cancel", id, "--confirm"]);
+  });
+});

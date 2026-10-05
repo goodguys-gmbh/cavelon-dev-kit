@@ -82,6 +82,8 @@ only reads it).
 | `harness_clone` | `cavelon harness clone` | changing |
 | `harness_default` | `cavelon harness default` | changing |
 | `activate` | `cavelon activate` | changing |
+| `deactivate` | `cavelon deactivate` | destructive |
+| `chat` | `cavelon chat` | changing |
 | `init` | `cavelon init` | destructive (local files only) |
 | `pull` | `cavelon pull` | destructive (local files only) |
 | `validate` | `cavelon validate` | read-only |
@@ -157,7 +159,7 @@ repeat them:
 - **What needs `confirm`.** `apply` returns a preview and imports only with
   `confirm` set to that preview's id. `limits_set`, `models_set_limit`,
   `loop_cancel`, `sandbox_seed`, `trigger_identity`, `harness_default`,
-  `activate` with `make_default`, and `api` for any operation that is not
+  `activate` with `make_default`, `deactivate`, and `api` for any operation that is not
   read-only (anything but GET, HEAD and OPTIONS), return what they would do
   (for `api`: the method, path, parameters and body) and a `confirm_token`,
   and act only when called again with the same arguments and `confirm` set to
@@ -171,14 +173,17 @@ repeat them:
   nothing without its token. The agent shows that to you first, and must show you any
   preview that reaches an active solution or production. Making a solution
   the tenant's default route changes which solution the tenant's chat and
-  widget answer with, so the agent asks you before it confirms that.
+  widget answer with, and deactivating one takes it out of live traffic, so
+  the agent asks you before it confirms either.
 - **What changes without `confirm`.** `init`, `pull` and `fmt` change nothing
   on the instance; they write files in the solution folder (`pull` refuses to
   replace a package file that is neither committed nor as the last pull or
   apply left it, unless `force`), and the other tools marked changing act at
   once:
   `use_tenant`, `tenant_create`, `harness_new`, `harness_clone`, `activate`
-  (through the readiness gate), `variables_set`, `kb_upload` (without
+  (through the readiness gate), `chat` (one turn of a conversation with the
+  solution it names, the way to try one that is not the default route),
+  `variables_set`, `kb_upload` (without
   `replace`, or where the instance replaces itself), `test_run`,
   `loop_start`, `loop_pause`, `loop_resume`, `sandbox_validate`,
   `sandbox_refresh` and `artifacts_export`.

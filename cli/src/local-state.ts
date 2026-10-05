@@ -35,7 +35,8 @@ export interface StoredPreview {
   instance: string;
   tenant_id: string | null;
   env: string | null;
-  harness: { id: string; slug: string; created: boolean } | null;
+  /** `created` only in previews stored by kits up to 0.1.5, whose preview could create the solution. */
+  harness: { id: string; slug: string; created?: boolean } | null;
   /** The package files' content when previewed, to tell when they changed since. */
   package_digest: string;
   /** Each package file's digest when previewed; absent in a preview an older kit stored. */

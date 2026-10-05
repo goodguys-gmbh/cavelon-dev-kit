@@ -300,6 +300,42 @@
         }
       }
     },
+    "/api/v1/chat": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Chat",
+        "operationId": "chat_api_v1_chat_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponse"
+                }
+              }
+            }
+          },
+          "400": {},
+          "401": {},
+          "403": {},
+          "404": {},
+          "409": {},
+          "422": {}
+        }
+      }
+    },
     "/api/v1/conversations/{conversation_id}/traces": {
       "get": {
         "tags": [
@@ -755,6 +791,48 @@
         },
         "responses": {
           "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HarnessResponse"
+                }
+              }
+            }
+          },
+          "403": {},
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/harnesses/{harness_id}/deactivate": {
+      "post": {
+        "tags": [
+          "harnesses"
+        ],
+        "summary": "Deactivate Harness",
+        "operationId": "deactivate_harness_api_v1_harnesses__harness_id__deactivate_post",
+        "parameters": [
+          {
+            "name": "harness_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Harness Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
             "content": {
               "application/json": {
                 "schema": {
@@ -7243,6 +7321,528 @@
         ],
         "title": "ChangedValue"
       },
+      "ChatImage": {
+        "properties": {
+          "data_url": {
+            "type": "string",
+            "maxLength": 7500000,
+            "title": "Data Url"
+          },
+          "detail": {
+            "type": "string",
+            "pattern": "^(auto|low|high)$",
+            "title": "Detail",
+            "default": "auto"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data_url"
+        ],
+        "title": "ChatImage"
+      },
+      "ChatProcessingStepCapError": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "const": "PROCESSING_STEP_CAP_REACHED",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "cap": {
+            "type": "integer",
+            "title": "Cap"
+          },
+          "used": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Used"
+          },
+          "period": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period"
+          },
+          "resets_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resets At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "cap"
+        ],
+        "title": "ChatProcessingStepCapError"
+      },
+      "ChatRateLimitError": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "const": "RATE_LIMIT_EXCEEDED",
+            "title": "Code"
+          },
+          "error": {
+            "type": "string",
+            "const": "rate_limit_exceeded",
+            "title": "Error"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "tenant",
+              "visitor"
+            ],
+            "title": "Scope"
+          },
+          "group": {
+            "type": "string",
+            "const": "chat",
+            "title": "Group"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "remaining": {
+            "type": "integer",
+            "title": "Remaining"
+          },
+          "reset_at": {
+            "type": "integer",
+            "title": "Reset At"
+          },
+          "retry_after_seconds": {
+            "type": "integer",
+            "title": "Retry After Seconds"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "error",
+          "message",
+          "scope",
+          "group",
+          "limit",
+          "remaining",
+          "reset_at",
+          "retry_after_seconds"
+        ],
+        "title": "ChatRateLimitError"
+      },
+      "ChatRequest": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "maxLength": 32000,
+            "title": "Message"
+          },
+          "display_message": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Message"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "chat_payload": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chat Payload"
+          },
+          "images": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ChatImage"
+                },
+                "type": "array",
+                "maxItems": 3
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Images"
+          },
+          "file_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "maxItems": 50
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Ids"
+          },
+          "knowledge_base_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Knowledge Base Id"
+          },
+          "harness_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness Id"
+          },
+          "external_refs": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Refs"
+          },
+          "user_confirmed": {
+            "type": "boolean",
+            "title": "User Confirmed",
+            "default": false
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "rollover_conversation": {
+            "type": "boolean",
+            "title": "Rollover Conversation",
+            "default": false
+          },
+          "contact_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Id"
+          },
+          "contact_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Name"
+          },
+          "language_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10,
+                "minLength": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language Code"
+          },
+          "stream": {
+            "type": "boolean",
+            "title": "Stream",
+            "default": false
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(playground|api|widget|test)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "render_document_refs": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Render Document Refs"
+          },
+          "page_context": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PageContext"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reader_mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "audience",
+                  "as_chat_user",
+                  "unrestricted"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reader Mode"
+          },
+          "reader_chat_user_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reader Chat User Id"
+          },
+          "personal_assistant_overdrive": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PersonalAssistantOverdriveRequest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "context_messages": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Messages"
+          },
+          "controlled_datetime": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Controlled Datetime"
+          },
+          "controlled_timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Controlled Timezone"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "ChatRequest"
+      },
+      "ChatResponse": {
+        "properties": {
+          "response": {
+            "type": "string",
+            "title": "Response"
+          },
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "conversation_id": {
+            "type": "string",
+            "title": "Conversation Id"
+          },
+          "agent_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Run Id"
+          },
+          "ui_directives": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ui Directives"
+          },
+          "retrieval_warning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retrieval Warning"
+          },
+          "conversation_rollover": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationRolloverResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rollover_recommendation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationRolloverRecommendationResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "limit_error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatRateLimitError"
+              },
+              {
+                "$ref": "#/components/schemas/ChatProcessingStepCapError"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "response",
+          "session_id",
+          "conversation_id"
+        ],
+        "title": "ChatResponse"
+      },
       "ChunkResponse": {
         "properties": {
           "id": {
@@ -7400,6 +8000,95 @@
           "persisted_path"
         ],
         "title": "ContextSourceLimitResponse"
+      },
+      "ConversationRolloverRecommendationResponse": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "enum": [
+              "total_tokens",
+              "message_count",
+              "age"
+            ],
+            "title": "Reason"
+          },
+          "current_total_token_count": {
+            "type": "integer",
+            "title": "Current Total Token Count"
+          },
+          "current_message_count": {
+            "type": "integer",
+            "title": "Current Message Count"
+          },
+          "current_estimated_cost": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Estimated Cost"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reason",
+          "current_total_token_count",
+          "current_message_count"
+        ],
+        "title": "ConversationRolloverRecommendationResponse"
+      },
+      "ConversationRolloverResponse": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "enum": [
+              "total_tokens",
+              "message_count",
+              "age",
+              "user_requested"
+            ],
+            "title": "Reason"
+          },
+          "previous_conversation_id": {
+            "type": "string",
+            "title": "Previous Conversation Id"
+          },
+          "previous_total_token_count": {
+            "type": "integer",
+            "title": "Previous Total Token Count"
+          },
+          "previous_message_count": {
+            "type": "integer",
+            "title": "Previous Message Count"
+          },
+          "previous_estimated_cost": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Estimated Cost"
+          },
+          "context_carried": {
+            "type": "boolean",
+            "title": "Context Carried"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reason",
+          "previous_conversation_id",
+          "previous_total_token_count",
+          "previous_message_count",
+          "context_carried"
+        ],
+        "title": "ConversationRolloverResponse"
       },
       "ConversationTraceDetailResponse": {
         "properties": {
@@ -12077,6 +12766,140 @@
         ],
         "title": "PackageVersions"
       },
+      "PageContext": {
+        "properties": {
+          "pathname": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Pathname"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 256
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "section": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section"
+          },
+          "wizard_entry_intent": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wizard Entry Intent"
+          },
+          "target_tenant_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Tenant Id"
+          },
+          "target_tenant_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Tenant Name"
+          },
+          "target_tenant_slug": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Tenant Slug"
+          },
+          "target_harness_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Harness Id"
+          },
+          "scope_token": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Token"
+          },
+          "confirmation_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmation Id"
+          },
+          "user_pressed_apply": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Pressed Apply"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pathname"
+        ],
+        "title": "PageContext"
+      },
       "PersonalAccessTokenOptions": {
         "properties": {
           "ceiling_roles": {
@@ -12102,6 +12925,27 @@
           "platform_mode_available"
         ],
         "title": "PersonalAccessTokenOptions"
+      },
+      "PersonalAssistantOverdriveRequest": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "operation_families": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 64,
+            "title": "Operation Families"
+          }
+        },
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "title": "PersonalAssistantOverdriveRequest"
       },
       "PrincipalApiKey": {
         "properties": {

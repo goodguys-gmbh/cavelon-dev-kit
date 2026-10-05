@@ -9,6 +9,20 @@ CLI, the skills and the plugin.
 
 ### Added
 
+- `cavelon chat <message> --harness <solution>` sends one message to a
+  solution and prints its answer, with the session to continue (`--session`)
+  and the conversation to trace. It is the way to try an active solution that
+  is not the tenant's default route; a draft answers a person's token as a
+  Playground run. MCP tool `chat`.
+- `cavelon deactivate` takes an active solution out of live traffic: it
+  previews, and deactivates only with `--confirm` (over MCP, the preview's
+  `confirm_token`). The tenant's default route is refused before anything is
+  sent (`default_route_deactivate`, exit 5), and an instance that publishes no
+  deactivate route is said so (`operation_unavailable`). MCP tool `deactivate`.
+- `cavelon trace <test run>` names each case's knowledge outcomes from its
+  result's `tool_calls` (`Knowledge: content_gap` under a case that did not
+  pass, `knowledge_outcomes` per case in `--json`); `null` for a result from an
+  older instance or run that records none.
 - `cavelon apply --discard <preview-id>` (or `--discard all`) forgets stored
   previews, so none is left for a later agent to confirm. A stored preview
   expires after a day: its confirm exits 4 (`preview_expired`), `cavelon
@@ -66,6 +80,34 @@ CLI, the skills and the plugin.
 
 ### Changed
 
+- `cavelon apply` no longer creates the solution an env file names when it is
+  missing, so a preview changes nothing on the instance. It stops with
+  `solution_not_found` and names the `cavelon harness new <slug> --name <name>`
+  that creates the draft (the name only from a `harnesses.yaml` entry with
+  that slug). `cavelon init --harness <name>` creates the draft instead, named
+  as given with a slug from the name, and `init --from` creates the package's
+  only solution; as MCP tools neither creates one, and `init` names the
+  `harness new` call. A name close to an existing solution's is refused with
+  the closest ones, so a typo creates nothing.
+- `init`'s question lists the tenant's solutions as "This tenant has 1
+  solution; choose it, or start a new one:", so the numbered "new" entry is no
+  longer read as a second solution.
+- `knowledge_base_without_search_tool` counts `list_documents` (and its older
+  name `list_kb_docs`) as reaching a knowledge base, beside `search_documents`,
+  also under a tenant tool whose `builtin_key` names it; validate no longer
+  reports the built-in document tools (`list_documents`, `read_document`,
+  `save_document`) as unknown tools.
+- `package_duplicate_key` and `package_field_unknown` link to the instance's
+  page on package import and export (`concepts/harnesses`).
+- The getting-started guide and the skills match the CLI again: `init`'s
+  output, `cavelon login` instead of `npx` in step 2, seven sections, the
+  preview's warnings, copying the example under your own name (knowledge bases
+  are matched by name across the tenant), picking the model with `cavelon
+  models list`, `temperature` on reasoning models, trying and deactivating a
+  solution, re-running the whole suite after a prompt change, and a neutral
+  document id in the loop skill.
+- The examples use `gpt-5.4-mini` with the instance's default temperature
+  (0.4), and say to pick a model the tenant offers with `cavelon models list`.
 - **Over MCP, a tool confirms only the change its preview showed.** `api`,
   `limits_set`, `models_set_limit`, `loop_cancel`, `sandbox_seed`,
   `trigger_identity`, `harness_default`, `activate` with `make_default`, and
@@ -109,7 +151,9 @@ CLI, the skills and the plugin.
 - `cavelon setup --check` lists an agent found on the computer but never set
   up for Cavelon as `skip`, and no longer exits 1 because of it.
 - `cavelon status` in a solution folder leaves out the running operations of
-  another solution (a test run names its solution) and says how many; an
+  another solution (a test run names its solution, a running loop's trigger
+  run its trigger, which names it; an instance that names the solution on the
+  run is read directly) and says how many; an
   active solution no longer reads "active, ready to activate".
 - `whoami`, `status` and the MCP `whoami` name a tenant given by id
   (`cavelon.yaml`, `--tenant`) that is none of the token's memberships, as an

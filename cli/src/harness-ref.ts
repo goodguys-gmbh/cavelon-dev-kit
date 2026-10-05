@@ -62,7 +62,7 @@ export function harnessNotFoundError(ref: string, candidates: HarnessSummary[], 
     message: `No solution "${ref}" in this tenant${source ? ` (from ${source})` : ""}.${near ? ` Closest: ${near}.` : ""}`,
     hint:
       (candidates.length ? `If you meant one of them:\n${lines}\n` : "") +
-      "`cavelon harness list` shows this tenant's solutions with name, slug and id; `cavelon harness new <slug>` creates one, and an env file's harness is created by `apply`.",
+      "`cavelon harness list` shows this tenant's solutions with name, slug and id; `cavelon harness new <slug> --name <name>` creates one as a draft (`cavelon init --harness <name>` does too).",
     details: candidates.length ? { candidates: candidates.map((h) => ({ id: h.id, slug: h.slug, name: h.name })) } : undefined,
   });
 }
@@ -74,3 +74,17 @@ export async function resolveHarnessId(ctx: Context, ref: string): Promise<strin
   if (!harness) throw harnessNotFoundError(ref, candidates);
   return harness.id;
 }
+
+/** A slug from a solution's name: lower-case letters, digits and single dashes. */
+export function slugFromName(name: string): string {
+  const plain = name.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  let slug = plain.replace(/[^a-z0-9]+/g, "-");
+  while (slug.startsWith("-")) slug = slug.slice(1);
+  while (slug.endsWith("-")) slug = slug.slice(0, -1);
+  slug = slug.slice(0, 60);
+  while (slug.endsWith("-")) slug = slug.slice(0, -1);
+  return slug;
+}
+
+/** What a solution's slug looks like. */
+export const SLUG = /^[a-z0-9][a-z0-9-]*$/;

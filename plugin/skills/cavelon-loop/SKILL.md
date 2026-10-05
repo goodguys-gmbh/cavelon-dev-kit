@@ -42,10 +42,16 @@ use it when you parse the result.
 - No `cavelon.yaml` here or above: for a new solution run
   `cavelon init --instance <url> --tenant <tenant> --harness <solution>`, where
   the tenant and the solution are each a name, slug or id; for an existing one
-  add `cavelon pull` after it. To start from a package file (a blueprint, an
+  add `cavelon pull` after it. From your shell, `init --harness "<name>"`
+  creates a solution that does not exist yet as a draft; the MCP tool `init`
+  never creates one and names the `cavelon harness new <slug> --name "<name>"`
+  that does. `apply` never creates a solution: when the one an env file names
+  is missing it stops with `solution_not_found` and names that command. To start from a package file (a blueprint, an
   export from another instance), run
   `cavelon init --instance <url> --tenant <tenant> --from <file>` instead of
-  splitting it by hand or importing it in the Admin. Never guess a tenant or a
+  splitting it by hand or importing it in the Admin; from your shell it creates
+  the package's only solution as a draft when the tenant lacks it (the MCP tool
+  names the `cavelon harness new` command instead). Never guess a tenant or a
   solution, and never ask the person for an id they would have to look up:
   `cavelon tenant list --json` and `cavelon harness list --json` list the
   names, slugs and ids to choose from, and the person names one by its name.
@@ -106,15 +112,20 @@ use it when you parse the result.
    uploads on (`kb_upload_archive_enabled`) and it stays within their file
    count, unpacked size and compression ratio (exit 3, naming the limit and who
    changes it).
-   **Updating a document**: upload the new version under the same file name
-   with `--replace` (try it with `--dry-run` first). Without it the old version
-   may stay active next to the new one, and both answer: `kb upload` names each
-   file that matches an active document ("bergbahn-faq.md exists (094e95e9…)
-   and stays active"). An instance that replaces same-named documents itself
-   does so on every upload (`--keep-both` keeps both); where the instance's
-   upload cannot replace, `--replace` shows the documents it would deactivate
-   after the upload and needs `--confirm`: show the person that first. A test
-   Sandbox gets its files with `cavelon sandbox seed <sandbox> <folder>`
+   **Updating a document**: upload the new version under the same file name.
+   `kb upload` names each file that matches an active document of the
+   knowledge base, and what happens to it depends on the instance (try it with
+   `--dry-run` first):
+   - An instance that replaces same-named documents does so on every upload:
+     "faq.md exists (0f3c…) and is replaced by the upload (--keep-both keeps
+     it)". `--keep-both` keeps both.
+   - On an older instance the old version stays active next to the new one,
+     and both answer: "faq.md exists (0f3c…) and stays active". Upload with
+     `--replace`: where the instance's upload can replace by id, the old
+     document is replaced once the new file is verified; where it cannot,
+     `--replace` shows the documents it would deactivate after the upload and
+     needs `--confirm`: show the person that first.
+   A test Sandbox gets its files with `cavelon sandbox seed <sandbox> <folder>`
    (isolated container) or `cavelon sandbox refresh <sandbox>` after the files
    were put on the VM (customer VM).
 7. **Test**: `cavelon test run --suite <suite>`, then `cavelon wait <operation>`.
@@ -142,6 +153,15 @@ says when the solution it activated is not the default.
   default, so use `cavelon activate --make-default`.
 - `is_default` in `harnesses.yaml` is not applied by `apply`; the preview
   lists it under "not applied".
+- To try an active solution that is not the default, talk to it by name:
+  `cavelon chat "<message>" --harness <solution>` (the `chat` tool over MCP)
+  prints its answer, the session to continue with `--session`, and the
+  conversation to trace. A draft answers only a person's token, as a
+  Playground run.
+- `cavelon deactivate --harness <solution>` takes an active solution out of
+  live traffic: it previews, and only `--confirm` deactivates. It is the
+  person's decision, like the default route; the default route itself is
+  refused until another solution is the default.
 
 ## Show the person before confirming
 
@@ -158,15 +178,17 @@ show the preview to the person, and confirm only after they agree, when:
 The same holds for the other commands that take `--confirm`: without it they
 only show what would happen. Show it to the person before `cavelon trigger
 identity <trigger> <key> --confirm` (it gives a trigger standing authority),
-before `cavelon harness default … --confirm` or `cavelon activate
---make-default --confirm` (it moves live traffic), and
+before `cavelon harness default … --confirm`, `cavelon activate
+--make-default --confirm` or `cavelon deactivate --confirm` (they move live
+traffic), and
 before `cavelon sandbox seed … --confirm` or `cavelon loop cancel … --confirm` on
 anything but a test Sandbox or a run you started yourself.
 
 **Over MCP, confirm with the preview's token.** `api`, `limits_set`,
 `models_set_limit`, `loop_cancel`, `sandbox_seed`, `trigger_identity`,
-`harness_default`, `activate` with `make_default`, and `kb_upload` where it
-would deactivate documents return a `confirm_token` with their preview. Show
+`harness_default`, `deactivate`, `activate` with `make_default`, and
+`kb_upload` where it would deactivate documents return a `confirm_token` with
+their preview. Show
 the preview, then call the tool again with the same arguments and `confirm`
 set to that token; it makes exactly the change shown. `confirm: true` is
 refused (`confirm_token_required`), and a token of another change returns the

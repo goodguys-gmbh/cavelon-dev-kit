@@ -108,6 +108,13 @@ default, showing the current one first and changing it only with `--confirm`.
 That changes live traffic, so a person decides it. `is_default` in
 `harnesses.yaml` is not applied by an import.
 
+An active solution that is not the default still answers a conversation that
+names it: `cavelon chat "<message>" --harness <solution>` sends one message to
+it and prints the answer, with the session to continue and the conversation
+to trace. `cavelon deactivate` takes an active solution out of live traffic
+(it is a draft again); it previews first, changes nothing without `--confirm`,
+and refuses the default route until another solution is the default.
+
 ## Package
 
 A **package** is a solution, or a whole tenant's configuration, as one
@@ -160,7 +167,10 @@ Files saved with a UTF-8 byte-order mark, as Windows PowerShell 5.1 writes
 them, read like any other.
 
 `cavelon init --from <file>` turns a package file you already have, such as an
-export or a blueprint, into this layout.
+export or a blueprint, into this layout. When the package holds one solution
+that the tenant does not have yet, `init --from` run from a terminal or shell
+creates it as a draft, named as in the package; as an MCP tool it names the
+`cavelon harness new` command instead.
 
 ## Environments
 
@@ -169,7 +179,7 @@ package:
 
 ```yaml
 tenant: acme-prod          # default: the tenant in cavelon.yaml
-harness: support-faq       # created as a draft when it does not exist yet
+harness: support-faq       # must exist: init or `cavelon harness new` creates it
 mode: overwrite            # or replace
 runtime_bindings:          # the package's runtime requirement -> this tenant's resource id
   crm_connection: 6f1c…
@@ -177,7 +187,11 @@ runtime_bindings:          # the package's runtime requirement -> this tenant's 
 
 `init` creates `env/test.yaml` and `env/prod.yaml`. A `--env <name>` without
 its `env/<name>.yaml` is refused (exit 2) before anything is sent, by every
-command that takes `--env`. A typical flow applies to
+command that takes `--env`. `apply` never creates a solution: when the
+solution an env file names is not on the instance, it stops before the preview
+(`solution_not_found`) and names the `cavelon harness new` command that
+creates the draft. `cavelon init --harness <name>` creates it when you set up
+the folder. A typical flow applies to
 `test`, runs the tests, then applies the same files to `prod`. Environment
 files never hold a token or a secret value; a secret is set in each tenant with
 `cavelon secrets set`.
