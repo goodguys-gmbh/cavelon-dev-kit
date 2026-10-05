@@ -148,3 +148,27 @@ export function tenantMissError(ref: string, pool: ReachableTenant[], reachesAll
     details: { tenants: listed.map((t) => ({ id: t.id, slug: t.slug, name: t.name })) },
   });
 }
+
+/**
+ * The name and slug of a tenant known only by its id (from cavelon.yaml,
+ * --tenant or CAVELON_TENANT): the tenant's own record where the token may
+ * read it, else the tenants `/meta/principal` lists for that id. Empty when
+ * the instance tells neither; nothing is ever guessed.
+ */
+export async function describeTenant(client: ApiClient, id: string): Promise<{ name?: string; slug?: string }> {
+  try {
+    const detail = await client.get<{ name?: unknown; slug?: unknown }>(`/api/v1/tenants/${encodeURIComponent(id)}`, {
+      sendTenant: false,
+      headers: { "X-Tenant-Id": id },
+      allow: [400, 401, 403, 404, 405, 422],
+    });
+    const name = typeof detail.data?.name === "string" && detail.data.name ? detail.data.name : undefined;
+    const slug = typeof detail.data?.slug === "string" && detail.data.slug ? detail.data.slug : undefined;
+    if (detail.status === 200 && (name || slug)) return { ...(name ? { name } : {}), ...(slug ? { slug } : {}) };
+    const found = await readTenantless(client, { search: id });
+    const hit = found && !found.refused ? found.tenants?.find((t) => t.id === id) : undefined;
+    return hit ? { ...(hit.name ? { name: hit.name } : {}), ...(hit.slug ? { slug: hit.slug } : {}) } : {};
+  } catch {
+    return {};
+  }
+}

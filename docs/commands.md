@@ -53,13 +53,14 @@ Set up your coding agents for Cavelon and log in, in one guided step.
 cavelon setup [options]
 ```
 
-Finds Claude Code, Codex, Cursor, VS Code with GitHub Copilot, Gemini CLI and Kiro, shows what it will change for each, asks once and does it: Claude Code and Codex get the Cavelon plugin through their own plugin command; the others get the `cavelon` MCP server in their user MCP configuration and the skills in their user skills folder. It touches nothing else in those files and records what it did, so --remove undoes exactly that. Then it logs in if needed, choosing the tenant by name as `login` does. The server starts as `cavelon mcp` when cavelon is installed, otherwise through npx. --check reports what is set up and working: each agent's entry, the MCP server starting, and the login. Without a terminal it changes nothing unless --yes.
+Finds Claude Code, Codex, Cursor, VS Code with GitHub Copilot, Gemini CLI and Kiro, shows what it will change for each, asks once and does it: Claude Code and Codex get the Cavelon plugin through their own plugin command; the others get the `cavelon` MCP server in their user MCP configuration and the skills in their user skills folder. It touches nothing else in those files and records what it did, so --remove undoes exactly that. Then it logs in if needed, choosing the tenant by name as `login` does. The server starts as `cavelon mcp` when cavelon is installed, otherwise through npx. --check reports what is set up and working: each agent's entry, the MCP server starting, and the login. An agent found but never set up for Cavelon is reported and skipped (exit 0 when the rest works); --strict, or naming it with --agents, counts it. Without a terminal it changes nothing unless --yes.
 
 | Option | Description |
 |---|---|
 | `--agents <list>` | Only these agents: claude, codex, cursor, copilot, gemini, kiro, or all (comma-separated). Default: every agent found. Repeatable. |
 | `-y, --yes` | Make the changes without asking. |
 | `--check` | Report what is set up and working; change nothing. |
+| `--strict` | With --check: fail for every agent found that is not set up, not only the ones setup set up. |
 | `--remove` | Undo what setup did (your login stays). |
 
 Examples:
@@ -218,7 +219,7 @@ Examples:
 
 ```bash
 cavelon pull --harness support
-cavelon pull && git diff -- package tests
+cavelon pull && git status --short -- package tests
 ```
 
 ### cavelon validate
@@ -362,7 +363,7 @@ Look a code up in the instance's error catalog: what it means and how to fix it.
 cavelon explain <code>
 ```
 
-Rule codes come from the package and graph checks, API error codes from failed requests; cavelon's own codes (validate's findings, and errors the CLI raises itself, such as operation_not_found or uncommitted_changes) are known too. Uses the cached catalog first. Where the instance's fix names an API route, the command that does the same is added. An unknown code gets the closest known ones (a typo away, the same start). Also explains the test-case statuses that are neither pass nor fail: calibration_required, pending_review, not_run, not_evaluated, skip.
+Rule codes come from the package and graph checks, API error codes from failed requests; cavelon's own codes (validate's findings, and errors the CLI raises itself, such as operation_not_found or uncommitted_changes) are known too. Uses the cached catalog first. Where the instance's fix names an API route, the command that does the same is added. An unknown code gets the closest known ones (a typo away, the same start). Also explains the test-case statuses that are neither pass nor fail: calibration_required, pending_review, not_run, not_evaluated, skip; and the values of a retrieval span's knowledge_outcome (usable_evidence, content_gap, unusable_hits, retrieval_fault, deliberately_unanswerable, no_usable_evidence), from the instance's catalog (area knowledge_outcome) where it lists them.
 
 | Argument | Description |
 |---|---|
@@ -743,7 +744,7 @@ Without --confirm, shows the variable and deletes nothing. A prompt or tool that
 
 | Option | Description |
 |---|---|
-| `--confirm` | Delete it; without this nothing is deleted. |
+| `--confirm` | Delete it; without this nothing is deleted. Run by a coding agent: the token its preview printed. |
 | `--env <name>` | Act in the tenant that env/&lt;name&gt;.yaml names. |
 
 Examples:
@@ -824,7 +825,7 @@ Without --confirm, shows the secret's status and deletes nothing. A tool or prom
 
 | Option | Description |
 |---|---|
-| `--confirm` | Delete it; without this nothing is deleted. |
+| `--confirm` | Delete it; without this nothing is deleted. Run by a coding agent: the token its preview printed. |
 | `--env <name>` | Act in the tenant that env/&lt;name&gt;.yaml names. |
 
 Examples:
@@ -1462,7 +1463,7 @@ cavelon api list [options]
 | `--search <text>` | Only operations whose name, path or summary contains the text. | yes |
 | `--method <method>` | Only this HTTP method (GET, POST, …). | yes |
 | `--tags` | List the tags with their operation counts instead. | yes |
-| `--limit <n>` | Return at most n items. | yes |
+| `--limit <n>` | Return at most n operations (default 50, 0 for all). | yes |
 | `--cursor <cursor>` | Continue after the previous page (its next_cursor). | yes |
 
 ### cavelon api describe

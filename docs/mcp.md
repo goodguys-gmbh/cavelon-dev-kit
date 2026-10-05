@@ -120,8 +120,14 @@ only reads it).
 | `artifacts_export` | `cavelon artifacts export` | changing |
 
 Each tool's arguments are the command's arguments and options, as listed in the
-[command reference](commands.md); options marked "CLI only" there, such as
-`--wait`, are not offered to the agent.
+[command reference](commands.md), spelled in snake_case: `--make-default` is
+`make_default`, `--keep-both` is `keep_both`, `--dry-run` is `dry_run`.
+Options marked "CLI only" there, such as `--wait`, are not offered to the
+agent. A call with an argument the tool's schema does not list is refused
+(`unknown_argument`, exit code 2) and nothing is done; the error names the
+closest argument. The CLI's spelling of a multi-word option (`make-default`)
+is still taken in this release, with a warning, and will be refused in a later
+one.
 
 ### What is not a tool
 

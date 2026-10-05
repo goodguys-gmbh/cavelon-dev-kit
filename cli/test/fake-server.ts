@@ -159,7 +159,14 @@ export interface FakeState {
   harnesses: Array<Record<string, unknown> & { id: string; tenant_id: string; slug: string; name: string }>;
   kbs: Array<{ id: string; tenant_id: string; name: string }>;
   /** Uploaded documents; a replaced one is soft-deleted and no longer listed. */
-  documents: Array<{ id: string; tenant_id: string; kb_id: string; filename: string; size: number; is_active: boolean; deleted: boolean; created_at: string }>;
+  documents: Array<{ id: string; tenant_id: string; kb_id: string; filename: string; size: number; is_active: boolean; deleted: boolean; created_at: string; sha256?: string }>;
+  /**
+   * Whether an upload reuses an active document of the same content instead of
+   * creating one, as the instance's content-hash dedup does; off by default.
+   */
+  uploadDedup: boolean;
+  /** Whether each uploaded document says `upload_outcome` (created, replaced, deduplicated); off is an older instance. */
+  uploadOutcome: boolean;
   /**
    * How an upload replaces a document named like an existing one: "name" also
    * a same-named active one by default (`replace_existing`), reporting
@@ -169,7 +176,7 @@ export interface FakeState {
    */
   uploadReplace: "none" | "ids" | "name";
   suites: Array<{ id: string; tenant_id: string; name: string; harness_id: string | null; archived_at: string | null }>;
-  runs: Array<{ id: string; tenant_id: string; suite_id: string; summary: Record<string, unknown> }>;
+  runs: Array<{ id: string; tenant_id: string; suite_id: string; summary: Record<string, unknown>; harness_id?: string | null }>;
   operations: Map<string, FakeOperation>;
   /** By "trigger:<run id>" or "conversation:<conversation id>". */
   traces: Map<string, Array<Record<string, unknown>>>;
@@ -501,6 +508,8 @@ export async function startFakeServer(): Promise<FakeServer> {
     interruptions: [],
     failures: [],
     uploadsBeforeFailure: Infinity,
+    uploadDedup: false,
+    uploadOutcome: false,
     dropStreams: 0,
     configs: new Map(),
     exportFillsDefaults: false,
@@ -696,7 +705,8 @@ export async function startFakeServer(): Promise<FakeServer> {
               }
             : null,
         tenant_id: tenantId ?? null,
-        mode: tenantId ? "tenant" : info.platform || info.kind === "key" ? "platform" : "none",
+        // A token whose ceiling holds no platform role is answered in no mode, with no permission, as the instance does.
+        mode: tenantId ? "tenant" : info.kind === "key" || (info.platform && effectiveRole(info)) ? "platform" : "none",
         ...(state.servePermissions ? { permissions: permissionsOf(info, tenantId) } : {}),
         ...(info.kind === "pat" && state.serveTenantReach ? reachOf(info, url.searchParams) : {}),
       });
@@ -730,6 +740,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     if (p === "/api/v1/tenants") {
       if (info.kind === "key") return send(res, 403, { detail: "API keys cannot manage tenants" });
       if (!info.platform || headerTenant) return send(res, 403, { detail: "Insufficient permissions" });
+      if (!effectiveRole(info)) return send(res, 403, { detail: "This personal access token's ceiling leaves no access here" });
       if (method === "POST") {
         const b = body.json as { slug: string; name: string; plan?: string };
         if (!b?.slug || !/^[a-z0-9-]+$/.test(b.slug)) return send(res, 422, { detail: [{ loc: ["body", "slug"], msg: "invalid slug", type: "value_error" }] });
@@ -822,6 +833,8 @@ export async function startFakeServer(): Promise<FakeServer> {
     if (m && method === "POST") {
       const h = state.harnesses.find((x) => x.tenant_id === tid && x.id === m![1]);
       if (!h) return send(res, 404, { detail: "Harness not found." });
+      // Only an active solution answers the tenant's chat, as the instance refuses a draft.
+      if (h.status !== "active") return send(res, 409, { detail: `Harness '${h.slug}' is ${String(h.status)}, not active.` });
       // One default route per tenant: the instance moves it.
       for (const other of state.harnesses) if (other.tenant_id === tid) other.is_default = other.id === h.id;
       return send(res, 200, h);
@@ -861,7 +874,14 @@ export async function startFakeServer(): Promise<FakeServer> {
       const mapped = typeof mappedRaw === "string" ? (JSON.parse(mappedRaw) as Record<string, string>) : {};
       const byName = state.uploadReplace === "name" && body.form?.get("replace_existing") !== "false";
       const before = state.documents.filter((d) => d.kb_id === kb.id && !d.deleted);
-      const docs = files.map((file) => {
+      const hashes = await Promise.all(files.map(async (file) => createHash("sha256").update(Buffer.from(await file.arrayBuffer())).digest("hex")));
+      const docs = files.map((file, index) => {
+        const same = state.uploadDedup ? before.find((d) => d.is_active && d.sha256 === hashes[index]) : undefined;
+        if (same) {
+          // Identical content is already active: the instance answers with that document and creates none.
+          const view = { ...documentView(same.id, same.filename, same.size, null), status: "ready" };
+          return state.uploadOutcome ? { ...view, upload_outcome: "deduplicated" } : view;
+        }
         const id = randomUUID();
         const op = addOperation("document_ingestion", tid, [...state.defaultSteps], {
           id: opId("document_ingestion", id),
@@ -874,9 +894,10 @@ export async function startFakeServer(): Promise<FakeServer> {
             ? before.filter((d) => d.filename === file.name && d.is_active).sort((a, b) => b.created_at.localeCompare(a.created_at))
             : [];
         for (const d of replaced) d.deleted = true;
-        state.documents.push({ id, tenant_id: tid, kb_id: kb.id, filename: file.name, size: file.size, is_active: true, deleted: false, created_at: now() });
+        state.documents.push({ id, tenant_id: tid, kb_id: kb.id, filename: file.name, size: file.size, is_active: true, deleted: false, created_at: now(), sha256: hashes[index] });
         const view = documentView(id, file.name, file.size, state.serveOperations ? op.id : null);
-        return state.uploadReplace === "name" ? { ...view, replaced_document_ids: replaced.map((d) => d.id) } : view;
+        const outcome = state.uploadOutcome ? { upload_outcome: replaced.length ? "replaced" : "created" } : {};
+        return state.uploadReplace === "name" ? { ...view, replaced_document_ids: replaced.map((d) => d.id), ...outcome } : { ...view, ...outcome };
       });
       return send(res, 202, docs);
     }
@@ -916,7 +937,8 @@ export async function startFakeServer(): Promise<FakeServer> {
       const suite = state.suites.find((s) => s.tenant_id === tid && s.id === m![1]);
       if (!suite) return send(res, 404, { detail: "Suite not found" });
       const id = randomUUID();
-      const run = { id, tenant_id: tid, suite_id: suite.id, summary: { ...state.runSummary } };
+      const asked = (body.json as { harness_id?: unknown } | undefined)?.harness_id;
+      const run = { id, tenant_id: tid, suite_id: suite.id, summary: { ...state.runSummary }, harness_id: typeof asked === "string" ? asked : suite.harness_id };
       state.runs.push(run);
       const op = addOperation("test_run", tid, [...state.defaultSteps], {
         id: opId("test_run", id),
@@ -1728,11 +1750,11 @@ function suiteView(s: { id: string; name: string; harness_id: string | null; arc
   };
 }
 
-function runView(run: { id: string; suite_id: string; summary: Record<string, unknown> }, suiteName: string | null, status: string, operationId: string | null) {
+function runView(run: { id: string; suite_id: string; summary: Record<string, unknown>; harness_id?: string | null }, suiteName: string | null, status: string, operationId: string | null) {
   return {
     id: run.id,
     suite_id: run.suite_id,
-    harness_id: null,
+    harness_id: run.harness_id ?? null,
     suite_name: suiteName,
     status,
     started_at: now(),
@@ -1783,8 +1805,12 @@ function resultView(runId: string, name: string, status: string, conversationId:
  * `knowledgeOutcome` adds the search's retrieval span with the outcome the
  * agent recorded on it, as a recent instance writes it.
  */
-export function traceFixture(id: string, conversationId: string | null, options: { knowledgeOutcome?: string } = {}) {
-  const span = (n: number, type: string, name: string, status = "ok", parent = 1, attributes: Record<string, unknown> = {}) => ({
+export function traceFixture(
+  id: string,
+  conversationId: string | null,
+  options: { knowledgeOutcome?: string; retrievalAttributes?: unknown; failedSearch?: boolean } = {},
+) {
+  const span = (n: number, type: string, name: string, status = "ok", parent = 1, attributes: unknown = {}) => ({
     id: `${id}-span-${n}`,
     parent_span_id: n === 1 ? null : `${id}-span-${parent}`,
     span_key: `k${n}`,
@@ -1802,8 +1828,9 @@ export function traceFixture(id: string, conversationId: string | null, options:
     started_at: now(),
     ended_at: now(),
     duration_ms: 10 * n,
-    input_json: { prompt: "x".repeat(5000) },
-    output_json: { text: "done" },
+    // A retrieval span records its search in its attributes only.
+    input_json: type === "retrieval" ? null : { prompt: "x".repeat(5000) },
+    output_json: type === "retrieval" ? null : { text: "done" },
     attributes_json: attributes,
     token_usage_json: { input: 10, output: 5 },
     error_json: status === "error" ? { message: "tool exploded" } : null,
@@ -1823,7 +1850,7 @@ export function traceFixture(id: string, conversationId: string | null, options:
     ended_at: now(),
     duration_ms: 60,
     error_summary: null,
-    total_spans: options.knowledgeOutcome ? 4 : 3,
+    total_spans: options.knowledgeOutcome || options.retrievalAttributes !== undefined ? 4 : 3,
     total_tool_calls: 1,
     total_llm_calls: 1,
     total_input_tokens: 10,
@@ -1835,8 +1862,12 @@ export function traceFixture(id: string, conversationId: string | null, options:
     spans: [
       span(1, "agent", "Main"),
       span(2, "llm", "generate"),
-      span(3, "tool", "search_documents", "error"),
-      ...(options.knowledgeOutcome ? [span(4, "retrieval", "retrieve", "ok", 3, { knowledge_outcome: options.knowledgeOutcome })] : []),
+      span(3, "tool", "search_documents", options.failedSearch === false ? "ok" : "error"),
+      ...(options.retrievalAttributes !== undefined
+        ? [span(4, "retrieval", "retrieval", "ok", 3, options.retrievalAttributes)]
+        : options.knowledgeOutcome
+          ? [span(4, "retrieval", "retrieve", "ok", 3, { knowledge_outcome: options.knowledgeOutcome })]
+          : []),
     ],
   };
 }

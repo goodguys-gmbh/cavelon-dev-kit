@@ -10,7 +10,7 @@ import {
   type Context,
 } from "../command.js";
 import { CavelonError, ExitCode, usageError } from "../errors.js";
-import { confirmation } from "../confirm-token.js";
+import { confirmation, confirmTokenRequired } from "../confirm-token.js";
 import { keyValues, moreHint, table } from "../format.js";
 import { callStable } from "../invoke.js";
 import { formatQuota, limitError, limitsOrWarn, readQuotas } from "../limits.js";
@@ -93,6 +93,21 @@ function checkCanCreateTenant(principal: MetaPrincipal | undefined): void {
       message: `The personal access token "${token.name}" enters Platform mode${ceiling}, but without ${TENANTS_MANAGE}, so it cannot create a tenant; nothing was sent.`,
       hint: `A token whose ceiling and owner's global role grant ${TENANTS_MANAGE} can; or create the tenant in the Admin (Platform › Tenants).`,
       details: { permission: TENANTS_MANAGE, ceiling_role: token.ceiling_role ?? null, sent: false },
+    });
+  }
+  // Asked without a tenant, as the creation is sent, the instance caps the owner's role by the token's ceiling. A
+  // ceiling that holds no platform role (a tenant role such as tenant_builder) leaves the token in no mode, or in a
+  // tenant, never in Platform mode: the instance would answer 403, so the kit says so first.
+  const outside = principal.mode !== "platform" && (principal.permissions ? !principal.permissions.includes(TENANTS_MANAGE) : principal.mode === "none");
+  if (token.platform_mode_allowed === true && outside) {
+    throw new CavelonError(ExitCode.unauthorized, {
+      code: "permission_missing",
+      message:
+        `The personal access token "${token.name}" may enter Platform mode, but its ceiling${token.ceiling_role ? ` ${token.ceiling_role}` : ""} gives it no ` +
+        `role there with ${TENANTS_MANAGE} (asked without a tenant, the instance answers it ${principal.mode === "none" ? "in no mode" : "in a tenant"}), ` +
+        "so it cannot create a tenant; nothing was sent.",
+      hint: CREATE_TENANT_REMEDY,
+      details: { permission: TENANTS_MANAGE, ceiling_role: token.ceiling_role ?? null, mode: principal.mode, sent: false },
     });
   }
 }
@@ -317,6 +332,8 @@ export const harnessDefault: CommandSpec = {
     const session = await ctx.session();
     const ref = positional(input, "solution") ?? session.envFile?.harness ?? session.project?.harness;
     if (!ref) throw usageError("Which solution?", "Pass its name or slug (`cavelon harness list` shows them), or run it in a folder whose cavelon.yaml names one.");
+    // Refused before anything is read, as every confirming tool refuses true.
+    if (ctx.mode === "mcp" && input.options.confirm === true) throw confirmTokenRequired("harness_default");
     const { harness, candidates } = await lookupHarness<Harness>(ctx, ref);
     if (!harness) throw harnessNotFoundError(ref, candidates, undefined, (slug) => cavelonCommand("harness", "default", slug));
     const route = await readDefaultRoute(ctx);
@@ -326,7 +343,17 @@ export const harnessDefault: CommandSpec = {
       return { data: { changed: false, already_default: true, harness: target, default_route: current }, text: `${named(harness)} is already the tenant's default route.` };
     }
     const commands = defaultCommands(harness.slug);
-    const draft = harness.status !== "active" ? `${named(harness)} is ${harness.status}; activate it first (\`cavelon activate --harness ${harness.slug}\`), or the instance may refuse.` : undefined;
+    // The instance routes the tenant's chat and widget only to an active solution, and refuses a draft as the default.
+    if (harness.status !== "active") {
+      throw new CavelonError(ExitCode.conflict, {
+        code: "solution_not_active",
+        message: `${named(harness)} is ${harness.status}, and only an active solution can be the tenant's default route; nothing was changed.`,
+        hint:
+          `Activate it through the readiness gate and preview the default route in one step: ${cavelonCommand("activate", "--harness", harness.slug, "--make-default")}. ` +
+          `The default route stays ${current ? named(current) : "as it is"} until then.`,
+        details: { harness: target, default_route: current },
+      });
+    }
     const gate = await confirmation(ctx, input, "harness_default", { harness: harness.id, from: current?.id ?? null });
     if (!gate.confirmed) {
       return {
@@ -337,13 +364,11 @@ export const harnessDefault: CommandSpec = {
           default_known: route.known,
           confirm: gate.confirm(commands.confirm),
           ...gate.fields,
-          ...(draft ? { note: draft } : {}),
         },
         text: [
           defaultChangeLine(harness, route),
-          ...(draft ? [draft] : []),
           ...(gate.mismatch ? [gate.mismatch] : []),
-          `Show this to a person; with their yes: ${commands.confirm}`,
+          `Show this to a person; with their yes: ${gate.confirm(commands.confirm)}`,
         ].join("\n"),
         ...(gate.exitCode ? { exitCode: gate.exitCode } : {}),
       };

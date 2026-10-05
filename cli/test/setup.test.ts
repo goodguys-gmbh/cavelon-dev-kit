@@ -490,6 +490,16 @@ describe("login and --check", () => {
     expect(text.stdout).toMatch(/ok {2}Cursor/);
     expect(text.stdout).toMatch(/ok {2}The Cavelon tools start: cavelon mcp \(cavelon 9\.9\.9\)/);
     expect(text.stdout).toMatch(/ok {2}Logged in to .* tenant Acme/);
+
+    // Agents found but never set up for Cavelon are reported and skipped; --strict counts them.
+    const all = await cli(sb, ["setup", "--check"], { env });
+    expect(all.code, all.stdout).toBe(0);
+    expect(all.stdout).toMatch(/^skip {2}VS Code with GitHub Copilot: found, not set up for Cavelon \(cavelon setup --agents copilot sets it up\)$/m);
+    expect((await cli(sb, ["setup", "--check", "--json"], { env })).json<any>().agents.find((a: any) => a.name === "gemini")).toMatchObject({ ok: false, skipped: true });
+    const strict = await cli(sb, ["setup", "--check", "--strict"], { env });
+    expect(strict.code).toBe(1);
+    expect(strict.stdout).toMatch(/^no {2}VS Code with GitHub Copilot$/m);
+    expect((await cli(sb, ["setup", "--strict"], { env })).code).toBe(2);
   });
 
   it("--check without anything set up says what is missing", async () => {

@@ -311,13 +311,20 @@ async function runCheck(ctx: Context, input: Input) {
   const agents = setupAgents(env);
   const named = namedAgents(input, agents);
   const state = await loadState(env);
-  const checks: AgentCheck[] = [];
+  const strict = boolOption(input, "strict");
+  const checks: Array<AgentCheck & { skipped?: true }> = [];
   for (const agent of named.length ? named : agents) {
-    const check = await checkAgent(agent, env, state.agents[agent.name]);
-    if (named.length || check.found || state.agents[agent.name]) checks.push(check);
+    const record = state.agents[agent.name];
+    const check = await checkAgent(agent, env, record);
+    if (!named.length && !check.found && !record) continue;
+    // Found on this computer, but neither set up by setup nor working: an agent the person does not use with
+    // Cavelon. It is reported and skipped, unless named with --agents or --strict asks for every agent found.
+    const skipped = !named.length && !strict && !record && !check.ok;
+    checks.push(skipped ? { ...check, skipped: true } : check);
   }
+  const counted = checks.filter((c) => !c.skipped);
   const servers: ServerCommand[] = [];
-  for (const server of checks.flatMap((c) => c.servers)) {
+  for (const server of counted.flatMap((c) => c.servers)) {
     if (!servers.some((s) => JSON.stringify(s) === JSON.stringify(server))) servers.push(server);
   }
   if (!servers.length) servers.push(await serverCommand(env));
@@ -342,11 +349,16 @@ async function runCheck(ctx: Context, input: Input) {
     }
   }
 
-  const ok = checks.length > 0 && checks.every((c) => c.ok) && probes.every((p) => p.ok) && loginCheck.ok;
+  const ok = counted.length > 0 && counted.every((c) => c.ok) && probes.every((p) => p.ok) && loginCheck.ok;
   const mark = (good: boolean) => (good ? ctx.style.green("ok  ") : ctx.style.red("no  "));
   const lines: string[] = [];
   if (!checks.length) lines.push(`${mark(false)}No coding agent found, and setup has set up none.`);
+  else if (!counted.length) lines.push(`${mark(false)}No coding agent is set up for Cavelon.`);
   for (const check of checks) {
+    if (check.skipped) {
+      lines.push(`skip  ${check.label}: found, not set up for Cavelon (${cavelonCommand("setup", "--agents", check.name)} sets it up)`);
+      continue;
+    }
     lines.push(`${mark(check.ok)}${check.label}${check.found ? "" : " (not found on this computer)"}`);
     for (const detail of check.details) lines.push(`      ${detail}`);
   }
@@ -438,7 +450,9 @@ export const setup: CommandSpec = {
     "server in their user MCP configuration and the skills in their user skills folder. It touches nothing else in those files and\n" +
     "records what it did, so --remove undoes exactly that. Then it logs in if needed, choosing the tenant by name as `login` does.\n" +
     "The server starts as `cavelon mcp` when cavelon is installed, otherwise through npx. --check reports what is set up and\n" +
-    "working: each agent's entry, the MCP server starting, and the login. Without a terminal it changes nothing unless --yes.",
+    "working: each agent's entry, the MCP server starting, and the login. An agent found but never set up for Cavelon is\n" +
+    "reported and skipped (exit 0 when the rest works); --strict, or naming it with --agents, counts it.\n" +
+    "Without a terminal it changes nothing unless --yes.",
   readOnly: false,
   destructive: true,
   idempotent: true,
@@ -452,6 +466,7 @@ export const setup: CommandSpec = {
     },
     yes: { type: "boolean", short: "y", description: "Make the changes without asking." },
     check: { type: "boolean", description: "Report what is set up and working; change nothing." },
+    strict: { type: "boolean", description: "With --check: fail for every agent found that is not set up, not only the ones setup set up." },
     remove: { type: "boolean", description: "Undo what setup did (your login stays)." },
   },
   examples: [
@@ -462,6 +477,7 @@ export const setup: CommandSpec = {
   ],
   async run(ctx, input) {
     if (boolOption(input, "check") && boolOption(input, "remove")) throw usageError("--check and --remove do not go together.");
+    if (boolOption(input, "strict") && !boolOption(input, "check")) throw usageError("--strict goes with --check.");
     if (boolOption(input, "check")) return runCheck(ctx, input);
     if (boolOption(input, "remove")) return runRemove(ctx, input);
     return runSetup(ctx, input);

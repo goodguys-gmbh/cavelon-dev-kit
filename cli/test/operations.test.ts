@@ -433,7 +433,26 @@ describe("trace", () => {
       expect(items[0]).toMatchObject({ reason, judge_breakdown: { deterministic_criteria: [expect.objectContaining({ type: "handoff_to", passed: false }), expect.objectContaining({ type: "answered_by" })] } });
       const text = await cli(sb, ["trace", runId]);
       expect(text.stdout).toMatch(/^CASE\s+STEP\s+STATUS\s+SCORE\s+AGENT\s/m);
-      expect(text.stdout).toContain(`Did not pass:\n  Family ticket price (step 1)  fail\n    ${reason}\n    Answered by: front-desk`);
+      expect(text.stdout).toContain(
+        [
+          "Did not pass:",
+          "  Family ticket price (step 1)  fail",
+          `    ${reason}`,
+          "    Assertions (0 of 2 passed):",
+          `      FAIL  Handed off to ticket-agent [handoff_to] (expected "ticket-agent", observed []): ${reason}`,
+          '      FAIL  Answered by ticket-agent [answered_by] (expected "ticket-agent", observed "front-desk"): Agent front-desk answered; ticket-agent must answer.',
+          "    Answer: Hello",
+          "    Answered by: front-desk",
+        ].join("\n"),
+      );
+      // Each step's assertions and answer are in the JSON too, whatever its status.
+      const steps = json.json<{ results: { items: Array<{ answer: string | null; assertions: Array<Record<string, unknown>> }> } }>().results.items;
+      expect(steps[0]!.answer).toBe("Hello");
+      expect(steps[0]!.assertions).toEqual([
+        { type: "handoff_to", label: "Handed off to ticket-agent", passed: false, expected: "ticket-agent", observed: [], reasoning: reason },
+        { type: "answered_by", label: "Answered by ticket-agent", passed: false, expected: "ticket-agent", observed: "front-desk", reasoning: "Agent front-desk answered; ticket-agent must answer." },
+      ]);
+      expect(steps[1]!.assertions).toEqual([]);
     } finally {
       server.state.runResults = null;
     }
@@ -508,10 +527,11 @@ describe("trace", () => {
 
       const spans = await cli(sb, spansOf);
       expect(spans.code, spans.stderr).toBe(0);
-      const oneSpan = printed(spans.stdout, "One span in full, by the span_id in its row:");
+      // The span suggested first is the one that failed, never the root span, which carries no content.
+      const oneSpan = printed(spans.stdout, "One span in full (the one that failed), by the span_id in its row:");
       const span = await cli(sb, oneSpan);
       expect(span.code, span.stderr).toBe(0);
-      expect(JSON.parse(span.stdout)).toMatchObject({ span_id: `${traceId}-span-1` });
+      expect(JSON.parse(span.stdout)).toMatchObject({ span_id: `${traceId}-span-3`, name: "search_documents", status: "error" });
 
       const json = await cli(sb, ["trace", runId, "--json"]);
       const items = json.json<{ results: { items: Array<{ case: string; trace_command: string | null }> } }>().results.items;
@@ -522,9 +542,9 @@ describe("trace", () => {
       const runId = await testRunId();
       const view = await cli(sb, ["trace", runId]);
       expect(view.stdout).toContain("Did not pass:\n  Escalates (step 1)  fail\n    Did not escalate.");
-      expect(view.stdout).toContain("Judge's reasoning:\n  Refund limit (step 1)  pass  score 0.55\n    Judge: Names the limit but not the approver.");
-      // A pass the instance sent no reasoning for is only scored.
-      expect(view.stdout).not.toMatch(/Greets \(step 1\) {2}pass/);
+      expect(view.stdout).toContain("Passed:\n  Refund limit (step 1)  pass  score 0.55\n    Judge: Names the limit but not the approver.\n    Answer: Hello");
+      // A pass the instance sent no reasoning for shows its score and its answer.
+      expect(view.stdout).toContain("  Greets (step 1)  pass  score 0.9\n    Answer: Hello");
       const json = await cli(sb, ["trace", runId, "--json"]);
       const items = json.json<{ results: { items: Array<{ case: string; judge_reasoning: string | null }> } }>().results.items;
       expect(items.map((r) => [r.case, r.judge_reasoning])).toEqual([

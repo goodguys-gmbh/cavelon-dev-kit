@@ -3,8 +3,9 @@ import { CallToolRequestSchema, ListToolsRequestSchema, type Tool } from "@model
 import type { CommandSpec, Input } from "./command.js";
 import { MCP_MAX_WAIT_MS } from "./commands/async.js";
 import { createContext, withWarnings } from "./context.js";
-import { asCavelonError, usageError } from "./errors.js";
+import { asCavelonError, CavelonError, ExitCode, usageError } from "./errors.js";
 import type { Io } from "./io.js";
+import { closest } from "./package-references.js";
 import { KIT_VERSION } from "./version.js";
 
 /**
@@ -64,18 +65,27 @@ function ownsTenant(spec: CommandSpec): boolean {
   return Boolean(spec.positionals?.some((p) => p.name === "tenant") || spec.options?.tenant);
 }
 
+/**
+ * A tool's property for a command's option or positional: the CLI's name in
+ * snake_case (`make_default` for `--make-default`), as the instructions and
+ * docs spell it and as tool arguments are usually written.
+ */
+export function propertyName(name: string): string {
+  return name.replaceAll("-", "_");
+}
+
 export function inputSchema(spec: CommandSpec): JsonSchema {
   const properties: Record<string, JsonSchema> = {};
   const required: string[] = [];
   for (const p of spec.positionals ?? []) {
-    properties[p.name] = p.variadic
+    properties[propertyName(p.name)] = p.variadic
       ? { type: "array", items: { type: "string" }, description: p.description }
       : { type: "string", description: p.description };
-    if (p.required) required.push(p.name);
+    if (p.required) required.push(propertyName(p.name));
   }
   for (const [name, option] of Object.entries(spec.options ?? {})) {
     if (option.cliOnly) continue;
-    properties[name] = option.mcpToken
+    properties[propertyName(name)] = option.mcpToken
       ? { type: "string", description: `${option.description} ${TOKEN_DESCRIPTION}` }
       : option.type === "boolean"
         ? { type: "boolean", description: option.description }
@@ -106,16 +116,48 @@ export function toolFor(spec: CommandSpec): Tool {
   };
 }
 
+/**
+ * The arguments by the tool's property names. A property the schema does not
+ * list is refused, naming the closest one, rather than dropped: an
+ * `activate` that lost `make_default` would activate without the preview it
+ * was asked for. The CLI's spelling of a multi-word option (`make-default`)
+ * is still taken for one release, with a warning.
+ */
+function argumentsOf(spec: CommandSpec, args: Record<string, unknown>, warn: (message: string) => void): Record<string, unknown> {
+  const properties = Object.keys((inputSchema(spec).properties as Record<string, unknown>) ?? {});
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(args)) {
+    if (properties.includes(key)) {
+      out[key] = value;
+      continue;
+    }
+    const spelled = propertyName(key);
+    if (spelled !== key && properties.includes(spelled)) {
+      warn(`"${key}" is spelled "${spelled}" in this tool's schema; "${key}" is still taken for now and will be refused in a later release.`);
+      if (!(spelled in args)) out[spelled] = value;
+      continue;
+    }
+    const near = closest(key, properties);
+    throw new CavelonError(ExitCode.usage, {
+      code: "unknown_argument",
+      message: `${spec.mcpTool} has no argument "${key}"; nothing was done.${near ? ` Did you mean "${near}"?` : ""}`,
+      hint: `Its arguments: ${properties.join(", ")}.`,
+      details: { argument: key, ...(near ? { suggestion: near } : {}), arguments: properties },
+    });
+  }
+  return out;
+}
+
 function inputFrom(spec: CommandSpec, args: Record<string, unknown>): Input {
   const input: Input = { positionals: {}, options: {} };
   for (const p of spec.positionals ?? []) {
-    const value = args[p.name];
+    const value = args[propertyName(p.name)];
     if (value === undefined || value === null) continue;
     input.positionals[p.name] = p.variadic ? (Array.isArray(value) ? value.map(String) : [String(value)]) : String(value);
   }
   for (const [name, option] of Object.entries(spec.options ?? {})) {
     if (option.cliOnly) continue;
-    const value = args[name];
+    const value = args[propertyName(name)];
     if (value === undefined || value === null) continue;
     // A token stays a string; `true` is kept as such, so the command refuses it rather than taking it as yes.
     if (option.mcpToken) input.options[name] = value === true || value === "true" ? true : value === false ? false : String(value);
@@ -127,7 +169,10 @@ function inputFrom(spec: CommandSpec, args: Record<string, unknown>): Input {
 }
 
 function missingRequired(spec: CommandSpec, args: Record<string, unknown>): string[] {
-  return (spec.positionals ?? []).filter((p) => p.required && (args[p.name] === undefined || args[p.name] === "")).map((p) => p.name);
+  return (spec.positionals ?? [])
+    .map((p) => ({ ...p, name: propertyName(p.name) }))
+    .filter((p) => p.required && (args[p.name] === undefined || args[p.name] === ""))
+    .map((p) => p.name);
 }
 
 /** Commands write nothing to stdout in MCP mode; stdout belongs to the protocol. */
@@ -144,12 +189,19 @@ export function createMcpServer(io: Io, commands: CommandSpec[]): Server {
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const spec = byName.get(request.params.name);
-    const args = (request.params.arguments ?? {}) as Record<string, unknown>;
+    const given = (request.params.arguments ?? {}) as Record<string, unknown>;
     const fail = (error: unknown) => ({
       isError: true,
       content: [{ type: "text" as const, text: JSON.stringify({ error: asCavelonError(error).toJSON() }) }],
     });
     if (!spec) return fail(new Error(`Unknown tool ${request.params.name}.`));
+    const spelling: string[] = [];
+    let args: Record<string, unknown>;
+    try {
+      args = argumentsOf(spec, given, (message) => spelling.push(message));
+    } catch (error) {
+      return fail(error);
+    }
     const missing = missingRequired(spec, args);
     if (missing.length) {
       return fail(usageError(`Missing ${missing.join(", ")}.`));
@@ -157,6 +209,7 @@ export function createMcpServer(io: Io, commands: CommandSpec[]): Server {
     const tenant = !ownsTenant(spec) && typeof args.tenant === "string" ? args.tenant : undefined;
     const solutionEnv = spec.options?.env && typeof args.env === "string" ? args.env : undefined;
     const ctx = createContext(mcpIo(io), { json: true, tenant, solutionEnv }, "mcp");
+    for (const message of spelling) ctx.warn(message);
     try {
       const result = await spec.run(ctx, inputFrom(spec, args));
       let data = result.data;

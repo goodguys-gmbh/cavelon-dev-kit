@@ -5,7 +5,8 @@ import { boolOption, intOption, positional, stringOption, type CommandSpec, type
 import type { WarningEntry } from "../context.js";
 import { Contracts, type CachedContract, type ErrorCatalog, type PackageSchema } from "../contracts.js";
 import { CavelonError, ExitCode, usageError, type ExitCodeValue } from "../errors.js";
-import { confirmation, confirmGiven, confirmTokenRequired } from "../confirm-token.js";
+import { drivenByAgent } from "../agent-env.js";
+import { confirmation, confirmGiven, confirmTokenRequired, shellTokenRequired } from "../confirm-token.js";
 import { clip, keyValues } from "../format.js";
 import { readTextFile, writeFileAtomic } from "../fsutil.js";
 import { uncommitted } from "../git.js";
@@ -40,6 +41,7 @@ import { blockerDetails, blockerLines, changeLines, fieldChanges, locateBlockers
 import { readPrincipal } from "../principal.js";
 import type { ProjectConfig } from "../project.js";
 import { CASE_STATUSES, caseStatus, TESTING_PAGE, type CaseStatus } from "../results.js";
+import { KNOWLEDGE_OUTCOME_AREA, KNOWLEDGE_OUTCOME_PAGE, KNOWLEDGE_OUTCOMES, knowledgeOutcome, type KnowledgeOutcome } from "../trace-view.js";
 import { isUuid, requireInstance, type Session } from "../session.js";
 import { listedPages } from "./docs.js";
 import { readInventory, readInventoryKinds, writeInventory, type InventoryKind } from "./inventory.js";
@@ -277,7 +279,7 @@ export const pull: CommandSpec = {
       description: "With a solution, also write the tenant-wide sections its export carries (tenant_settings, model_registry): apply then sends them for the whole tenant.",
     },
   },
-  examples: ["cavelon pull --harness support", "cavelon pull && git diff -- package tests"],
+  examples: ["cavelon pull --harness support", "cavelon pull && git status --short -- package tests"],
   async run(ctx, input) {
     const session = await ctx.session();
     const project = requireSolution(session);
@@ -354,7 +356,12 @@ export const pull: CommandSpec = {
         ? [`Left out the tenant-wide section${report.tenant_wide.length === 1 ? "" : "s"} ${report.tenant_wide.join(", ")} (--tenant-wide writes them).`]
         : []),
       `Inventory: ${inventory.file} (${inventory.counts.map((c) => `${c.count} ${c.label}`).join(", ")})`,
-      rewritten ? `See what changed: git diff -- ${layoutDirs.join(" ")}` : "Nothing changed on the instance since the last pull.",
+      // `git diff` alone shows nothing for a file git does not track yet, as every file of a first pull is.
+      !rewritten
+        ? "Nothing changed on the instance since the last pull."
+        : dirty === undefined
+          ? "See what changed: the files listed above (this folder is not in a git repository)."
+          : `See what changed: git status --short -- ${layoutDirs.join(" ")} (new files), then git diff -- ${layoutDirs.join(" ")}`,
     ];
     return { data: { ...record, inventory }, text: lines.join("\n") };
   },
@@ -1132,6 +1139,38 @@ async function caseStatusAnswer(ctx: Context, status: CaseStatus) {
   };
 }
 
+/**
+ * A `knowledge_outcome` value on an instance whose catalog does not list it:
+ * what the kit knows from the instance's regression-testing docs.
+ */
+async function knowledgeOutcomeAnswer(ctx: Context, outcome: KnowledgeOutcome) {
+  const instance = (await ctx.session().catch(() => undefined))?.url;
+  const page = `/docs/${KNOWLEDGE_OUTCOME_PAGE}`;
+  const data = {
+    code: outcome.value,
+    kind: "knowledge_outcome",
+    message: outcome.message,
+    hint: outcome.hint,
+    ...(outcome.recorded_as ? { recorded_as: outcome.recorded_as } : {}),
+    docs: instance ? `${instance}${page}` : page,
+    read: [{ page: KNOWLEDGE_OUTCOME_PAGE, command: cavelonCommand("docs", "get", KNOWLEDGE_OUTCOME_PAGE) }],
+  };
+  return {
+    data,
+    text: keyValues([
+      ["code", outcome.value],
+      ["kind", OUTCOME_KIND],
+      ["meaning", outcome.message],
+      ["next", outcome.hint],
+      ["recorded as", outcome.recorded_as],
+      ["docs", data.docs],
+      ["read", data.read[0]!.command],
+    ]),
+  };
+}
+
+const OUTCOME_KIND = "knowledge outcome (what a knowledge search found, as its retrieval span's knowledge_outcome says)";
+
 export const explain: CommandSpec = {
   name: "explain",
   summary: "Look a code up in the instance's error catalog: what it means and how to fix it.",
@@ -1140,7 +1179,9 @@ export const explain: CommandSpec = {
     "findings, and errors the CLI raises itself, such as operation_not_found or uncommitted_changes) are known too. Uses the\n" +
     "cached catalog first. Where the instance's fix names an API route, the command that does the same is added. An unknown\n" +
     "code gets the closest known ones (a typo away, the same start).\n" +
-    `Also explains the test-case statuses that are neither pass nor fail: ${CASE_STATUSES.map((s) => s.status).join(", ")}.`,
+    `Also explains the test-case statuses that are neither pass nor fail: ${CASE_STATUSES.map((s) => s.status).join(", ")};\n` +
+    `and the values of a retrieval span's knowledge_outcome (${KNOWLEDGE_OUTCOMES.map((o) => o.value).join(", ")}), from the\n` +
+    "instance's catalog (area knowledge_outcome) where it lists them.",
   readOnly: true,
   idempotent: true,
   mcpTool: "explain",
@@ -1148,10 +1189,17 @@ export const explain: CommandSpec = {
   async run(ctx, input) {
     const code = positional(input, "code")!.trim();
     const status = caseStatus(code);
-    // A test-case status needs no instance; a catalog that lists the same name still wins.
-    let catalog = status ? await catalogFor(ctx, false).catch(() => null) : await catalogFor(ctx, false);
+    const outcome = knowledgeOutcome(code);
+    // A test-case status or a knowledge outcome needs no instance; a catalog that lists the same name still wins.
+    let catalog = status || outcome ? await catalogFor(ctx, false).catch(() => null) : await catalogFor(ctx, false);
     let entry = catalogEntry(catalog, code) ?? looseEntry(catalog, code);
+    if (!entry && outcome && catalog) {
+      // A newer instance may list the outcomes the cached catalog does not.
+      catalog = await (await ctx.contracts()).errorCatalog({ refresh: true }).catch(() => catalog);
+      entry = catalogEntry(catalog, outcome.value);
+    }
     if (!entry && status) return caseStatusAnswer(ctx, status);
+    if (!entry && outcome) return knowledgeOutcomeAnswer(ctx, outcome);
     if (!entry || entry.kind === "kit" || entry.kind === "cli") {
       // A newer instance may know a code the cached catalog does not.
       catalog = await (await ctx.contracts()).errorCatalog({ refresh: true }).catch(() => catalog);
@@ -1171,6 +1219,7 @@ export const explain: CommandSpec = {
         ...KIT_CODES,
         ...KIT_ERROR_CODES,
         ...CASE_STATUSES.map((s) => ({ code: s.status })),
+        ...KNOWLEDGE_OUTCOMES.map((o) => ({ code: o.value })),
       ].map((e) => e.code);
       const similar = similarCodes(code, all);
       throw new CavelonError(ExitCode.failure, {
@@ -1198,7 +1247,7 @@ export const explain: CommandSpec = {
     const read = capacity ? (await listedPages(ctx, pages)).map((page) => ({ page, command: cavelonCommand("docs", "get", page) })) : [];
     // The instance's fix may name an API route; the command that does the same is easier to follow.
     const cli = entry.kind === "cli" ? undefined : cliFix(entry);
-    const data = { ...entry, docs, ...(cli ? { cli_fix: cli } : {}), ...(kitHint ? { kit_hint: kitHint } : {}), ...(read.length ? { read } : {}) };
+    const data = { ...entry, ...(entry.area === KNOWLEDGE_OUTCOME_AREA ? { kind: "knowledge_outcome" } : {}), docs, ...(cli ? { cli_fix: cli } : {}), ...(kitHint ? { kit_hint: kitHint } : {}), ...(read.length ? { read } : {}) };
     return {
       data,
       text: keyValues([
@@ -1211,7 +1260,9 @@ export const explain: CommandSpec = {
               ? "cavelon validate code"
               : entry.kind === "cli"
                 ? "cavelon error code (raised by the CLI, not the instance)"
-                : `API error code${entry.area ? ` (${entry.area})` : ""}`,
+                : entry.area === KNOWLEDGE_OUTCOME_AREA
+                  ? OUTCOME_KIND
+                  : `API error code${entry.area ? ` (${entry.area})` : ""}`,
         ],
         ["meaning", entry.message],
         ["fix", entry.hint ?? undefined],
@@ -1255,6 +1306,11 @@ export interface SolutionState {
   blockers?: string[];
   /** Null when the solution has no test run yet; undefined when the instance does not publish it. */
   latest_test_run?: { id: string | null; status: string | null; passed: number | null; failed: number | null; total: number | null; at: string | null } | null;
+  /**
+   * Whether it is the tenant's default route, and which solution is: `is_default` null when the
+   * instance does not say. Undefined when the solution list could not be read.
+   */
+  default_route?: { is_default: boolean | null; current: { id: string; slug: string; name: string } | null };
   /** Why part of it could not be read; the rest stands. */
   unavailable?: string;
 }
@@ -1275,6 +1331,13 @@ export async function solutionState(ctx: Context, ref: string): Promise<Solution
   }
   if (!harness) return { harness: null, unavailable: `This tenant has no solution "${ref}".` };
   const state: SolutionState = { harness: { id: harness.id, slug: harness.slug, name: harness.name, status: harness.status } };
+  try {
+    const route = await readDefaultRoute(ctx);
+    const current = route.current ? { id: route.current.id, slug: route.current.slug, name: route.current.name } : null;
+    state.default_route = { is_default: route.known ? route.current?.id === harness.id : null, current };
+  } catch (error) {
+    ctx.warn(`Could not read the tenant's default route: ${error instanceof Error ? error.message : String(error)}`);
+  }
   try {
     const readiness = await callStable<Readiness>(ctx, "GET", "/api/v1/harnesses/{harness_id}/readiness", "reading readiness", {
       params: { harness_id: [harness.id] },
@@ -1304,13 +1367,19 @@ export async function solutionState(ctx: Context, ref: string): Promise<Solution
 /** The lines `status` prints for a solution's state. */
 export function solutionStateLines(state: SolutionState): Array<[string, unknown]> {
   if (!state.harness) return [["state", `not readable: ${state.unavailable ?? "unknown"}`]];
+  // Readiness says whether a draft may activate; an active solution is past that gate (a recent instance sends null).
+  const active = state.harness.status === "active";
   const ready =
-    state.ready_to_activate === true
-      ? "ready to activate"
-      : state.ready_to_activate === false
-        ? `not ready to activate${state.blockers?.length ? ` (${list(state.blockers, 3)})` : ""}`
-        : undefined;
+    active
+      ? undefined
+      : state.ready_to_activate === true
+        ? "ready to activate"
+        : state.ready_to_activate === false
+          ? `not ready to activate${state.blockers?.length ? ` (${list(state.blockers, 3)})` : ""}`
+          : undefined;
   const lines: Array<[string, unknown]> = [["state", [state.harness.status, ready].filter(Boolean).join(", ")]];
+  const route = state.default_route;
+  if (route) lines.push(["default route", defaultRouteText(state.harness, route)]);
   const run = state.latest_test_run;
   if (run === null) lines.push(["last test run", "none yet (`cavelon test run`)"]);
   else if (run) {
@@ -1319,6 +1388,15 @@ export function solutionStateLines(state: SolutionState): Array<[string, unknown
   } else if (!state.unavailable) lines.push(["last test run", "not published by this instance"]);
   if (state.unavailable) lines.push(["state error", state.unavailable]);
   return lines;
+}
+
+/** Whether the folder's solution answers the tenant's chat and widget, and if not, which one does and how to change it. */
+function defaultRouteText(harness: { slug: string; name: string; status: string }, route: NonNullable<SolutionState["default_route"]>): string {
+  if (route.is_default === null) return "unknown (this instance does not say which solution is the default)";
+  if (route.is_default) return "yes: the tenant's chat and widget answer with it where a conversation names no solution";
+  const now = route.current ? named(route.current) : "no solution";
+  const how = harness.status === "active" ? cavelonCommand("harness", "default", harness.slug) : cavelonCommand("activate", "--harness", harness.slug, "--make-default");
+  return `no: ${now} answers the tenant's chat and widget; preview a change with ${how}`;
 }
 
 function checkLine(c: ReadinessCheck): string {
@@ -1397,7 +1475,7 @@ async function defaultRouteAfterActivation(
     const confirm = cavelonCommand("activate", "--harness", harness.slug, "--make-default", "--confirm");
     return {
       data: { default_route: { is_default: false, known: route.known, current, preview: commands.preview, confirm: gate.confirm(confirm), ...gate.fields } },
-      lines: [defaultChangeLine(harness, route), ...(gate.mismatch ? [gate.mismatch] : []), `Show this to a person; with their yes: ${confirm}`],
+      lines: [defaultChangeLine(harness, route), ...(gate.mismatch ? [gate.mismatch] : []), `Show this to a person; with their yes: ${gate.confirm(confirm)}`],
       ...(gate.exitCode ? { exitCode: gate.exitCode } : {}),
     };
   }
@@ -1437,6 +1515,10 @@ export const activate: CommandSpec = {
     }
     // Refused before the activation, so a refused confirm never leaves half of the call done.
     if (ctx.mode === "mcp" && input.options.confirm === true) throw confirmTokenRequired("activate");
+    const driven = drivenByAgent(ctx);
+    if (driven?.by === "agent" && input.options.confirm === true) {
+      throw shellTokenRequired(cavelonCommand("activate", "--harness", ref, "--make-default"), driven.variable);
+    }
     const client = await ctx.client();
     const principal = await readPrincipal(client);
     if (principal?.kind === "personal_access_token" && principal.token && !principal.token.may_activate) {

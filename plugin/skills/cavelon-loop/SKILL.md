@@ -136,7 +136,10 @@ says when the solution it activated is not the default.
   changes live traffic; never decide it yourself.
 - With their yes: `cavelon activate --make-default` (or `cavelon harness
   default <solution>`) shows the change, naming the current default; show it,
-  then run the same command with `--confirm`.
+  then run the confirm command it printed (from your shell it carries the
+  change's token: `--confirm <token>`). `harness default` refuses a draft
+  (`solution_not_active`, exit 4): only an active solution can be the
+  default, so use `cavelon activate --make-default`.
 - `is_default` in `harnesses.yaml` is not applied by `apply`; the preview
   lists it under "not applied".
 
@@ -162,12 +165,24 @@ anything but a test Sandbox or a run you started yourself.
 
 **Over MCP, confirm with the preview's token.** `api`, `limits_set`,
 `models_set_limit`, `loop_cancel`, `sandbox_seed`, `trigger_identity`,
-`harness_default`, `activate` with `make-default`, and `kb_upload` where it
+`harness_default`, `activate` with `make_default`, and `kb_upload` where it
 would deactivate documents return a `confirm_token` with their preview. Show
 the preview, then call the tool again with the same arguments and `confirm`
 set to that token; it makes exactly the change shown. `confirm: true` is
 refused (`confirm_token_required`), and a token of another change returns the
-new preview with `token_mismatch` (exit code 4): show that one instead.
+new preview with `token_mismatch` (exit code 4): show that one instead. Tool
+arguments are spelled in snake_case (`make_default`, `keep_both`, `dry_run`);
+an argument a tool does not list is refused (`unknown_argument`) with the
+closest one named.
+
+**From your shell, `--confirm` takes the same token.** Run by a coding agent,
+`limits set`, `models set-limit`, `loop cancel`, `sandbox seed`,
+`trigger identity`, `harness default`, `activate --make-default`,
+`kb upload --replace`, `variables delete` and `secrets delete` print their
+preview with a confirm token and the command that confirms it
+(`… --confirm <token>`). Show the preview, then run exactly that command. A
+bare `--confirm` changes nothing and exits 5; a token of another change exits
+4 with the new preview.
 
 **`cavelon api` from your shell has the guards of the MCP `api` tool**, since
 `cavelon` sees that a coding agent runs it (`CLAUDECODE`, `CODEX_THREAD_ID`, `CODEX_SANDBOX`,
@@ -180,7 +195,9 @@ new preview with `token_mismatch` (exit code 4): show that one instead.
   exactly that request. A changed body or parameter needs a new preview (exit 4).
 - It refuses an operation the instance keeps for a person
   (`operation_for_a_person`) and a body that sets a field the instance marks as
-  a secret value (`secret_field_for_a_person`), with or without `--confirm`.
+  a secret value (`secret_field_for_a_person`), with or without `--confirm`,
+  with exit code 5 (needs a person). `cavelon api describe <operation>` shows
+  both marks up front.
   Tell the person what the error's hint says; for a secret field, send the rest
   without it and let the person enter the value (`cavelon secrets set <name>`
   or the Admin). Never work around a refusal, by unsetting the variable or by

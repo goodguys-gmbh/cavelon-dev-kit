@@ -304,13 +304,16 @@ a run whose cases failed exits 1 and names them. So does a run that measured
 nothing comparable (steps not run, technical errors, no pass rate): it says
 nothing about the solution. A run whose answers wait for a manual verdict
 exits 5. `cavelon trace <run>` shows
-each case with its score, the agent that answered it, its error and the judge's
-reasoning (for a pass too, when the instance sends it), and leads to the
-conversation behind it, span by span, with each command carrying the id its
-route needs. A knowledge search's span shows what the agent recorded it found
+each case with its score, the agent that answered it, each assertion with pass
+or fail, the answer it judged, its error and the judge's reasoning (for a pass
+too, when the instance sends it), and leads to the conversation behind it,
+span by span, with each command carrying the id its route needs. A knowledge
+search's span shows its query, its hits and what the agent recorded it found
 (`knowledge_outcome`: `usable_evidence`, `content_gap`, `unusable_hits`,
 `retrieval_fault` or `deliberately_unanswerable`), where the instance records
-it. The package schema also allows cases
+it; `cavelon explain <value>` says what each one means. The agent records
+`no_usable_evidence`, which the trace shows as `content_gap`, `unusable_hits`
+or `retrieval_fault`, by what the search returned. The package schema also allows cases
 that start a trigger and check how its run ends.
 
 A test run never waits for a person. A pipeline that reaches an approval ends

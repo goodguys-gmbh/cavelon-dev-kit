@@ -400,7 +400,9 @@ git commit -m "Support FAQ solution"
 ```
 
 The repository is now the source of the solution. `cavelon status` shows the
-instance, tenant, solution and any open previews for this folder.
+instance, the tenant by name, the solution with its state and whether it is
+the tenant's default route, its running operations and any open previews for
+this folder.
 
 ## 11. Activate
 
