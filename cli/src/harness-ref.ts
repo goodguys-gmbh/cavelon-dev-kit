@@ -2,7 +2,7 @@ import { closest, displayName, exactMatch } from "./choose.js";
 import type { Context } from "./command.js";
 import { CavelonError, ExitCode } from "./errors.js";
 import { callStable } from "./invoke.js";
-import { isUuid } from "./session.js";
+import { contextFlags, isUuid } from "./session.js";
 import { shellWord } from "./shell.js";
 
 /**
@@ -53,8 +53,12 @@ export async function lookupHarness<T extends HarnessSummary = HarnessSummary>(c
   return { candidates: closest(all, ref) };
 }
 
-/** A solution that is not in this tenant, naming the closest ones and the command for each. */
-export function harnessNotFoundError(ref: string, candidates: HarnessSummary[], source?: string, command?: (slug: string) => string): CavelonError {
+/**
+ * A solution that is not in this tenant, naming the closest ones and the
+ * command for each. `flags` (`contextFlags`) go on the commands it names, so
+ * a copied one acts in the tenant this command did.
+ */
+export function harnessNotFoundError(ref: string, candidates: HarnessSummary[], source?: string, command?: (slug: string) => string, flags = ""): CavelonError {
   const near = candidates.map(displayName).join(", ");
   const lines = candidates.map((h) => `  ${command ? command(h.slug) : `--harness ${shellWord(h.slug)}`}`).join("\n");
   return new CavelonError(ExitCode.failure, {
@@ -62,7 +66,7 @@ export function harnessNotFoundError(ref: string, candidates: HarnessSummary[], 
     message: `No solution "${ref}" in this tenant${source ? ` (from ${source})` : ""}.${near ? ` Closest: ${near}.` : ""}`,
     hint:
       (candidates.length ? `If you meant one of them:\n${lines}\n` : "") +
-      "`cavelon harness list` shows this tenant's solutions with name, slug and id; `cavelon harness new <slug> --name <name>` creates one as a draft (`cavelon init --harness <name>` does too).",
+      `\`cavelon harness list${flags}\` shows this tenant's solutions with name, slug and id; \`cavelon harness new <slug> --name <name>${flags}\` creates one as a draft.`,
     details: candidates.length ? { candidates: candidates.map((h) => ({ id: h.id, slug: h.slug, name: h.name })) } : undefined,
   });
 }
@@ -71,7 +75,7 @@ export function harnessNotFoundError(ref: string, candidates: HarnessSummary[], 
 export async function resolveHarnessId(ctx: Context, ref: string): Promise<string> {
   if (isUuid(ref)) return ref;
   const { harness, candidates } = await lookupHarness(ctx, ref);
-  if (!harness) throw harnessNotFoundError(ref, candidates);
+  if (!harness) throw harnessNotFoundError(ref, candidates, undefined, undefined, contextFlags(await ctx.session()));
   return harness.id;
 }
 

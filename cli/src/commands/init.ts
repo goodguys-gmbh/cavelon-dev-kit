@@ -17,7 +17,7 @@ import { ENV_DIR, parseProject, PROJECT_FILE, type ProjectConfig } from "../proj
 import { canAsk, readLine } from "../prompt.js";
 import { pick } from "../choose.js";
 import { harnessNotFoundError, listHarnesses, lookupHarness, SLUG, slugFromName, type HarnessLookup, type HarnessSummary } from "../harness-ref.js";
-import { isUuid, lookupTenantId, requireInstance, requireToken, tenantRequiredError, type Session } from "../session.js";
+import { contextFlags, isUuid, lookupTenantId, requireInstance, requireToken, tenantRequiredError, type Session } from "../session.js";
 import { cavelonCommand } from "../shell.js";
 import { chooseTenant, listsTenants, noTenantError, tenantOpenError, tenantRef, tenantTitle } from "../tenant-choice.js";
 import { createHarness } from "./tenants.js";
@@ -338,14 +338,23 @@ interface InitHarness {
   choices?: Array<{ id: string; slug: string; name: string; status: string }>;
 }
 
+/** How init treats the solution it is given: `create` (--new) makes a new one even beside a similar name; `flags` go on every command it names. */
+interface HarnessChoice {
+  create?: boolean;
+  flags: string;
+}
+
 /**
  * The solution a new cavelon.yaml names: --harness by name, slug or id (one
  * not on the instance yet is created as a draft with that name, except by the
  * MCP tool, which only names the command), or on a terminal one of the
- * tenant's solutions or a new one by name. Without a terminal, none, and the
- * tenant's solutions are offered as next steps.
+ * tenant's solutions or a new one by name. A name close to an existing
+ * solution's may be a typo, so it is refused, naming that solution, unless
+ * --new says a new one is meant. Without a terminal, none, and the tenant's
+ * solutions are offered as next steps.
  */
-async function initHarness(ctx: Context, given: string | undefined, displayName = given): Promise<InitHarness> {
+async function initHarness(ctx: Context, given: string | undefined, displayName = given, choice: HarnessChoice = { flags: "" }): Promise<InitHarness> {
+  const { flags } = choice;
   if (given) {
     let lookup: HarnessLookup<HarnessSummary>;
     try {
@@ -355,19 +364,30 @@ async function initHarness(ctx: Context, given: string | undefined, displayName 
       ctx.warn(`Could not check solution "${given}" on the instance: ${error instanceof Error ? error.message : String(error)}`);
       return { slug: given };
     }
+    if (lookup.harness && choice.create) {
+      const found = lookup.harness;
+      throw new CavelonError(ExitCode.failure, {
+        code: "solution_exists",
+        message: `Solution ${found.name} (${found.slug}) is already in this tenant; --new creates only a solution it does not have.`,
+        hint: `For this folder to hold that solution: ${cavelonCommand("init", "--harness", found.slug)}${flags}. For a new one, give --new another name.`,
+        details: { harness: { id: found.id, slug: found.slug, name: found.name } },
+      });
+    }
     if (lookup.harness) return { slug: lookup.harness.slug };
     const slug = SLUG.test(given) ? given : slugFromName(given);
     const title = (displayName ?? given).trim().slice(0, 255) || slug;
+    // Run once cavelon.yaml names the tenant, so it needs no --tenant.
     const create = cavelonCommand("harness", "new", slug, ...(title !== slug ? ["--name", title] : []));
-    // A name close to an existing solution's may be a typo: name the solution, or create it on purpose.
-    if (!slug || isUuid(given) || lookup.candidates.length) {
-      const error = harnessNotFoundError(given, lookup.candidates, undefined, (s) => cavelonCommand("init", "--harness", s));
-      if (!slug || isUuid(given)) throw error;
+    const notFound = () => harnessNotFoundError(given, lookup.candidates, undefined, (s) => cavelonCommand("init", "--harness", s) + flags, flags);
+    if (!slug || isUuid(given)) throw notFound();
+    if (lookup.candidates.length && !choice.create) {
+      const error = notFound();
+      const createNew = cavelonCommand("init", "--harness", title, "--new") + flags;
       throw new CavelonError(error.exitCode, {
         code: error.code,
         message: error.message,
-        hint: `${error.hint} For a new solution of that name: ${create}, then ${cavelonCommand("init", "--harness", slug)}.`,
-        details: error.details,
+        hint: `${error.hint} For a new solution of that name: ${createNew}.`,
+        details: { ...(error.details as Record<string, unknown> | undefined), create: createNew },
       });
     }
     // As a tool, init changes nothing on the instance: the person or agent creates the draft on purpose.
@@ -547,6 +567,9 @@ async function runInit(ctx: Context, input: Parameters<CommandSpec["run"]>[1]) {
   if (from !== undefined && !from.trim()) throw usageError("--from needs the path of a package file.");
   if (from && update) throw usageError("--from and --update do not go together.", "Run `cavelon init --from <file>` and `cavelon init --update` one after the other.");
   if (boolOption(input, "force") && !from) throw usageError("--force only applies to --from.");
+  if (boolOption(input, "new") && (update || (!stringOption(input, "harness") && !from))) {
+    throw usageError("--new needs the new solution's name: --harness <name>.", "`cavelon init --harness <name> --new` creates it as a draft, even when an existing solution has a similar name.");
+  }
   // Read the file before anything is written: a wrong path changes nothing.
   const imported = from ? await readImportFile(ctx, from) : undefined;
 
@@ -573,6 +596,7 @@ async function runInit(ctx: Context, input: Parameters<CommandSpec["run"]>[1]) {
   const existing = await readTextFile(path.join(root, PROJECT_FILE));
   if (existing !== undefined) {
     actions.push({ file: PROJECT_FILE, action: "unchanged" });
+    if (boolOption(input, "new")) ctx.warn(`${PROJECT_FILE} already names this folder's solution; --new created none.`);
   } else {
     const url = requireInstance(session);
     requireToken(session);
@@ -593,11 +617,13 @@ async function runInit(ctx: Context, input: Parameters<CommandSpec["run"]>[1]) {
     const schema = await contracts.packageSchema();
     await contracts.errorCatalog().catch(() => null);
     if (!schema) ctx.warn("The instance does not publish its package schema; `validate` will have nothing to check against.");
+    // The tenant as cavelon.yaml will name it, on the commands a refusal names before that file exists.
+    const choice: HarnessChoice = { create: boolOption(input, "new"), flags: contextFlags({ ...session, tenant: tenant?.ref ?? session.tenant }) };
     const decided = stringOption(input, "harness")
-      ? await initHarness(ctx, stringOption(input, "harness"))
+      ? await initHarness(ctx, stringOption(input, "harness"), undefined, choice)
       : packageHarness
-        ? await initHarness(ctx, packageHarness, (imported && onlyHarnessName(imported)) ?? packageHarness)
-        : await initHarness(ctx, undefined);
+        ? await initHarness(ctx, packageHarness, (imported && onlyHarnessName(imported)) ?? packageHarness, choice)
+        : await initHarness(ctx, undefined, undefined, choice);
     chosenHarness = decided;
     const harness = decided.slug;
     if (decided.missing) next.push(`Solution ${harness} is not on the instance yet: create it as a draft with ${decided.create}, then cavelon apply --env test.`);
@@ -676,7 +702,11 @@ export const init: CommandSpec = {
       type: "string",
       value: "<harness>",
       description:
-        "The solution (harness) this folder holds, by name, slug or id; its slug goes into cavelon.yaml. One that is not on the instance yet is created as a draft with that name. Without it, init asks on a terminal.",
+        "The solution (harness) this folder holds, by name, slug or id; its slug goes into cavelon.yaml. One that is not on the instance yet is created as a draft with that name, unless an existing solution's name is close to it: then init refuses, naming that one, and --new creates the new one. Without it, init asks on a terminal.",
+    },
+    new: {
+      type: "boolean",
+      description: "Create the solution --harness names as a new draft, even when an existing solution has a similar name (refused when one has that very name or slug).",
     },
     agents: {
       type: "string",
@@ -692,6 +722,7 @@ export const init: CommandSpec = {
   examples: [
     "cavelon init",
     "cavelon init --instance https://cavelon.example.com --tenant \"Acme Support\" --harness \"Support FAQ\"",
+    "cavelon init --tenant acme --harness \"Support FAQ v2\" --new",
     "cavelon init --agents codex,cursor --hook",
     "cavelon init --update",
     "cavelon init --instance https://cavelon.example.com --tenant acme --from ./blueprint.json",

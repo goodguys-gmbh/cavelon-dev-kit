@@ -17,7 +17,7 @@ import { formatQuota, limitError, limitsOrWarn, readQuotas } from "../limits.js"
 import { containing } from "../choose.js";
 import { readPrincipal, readTenantless, type MetaPrincipal } from "../principal.js";
 import type { ApiClient } from "../http.js";
-import { requireInstance } from "../session.js";
+import { contextFlags, requireInstance } from "../session.js";
 import { listsTenants, searchTenants } from "../tenant-choice.js";
 import { harnessNotFoundError, lookupHarness, resolveHarnessId } from "../harness-ref.js";
 import { defaultChangeLine, defaultCommands, named, readDefaultRoute, setDefaultRoute } from "../default-route.js";
@@ -327,7 +327,7 @@ export const harnessDefault: CommandSpec = {
   options: {
     confirm: { type: "boolean", mcpToken: true, description: "Change the default route (after a person saw the preview)." },
   },
-  examples: ["cavelon harness default support", "cavelon harness default support --confirm"],
+  examples: ["cavelon harness default support", "cavelon harness default support --confirm", "cavelon harness default support --confirm <token>"],
   async run(ctx, input) {
     const session = await ctx.session();
     const ref = positional(input, "solution") ?? session.envFile?.harness ?? session.project?.harness;
@@ -335,7 +335,10 @@ export const harnessDefault: CommandSpec = {
     // Refused before anything is read, as every confirming tool refuses true.
     if (ctx.mode === "mcp" && input.options.confirm === true) throw confirmTokenRequired("harness_default");
     const { harness, candidates } = await lookupHarness<Harness>(ctx, ref);
-    if (!harness) throw harnessNotFoundError(ref, candidates, undefined, (slug) => cavelonCommand("harness", "default", slug));
+    if (!harness) {
+      const flags = contextFlags(session);
+      throw harnessNotFoundError(ref, candidates, undefined, (slug) => cavelonCommand("harness", "default", slug) + flags, flags);
+    }
     const route = await readDefaultRoute(ctx);
     const target = { id: harness.id, slug: harness.slug, name: harness.name, status: harness.status };
     const current = route.current ? { id: route.current.id, slug: route.current.slug, name: route.current.name } : null;

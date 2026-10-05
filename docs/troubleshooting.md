@@ -172,9 +172,14 @@ list, so they keep the written order. A file that `cavelon` 0.1.5's `fmt` gave
 
 `pull` of a solution leaves the tenant-wide sections (`tenant_settings`,
 `model_registry`, or the sections the instance marks `x-cavelon-scope: tenant`)
-out of the solution's folder; `apply` would send them for the whole tenant.
-`cavelon pull --tenant-wide` writes them; a file of one already there is kept,
-with a warning.
+out of the solution's folder, and `apply` leaves them out of the solution's
+import. `cavelon pull --tenant-wide` writes them (it says so when the export
+carries none), and `cavelon apply --tenant-wide` imports them, for every
+solution of the tenant. A file of one already in the folder is kept, listed
+under `kept`, with a warning, and `validate` warns about it
+(`tenant_wide_section`). An instance that does not publish
+`include_tenant_wide` imports such a file with every solution's package, and
+`apply` says so: remove the file unless that is meant.
 
 On a development build of the instance, `validate` may report a field or
 section the instance has just gained as unknown: the build keeps its version
@@ -210,8 +215,22 @@ shows which solution that is (DEFAULT). Try yours by name with
 `cavelon harness default <solution>` previews the change, and a person
 confirms it with `--confirm`. To take a solution out of live traffic,
 `cavelon deactivate --harness <solution>` previews, and `--confirm`
-deactivates; the default route is refused until another solution is the
-default.
+deactivates (its status becomes `inactive`); the default route is refused
+until another solution is the default.
+
+**`init` refuses the name of my new solution.** A name close to an existing
+solution's (`qa-v2` beside `qa`) may be a typo, so `init --harness <name>`
+refuses it with `solution_not_found` and names the closest ones. For a new
+solution of that name, add `--new`.
+
+**A copied command acted in another tenant.** The commands `cavelon` prints
+carry the `--tenant` and `--instance` you gave on the command line. Outside a
+solution folder, pass `--tenant` to every command until `cavelon.yaml` names
+the tenant: without it a command acts in the tenant `cavelon use` chose.
+
+**A coding agent's `--confirm` exits 5.** Run by a coding agent, a confirming
+command takes the token its preview printed (`--confirm <token>`); the bare
+flag only shows the preview. Run the confirm command the preview printed.
 
 ## Network
 

@@ -194,7 +194,8 @@ export const modelsSetLimit: CommandSpec = {
     confirm: { type: "boolean", mcpToken: true, description: "Change it; without this nothing is changed." },
     env: ENV_OPTION,
   },
-  examples: ["cavelon models set-limit llama-70b 8", "cavelon models set-limit llama-70b 8 --confirm", "cavelon models set-limit llama-70b none --confirm"],
+  examples: ["cavelon models set-limit llama-70b 8", "cavelon models set-limit llama-70b 8 --confirm",
+    "cavelon models set-limit llama-70b 8 --confirm <token>", "cavelon models set-limit llama-70b none --confirm"],
   async run(ctx, input) {
     const ref = positional(input, "model")!;
     const limit = parseLimit(positional(input, "limit")!);

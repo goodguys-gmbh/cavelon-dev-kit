@@ -177,9 +177,9 @@ any field.
 The commands with a `--confirm` flag are held to the same as their MCP tools:
 `limits set`, `models set-limit`, `loop cancel`, `sandbox seed`,
 `trigger identity`, `harness default`, `activate --make-default`,
-`kb upload --replace`, `variables delete` and `secrets delete`. Run under a
-coding agent, each prints its preview with a confirm token and the command
-that confirms exactly that change (`--confirm <token>`, the same token the MCP
+`deactivate`, `kb upload --replace`, `variables delete` and `secrets delete`.
+Run under a coding agent, each prints its preview with a confirm token and
+the command that confirms exactly that change (`--confirm <token>`, the same token the MCP
 tool returns). A bare `--confirm` changes nothing: it shows the preview and
 exits 5, and `activate --make-default --confirm` refuses before it activates.
 A token of another change exits 4. In your own terminal the plain flag

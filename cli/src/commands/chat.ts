@@ -5,7 +5,7 @@ import { CavelonError, ExitCode, usageError } from "../errors.js";
 import { clip } from "../format.js";
 import { harnessNotFoundError, lookupHarness, type HarnessSummary } from "../harness-ref.js";
 import { callStable, workflowOperation } from "../invoke.js";
-import type { Session } from "../session.js";
+import { contextFlags, type Session } from "../session.js";
 import { cavelonCommand } from "../shell.js";
 import { MCP_MAX_WAIT_MS } from "./async.js";
 
@@ -38,8 +38,9 @@ function harnessRef(session: Session, input: Input): { ref?: string; source?: st
 
 async function findHarness(ctx: Context, ref: string, source: string | undefined, command: (slug: string) => string): Promise<HarnessSummary> {
   const { harness, candidates } = await lookupHarness(ctx, ref);
-  if (!harness) throw harnessNotFoundError(ref, candidates, source === "option" ? undefined : source, command);
-  return harness;
+  if (harness) return harness;
+  const flags = contextFlags(await ctx.session());
+  throw harnessNotFoundError(ref, candidates, source === "option" ? undefined : source, (slug) => command(slug) + flags, flags);
 }
 
 const HARNESS_OPTION = {
@@ -123,13 +124,15 @@ export const chat: CommandSpec = {
 
 export const deactivate: CommandSpec = {
   name: "deactivate",
-  summary: "Take an active solution out of service; previews first, --confirm deactivates.",
+  summary: "Take an active solution out of service (status inactive); previews first, --confirm deactivates.",
   description:
-    "An active solution answers live traffic: the conversations, channels and API keys that name it. Deactivating stops that\n" +
-    "until it is activated again (`cavelon activate`, through its readiness gate). Without --confirm nothing changes: the\n" +
-    "preview says what would stop. Show it to a person and confirm only with their yes. The tenant's default route is refused\n" +
-    "before anything is sent: make another solution the default first (`cavelon harness default <solution>`). An instance\n" +
-    "that publishes no deactivate route is said so; a person deactivates in the Admin there.",
+    "An active solution answers live traffic: the conversations, channels and API keys that name it. Deactivating sets its\n" +
+    "status to inactive, not back to draft (a draft has not been activated yet; an inactive solution was taken out of\n" +
+    "service). It keeps its configuration and answers no live traffic until it is activated again (`cavelon activate`,\n" +
+    "through its readiness gate). Without --confirm nothing changes: the preview says what would stop. Show it to a person\n" +
+    "and confirm only with their yes. The tenant's default route is refused before anything is sent: make another solution\n" +
+    "the default first (`cavelon harness default <solution>`). An instance that publishes no deactivate route is said so; a\n" +
+    "person deactivates in the Admin there.",
   readOnly: false,
   destructive: true,
   idempotent: true,
@@ -139,7 +142,9 @@ export const deactivate: CommandSpec = {
     env: ENV_OPTION,
     confirm: { type: "boolean", mcpToken: true, description: "Deactivate it (after a person saw the preview)." },
   },
-  examples: ["cavelon deactivate --harness support-faq", "cavelon deactivate --harness support-faq --confirm"],
+  examples: ["cavelon deactivate --harness support-faq", "cavelon deactivate --harness support-faq --confirm",
+    "cavelon deactivate --harness support-faq --confirm <token>",
+  ],
   async run(ctx, input) {
     const session = await ctx.session();
     const { ref, source } = harnessRef(session, input);
@@ -178,7 +183,7 @@ export const deactivate: CommandSpec = {
       return {
         data: { changed: false, harness: target, would: "deactivate", confirm: gate.confirm(confirmCommand), ...gate.fields },
         text: [
-          `Deactivating ${named(harness)} takes it out of live traffic: the conversations, channels and API keys that name it are no longer answered by it until it is activated again${known}.`,
+          `Deactivating ${named(harness)} sets it inactive and takes it out of live traffic: the conversations, channels and API keys that name it are no longer answered by it until it is activated again${known}.`,
           ...(gate.mismatch ? [gate.mismatch] : []),
           `Show this to a person; with their yes: ${gate.confirm(confirmCommand)}`,
         ].join("\n"),

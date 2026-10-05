@@ -174,6 +174,23 @@ Next:
   Catch an invalid package before each commit: cavelon init --hook
 ```
 
+A name close to an existing solution's may be a typo, so `init` refuses it
+(`solution_not_found`, exit 1), names the closest solutions and creates
+nothing:
+
+```text
+error: No solution "Support FAQ v2" in this tenant. Closest: Support FAQ (support-faq).
+hint: If you meant one of them:
+  cavelon init --harness support-faq --tenant acme-support
+`cavelon harness list --tenant acme-support` shows this tenant's solutions with name, slug and id; `cavelon harness new <slug> --name <name> --tenant acme-support` creates one as a draft. For a new solution of that name: cavelon init --harness 'Support FAQ v2' --new --tenant acme-support.
+```
+
+When you do mean a new solution, add `--new`: `init --harness "Support FAQ v2"
+--new` creates the draft whatever names are close to it (and refuses a name or
+slug the tenant already has, `solution_exists`). The commands `init` prints
+carry the `--tenant` you gave, since until `cavelon.yaml` exists nothing else
+names the tenant.
+
 `cavelon.yaml` names the instance, the tenant and the solution (a *harness* in
 Cavelon's API) by their slugs, with a comment that names the tenant, never a
 token:
@@ -523,6 +540,12 @@ cavelon activate --make-default
 cavelon activate --make-default --confirm
 ```
 
+That bare `--confirm` is your form, in your terminal. Run by a coding agent,
+the preview prints the command with a token instead
+(`cavelon activate --make-default --confirm 3f9a0c1d2e4b`), and the agent
+confirms with exactly that: its shell refuses a bare `--confirm` (exit 5), so
+it cannot skip the preview you are shown.
+
 `cavelon harness default <solution>` does the same for a solution that is
 already active, and `cavelon harness list` marks the default in its DEFAULT
 column. See [Default route](concepts.md#default-route).
@@ -554,14 +577,19 @@ token gets an answer from one, never a tenant API key.
 
 ### Take it out of service
 
-`cavelon deactivate` takes an active solution out of live traffic; it is a
-draft again on the instance. It previews first, and changes nothing until you
-confirm:
+`cavelon deactivate` takes an active solution out of live traffic: its status
+becomes `inactive`, not `draft`. A draft has not been activated yet; an
+inactive solution was taken out of service, keeps its configuration, and
+`cavelon activate` puts it back through its readiness gate. It previews first,
+and changes nothing until you confirm:
 
 ```bash
 cavelon deactivate
 cavelon deactivate --harness support-faq --confirm
 ```
+
+Run by a coding agent, the confirm takes the token the preview printed
+(`--confirm <token>`), as for `activate --make-default`.
 
 Deactivating is a person's decision. A solution that is the tenant's default
 route is refused before anything is sent: make another solution the default

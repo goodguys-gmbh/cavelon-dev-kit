@@ -98,6 +98,16 @@
               ],
               "title": "Harness Id"
             }
+          },
+          {
+            "name": "include_tenant_wide",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Tenant Wide"
+            }
           }
         ],
         "responses": {
@@ -5053,6 +5063,11 @@
               }
             ],
             "title": "Preview Id"
+          },
+          "include_tenant_wide": {
+            "type": "boolean",
+            "title": "Include Tenant Wide",
+            "default": false
           }
         },
         "type": "object",

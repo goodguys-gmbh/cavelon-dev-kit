@@ -6,6 +6,7 @@ import { readTenantless, type ReachableTenant } from "./principal.js";
 import { listsTenants, searchTenants, tenantMissError, type Reach } from "./tenant-choice.js";
 import { findProject, readEnvFile, type EnvFile, type ProjectConfig } from "./project.js";
 import { loadUserConfig, tokenKind, updateInstance, type InstanceSettings, type TokenKind } from "./user-config.js";
+import { shellWord } from "./shell.js";
 
 /**
  * Which instance, credential and tenant a command uses.
@@ -56,6 +57,19 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function isUuid(value: string): boolean {
   return UUID.test(value);
+}
+
+/**
+ * The `--instance` and `--tenant` a printed next command needs: those given on
+ * the command line. Without them a copied hint acts where the stored login or
+ * `cavelon use` points, which may be another tenant; what cavelon.yaml or a
+ * CAVELON_* variable names reaches the next command by itself.
+ */
+export function contextFlags(session: Pick<Session, "url" | "urlSource" | "tenant" | "tenantSource">): string {
+  let flags = "";
+  if (session.urlSource === "option" && session.url) flags += ` --instance ${shellWord(session.url)}`;
+  if (session.tenantSource === "option" && session.tenant) flags += ` --tenant ${shellWord(session.tenant)}`;
+  return flags;
 }
 
 function isLocalHost(hostname: string): boolean {

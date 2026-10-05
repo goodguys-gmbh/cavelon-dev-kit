@@ -607,6 +607,7 @@ export const limitsSet: CommandSpec = {
   examples: [
     "cavelon limits set kb_upload_max_file_size_mb 50",
     "cavelon limits set kb_upload_max_file_size_mb 50 --confirm",
+    "cavelon limits set kb_upload_max_file_size_mb 50 --confirm <token>",
     "cavelon limits set rate_limit_chat_rpm none --confirm",
     "cavelon limits set monthly_inference_token_budget 2000000",
     "cavelon limits set monthly_processing_step_cap none --confirm",

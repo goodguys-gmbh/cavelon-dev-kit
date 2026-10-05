@@ -374,7 +374,7 @@ export const loopCancel: CommandSpec = {
   options: {
     confirm: { type: "boolean", mcpToken: true, description: "Stop the run; without it nothing is stopped." },
   },
-  examples: ["cavelon loop cancel <run>", "cavelon loop cancel <run> --confirm"],
+  examples: ["cavelon loop cancel <run>", "cavelon loop cancel <run> --confirm", "cavelon loop cancel <run> --confirm <token>"],
   async run(ctx, input) {
     const runId = positional(input, "run")!;
     const run = await getRun(ctx, runId);
@@ -1035,7 +1035,12 @@ export const triggerIdentity: CommandSpec = {
     clear: { type: "boolean", description: "Remove the binding; scheduled and webhook runs then cannot start." },
     confirm: { type: "boolean", mcpToken: true, description: "Make the change; without it nothing changes." },
   },
-  examples: ["cavelon trigger identity orders", "cavelon trigger identity orders loop-runner --confirm", "cavelon trigger identity orders --clear --confirm"],
+  examples: [
+    "cavelon trigger identity orders",
+    "cavelon trigger identity orders loop-runner --confirm",
+    "cavelon trigger identity orders loop-runner --confirm <token>",
+    "cavelon trigger identity orders --clear --confirm",
+  ],
   async run(ctx, input) {
     const keyRef = positional(input, "key");
     const clear = boolOption(input, "clear");

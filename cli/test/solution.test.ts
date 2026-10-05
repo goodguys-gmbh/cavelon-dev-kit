@@ -176,8 +176,25 @@ describe("init chooses the tenant and the solution", () => {
     const miss = await cli(other, ["init", "--tenant", "globex", "--harness", "Support FA", "--json"], { cwd: dirFor() });
     expect(miss.code).toBe(1);
     const missed = miss.json<{ error: { code: string; hint: string } }>().error;
-    expect(missed.hint).toContain(`For a new solution of that name: cavelon harness new support-fa --name ${shellWord("Support FA")}, then cavelon init --harness support-fa.`);
-    expect(miss.json<{ error: { code: string; hint: string } }>().error).toMatchObject({ code: "solution_not_found", hint: expect.stringContaining("cavelon init --harness support-faq") });
+    expect(missed.hint).toContain(`For a new solution of that name: cavelon init --harness ${shellWord("Support FA")} --new --tenant globex.`);
+    expect(missed.hint).not.toContain("does too");
+    expect(miss.json<{ error: { code: string; hint: string } }>().error).toMatchObject({ code: "solution_not_found", hint: expect.stringContaining("cavelon init --harness support-faq --tenant globex") });
+    expect(server.state.harnesses.find((h) => h.tenant_id === globex && h.slug === "support-fa")).toBeUndefined();
+
+    // --new creates it on purpose, beside the similar name; and refuses a name the tenant already has.
+    const meant = await cli(other, ["init", "--tenant", "globex", "--harness", "Support FA", "--new", "--json"], { cwd: dirFor() });
+    expect(meant.code, meant.stdout).toBe(0);
+    expect(meant.stderr).toContain("Created the draft solution Support FA (support-fa).");
+    expect(server.state.harnesses.find((h) => h.tenant_id === globex && h.slug === "support-fa")).toMatchObject({ name: "Support FA", status: "draft" });
+    const taken = await cli(other, ["init", "--tenant", "globex", "--harness", "support-faq", "--new", "--json"], { cwd: dirFor() });
+    expect(taken.code).toBe(1);
+    expect(taken.json<{ error: { code: string; hint: string } }>().error).toMatchObject({
+      code: "solution_exists",
+      hint: expect.stringContaining("cavelon init --harness support-faq --tenant globex"),
+    });
+    const bare = await cli(other, ["init", "--tenant", "globex", "--new"], { cwd: dirFor() });
+    expect(bare.code).toBe(2);
+    expect(bare.stderr).toContain("--new needs the new solution's name");
   });
 });
 
@@ -1454,6 +1471,32 @@ describe("apply", () => {
     expect(error).toMatchObject({ code: "import_preview_stale", exit_code: 4 });
     expect(error.hint).toMatch(/cavelon apply --harness support` again/);
     expect(existsSync(path.join(dir, ".cavelon", "previews", `${preview.preview_id}.json`))).toBe(false);
+  });
+
+  it("names what changed since a stale preview where the instance says it", async () => {
+    try {
+      for (const changed of [["agents of solution 'support'", "tools"], []]) {
+        server.state.staleChanged = changed;
+        const dir = await pulled();
+        const preview = (await cli(sb, ["apply", "--json"], { cwd: dir })).json<{ preview_id: string }>();
+        server.editConfig(tenant, (pkg) => {
+          (pkg.knowledge_bases as Array<Record<string, unknown>>)[0]!.description = `Edited ${changed.length}`;
+        });
+        const result = await cli(sb, ["apply", "--confirm", preview.preview_id, "--json"], { cwd: dir });
+        expect(result.code).toBe(4);
+        const error = result.json<{ error: { code: string; message: string; details?: { changed: string[] } } }>().error;
+        expect(error.code).toBe("import_preview_stale");
+        if (changed.length) {
+          expect(error.message).toBe(`The target changed since preview ${preview.preview_id}: agents of solution 'support'; tools; nothing was imported.`);
+          expect(error.details).toEqual({ preview_id: preview.preview_id, changed });
+        } else {
+          expect(error.message).toBe(`The target changed since preview ${preview.preview_id}; nothing was imported.`);
+          expect(error.details).toBeUndefined();
+        }
+      }
+    } finally {
+      server.state.staleChanged = null;
+    }
   });
 
   it("says a confirmed preview was imported, and one made before it superseded (exit 4), instead of not knowing them", async () => {

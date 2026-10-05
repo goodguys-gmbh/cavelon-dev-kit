@@ -5,6 +5,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AddressInfo } from "node:net";
 import { handleLongRunning, longRunningState, type LiveView, type LongRunningState } from "./fake-long-running.js";
+import { tenantWideSections } from "../src/package-files.js";
+import type { PackageSchema } from "../src/contracts.js";
 
 /**
  * A fake Cavelon instance for tests. It serves the contract snapshots in
@@ -67,6 +69,18 @@ function withUploadReplace(text: string, kind: FakeState["uploadReplace"]): stri
   delete form.properties.replace_existing;
   delete doc.components.schemas.DocumentResponse!.properties.replaced_document_ids;
   if (kind === "none") delete form.properties.replace_doc_ids;
+  return JSON.stringify(doc);
+}
+/** The OpenAPI without `include_tenant_wide` on the export and the import, as an instance older than it publishes it. */
+function withTenantWideFlag(text: string, on: boolean): string {
+  if (on) return text;
+  const doc = JSON.parse(text) as {
+    paths: Record<string, Record<string, { parameters?: Array<{ name: string }> }>>;
+    components: { schemas: Record<string, { properties: Record<string, unknown> }> };
+  };
+  const exportOp = doc.paths["/api/v1/agent-graph/export"]!.get!;
+  exportOp.parameters = exportOp.parameters?.filter((p) => p.name !== "include_tenant_wide");
+  delete doc.components.schemas.AgentGraphPackageImportRequest!.properties.include_tenant_wide;
   return JSON.stringify(doc);
 }
 /** The OpenAPI without these operations ("METHOD /path"), as an instance older than them publishes it. */
@@ -185,6 +199,19 @@ export interface FakeState {
    * instance whose upload form has no `replace_doc_ids` either.
    */
   uploadReplace: "none" | "ids" | "name";
+  /**
+   * Whether a solution's export and import carry its tenant-wide sections only
+   * when `include_tenant_wide` asks, as the snapshot's instance; off is an
+   * older instance, whose OpenAPI has no such flag and whose solution export
+   * and import carry them always.
+   */
+  tenantWideFlag: boolean;
+  /**
+   * How a stale confirm is refused: null as an older instance (the code in
+   * `detail`); a list as a recent one (`code` at the top), with `changed`
+   * naming what changed when the list is not empty.
+   */
+  staleChanged: string[] | null;
   suites: Array<{ id: string; tenant_id: string; name: string; harness_id: string | null; archived_at: string | null }>;
   runs: Array<{ id: string; tenant_id: string; suite_id: string; summary: Record<string, unknown>; harness_id?: string | null }>;
   operations: Map<string, FakeOperation>;
@@ -498,6 +525,8 @@ export async function startFakeServer(): Promise<FakeServer> {
     kbs: [],
     documents: [],
     uploadReplace: "name",
+    tenantWideFlag: true,
+    staleChanged: null,
     suites: [],
     runs: [],
     operations: new Map(),
@@ -610,7 +639,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     }
     if (p === "/openapi.json" || (p === "/api/v1/openapi.json" && !state.rootPathsReachApi)) {
       res.writeHead(200, { "content-type": "application/json" });
-      return res.end(withoutOperations(withUploadReplace(withMarkers(state.personOnly, state.secretFields), state.uploadReplace), state.openapiWithout));
+      return res.end(withoutOperations(withTenantWideFlag(withUploadReplace(withMarkers(state.personOnly, state.secretFields), state.uploadReplace), state.tenantWideFlag), state.openapiWithout));
     }
 
     // Auth: every API and docs route needs a known bearer token.
@@ -844,7 +873,8 @@ export async function startFakeServer(): Promise<FakeServer> {
     if (m && method === "POST") {
       const h = state.harnesses.find((x) => x.tenant_id === tid && x.id === m![1]);
       if (!h) return send(res, 404, { detail: "Harness not found." });
-      h.status = "draft";
+      // As the instance: out of service, not back to draft.
+      h.status = "inactive";
       return send(res, 200, h);
     }
     if (p === "/api/v1/chat" && method === "POST") {
@@ -1047,13 +1077,35 @@ export async function startFakeServer(): Promise<FakeServer> {
       const config = configFor(tid);
       const pkg = state.exportFillsDefaults ? withSchemaDefaults(packageSchema(), config.pkg) : structuredClone(config.pkg);
       pkg.manifest = { ...(pkg.manifest as object), exported_at: now(), scope };
+      // A recent instance's solution export leaves what the whole tenant shares out unless asked.
+      if (state.tenantWideFlag && scope === "agent_graph" && url.searchParams.get("include_tenant_wide") !== "true") {
+        for (const section of tenantWideSections(packageSchema() as PackageSchema)) delete pkg[section];
+      }
       return send(res, 200, pkg);
     }
     if ((p === "/api/v1/agent-graph/import/preview" || p === "/api/v1/agent-graph/import") && method === "POST") {
-      const b = body.json as { package: Record<string, unknown>; mode?: string; harness_id?: string | null; runtime_bindings?: Record<string, string>; preview_id?: string | null };
+      const b = body.json as {
+        package: Record<string, unknown>;
+        mode?: string;
+        harness_id?: string | null;
+        runtime_bindings?: Record<string, string>;
+        preview_id?: string | null;
+        include_tenant_wide?: boolean;
+      };
       const config = configFor(tid);
       const schema = JSON.parse(readContract("meta-package-schema-v3.json")) as { properties: Record<string, unknown> };
-      const request = { package: b.package, mode: b.mode ?? "overwrite", harness_id: b.harness_id ?? null, runtime_bindings: b.runtime_bindings ?? {} };
+      const request = {
+        package: b.package,
+        mode: b.mode ?? "overwrite",
+        harness_id: b.harness_id ?? null,
+        runtime_bindings: b.runtime_bindings ?? {},
+        ...(state.tenantWideFlag ? { include_tenant_wide: b.include_tenant_wide === true } : {}),
+      };
+      // A recent instance's solution import keeps the tenant's shared sections as they are unless asked.
+      const sharedKept =
+        state.tenantWideFlag && request.harness_id && !b.include_tenant_wide
+          ? [...tenantWideSections(packageSchema() as PackageSchema)].filter((section) => section in b.package)
+          : [];
       const previewId = `pv_${createHash("sha256").update(`${tid}:${config.version}:${canonical(request)}`).digest("hex").slice(0, 32)}`;
       const ignored = Object.keys(b.package).filter((k) => !(k in schema.properties));
       const preview = {
@@ -1061,7 +1113,9 @@ export async function startFakeServer(): Promise<FakeServer> {
         text_blocks: [],
         mode: request.mode,
         summary: { creates: { agents: 1 }, updates: { knowledge_bases: 1 }, deletes: {}, references: {}, warnings: 0, blockers: state.previewBlockers.length },
-        warnings: [],
+        warnings: sharedKept.map(
+          (section) => `This solution import leaves ${section} out: they hold what the whole tenant shares, so every solution would see the change. Import with include_tenant_wide to apply them.`,
+        ),
         blockers: state.previewBlockers,
         ignored: { sections: ignored, fields: [], count: ignored.length },
         impact: { changed_tools: [], changed_knowledge_bases: [], active_harnesses: [], sandbox_writers: [] },
@@ -1073,6 +1127,16 @@ export async function startFakeServer(): Promise<FakeServer> {
       if (info.kind === "key") return send(res, 403, { detail: "Agent graph import requires admin authentication (JWT), not API key" });
       if (state.previewBlockers.length) return send(res, 422, { detail: preview });
       if (b.preview_id && b.preview_id !== previewId) {
+        // A recent instance answers at the top level and names what changed where it still knows.
+        if (state.staleChanged) {
+          const what = state.staleChanged;
+          return send(res, 409, {
+            code: "import_preview_stale",
+            message: `The target changed since this preview${what.length ? `: ${what.join("; ")}` : ""}; nothing was imported.`,
+            hint: "Preview again, show the new result, and import with the new preview_id.",
+            ...(what.length ? { changed: what } : {}),
+          });
+        }
         return send(res, 409, {
           detail: {
             error: "import_preview_stale",
@@ -1097,7 +1161,8 @@ export async function startFakeServer(): Promise<FakeServer> {
           docs: `http://${req.headers.host}${entry.docs}`,
         });
       }
-      const kept = Object.fromEntries(Object.entries(b.package).filter(([k]) => k in schema.properties));
+      const kept = Object.fromEntries(Object.entries(b.package).filter(([k]) => k in schema.properties && !sharedKept.includes(k)));
+      for (const section of sharedKept) if (section in config.pkg) kept[section] = config.pkg[section];
       state.configs.set(tid, { pkg: kept, version: config.version + 1 });
       // Like the instance: an import adds the names a package declares, and never forgets one.
       const values = valuesFor(tid);

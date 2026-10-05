@@ -33,7 +33,7 @@ export const ENV_OPTION = { type: "string" as const, value: "<name>", descriptio
 const CONFIRM_OPTION = {
   type: "boolean" as const,
   mcpToken: true,
-  description: "Delete it; without this nothing is deleted. Run by a coding agent: the token its preview printed.",
+  description: "Delete it; without this nothing is deleted.",
 };
 /** Key and token values start like this; they belong in a secret, never in a variable or an argument. */
 const TOKEN_PREFIXES = ["cbp_", "cvpat_"];
@@ -228,7 +228,7 @@ export const variablesDelete: CommandSpec = {
   mcpTool: false,
   positionals: [{ name: "name", description: "The variable's name.", required: true }],
   options: { confirm: CONFIRM_OPTION, env: ENV_OPTION },
-  examples: ["cavelon variables delete old_url", "cavelon variables delete old_url --confirm"],
+  examples: ["cavelon variables delete old_url", "cavelon variables delete old_url --confirm", "cavelon variables delete old_url --confirm <token>"],
   async run(ctx, input) {
     const name = positional(input, "name")!;
     const flags = targetFlags(await ctx.session());
@@ -439,7 +439,7 @@ export const secretsDelete: CommandSpec = {
   mcpTool: false,
   positionals: [{ name: "name", description: "The secret's name.", required: true }],
   options: { confirm: CONFIRM_OPTION, env: ENV_OPTION },
-  examples: ["cavelon secrets delete old_token", "cavelon secrets delete old_token --confirm"],
+  examples: ["cavelon secrets delete old_token", "cavelon secrets delete old_token --confirm", "cavelon secrets delete old_token --confirm <token>"],
   async run(ctx, input) {
     const name = positional(input, "name")!;
     await requirePerson(ctx, "delete", name);

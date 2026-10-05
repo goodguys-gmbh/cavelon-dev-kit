@@ -318,6 +318,7 @@ export function errorFromResponse(status: number, body: unknown, what: string, h
   let details: unknown;
   let blockers: string[] | undefined;
   let structured: BlockerDetail[] | undefined;
+  let changed: string[] | undefined;
   const pick = (source: Record<string, unknown>) => {
     if (typeof source.code === "string") code = source.code;
     if (typeof source.error === "string" && !code) code = source.error;
@@ -330,6 +331,9 @@ export function errorFromResponse(status: number, body: unknown, what: string, h
     // A recent instance sends them structured too; an older one sends the sentences alone.
     const detailed = blockerDetails(source.blocker_details);
     if (detailed.length) structured = detailed;
+    // A stale import preview names what changed since, where the instance still knows.
+    const what = Array.isArray(source.changed) ? source.changed.filter((c): c is string => typeof c === "string" && c.trim() !== "") : [];
+    if (what.length) changed = what;
   };
   if (body && typeof body === "object" && !Array.isArray(body)) {
     const map = body as Record<string, unknown>;
@@ -370,6 +374,7 @@ export function errorFromResponse(status: number, body: unknown, what: string, h
     hint = ceiling.hint;
     details = details && typeof details === "object" ? { ...(details as Record<string, unknown>), ...ceiling.details } : ceiling.details;
   }
+  if (changed) details = details && typeof details === "object" && !Array.isArray(details) ? { ...(details as Record<string, unknown>), changed } : { changed };
   if (status === 400 && !hint && message && /select a tenant|tenant context|X-Tenant-Id/i.test(message)) {
     hint = "Choose a tenant with `cavelon use` (it lists your tenants), --tenant or CAVELON_TENANT.";
   }

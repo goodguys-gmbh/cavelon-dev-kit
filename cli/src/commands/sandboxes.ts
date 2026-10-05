@@ -599,7 +599,9 @@ export const sandboxSeed: CommandSpec = {
     timeout: TIMEOUT_OPTION,
     "idempotency-key": UUID_KEY_OPTION,
   },
-  examples: ["cavelon sandbox seed orders-test seeds/orders", "cavelon sandbox seed orders-test seeds/orders --confirm --wait"],
+  examples: ["cavelon sandbox seed orders-test seeds/orders", "cavelon sandbox seed orders-test seeds/orders --confirm --wait",
+    "cavelon sandbox seed orders-test seeds/orders --confirm <token> --wait",
+  ],
   async run(ctx, input) {
     const sandbox = await resolveSandbox(ctx, positional(input, "sandbox")!);
     requireOffer(ctx, sandbox, "archive", "sandbox seed");

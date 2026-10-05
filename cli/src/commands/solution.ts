@@ -10,7 +10,8 @@ import { confirmation, confirmGiven, confirmTokenRequired, shellTokenRequired } 
 import { clip, keyValues } from "../format.js";
 import { readTextFile, writeFileAtomic } from "../fsutil.js";
 import { uncommitted } from "../git.js";
-import { callStable } from "../invoke.js";
+import { callStable, workflowOperation } from "../invoke.js";
+import { deref, jsonBodySchema } from "../openapi.js";
 import { harnessNotFoundError, lookupHarness, SLUG } from "../harness-ref.js";
 import { defaultChangeLine, defaultCommands, named, readDefaultRoute, setDefaultRoute } from "../default-route.js";
 import { ceilingHint, LIMIT_ABOVE_CEILING, parseLimits, readLimits, type PublishedLimits } from "../limits.js";
@@ -44,7 +45,7 @@ import { readPrincipal } from "../principal.js";
 import type { ProjectConfig } from "../project.js";
 import { CASE_STATUSES, caseStatus, TESTING_PAGE, type CaseStatus } from "../results.js";
 import { KNOWLEDGE_OUTCOME_AREA, KNOWLEDGE_OUTCOME_PAGE, KNOWLEDGE_OUTCOMES, knowledgeOutcome, type KnowledgeOutcome } from "../trace-view.js";
-import { isUuid, requireInstance, type Session } from "../session.js";
+import { contextFlags, isUuid, requireInstance, type Session } from "../session.js";
 import { listedPages } from "./docs.js";
 import { readInventory, readInventoryKinds, writeInventory, type InventoryKind } from "./inventory.js";
 import { checkedBy, MODEL_UNKNOWN_CODE, missingInventory, REFERENCE_UNKNOWN_CODE } from "../package-references.js";
@@ -69,12 +70,16 @@ interface Harness {
   status: string;
 }
 
-export function requireSolution(session: Session): ProjectConfig {
+/** The solution folder a command needs; without one, the `init` that makes it, in the tenant this command was given. */
+export function requireSolution(session: Session, harness?: string): ProjectConfig {
   if (!session.project) {
+    const flags = contextFlags(session);
     throw new CavelonError(ExitCode.usage, {
       code: "no_solution",
       message: "This folder is not a Cavelon solution (no cavelon.yaml here or above).",
-      hint: "Run `cavelon init`: it asks which solution, or a new one, on a terminal. `cavelon harness list` shows the solutions.",
+      hint: harness
+        ? `Make it the folder of that solution first: ${cavelonCommand("init", "--harness", harness)}${flags}, then run this command again.`
+        : `Run \`cavelon init${flags}\`: it asks which solution, or a new one, on a terminal. \`cavelon harness list${flags}\` shows the solutions.`,
     });
   }
   return session.project;
@@ -91,7 +96,7 @@ function harnessRef(session: Session, input: Parameters<CommandSpec["run"]>[1]):
 
 async function findHarness(ctx: Context, ref: string, source?: string): Promise<Harness> {
   const { harness, candidates } = await lookupHarness<Harness>(ctx, ref);
-  if (!harness) throw harnessNotFoundError(ref, candidates, source);
+  if (!harness) throw harnessNotFoundError(ref, candidates, source, undefined, contextFlags(await ctx.session()));
   return harness;
 }
 
@@ -254,6 +259,37 @@ async function editedSincePull(project: ProjectConfig, pkg: Record<string, unkno
   return edited.sort((a, b) => a.localeCompare(b, "en"));
 }
 
+const EXPORT_ROUTE = "/api/v1/agent-graph/export";
+const PREVIEW_ROUTE = "/api/v1/agent-graph/import/preview";
+/** The flag, on the export's query and the import's body, that takes a solution's tenant-wide sections along. */
+const INCLUDE_TENANT_WIDE = "include_tenant_wide";
+
+/**
+ * Whether this instance's export (a query parameter) or import (a request
+ * field) takes `include_tenant_wide`. An instance that does carries a
+ * solution's tenant-wide sections only when asked; an older one exports and
+ * imports them with every solution. An OpenAPI that cannot be read takes
+ * neither, so nothing it might not know is sent.
+ */
+async function takesTenantWide(ctx: Context, where: "export" | "import"): Promise<boolean> {
+  if (where === "export") {
+    const { doc, op } = await workflowOperation(ctx, "GET", EXPORT_ROUTE, "exporting packages");
+    return Boolean(doc) && op.parameters.some((p) => p.name === INCLUDE_TENANT_WIDE);
+  }
+  const { doc, op } = await workflowOperation(ctx, "POST", PREVIEW_ROUTE, "previewing imports");
+  const schema = jsonBodySchema(op);
+  const properties = doc && schema ? (deref(doc, schema) as { properties?: Record<string, unknown> } | undefined)?.properties : undefined;
+  return Boolean(properties?.[INCLUDE_TENANT_WIDE]);
+}
+
+/** The package file each section is read from, relative to the solution folder. */
+function sectionFiles(disk: PackageOnDisk, sections: string[]): string[] {
+  return sections.flatMap((section) => {
+    const source = disk.sources[section];
+    return (Array.isArray(source) ? source : source ? [source] : []).map((s) => s.file);
+  });
+}
+
 export const pull: CommandSpec = {
   name: "pull",
   summary: "Write the instance's package into package/ (split along the schema's sections) and the inventory into .cavelon/.",
@@ -262,8 +298,8 @@ export const pull: CommandSpec = {
     "A file whose content did not change keeps its bytes, so `git diff` shows what changed on the instance; a field the export\n" +
     "spells out that the file leaves out (an empty list, a default) is no change. A test suite goes back to the file it was\n" +
     "pulled into or applied from, whatever its name. Files of sections the schema does not know are kept byte for byte.\n" +
-    "A solution's export leaves the tenant-wide sections (the tenant's settings, its model list) out of the folder, unless\n" +
-    "--tenant-wide. Refuses when package files have uncommitted changes, unless --force;\n" +
+    "A solution's pull leaves the tenant-wide sections (the tenant's settings, its model list) out of the folder, unless\n" +
+    "--tenant-wide; it says when the export carries none. Refuses when package files have uncommitted changes, unless --force;\n" +
     "outside a git repository, when a file it would overwrite or remove changed since the last pull. A file as the last pull\n" +
     "or apply left it (digests in .cavelon/) counts as unchanged, committed or not.",
   readOnly: false,
@@ -278,13 +314,14 @@ export const pull: CommandSpec = {
     force: { type: "boolean", description: "Overwrite package files that have uncommitted changes since the last pull or apply." },
     "tenant-wide": {
       type: "boolean",
-      description: "With a solution, also write the tenant-wide sections its export carries (tenant_settings, model_registry): apply then sends them for the whole tenant.",
+      description:
+        "With a solution, also write the tenant-wide sections (tenant_settings, model_registry, …): asked of the export where the instance takes include_tenant_wide. Only `apply --tenant-wide` sends them back, for the whole tenant.",
     },
   },
   examples: ["cavelon pull --harness support", "cavelon pull && git status --short -- package tests"],
   async run(ctx, input) {
     const session = await ctx.session();
-    const project = requireSolution(session);
+    const project = requireSolution(session, stringOption(input, "harness"));
     const url = requireInstance(session);
     const layoutDirs = [project.layout.package, ...Object.values(project.layout.items)];
     const force = boolOption(input, "force");
@@ -300,8 +337,12 @@ export const pull: CommandSpec = {
       harness = await findHarness(ctx, ref);
     }
     const scope = harness ? "agent_graph" : "full_config";
-    const exported = await callStable<Record<string, unknown>>(ctx, "GET", "/api/v1/agent-graph/export", "exporting packages", {
-      query: { scope, harness_id: harness?.id },
+    const tenantWide = boolOption(input, "tenant-wide");
+    if (tenantWide && !harness) ctx.warn("--tenant-wide applies to a solution's pull; the tenant's full configuration carries the tenant-wide sections anyway.");
+    // A recent instance's export carries a solution's tenant-wide sections only when asked.
+    const askTenantWide = Boolean(harness) && tenantWide && (await takesTenantWide(ctx, "export"));
+    const exported = await callStable<Record<string, unknown>>(ctx, "GET", EXPORT_ROUTE, "exporting packages", {
+      query: { scope, harness_id: harness?.id, ...(askTenantWide ? { [INCLUDE_TENANT_WIDE]: true } : {}) },
       timeoutMs: 120_000,
     });
     if (!exported || typeof exported !== "object" || Array.isArray(exported)) {
@@ -311,7 +352,8 @@ export const pull: CommandSpec = {
     const { schema } = await schemaFor(ctx, version, false);
     if (!schema) ctx.warn("The instance does not publish its package schema; every top-level key became a file of its own.");
     // A solution's folder holds the solution; the tenant's settings travel with it only when asked.
-    const skip = harness && !boolOption(input, "tenant-wide") ? tenantWideSections(schema) : new Set<string>();
+    const shared = tenantWideSections(schema);
+    const skip = harness && !tenantWide ? shared : new Set<string>();
     const placed: ItemFiles = {};
     const options: WriteOptions = { skip, itemFiles: await readItemFiles(project.root), placed };
     if (dirty === undefined) {
@@ -338,13 +380,17 @@ export const pull: CommandSpec = {
       files: report,
     };
     await writeState(project.root, "pull.json", JSON.stringify(record, null, 2));
-    for (const file of report.kept) ctx.warn(`Kept ${file}: its section is not in this instance's package schema.`);
-    for (const section of report.refused) ctx.warn(`Did not write section ${JSON.stringify(section)}: its name is not a plain file name.`);
-    const tenantFiles = report.tenant_wide.flatMap((section) => [".yaml", ".yml", ".json"].map((ext) => `${project.layout.package}/${section}${ext}`));
-    for (const file of tenantFiles) {
-      if ((await readTextFile(path.join(project.root, file))) === undefined) continue;
-      ctx.warn(`Kept ${file} as it is: it holds a tenant-wide section, which pull leaves out of a solution's folder. apply sends it for the whole tenant; remove the file unless you mean that.`);
+    for (const file of report.kept) {
+      const section = path.posix.basename(file).replace(/\.(ya?ml|json)$/i, "");
+      ctx.warn(
+        report.tenant_wide.includes(section)
+          ? `Kept ${file} as it is: it holds a tenant-wide section, which pull leaves out of a solution's folder. apply leaves it out too, and \`apply --tenant-wide\` sends it for the whole tenant; remove the file unless you mean that.`
+          : `Kept ${file}: its section is not in this instance's package schema.`,
+      );
     }
+    for (const section of report.refused) ctx.warn(`Did not write section ${JSON.stringify(section)}: its name is not a plain file name.`);
+    // What --tenant-wide brought, so an export without any says so instead of writing nothing silently.
+    const pulledShared = harness && tenantWide ? Object.keys(exported).filter((section) => shared.has(section)) : undefined;
 
     const rewritten = report.written.length + report.removed.length;
     const lines = [
@@ -357,6 +403,13 @@ export const pull: CommandSpec = {
       ...(report.tenant_wide.length
         ? [`Left out the tenant-wide section${report.tenant_wide.length === 1 ? "" : "s"} ${report.tenant_wide.join(", ")} (--tenant-wide writes them).`]
         : []),
+      ...(pulledShared
+        ? [
+            pulledShared.length
+              ? `Tenant-wide: ${pulledShared.join(", ")} (shared by every solution of the tenant; only \`apply --tenant-wide\` sends them back).`
+              : `The export carries no tenant-wide sections${askTenantWide ? "" : " (this instance's export does not take include_tenant_wide)"}, so --tenant-wide wrote none.`,
+          ]
+        : []),
       `Inventory: ${inventory.file} (${inventory.counts.map((c) => `${c.count} ${c.label}`).join(", ")})`,
       // `git diff` alone shows nothing for a file git does not track yet, as every file of a first pull is.
       !rewritten
@@ -365,7 +418,7 @@ export const pull: CommandSpec = {
           ? "See what changed: the files listed above (this folder is not in a git repository)."
           : `See what changed: git status --short -- ${layoutDirs.join(" ")} (new files), then git diff -- ${layoutDirs.join(" ")}`,
     ];
-    return { data: { ...record, inventory }, text: lines.join("\n") };
+    return { data: { ...record, inventory, ...(pulledShared ? { tenant_wide_pulled: pulledShared } : {}) }, text: lines.join("\n") };
   },
 };
 
@@ -407,7 +460,7 @@ async function validatePackage(
   ctx: Context,
   project: ProjectConfig,
   offline: boolean,
-): Promise<{ disk: PackageOnDisk; findings: Finding[]; schemaVersion: string | null; used: SchemaUsed; skipped: SkippedCheck[] }> {
+): Promise<{ disk: PackageOnDisk; findings: Finding[]; schema: PackageSchema; schemaVersion: string | null; used: SchemaUsed; skipped: SkippedCheck[] }> {
   const disk = await readPackage(project.root, project.layout);
   const version = packageVersionOf(disk.package) ?? project.packageVersion;
   const { schema, used } = await schemaFor(ctx, version, offline);
@@ -429,7 +482,7 @@ async function validatePackage(
     inventory,
     solution: project.harness,
   });
-  return { disk, findings, schemaVersion: schema["x-package-version"] ?? version ?? null, used, skipped };
+  return { disk, findings, schema, schemaVersion: schema["x-package-version"] ?? version ?? null, used, skipped };
 }
 
 /** For --verbose: which copy of the schema validate checked against. */
@@ -813,8 +866,10 @@ async function instanceHolds(ctx: Context, project: ProjectConfig, stored: Store
   const scope = harnessId ? "agent_graph" : ((stored.request.package.manifest as Record<string, unknown> | undefined)?.scope as string | undefined);
   if (scope !== "agent_graph" && scope !== "full_config") return undefined;
   if (scope === "agent_graph" && !harnessId) return undefined;
-  const exported = await callStable<Record<string, unknown>>(ctx, "GET", "/api/v1/agent-graph/export", "exporting packages", {
-    query: { scope, harness_id: harnessId },
+  // The tenant-wide sections this import sent are compared too, so their files count as the instance holds them.
+  const shared = stored.request[INCLUDE_TENANT_WIDE] === true && scope === "agent_graph" && (await takesTenantWide(ctx, "export"));
+  const exported = await callStable<Record<string, unknown>>(ctx, "GET", EXPORT_ROUTE, "exporting packages", {
+    query: { scope, harness_id: harnessId, ...(shared ? { [INCLUDE_TENANT_WIDE]: true } : {}) },
     timeoutMs: 120_000,
   });
   if (!exported || typeof exported !== "object" || Array.isArray(exported)) return undefined;
@@ -912,12 +967,16 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
     if (error instanceof CavelonError && error.blockerDetails?.length) throw withBlockersLocated(error, disk, stored, session);
     if (error instanceof CavelonError && (error.code === "import_preview_stale" || (error.status === 409 && /preview/i.test(error.message)))) {
       await retire("stale");
+      // What changed, where the instance still knows what the preview was made over; an older one says nothing more.
+      const said = (error.details as { changed?: unknown } | undefined)?.changed;
+      const changed = Array.isArray(said) ? said.filter((c): c is string => typeof c === "string") : [];
       throw new CavelonError(ExitCode.conflict, {
         code: error.code === "conflict" ? "import_preview_stale" : error.code,
         status: 409,
-        message: `The target changed since preview ${stored.preview_id}; nothing was imported.`,
+        message: `The target changed since preview ${stored.preview_id}${changed.length ? `: ${changed.join("; ")}` : ""}; nothing was imported.`,
         hint: `Run \`${previewAgain(stored, session)}\` again, show the new preview, and confirm its id.`,
         docs: error.docs,
+        ...(changed.length ? { details: { preview_id: stored.preview_id, changed } } : {}),
       });
     }
     throw error;
@@ -987,7 +1046,7 @@ async function applyTarget(
   if (!ref) return undefined;
   const { harness: found, candidates } = await lookupHarness<Harness>(ctx, ref);
   if (found) return found;
-  if (!source || source === "option" || isUuid(ref) || !SLUG.test(ref)) throw harnessNotFoundError(ref, candidates, source);
+  if (!source || source === "option" || isUuid(ref) || !SLUG.test(ref)) throw harnessNotFoundError(ref, candidates, source, undefined, contextFlags(session));
   const name = packageHarnessName(pkg, ref) ?? ref;
   // In the tenant the preview was for: a --tenant given here goes into the command, or the draft lands in another one.
   const create = `${cavelonCommand("harness", "new", ref, ...(name !== ref ? ["--name", name] : []))}${targetFlags(session, null)}`;
@@ -1014,11 +1073,12 @@ function packageHarnessName(pkg: Record<string, unknown>, slug: string): string 
 }
 
 /** Whether a preview needs a person's look before it is confirmed, and why; naming the active solutions it reaches. */
-function personReason(preview: Preview, harness: Harness | undefined, mode: string, env: string | undefined): string | undefined {
+function personReason(preview: Preview, harness: Harness | undefined, mode: string, env: string | undefined, shared: string[] = []): string | undefined {
   const active = (preview.impact?.active_harnesses ?? []).map((h) => h.harness_slug ?? h.name).filter((n): n is string => Boolean(n));
   if (harness?.status === "active" && !active.includes(harness.slug)) active.unshift(harness.slug);
   if (active.length) return `reaches the active solution${active.length === 1 ? "" : "s"} ${list(active, 5)}`;
   if (preview.impact?.active_harnesses?.length) return "reaches an active solution";
+  if (shared.length) return `changes what the whole tenant shares (${list(shared, 5)})`;
   if (counts(preview.summary?.deletes) || mode === "replace") return "deletes";
   if (env === "prod") return "goes to env/prod";
   return undefined;
@@ -1037,7 +1097,10 @@ export const apply: CommandSpec = {
     "imports nothing: one whose target changed on the instance since, one whose package files changed since (what they\n" +
     "hold, not their formatting; --allow-stale imports what the preview showed anyway), and one older than a day. So does\n" +
     "an import its own check refuses when it applies, naming each blocker. --discard <id|all> forgets stored previews;\n" +
-    "`cavelon status` lists them with when each expires.",
+    "`cavelon status` lists them with when each expires.\n" +
+    "A solution's import leaves the package's tenant-wide sections (tenant_settings, model_registry, …) out; --tenant-wide\n" +
+    "imports them, for every solution of the tenant. An instance that does not publish include_tenant_wide imports them with\n" +
+    "every solution's package, and apply says so.",
   readOnly: false,
   destructive: true,
   mcpTool: "apply",
@@ -1051,11 +1114,22 @@ export const apply: CommandSpec = {
     },
     discard: { type: "string", value: "<preview-id|all>", description: "Forget this stored preview, or all of them; changes nothing on the instance." },
     mode: { type: "string", value: "<mode>", description: "overwrite (default) or replace (deletes what the package does not hold)." },
+    "tenant-wide": {
+      type: "boolean",
+      description:
+        "With a solution, also import the package's tenant-wide sections (tenant_settings, model_registry, …): they change for every solution of the tenant, so a person sees the preview first.",
+    },
   },
-  examples: ["cavelon apply --env test", "cavelon apply --confirm <preview-id>", "cavelon apply --env prod --json", "cavelon apply --discard all"],
+  examples: [
+    "cavelon apply --env test",
+    "cavelon apply --confirm <preview-id>",
+    "cavelon apply --env test --tenant-wide",
+    "cavelon apply --env prod --json",
+    "cavelon apply --discard all",
+  ],
   async run(ctx, input) {
     const session = await ctx.session();
-    const project = requireSolution(session);
+    const project = requireSolution(session, stringOption(input, "harness"));
     const url = requireInstance(session);
     const confirm = previewIdOption(input);
     const discard = stringOption(input, "discard")?.trim();
@@ -1075,7 +1149,7 @@ export const apply: CommandSpec = {
     const mode = (stringOption(input, "mode") ?? envFile?.mode ?? "overwrite") as ImportRequest["mode"];
     if (mode !== "overwrite" && mode !== "replace") throw usageError(`--mode must be overwrite or replace, got "${mode}".`);
 
-    const { disk, findings } = await validatePackage(ctx, project, false);
+    const { disk, findings, schema } = await validatePackage(ctx, project, false);
     if (disk.empty) throw usageError(`No package files in ${project.layout.package}/.`, "Run `cavelon pull --harness <name or slug>` first (`cavelon harness list` shows them), or write the package files.");
     const errors = findings.filter((f) => f.severity === "error");
     if (errors.length) {
@@ -1094,6 +1168,24 @@ export const apply: CommandSpec = {
     if (harness) request.harness_id = harness.id;
     if (envFile && Object.keys(envFile.runtimeBindings).length) request.runtime_bindings = envFile.runtimeBindings;
 
+    // A solution's import leaves the sections the whole tenant shares out unless asked; an older instance imports them always.
+    const tenantWide = boolOption(input, "tenant-wide");
+    const solutionImport = Boolean(harness) && scope !== "full_config";
+    if (tenantWide && !solutionImport) ctx.warn("--tenant-wide applies to a solution's import; this one goes to the whole tenant anyway.");
+    const shared = solutionImport ? [...tenantWideSections(schema)].filter((section) => section in disk.package) : [];
+    const takes = solutionImport && (tenantWide || shared.length > 0) && (await takesTenantWide(ctx, "import"));
+    if (tenantWide && takes) request[INCLUDE_TENANT_WIDE] = true;
+    const sharedImported = tenantWide || !takes ? shared : [];
+    const sharedLeftOut = tenantWide || !takes ? [] : shared;
+    if (tenantWide && solutionImport && !shared.length) ctx.warn("--tenant-wide: the package holds no tenant-wide section, so this import changes nothing the whole tenant shares.");
+    if (sharedImported.length) {
+      const files = sectionFiles(disk, sharedImported).join(", ");
+      ctx.warn(
+        `${files} ${sharedImported.length === 1 ? "holds a section" : "hold sections"} the whole tenant shares: this import changes ${sharedImported.join(", ")} for every solution of the tenant` +
+          (takes ? "." : " (this instance does not publish include_tenant_wide and imports them with every solution's package); remove the file unless that is meant."),
+      );
+    }
+
     const client = await ctx.client();
     const preview = await callStable<Preview>(ctx, "POST", "/api/v1/agent-graph/import/preview", "previewing imports", {
       body: request,
@@ -1101,6 +1193,12 @@ export const apply: CommandSpec = {
     });
     const target = harness ? { id: harness.id, slug: harness.slug } : null;
     const data: Record<string, unknown> = { previewed: true, ...preview, env: envFile?.name ?? null, harness: target };
+    if (shared.length || tenantWide) data.tenant_wide = { sections: shared, imported: sharedImported, left_out: sharedLeftOut };
+    const sharedLine = sharedImported.length
+      ? `tenant-wide: ${sharedImported.join(", ")} change for every solution of the tenant`
+      : sharedLeftOut.length
+        ? `tenant-wide: ${sharedLeftOut.join(", ")} left out (\`cavelon apply --tenant-wide\` imports them, for every solution of the tenant)`
+        : undefined;
     const flags = targetFlags(session);
     const commands = setCommands(preview, flags);
     if (commands.secrets.length || commands.variables.length) data.set_commands = commands;
@@ -1114,12 +1212,22 @@ export const apply: CommandSpec = {
         ...blockerDetails(preview.blocker_details).map((b) => `${b.code ?? ""}: ${b.message}`),
       ]);
       if (pair) data.hint = pair.hint;
+      // The instance checks a tenant-wide section it leaves out of the import, so a blocker there needs the file gone or fixed.
+      const blockedShared = sharedLeftOut.filter((section) =>
+        blockerDetails(preview.blocker_details).some((b) => b.path === section || b.path?.startsWith(`${section}.`) || b.path?.startsWith(`${section}[`)),
+      );
+      const sharedHint = blockedShared.length
+        ? `A blocker is in ${sectionFiles(disk, blockedShared).join(", ")}, which this import leaves out (tenant-wide); the instance checks it anyway: remove the file, or fix it.`
+        : undefined;
+      if (sharedHint) data.tenant_wide_hint = sharedHint;
       return {
         data,
         text: [
           previewText(preview, flags, context),
+          ...(sharedLine ? [sharedLine] : []),
           "",
           ...(pair ? [`hint: ${pair.hint}`] : []),
+          ...(sharedHint ? [`hint: ${sharedHint}`] : []),
           "The preview has blockers; fix them and run `cavelon apply` again.",
         ].join("\n"),
         exitCode: ExitCode.validation,
@@ -1161,12 +1269,13 @@ export const apply: CommandSpec = {
       const expired = (await listPreviews(project.root, ctx.io.now())).filter((old) => old.expired);
       await retirePreviews(project.root, expired.map((old) => ({ preview_id: old.preview_id, reason: "expired" as const, at })));
     }
-    const reason = personReason(preview, harness, mode, envFile?.name);
+    const reason = personReason(preview, harness, mode, envFile?.name, sharedImported);
     data.show_to_person = Boolean(reason);
     const confirmLine = preview.preview_id ? `${cavelonCommand("apply", "--confirm", preview.preview_id)}${flags}` : undefined;
     const text = [
       `Preview of ${project.layout.package}/ for ${harness ? `solution ${harness.slug}${harness.status ? ` (${harness.status})` : ""}` : "the tenant"}${envFile ? ` [env ${envFile.name}]` : ""}:`,
       previewText(preview, flags, context),
+      ...(sharedLine ? [sharedLine] : []),
       "",
       ...(preview.preview_id ? [`preview id: ${preview.preview_id}`] : []),
       ...(reason ? [`This ${reason}: show this preview to a person before confirming.`] : []),
@@ -1601,7 +1710,7 @@ export const activate: CommandSpec = {
     "make-default": { type: "boolean", description: "Also make it the tenant's default route: previews the change; with --confirm, makes it." },
     confirm: { type: "boolean", mcpToken: true, description: "With --make-default: change the default route (after a person saw the preview)." },
   },
-  examples: ["cavelon activate", "cavelon activate --make-default", "cavelon activate --make-default --confirm"],
+  examples: ["cavelon activate", "cavelon activate --make-default", "cavelon activate --make-default --confirm", "cavelon activate --make-default --confirm <token>"],
   async run(ctx, input) {
     const session = await ctx.session();
     const { ref, source } = harnessRef(session, input);

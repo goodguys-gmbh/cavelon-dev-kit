@@ -14,7 +14,8 @@ use it when you parse the result.
 ## Before anything
 
 - `cavelon status` says which instance, tenant and solution this folder is
-  bound to, the solution's state (draft or active, whether it is ready to
+  bound to, the solution's state (draft, active, or inactive after a
+  deactivate; whether it is ready to
   activate, its latest test run), the last pull and the open previews.
   `cavelon whoami` says who the token acts as, when it expires, whether it may
   enter Platform mode and which tenants it reaches.
@@ -45,7 +46,14 @@ use it when you parse the result.
   add `cavelon pull` after it. From your shell, `init --harness "<name>"`
   creates a solution that does not exist yet as a draft; the MCP tool `init`
   never creates one and names the `cavelon harness new <slug> --name "<name>"`
-  that does. `apply` never creates a solution: when the one an env file names
+  that does. A name close to an existing solution's is refused as a likely
+  typo (`solution_not_found`, naming the closest ones, creating nothing): ask
+  the person whether they meant that one, and only for a new solution run
+  `cavelon init ... --harness "<name>" --new`. Until a `cavelon.yaml` exists,
+  pass `--tenant` (and `--instance`) to every command, `harness new` and
+  `pull` included: without it a command acts in the tenant `cavelon use`
+  chose, which may be another one. The commands `cavelon` prints carry the
+  `--tenant` you gave; run them as printed. `apply` never creates a solution: when the one an env file names
   is missing it stops with `solution_not_found` and names that command. To start from a package file (a blueprint, an
   export from another instance), run
   `cavelon init --instance <url> --tenant <tenant> --from <file>` instead of
@@ -67,8 +75,13 @@ use it when you parse the result.
    commit. `git diff` then shows what someone changed in the Admin. A test
    suite goes back to the file it came from, whatever its name. A solution's
    pull leaves the tenant-wide sections (the tenant's settings, its model
-   list) out of the folder; `--tenant-wide` writes them, and `apply` then
-   sends them for the whole tenant, so only with the person's say-so.
+   list) out of the folder, and `apply` leaves them out of the solution's
+   import. `pull --tenant-wide` writes them; `apply --tenant-wide` imports
+   them, for every solution of the tenant, so only with the person's say-so.
+   `validate` warns about a tenant-wide file in the folder
+   (`tenant_wide_section`); on an instance that does not publish
+   `include_tenant_wide`, `apply` imports such a file anyway and says so:
+   remove it unless the person wants it.
 2. **Edit** the files in `package/` (one file per schema section) and `tests/`
    (one file per test suite). See the cavelon-authoring skill.
 3. **Validate** offline: `cavelon validate`. Fix every error; `cavelon explain
@@ -100,7 +113,7 @@ use it when you parse the result.
 5. **Confirm** exactly that preview: `cavelon apply --confirm <preview-id>`
    (the line `apply` printed, with the same `--env` and `--tenant`). Exit 4
    means the preview is stale and nothing was imported: the target changed on
-   the instance (`import_preview_stale`), the package files changed since
+   the instance (`import_preview_stale`; a recent instance names what changed), the package files changed since
    (`preview_files_changed`, naming them), the preview is more than a day
    old (`preview_expired`), another preview was imported after it
    (`preview_superseded`), it was imported already (`preview_applied`), or it
@@ -168,9 +181,12 @@ says when the solution it activated is not the default.
   conversation to trace. A draft answers only a person's token, as a
   Playground run.
 - `cavelon deactivate --harness <solution>` takes an active solution out of
-  live traffic: it previews, and only `--confirm` deactivates. It is the
-  person's decision, like the default route; the default route itself is
-  refused until another solution is the default.
+  live traffic: it previews, and only the confirm command it prints
+  deactivates. Its status becomes `inactive`, not `draft`: it keeps its
+  configuration, answers no live traffic, and `cavelon activate` puts it back
+  through its readiness gate. It is the person's decision, like the default
+  route; the default route itself is refused until another solution is the
+  default.
 
 ## Show the person before confirming
 
@@ -181,6 +197,9 @@ show the preview to the person, and confirm only after they agree, when:
   solution is active;
 - the environment is `prod` (`--env prod`), or the preview deletes anything
   (`--mode replace`);
+- the preview changes tenant-wide sections (`tenant-wide: … change for every
+  solution of the tenant`, after `--tenant-wide` or on an instance that
+  imports them anyway): every solution of the tenant sees the change;
 - the preview lists target needs (secrets, grants, identities): only a person
   can provide them, with `cavelon secrets set <name>` or in the Admin.
 
@@ -209,11 +228,12 @@ closest one named.
 **From your shell, `--confirm` takes the same token.** Run by a coding agent,
 `limits set`, `models set-limit`, `loop cancel`, `sandbox seed`,
 `trigger identity`, `harness default`, `activate --make-default`,
-`kb upload --replace`, `variables delete` and `secrets delete` print their
-preview with a confirm token and the command that confirms it
+`deactivate`, `kb upload --replace`, `variables delete` and `secrets delete`
+print their preview with a confirm token and the command that confirms it
 (`… --confirm <token>`). Show the preview, then run exactly that command. A
-bare `--confirm` changes nothing and exits 5; a token of another change exits
-4 with the new preview.
+bare `--confirm`, as the docs show it for a person's terminal, changes nothing
+from your shell and exits 5; a token of another change exits 4 with the new
+preview.
 
 **`cavelon api` from your shell has the guards of the MCP `api` tool**, since
 `cavelon` sees that a coding agent runs it (`CLAUDECODE`, `CODEX_THREAD_ID`, `CODEX_SANDBOX`,
