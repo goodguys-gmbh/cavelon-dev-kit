@@ -7,6 +7,36 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Added
+
+- `cavelon init` writes a minimal `package/manifest.yaml` (the package format
+  and the tenant's id and slug, from the fields the package schema requires),
+  so `validate` passes before the first pull; the first `pull` replaces it.
+  `init` in a folder without one writes it too, and `validate` and `explain
+  package_schema_invalid` say where a missing manifest comes from (#121).
+- `cavelon whoami` says whether the token may set secrets ("may set secrets",
+  `may_set_secrets` in `--json`), where the instance publishes the token's
+  permissions; it is advice, read from the permission names the instance's
+  refusal gives today, and refuses nothing (#123).
+
+### Changed
+
+- A token whose role may not manage secrets (a Builder) is told who can:
+  `secrets set` and `secrets delete` reword the instance's refusal
+  (`permission_missing`) with who sets the secret instead; the instance
+  decides, so a renamed permission never turns away someone who may.
+  `activate` and `status` name a secret the readiness gate says is not set,
+  and with such a token, that a tenant Owner sets it, in the Admin or with
+  their own token (#123).
+- `apply` reads the instance's `tenant_wide.would_import` and `left_out` where
+  it sends them, and falls back to `applied` where it does not. The preview's
+  `--json` reports `would_import` instead of `imported` and `applied: false`, as
+  a preview applies nothing; after a confirm, `tenant_wide` comes from the
+  import's result where the instance sends one (#124).
+- `apply --include-tenant-wide` warns of a change for every solution only where
+  the preview says a tenant-wide section changes; when the sections equal the
+  instance's it says they are sent as the instance holds them (#122).
+
 ### Fixed
 
 - Every command `cavelon` prints now carries the `--tenant`, `--env` and
@@ -21,15 +51,27 @@ CLI, the skills and the plugin.
   JSON, never a `cavelon` command line: `activate`'s default route names
   `harness_default` (its confirm takes the preview's `confirm_token`),
   `operation_status` resumes with `operation_status`, and `init` names
-  `harness_new` with the solution's slug and name, then `pull` (which writes
-  the manifest `validate` needs), then `validate` and `apply`. A command only
+  `harness_new` with the solution's slug and name, then `pull` (which brings
+  the draft's own manifest), then `validate` and `apply`. A command only
   a person runs (`secrets set`, `login`) stays a command line. The tools' and
   arguments' descriptions name the arguments in snake_case (`make_default`,
   `include_tenant_wide`, `replace`) and other tools by name, and `init`'s
   `harness` no longer says the tool creates a missing solution (#120). The
   CLI's help and text output keep the CLI's spelling.
 - `init` from a terminal that creates the draft names `pull` before
-  `validate`, since a new draft's manifest comes from its export.
+  `validate`, since a new draft's own manifest comes from its export.
+- A change in a long field (an agent's `system_prompt`) shows where the two
+  values differ, with a little context, instead of the same cut-off start on
+  both sides (#122).
+- `kb upload --dry-run` gives a file identical to an active document the plan
+  `identical` instead of `replaced_by_name`, and no longer counts it under
+  "Would upload" (#122).
+- `secrets list` names the secrets the folder's `package/required_secrets.yaml`
+  declares before the first apply, instead of saying no package declared one (#122).
+- `pull --include-tenant-wide` no longer names tenant-wide sections the export
+  carries empty (#122).
+- `cavelon explain token_mismatch` explains what a confirm with another
+  change's token returns (#122).
 
 ## [0.1.9] - 2026-10-05
 

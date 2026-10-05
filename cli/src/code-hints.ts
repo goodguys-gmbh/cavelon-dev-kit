@@ -60,7 +60,8 @@ export function similarCodes(code: string, known: string[], max = 8): string[] {
 const BY_CODE: Record<string, string> = {
   package_schema_invalid:
     "Run `cavelon validate`: it checks the package files against the package schema offline and names each field that " +
-    "does not match, with file, line and path. `cavelon schema <section>` shows a section's fields and a minimal entry.",
+    "does not match, with file, line and path. `cavelon schema <section>` shows a section's fields and a minimal entry. " +
+    "A missing manifest comes from `cavelon pull`, or `cavelon init` in the folder writes a minimal one.",
   package_requirements_changed: "Run `cavelon apply` again for a new preview, show it, and confirm its id with `cavelon apply --confirm <preview-id>`.",
   import_preview_stale: "Run `cavelon apply` again for a new preview, show it, and confirm its id with `cavelon apply --confirm <preview-id>`.",
 };

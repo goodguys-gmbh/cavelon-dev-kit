@@ -198,6 +198,52 @@ describe("cavelon secrets", () => {
     expect((await cli(keySb, ["explain", "secret_needs_a_person"])).stdout).toMatch(/A tenant API key cannot set or delete a secret value/);
   });
 
+  it("tells a role the instance refuses who sets secrets, and leaves the decision to the instance", async () => {
+    const builder = sandbox();
+    try {
+      await login(builder, server.url, server.addToken({ kind: "pat", tenantIds: [tenant], defaultTenant: tenant, permissions: ["agents.manage", "agents.view"] }));
+      type Refusal = { error: { code: string; message: string; hint: string; details: Record<string, unknown> } };
+      const refused = await cli(builder, ["secrets", "set", "crm_api_token", "--json"], { stdin: SECRET });
+      expect(refused.code).toBe(7);
+      const error = refused.json<Refusal>().error;
+      expect(error).toMatchObject({ code: "permission_missing", details: { sent: true, permissions: ["settings.manage", "settings.secrets.manage"] } });
+      expect(error.message).toMatch(/^This token's role may not set secrets: the instance refused it, as that needs settings\.manage or settings\.secrets\.manage/);
+      expect(error.hint).toBe(
+        "A tenant Owner (or another role allowed to manage secrets) sets it, in the Admin under Settings › Secrets or with their own token: `cavelon secrets set crm_api_token`.",
+      );
+      expect(refused.stdout + refused.stderr).not.toContain(SECRET);
+      const elsewhere = await cli(builder, ["secrets", "set", "crm_api_token", "--tenant", tenant, "--json"], { stdin: SECRET });
+      expect(elsewhere.json<Refusal>().error.hint).toMatch(new RegExp(`: \`cavelon secrets set crm_api_token --tenant ${tenant}\`\\.$`));
+      // The instance decided: the kit sent the request rather than refusing on permission names it only knows from a refusal.
+      expect(secretRequests().filter((r) => r.method === "PUT")).toHaveLength(2);
+
+      const who = await cli(builder, ["whoami"]);
+      expect(who.stdout).toMatch(/^may set secrets:\s+no \(a tenant Owner sets them, in the Admin or with their own token\)$/m);
+      expect((await cli(builder, ["whoami", "--json"])).json<{ credential: { may_set_secrets: boolean } }>().credential.may_set_secrets).toBe(false);
+      expect((await cli(sb, ["whoami", "--json"])).json<{ credential: { may_set_secrets: boolean } }>().credential.may_set_secrets).toBe(true);
+      expect((await cli(keySb, ["whoami", "--json"])).json<{ credential: { may_set_secrets: boolean } }>().credential.may_set_secrets).toBe(false);
+      server.state.servePermissions = false;
+      expect((await cli(builder, ["whoami"])).stdout).not.toMatch(/may set secrets/);
+    } finally {
+      server.state.servePermissions = true;
+      builder.cleanup();
+    }
+  });
+
+  it("sets a secret for a role the instance allows under a permission name the kit does not know", async () => {
+    const renamed = sandbox();
+    server.state.secretsPermissions = ["secrets.write"];
+    try {
+      await login(renamed, server.url, server.addToken({ kind: "pat", tenantIds: [tenant], defaultTenant: tenant, permissions: ["secrets.write"] }));
+      const set = await cli(renamed, ["secrets", "set", "crm_api_token"], { stdin: SECRET });
+      expect(set.code, set.stderr).toBe(0);
+      expect(stored("crm_api_token")).toBe(SECRET);
+    } finally {
+      server.state.secretsPermissions = ["settings.manage", "settings.secrets.manage"];
+      renamed.cleanup();
+    }
+  });
+
   it("a key may still list the names; nothing in the list is a value", async () => {
     await cli(sb, ["secrets", "set", "crm_api_token"], { stdin: SECRET });
     const list = await cli(keySb, ["secrets", "list", "--json"]);
@@ -308,5 +354,17 @@ describe("apply names the variables and secrets the target still needs", () => {
     const fresh = await solution();
     expect(parse(readFileSync(path.join(fresh, "package", "required_variables.yaml"), "utf8"))).toEqual([{ name: "crm_base_url", description: "Base URL of the CRM API" }]);
     expect(parse(readFileSync(path.join(fresh, "package", "required_secrets.yaml"), "utf8"))).toEqual([{ name: "crm_api_token", description: "Token of the CRM integration user" }]);
+  });
+
+  it("list names what this folder's package declares before the first apply", async () => {
+    const dir = await solution();
+    writeFileSync(path.join(dir, "package", "required_secrets.yaml"), "- name: crm_api_token\n  description: Token of the CRM integration user\n");
+    const listed = await cli(sb, ["secrets", "list"], { cwd: dir });
+    expect(listed.code, listed.stderr).toBe(0);
+    expect(listed.stdout).toMatch(/^This tenant has no secrets, and no package applied to it declared one\./);
+    expect(listed.stdout).toContain("package/required_secrets.yaml declares crm_api_token, which the tenant does not know yet");
+    expect(listed.stdout).toContain("cavelon secrets set crm_api_token");
+    const json = (await cli(sb, ["secrets", "list", "--json"], { cwd: dir })).json<{ declared_locally: Array<{ name: string; file: string }> }>();
+    expect(json.declared_locally).toEqual([{ name: "crm_api_token", file: "package/required_secrets.yaml" }]);
   });
 });

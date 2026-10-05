@@ -18,6 +18,9 @@ type SchemaNode = Record<string, unknown>;
  */
 export const PERSONA_SECTION = "persona";
 
+/** The section that names the package format and the tenant a package was made for; required by the schema. */
+export const MANIFEST_SECTION = "manifest";
+
 export function toYaml(value: unknown): string {
   return stringify(value, { lineWidth: 0, aliasDuplicateObjects: false });
 }
@@ -86,6 +89,15 @@ export function sectionFields(schema: PackageSchema | null, section: string): Re
   const props = propertiesOf(object);
   if (!props) return undefined;
   return Object.fromEntries(Object.entries(props).map(([k, v]) => [k, resolve(schema, v) ?? {}]));
+}
+
+/** The required fields of an object section, as the schema lists them; undefined for a list section or one it does not know. */
+export function requiredFields(schema: PackageSchema | null, section: string): string[] | undefined {
+  if (!schema) return undefined;
+  const node = resolve(schema, schema.properties?.[section]);
+  const object = node ? branches(schema, node).find((b) => propertiesOf(b)) : undefined;
+  if (!object) return undefined;
+  return Array.isArray(object.required) ? (object.required as unknown[]).filter((k): k is string => typeof k === "string") : [];
 }
 
 /** JSON with sorted keys: two values are the same when this is. */

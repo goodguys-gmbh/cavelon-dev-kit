@@ -189,7 +189,10 @@ describe("tenant-wide sections", () => {
     const asked = await cli(sb, ["pull", "--include-tenant-wide", "--json"], { cwd: dir });
     expect(asked.code, asked.stderr).toBe(0);
     expect(exportsAsked()).toEqual([null, "true"]);
-    expect(asked.json<{ tenant_wide_pulled: string[] }>().tenant_wide_pulled).toEqual(expect.arrayContaining(["tenant_settings", "model_registry"]));
+    // The export carries model_registry empty ([]): it holds nothing of the tenant's, so it is not named.
+    expect(asked.json<{ tenant_wide_pulled: string[] }>().tenant_wide_pulled).toEqual(["tenant_settings"]);
+    const text = await cli(sb, ["pull", "--include-tenant-wide"], { cwd: dir });
+    expect(text.stdout).toMatch(/^Tenant-wide: tenant_settings \(shared by every solution/m);
 
     // Without the flag the export no longer carries them; the files stay, and say so in kept.
     const again = await cli(sb, ["pull", "--json"], { cwd: dir });
@@ -242,8 +245,8 @@ describe("tenant-wide sections", () => {
     const plain = await cli(sb, ["apply", "--json"], { cwd: dir });
     expect(plain.code, plain.stderr).toBe(0);
     expect(importBodies()[0]).not.toHaveProperty("include_tenant_wide");
-    const left = plain.json<{ tenant_wide: { left_out: string[]; imported: string[] }; show_to_person: boolean; preview_id: string }>();
-    expect(left.tenant_wide).toMatchObject({ left_out: expect.arrayContaining(["tenant_settings"]), imported: [] });
+    const left = plain.json<{ tenant_wide: { left_out: string[]; would_import: string[] }; show_to_person: boolean; preview_id: string }>();
+    expect(left.tenant_wide).toMatchObject({ left_out: expect.arrayContaining(["tenant_settings"]), would_import: [], applied: false });
     expect(left.show_to_person).toBe(false);
     const text = await cli(sb, ["apply"], { cwd: dir });
     expect(text.stdout).toMatch(/tenant-wide: .*tenant_settings.* left out \(`cavelon apply --include-tenant-wide` imports them, for every solution of the tenant\)/);
@@ -255,10 +258,12 @@ describe("tenant-wide sections", () => {
     const asked = await cli(sb, ["apply", "--include-tenant-wide", "--json"], { cwd: dir });
     expect(asked.code, asked.stderr).toBe(0);
     expect(importBodies()[0]).toMatchObject({ include_tenant_wide: true });
-    const shown = asked.json<{ tenant_wide: { imported: string[] }; show_to_person: boolean; preview_id: string }>();
-    expect(shown.tenant_wide.imported).toEqual(expect.arrayContaining(["tenant_settings"]));
+    const shown = asked.json<{ tenant_wide: { would_import: string[]; applied: boolean }; show_to_person: boolean; preview_id: string }>();
+    // A preview applies nothing: what the confirm would import is would_import.
+    expect(shown.tenant_wide).toMatchObject({ applied: false, would_import: expect.arrayContaining(["tenant_settings"]) });
     expect(shown.show_to_person).toBe(true);
-    expect(asked.stderr).toMatch(/package\/tenant_settings\.yaml.* the whole tenant shares: this import changes .*tenant_settings.* for every solution of the tenant\./);
+    // The preview counts other kinds only, so the kit cannot tell whether these change: it says they are sent.
+    expect(asked.stderr).toMatch(/package\/tenant_settings\.yaml.* the whole tenant shares: this import sends .*tenant_settings.*, and what in them differs from the instance changes for every solution of the tenant\./);
     const human = await cli(sb, ["apply", "--include-tenant-wide"], { cwd: dir });
     expect(human.stdout).toMatch(/This changes what the whole tenant shares \(.*tenant_settings.*\): show this preview to a person before confirming\./);
     const done = await cli(sb, ["apply", "--confirm", shown.preview_id], { cwd: dir });
@@ -276,9 +281,9 @@ describe("tenant-wide sections", () => {
       server.state.requests.length = 0;
       const plain = await cli(sb, ["apply", "--json"], { cwd: dir });
       expect(plain.code, plain.stderr).toBe(0);
-      type Report = { sections: string[]; applied: boolean; imported: string[]; left_out: string[]; reaches_active_solutions: string[]; reported_by: string };
+      type Report = { sections: string[]; applied: boolean; would_import: string[]; left_out: string[]; reaches_active_solutions: string[]; reported_by: string };
       const left = plain.json<{ tenant_wide: Report; warnings: string[] }>();
-      expect(left.tenant_wide).toMatchObject({ applied: false, imported: [], reaches_active_solutions: [], reported_by: "instance" });
+      expect(left.tenant_wide).toMatchObject({ applied: false, would_import: [], reaches_active_solutions: [], reported_by: "instance" });
       expect(left.tenant_wide.left_out).toEqual(expect.arrayContaining(["tenant_settings", "model_registry"]));
       expect(left.warnings).toEqual(expect.arrayContaining([expect.stringMatching(/^This solution import leaves tenant_settings out/)]));
 
@@ -286,8 +291,8 @@ describe("tenant-wide sections", () => {
       expect(asked.code, asked.stderr).toBe(0);
       expect(importBodies().at(-1)).toMatchObject({ include_tenant_wide: true });
       const shown = asked.json<{ tenant_wide: Report; show_to_person: boolean; preview_id: string }>();
-      expect(shown.tenant_wide).toMatchObject({ applied: true, left_out: [], reaches_active_solutions: ["support"], reported_by: "instance" });
-      expect(shown.tenant_wide.imported).toEqual(shown.tenant_wide.sections);
+      expect(shown.tenant_wide).toMatchObject({ applied: false, left_out: [], reaches_active_solutions: ["support"], reported_by: "instance" });
+      expect(shown.tenant_wide.would_import).toEqual(shown.tenant_wide.sections);
       expect(shown.show_to_person).toBe(true);
       // The stored preview holds the flag, so its confirm sends the request the preview id was made for.
       const stored = JSON.parse(read(path.join(dir, ".cavelon", "previews", `${shown.preview_id}.json`))) as { request: Record<string, unknown> };
@@ -304,6 +309,54 @@ describe("tenant-wide sections", () => {
       expect(done.stdout).toMatch(/^tenant-wide: .*tenant_settings.*, for every solution of the tenant \(active: support\)$/m);
     } finally {
       support.status = status;
+    }
+  });
+
+  it("says a tenant-wide section changes only where the preview says so, and nothing when it equals the instance's", async () => {
+    const dir = await pulled(sb, ["--include-tenant-wide"]);
+    try {
+      // The preview counts a change in tenant_settings.
+      server.state.previewExtras = { summary: { creates: {}, updates: { tenant_settings: 1 }, deletes: {} } };
+      const changed = await cli(sb, ["apply", "--include-tenant-wide", "--json"], { cwd: dir });
+      expect(changed.code, changed.stderr).toBe(0);
+      expect(changed.stderr).toMatch(/the whole tenant shares: this import changes tenant_settings for every solution of the tenant\./);
+      expect(changed.json<{ tenant_wide: { changing: string[] } }>().tenant_wide.changing).toEqual(["tenant_settings"]);
+
+      // Right after a pull nothing differs: no warning that claims a change.
+      server.state.previewExtras = { summary: { creates: {}, updates: {}, deletes: {} } };
+      const same = await cli(sb, ["apply", "--include-tenant-wide"], { cwd: dir });
+      expect(same.code, same.stderr).toBe(0);
+      expect(same.stderr).not.toMatch(/the whole tenant shares/);
+      expect(same.stdout).toMatch(/^tenant-wide: .*tenant_settings.* sent as the instance holds them; nothing changes for the tenant's solutions$/m);
+      expect(same.stdout).toContain("Nothing to import");
+    } finally {
+      server.state.previewExtras = {};
+    }
+  });
+
+  it("reads the instance's would_import and left_out, and after a confirm the import's own tenant_wide", async () => {
+    const dir = await pulled(sb, ["--include-tenant-wide"]);
+    server.state.tenantWideLists = true;
+    server.state.tenantWideKept = ["model_registry"];
+    try {
+      type Report = { applied: boolean; would_import?: string[]; imported?: string[]; left_out: string[]; reported_by: string };
+      const asked = await cli(sb, ["apply", "--include-tenant-wide", "--json"], { cwd: dir });
+      expect(asked.code, asked.stderr).toBe(0);
+      const shown = asked.json<{ tenant_wide: Report; preview_id: string }>();
+      // applied says include_tenant_wide was asked; the instance's own lists say what the confirm takes along.
+      expect(shown.tenant_wide).toMatchObject({ applied: false, left_out: ["model_registry"], reported_by: "instance" });
+      expect(shown.tenant_wide.would_import).toEqual(expect.arrayContaining(["tenant_settings"]));
+      expect(shown.tenant_wide.would_import).not.toContain("model_registry");
+
+      const done = await cli(sb, ["apply", "--confirm", shown.preview_id, "--json"], { cwd: dir });
+      expect(done.code, done.stderr).toBe(0);
+      const result = done.json<{ tenant_wide: Report }>().tenant_wide;
+      expect(result).toMatchObject({ applied: true, left_out: ["model_registry"], reported_by: "import" });
+      expect(result.imported).toEqual(expect.arrayContaining(["tenant_settings"]));
+      expect(result.imported).not.toContain("model_registry");
+    } finally {
+      server.state.tenantWideLists = false;
+      server.state.tenantWideKept = [];
     }
   });
 
@@ -376,9 +429,9 @@ describe("tenant-wide sections", () => {
       expect(preview.code, preview.stderr).toBe(0);
       expect(importBodies()[0]).not.toHaveProperty("include_tenant_wide");
       expect(preview.stderr).toMatch(/this instance does not publish include_tenant_wide and imports them with every solution's package\); remove the file unless that is meant\./);
-      expect(preview.json<{ show_to_person: boolean; tenant_wide: { imported: string[] } }>()).toMatchObject({
+      expect(preview.json<{ show_to_person: boolean; tenant_wide: { would_import: string[] } }>()).toMatchObject({
         show_to_person: true,
-        tenant_wide: { imported: expect.arrayContaining(["tenant_settings"]) },
+        tenant_wide: { would_import: expect.arrayContaining(["tenant_settings"]) },
       });
     } finally {
       box.cleanup();

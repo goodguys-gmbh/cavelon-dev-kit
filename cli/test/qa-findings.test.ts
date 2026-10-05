@@ -455,7 +455,8 @@ describe("kb upload --dry-run and identical content", () => {
     try {
       const dry = await cli(sb, ["kb", "upload", copy, "--kb", "FAQ", "--dry-run"]);
       expect(dry.code, dry.stderr).toBe(0);
-      expect(dry.stdout).toMatch(/^Would upload 3 files:$/m);
+      // A file identical to an active document creates nothing new, so it is not counted as an upload.
+      expect(dry.stdout).toMatch(published ? /^Would upload 2 files:$/m : /^Would upload 3 files:$/m);
       if (published) {
         expect(dry.stdout).toMatch(new RegExp(`renamed-true\\.md: identical to the active document [0-9a-f]{8}… \\(kept-true\\.md\\); nothing new would be created \\(deduplicated\\)`));
       } else {
@@ -486,6 +487,11 @@ describe("kb upload --dry-run and identical content", () => {
       const dry = await cli(sb, ["kb", "upload", dir, "--kb", "FAQ", "--dry-run"]);
       expect(dry.stdout).toMatch(/^\S*same-name\.md: identical to the active document [0-9a-f]{8}…; nothing new would be created \(deduplicated\)$/m);
       expect(dry.stdout).not.toMatch(/exists \(|Both versions answer/);
+      expect(dry.stdout).toMatch(/^Nothing new to upload:$/m);
+      // The plan agrees with the flag and the text: nothing is replaced.
+      const json = (await cli(sb, ["kb", "upload", dir, "--kb", "FAQ", "--dry-run", "--json"])).json<{ existing: Array<{ plan: string; identical: boolean }>; new_files: string[] }>();
+      expect(json.existing).toEqual([expect.objectContaining({ plan: "identical", identical: true })]);
+      expect(json.new_files).toEqual([]);
       const replace = await cli(sb, ["kb", "upload", dir, "--kb", "FAQ", "--replace", "--dry-run"]);
       expect(replace.stdout).not.toMatch(/exists \(|deactivates/);
     } finally {

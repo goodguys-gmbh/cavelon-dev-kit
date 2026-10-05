@@ -392,7 +392,12 @@ describe("cavelon mcp", () => {
     const bodies = () => server.state.requests.filter((r) => r.path === "/api/v1/agent-graph/import/preview").map((r) => r.body as Record<string, unknown>);
     const preview = payload(await client.callTool({ name: "apply", arguments: { include_tenant_wide: true } }));
     expect(bodies().at(-1)).toMatchObject({ include_tenant_wide: true });
-    expect(preview.tenant_wide).toMatchObject({ applied: true, reported_by: "instance", sections: expect.arrayContaining(["tenant_settings"]) });
+    expect(preview.tenant_wide).toMatchObject({
+      applied: false,
+      would_import: expect.arrayContaining(["tenant_settings"]),
+      reported_by: "instance",
+      sections: expect.arrayContaining(["tenant_settings"]),
+    });
     expect(preview.show_to_person).toBe(true);
 
     const former = payload(await client.callTool({ name: "apply", arguments: { tenant_wide: true } }));

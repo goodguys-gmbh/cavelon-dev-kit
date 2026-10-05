@@ -4,9 +4,9 @@ import type { CatalogEntry, ErrorCatalog, PackageSchema } from "./contracts.js";
 import type { PublishedLimits } from "./limits.js";
 import type { TenantInventory } from "./commands/inventory.js";
 import { locate, schemaSections, tenantWideSections, type Finding, type PackageOnDisk } from "./package-files.js";
-import { PERSONA_SECTION, sectionFields } from "./package-format.js";
+import { MANIFEST_SECTION, PERSONA_SECTION, sectionFields } from "./package-format.js";
 import { kitErrorEntry } from "./kit-codes.js";
-import { cavelonCommand, fill } from "./printed.js";
+import { cavelonCommand, fill, folderCommand } from "./printed.js";
 import {
   branches,
   checkModels,
@@ -392,7 +392,9 @@ export function checkPackage(disk: PackageOnDisk, options: CheckOptions): Findin
       const key = `${pointer} ${message}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      findings.push({ code: SCHEMA_CODE, severity: "error", ...locate(disk, pointer), message, hint: schemaHint(disk.package, pointer) });
+      // A missing manifest is the export's, not something to write by hand from the schema.
+      const manifest = error.keyword === "required" && pointer === "" && (error.params as Record<string, unknown>).missingProperty === MANIFEST_SECTION;
+      findings.push({ code: SCHEMA_CODE, severity: "error", ...locate(disk, pointer), message, hint: manifest ? manifestHint() : schemaHint(disk.package, pointer) });
     }
   }
 
@@ -727,6 +729,14 @@ export function schemaPathOf(pkg: Record<string, unknown>, pointer: string): str
     value = inner;
   }
   return names.join(".");
+}
+
+/** Where a missing manifest comes from: the folder's cavelon.yaml names the instance and tenant both commands act in. */
+function manifestHint(): string {
+  return (
+    `\`${folderCommand("pull")}\` writes the instance's manifest (the package format and the tenant the package is for); for a solution not on the instance ` +
+    `yet, run \`${folderCommand("init")}\` again in this folder: it writes a minimal one.`
+  );
 }
 
 /** The kit's hint for a schema finding: the command that shows the fields where it is. */

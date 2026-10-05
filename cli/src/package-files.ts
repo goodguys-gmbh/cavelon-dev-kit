@@ -4,7 +4,7 @@ import { CST, LineCounter, Parser, parseDocument, type Document, type YAMLError 
 import type { PackageSchema } from "./contracts.js";
 import { CavelonError, ExitCode } from "./errors.js";
 import { readTextFile, withoutBom, writeFileAtomic } from "./fsutil.js";
-import { canonical, PERSONA_SECTION, sameEntry, sameSectionValue, sectionContent, sectionFields, toYaml } from "./package-format.js";
+import { canonical, MANIFEST_SECTION, PERSONA_SECTION, sameEntry, sameSectionValue, sectionContent, sectionFields, toYaml } from "./package-format.js";
 
 export { canonical, toYaml };
 
@@ -272,6 +272,11 @@ export async function readPackage(root: string, layout: Layout): Promise<Package
     sources[section] = parsed.source;
     // The persona file of placeholders only (as init writes it) sets nothing, so it sends nothing and is no package yet.
     if (!parsed.finding && section === PERSONA_SECTION && (parsed.value === null || parsed.value === undefined)) continue;
+    // A manifest alone (as init writes it) names the format and the tenant, and holds nothing to import yet.
+    if (!parsed.finding && section === MANIFEST_SECTION) {
+      pkg[section] = parsed.value;
+      continue;
+    }
     empty = false;
     if (parsed.finding) {
       findings.push(parsed.finding);

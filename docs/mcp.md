@@ -202,9 +202,12 @@ repeat them:
   the agent asks you before it confirms either. The same goes for `apply` with
   `include_tenant_wide`: it imports the package's tenant-wide sections
   (`tenant_settings`, `model_registry`, …) for every solution of the tenant,
-  and its preview's `tenant_wide` names the active solutions the change
-  reaches (`reaches_active_solutions`). Without it, a solution's import leaves
-  those sections out, and `tenant_wide.left_out` says which. The preview it
+  and its preview's `tenant_wide` names the sections the confirm would import
+  (`would_import`) and the active solutions the change reaches
+  (`reaches_active_solutions`). Without it, a solution's import leaves those
+  sections out, and `tenant_wide.left_out` says which. A preview applies
+  nothing, so its `tenant_wide.applied` is false; after the confirm,
+  `tenant_wide.imported` says what the import took along. The preview it
   stores keeps the flag, so the confirm sends the same request. `pull` takes
   `include_tenant_wide` too, to write those sections into the folder.
 - **What changes without `confirm`.** `init`, `pull` and `fmt` change nothing

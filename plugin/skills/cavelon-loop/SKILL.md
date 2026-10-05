@@ -84,7 +84,9 @@ use it when you parse the result.
    import. `pull --include-tenant-wide` writes them; `apply
    --include-tenant-wide` (the MCP tool's `include_tenant_wide`) imports them,
    for every solution of the tenant, so only with the person's say-so; its
-   preview names the active solutions the change reaches.
+   preview names the sections the confirm would import (`would_import`) and
+   the active solutions the change reaches, and warns of a change only where
+   one of those sections differs from the instance's.
    `validate` warns about a tenant-wide file in the folder
    (`tenant_wide_section`); on an instance that does not publish
    `include_tenant_wide`, `apply` imports such a file anyway and says so:

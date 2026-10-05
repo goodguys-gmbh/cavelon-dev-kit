@@ -16,8 +16,10 @@ import { callStable, workflowOperation } from "../invoke.js";
 import { readAll } from "../io.js";
 import { schemaErrors } from "../openapi.js";
 import { readPrincipal } from "../principal.js";
+import { permissionsNamed, SECRETS_PERMISSIONS, secretsPermissionMissing } from "../secret-access.js";
 import { readHidden } from "../prompt.js";
-import { requireToken } from "../session.js";
+import { readPackage } from "../package-files.js";
+import { requireToken, type Session } from "../session.js";
 import { cavelonCommand, fill, printedCommand } from "../printed.js";
 
 /**
@@ -264,6 +266,19 @@ async function requirePerson(ctx: Context, verb: "set" | "delete", name: string)
   });
 }
 
+/**
+ * The instance's 403 for a role without the permission, as who may set the
+ * secret instead; any other error as it is. The instance decides: the kit
+ * never refuses a person's token up front, as the permission names are not
+ * published and a renamed one would turn away someone who may.
+ */
+function refusedForRole(error: unknown, verb: "set" | "delete", name: string): unknown {
+  if (!(error instanceof CavelonError) || error.status !== 403 || error.code === "secret_needs_a_person") return error;
+  const named = permissionsNamed(error.message);
+  if (!named.length && error.code !== "forbidden") return error;
+  return secretsPermissionMissing(verb, name, named.length ? named : SECRETS_PERMISSIONS);
+}
+
 function withoutLineEnd(text: string): string {
   if (text.endsWith("\r\n")) return text.slice(0, -2);
   if (text.endsWith("\n")) return text.slice(0, -1);
@@ -349,12 +364,34 @@ function secretView(status: SecretStatus) {
   };
 }
 
+/** The section a package declares the secrets it needs in. */
+const REQUIRED_SECRETS_SECTION = "required_secrets";
+
+/**
+ * The secrets this folder's package declares, with the file that does: before
+ * the first apply the tenant does not know them yet, so its list alone would
+ * say nobody declared one. Empty outside a solution folder or when the files
+ * cannot be read.
+ */
+async function locallyDeclaredSecrets(session: Session): Promise<Array<{ name: string; file: string | null }>> {
+  const project = session.project;
+  if (!project) return [];
+  const disk = await readPackage(project.root, project.layout).catch(() => undefined);
+  const declared = disk?.package[REQUIRED_SECRETS_SECTION];
+  if (!Array.isArray(declared)) return [];
+  const source = disk!.sources[REQUIRED_SECRETS_SECTION];
+  const file = (Array.isArray(source) ? source[0]?.file : source?.file) ?? null;
+  const names = declared.map((d) => (d && typeof d === "object" ? (d as Record<string, unknown>).name : d)).filter((n): n is string => typeof n === "string" && n !== "");
+  return [...new Set(names)].map((name) => ({ name, file }));
+}
+
 export const secretsList: CommandSpec = {
   name: "secrets list",
   summary: "List the tenant's secret names ({{secret:…}}) with whether each is set; never a value.",
   description:
-    "Lists every secret that has a value or that an imported package declared. A person sets a missing one with\n" +
-    "`cavelon secrets set <name>`; an agent never sets or reads a secret value.",
+    "Lists every secret that has a value or that an imported package declared, and in a solution folder the ones its\n" +
+    "package declares that the tenant does not know yet. A person sets a missing one with `cavelon secrets set <name>`;\n" +
+    "an agent never sets or reads a secret value.",
   readOnly: true,
   idempotent: true,
   mcpTool: "secrets_list",
@@ -367,20 +404,32 @@ export const secretsList: CommandSpec = {
   examples: ["cavelon secrets list", "cavelon secrets list --missing --json"],
   async run(ctx, input) {
     const limit = intOption(input, "limit", { min: 1, max: 500, fallback: 50 })!;
+    const session = await ctx.session();
     const all = ((await callStable<{ items: SecretStatus[] }>(ctx, "GET", "/api/v1/secrets", "tenant secrets")).items ?? []).map(secretView);
+    const local = (await locallyDeclaredSecrets(session)).filter((d) => !all.some((s) => s.name === d.name));
     const wanted = boolOption(input, "missing") ? all.filter((s) => s.status !== "set") : all;
     const page = pageOf(wanted, limit, stringOption(input, "cursor"));
     const items = page.items.map((s) => (s.status === "set" ? s : { ...s, set_by_person: secretSetCommand(s.name) }));
     const missing = all.filter((s) => s.status !== "set").length;
     const onlyMissing = boolOption(input, "missing");
-    let text = onlyMissing ? "Every secret this tenant knows is set." : "This tenant has no secrets and no package declared one.";
+    let text = onlyMissing ? "Every secret this tenant knows is set." : "This tenant has no secrets, and no package applied to it declared one.";
     if (items.length) {
       const rows = items.map((s) => ({ ...s, declared: s.declared ? "yes" : "", changed_at: s.changed_at ?? "", description: s.description ?? "" }));
       const next = moreHint(page.next_cursor, cavelonCommand("secrets", "list", ...(onlyMissing ? ["--missing"] : [])));
       const howTo = missing ? `\n\n${missing} not set. A person sets each with: ${cavelonCommand("secrets", "set", fill("name"))}` : "";
       text = table(rows, ["name", "status", "declared", "changed_at", "description"], 50) + next + howTo;
     }
-    return { data: { items, next_cursor: page.next_cursor, total: page.total, not_set: missing }, text };
+    if (local.length) {
+      const where = local[0]!.file ?? "this folder's package";
+      text +=
+        `\n\n${where} declares ${local.map((d) => d.name).join(", ")}, which the tenant does not know yet: it lists ` +
+        `${local.length === 1 ? "it" : "them"} once the package is applied (\`${cavelonCommand("apply")}\`). A person may set ${local.length === 1 ? "it" : "each"} before that: ` +
+        local.map((d) => secretSetCommand(d.name)).join("; ");
+    }
+    return {
+      data: { items, next_cursor: page.next_cursor, total: page.total, not_set: missing, ...(local.length ? { declared_locally: local } : {}) },
+      text,
+    };
   },
 };
 
@@ -389,7 +438,8 @@ export const secretsSet: CommandSpec = {
   summary: "Set a secret's value (a person runs this, never the agent).",
   description:
     "Asks for the value without echoing it, or reads it from standard input when that is piped (one trailing line break is\n" +
-    "dropped). The value is never an argument, never printed and never read back. A tenant API key cannot set a secret.",
+    "dropped). The value is never an argument, never printed and never read back. A tenant API key cannot set a secret,\n" +
+    "nor can a role the instance does not allow to manage secrets (a Builder): its refusal then names who can, a tenant Owner.",
   readOnly: false,
   idempotent: true,
   mcpTool: false,
@@ -406,7 +456,7 @@ export const secretsSet: CommandSpec = {
     try {
       status = await callStable<SecretStatus>(ctx, "PUT", "/api/v1/secrets/{name}", "setting secrets", { params: { name: [name] }, body: { value } });
     } catch (error) {
-      throw withoutValue(error, value);
+      throw withoutValue(refusedForRole(error, "set", name), value);
     }
     const data = secretView(status);
     return { data, text: `Secret ${data.name} is set${changedNote(data.changed_at)}. Its value is never shown.` };
@@ -447,7 +497,7 @@ export const secretsDelete: CommandSpec = {
       await callStable(ctx, "DELETE", "/api/v1/secrets/{name}", "deleting secrets", { params: { name: [name] } });
     } catch (error) {
       if (notFound(error)) return nothing;
-      throw error;
+      throw refusedForRole(error, "delete", name);
     }
     return {
       data: { ...current, status: "not_set", deleted: true },

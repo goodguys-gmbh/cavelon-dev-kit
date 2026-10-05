@@ -138,13 +138,47 @@ export function fieldChanges(raw: unknown): FieldChange[] {
   return out;
 }
 
+function commonPrefix(a: string, b: string): number {
+  let n = 0;
+  while (n < a.length && n < b.length && a[n] === b[n]) n++;
+  return n;
+}
+
 function shown(value: unknown): string {
   if (value === undefined || value === null) return "null";
   return clip(JSON.stringify(value), 80);
 }
 
+/** Characters shown on each side of where two long texts differ. */
+const DIFF_CONTEXT = 30;
+
+/**
+ * Both sides of a change. Two long texts are shown from a little before
+ * where they start to differ to a little after where they agree again: cut
+ * at the same prefix, an edit at the end of a long prompt would not show.
+ */
+export function shownPair(before: unknown, after: unknown): [string, string] {
+  if (typeof before !== "string" || typeof after !== "string" || (JSON.stringify(before).length <= 80 && JSON.stringify(after).length <= 80)) {
+    return [shown(before), shown(after)];
+  }
+  const start = commonPrefix(before, after);
+  let end = 0;
+  while (end < before.length - start && end < after.length - start && before[before.length - 1 - end] === after[after.length - 1 - end]) end++;
+  const from = Math.max(0, start - DIFF_CONTEXT);
+  const window = (value: string) => {
+    const to = Math.min(value.length, value.length - end + DIFF_CONTEXT);
+    const part = JSON.stringify(value.slice(from, to));
+    return `${from > 0 ? "…" : ""}${clip(part, 160)}${to < value.length ? "…" : ""}`;
+  };
+  return [window(before), window(after)];
+}
+
 export function changeLines(changes: FieldChange[], max = 20): string {
-  const lines = changes.slice(0, max).map((c) => `\n  - ${c.object}.${c.field}: ${shown(c.old)} → ${shown(c.new)}`);
+  const lines = changes.slice(0, max).map((c) => {
+    const [before, after] = shownPair(c.old, c.new);
+    const at = typeof c.old === "string" && typeof c.new === "string" && (before.startsWith("…") || after.startsWith("…")) ? ` (from character ${commonPrefix(c.old, c.new) + 1})` : "";
+    return `\n  - ${c.object}.${c.field}: ${before} → ${after}${at}`;
+  });
   return lines.join("") + (changes.length > max ? `\n  … ${changes.length - max} more (--json)` : "");
 }
 
@@ -191,27 +225,50 @@ export function notAppliedLines(list: NotApplied[]): string {
     .join("") + (list.length > 20 ? `\n  … ${list.length - 20} more (--json)` : "");
 }
 
-/** The preview's report on a solution package's tenant-wide sections, as a recent instance sends it. */
+/** What an instance reports on a solution package's tenant-wide sections, in a preview or an import's result. */
 export interface TenantWideReport {
   /** The tenant-wide sections the package holds. */
   sections: string[];
-  /** Whether this import applies them (include_tenant_wide), or leaves them out. */
+  /** Whether this import takes them along (include_tenant_wide), or leaves them out. */
   applied: boolean;
+  /** The sections the import takes along: a preview's `would_import`, a result's `imported`, else all of them when `applied`. */
+  imports: string[];
+  /** The sections it leaves out: `left_out`, else all of them when not `applied`. */
+  left_out: string[];
+  /** Whether the instance named `imports` and `left_out` itself, rather than the kit reading them from `applied`. */
+  listed: boolean;
   /** The active solutions that see them change, by slug or name, when applied. */
   reaches_active_solutions: string[];
 }
 
+const names = (raw: unknown): string[] | undefined => (Array.isArray(raw) ? raw.map(text).filter((s): s is string => s !== null) : undefined);
+
 /**
- * The preview's `tenant_wide`: `{sections, applied, reaches_active_solutions}`,
- * an active solution named by a string or an object with its slug or name.
- * Undefined on an instance that sends none, or a shape without sections.
+ * The `tenant_wide` of a preview or an import's result: `{sections, applied,
+ * reaches_active_solutions}`, an active solution named by a string or an
+ * object with its slug or name. A recent instance also names what the import
+ * takes along (`would_import` in a preview, `imported` in a result) and what
+ * it leaves out (`left_out`); an older one says only `applied`, which then
+ * stands for all of the sections. Undefined on an instance that sends none,
+ * or a shape without sections.
  */
 export function tenantWideReport(raw: unknown): TenantWideReport | undefined {
   if (!isObject(raw) || !Array.isArray(raw.sections)) return undefined;
-  const sections = raw.sections.map(text).filter((s): s is string => s !== null);
+  const sections = names(raw.sections)!;
   const reaches = Array.isArray(raw.reaches_active_solutions) ? raw.reaches_active_solutions : [];
-  const names = reaches
+  const solutions = reaches
     .map((h) => (isObject(h) ? (text(h.slug) ?? text(h.harness_slug) ?? text(h.name) ?? text(h.id)) : text(h)))
     .filter((n): n is string => n !== null);
-  return { sections, applied: raw.applied === true, reaches_active_solutions: [...new Set(names)] };
+  const applied = raw.applied === true;
+  const said = names(raw.would_import) ?? names(raw.imported);
+  const leftOut = names(raw.left_out);
+  const imports = said ?? (leftOut ? sections.filter((s) => !leftOut.includes(s)) : applied ? sections : []);
+  return {
+    sections,
+    applied,
+    imports,
+    left_out: leftOut ?? sections.filter((s) => !imports.includes(s)),
+    listed: said !== undefined || leftOut !== undefined,
+    reaches_active_solutions: [...new Set(solutions)],
+  };
 }
