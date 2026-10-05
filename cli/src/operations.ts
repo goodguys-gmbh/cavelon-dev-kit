@@ -1,6 +1,7 @@
 import type { Context } from "./command.js";
 import { CavelonError, ExitCode, type ExitCodeValue } from "./errors.js";
 import type { ApiClient } from "./http.js";
+import { cavelonCommand } from "./printed.js";
 import { failureLines, type ResultFailure } from "./results.js";
 
 /**
@@ -72,7 +73,7 @@ export async function getOperation(client: ApiClient, id: string, signal?: Abort
         throw new CavelonError(ExitCode.usage, {
           code: "not_an_operation_id",
           message: `"${id}" is not an operation id (they start with op_).`,
-          hint: "Commands that start work print the operation id; `cavelon status` lists running ones.",
+          hint: `Commands that start work print the operation id; \`${cavelonCommand("status")}\` lists running ones.`,
         });
       }
       // Either the id is unknown, or the route is missing altogether.
@@ -82,7 +83,7 @@ export async function getOperation(client: ApiClient, id: string, signal?: Abort
         code: "operation_not_found",
         status: 404,
         message: `No operation ${id} in this tenant.`,
-        hint: "Operation ids are per tenant; check `cavelon whoami`.",
+        hint: `Operation ids are per tenant; check \`${cavelonCommand("whoami")}\`.`,
       });
     }
     throw error;

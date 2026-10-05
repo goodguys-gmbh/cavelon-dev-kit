@@ -134,6 +134,28 @@ option's former name is still taken for a release, with a warning: `apply`'s
 and `pull`'s `tenant_wide` (0.1.7) is now `include_tenant_wide`, the
 instance's name for it.
 
+### Next steps over MCP
+
+What a tool returns for the agent to do next (a hint, `next`, `resume`, a
+preview's `confirm` or `default_route`) names the tool call, never a
+`cavelon` command line: the tool's name and its arguments as JSON, with the
+`tenant` and `env` the call was given. `operation_status` resumes with
+`operation_status {"operation":["op_…"]}`, and `activate` names the default
+route's change as
+
+```text
+harness_default {"solution":"support","tenant":"acme"}
+harness_default {"solution":"support","confirm":"<confirm_token of its preview>","tenant":"acme"}
+```
+
+A value in angle brackets is the agent's to fill: a `confirm_token` comes from
+calling that tool without `confirm` first. A command only a person runs
+(`secrets set`, `login`) stays a command line for their terminal. The tools'
+descriptions spell their arguments the same way (`make_default`, not
+`--make-default`), and `init` as a tool names the `harness_new` call (with the
+solution's slug and name) and then `pull` for a solution that is not on the
+instance yet, since it creates none.
+
 ### What is not a tool
 
 - **`login` and `logout`**: a person runs them.

@@ -17,11 +17,11 @@ import { formatQuota, limitError, limitsOrWarn, readQuotas } from "../limits.js"
 import { containing } from "../choose.js";
 import { readPrincipal, readTenantless, type MetaPrincipal } from "../principal.js";
 import type { ApiClient } from "../http.js";
-import { contextFlags, requireInstance } from "../session.js";
+import { requireInstance } from "../session.js";
 import { listsTenants, searchTenants } from "../tenant-choice.js";
 import { harnessNotFoundError, lookupHarness, resolveHarnessId } from "../harness-ref.js";
 import { defaultChangeLine, defaultCommands, named, readDefaultRoute, setDefaultRoute } from "../default-route.js";
-import { cavelonCommand } from "../shell.js";
+import { cavelonCommand, fill } from "../printed.js";
 import { rememberTenant } from "./session.js";
 
 /**
@@ -134,6 +134,7 @@ async function entersTenant(client: ApiClient, tenantId: string): Promise<{ ok: 
 
 export const tenantCreate: CommandSpec = {
   name: "tenant create",
+  tenantless: true,
   summary: "Create a tenant (personal access token in Platform mode with tenants.manage).",
   description:
     "A tenant API key never can. Before sending, the token is checked: one that may not enter Platform mode, or enters it\n" +
@@ -191,6 +192,7 @@ interface Me {
 
 export const tenantList: CommandSpec = {
   name: "tenant list",
+  tenantless: true,
   summary: "List the tenants this token can see, with name, slug and id.",
   description:
     "A personal access token in Platform mode sees every tenant; any other sees the tenants it reaches. " +
@@ -206,7 +208,7 @@ export const tenantList: CommandSpec = {
   async run(ctx, input) {
     const session = await ctx.session();
     if (session.tokenKind === "api_key") {
-      throw usageError("A tenant API key sees only its own tenant.", "`cavelon whoami` shows it.");
+      throw usageError("A tenant API key sees only its own tenant.", `\`${cavelonCommand("whoami")}\` shows it.`);
     }
     const limit = intOption(input, "limit", { min: 1, max: 200, fallback: 50 })!;
     const cursor = stringOption(input, "cursor");
@@ -248,8 +250,8 @@ export const tenantList: CommandSpec = {
         page.listed = "own_memberships";
         page.note = "This token reaches every tenant; items and total count only your own memberships. Find any tenant with --search <part of the name>.";
         note = all.length
-          ? `\nThese are your own memberships; this token reaches every tenant on ${client.url}. Find any other: cavelon tenant list --search <part of the name>`
-          : `No memberships of your own; this token reaches every tenant on ${client.url}. Find any tenant with: cavelon tenant list --search <part of the name>`;
+          ? `\nThese are your own memberships; this token reaches every tenant on ${client.url}. Find any other: ${cavelonCommand("tenant", "list", "--search", fill("part of the name"))}`
+          : `No memberships of your own; this token reaches every tenant on ${client.url}. Find any tenant with: ${cavelonCommand("tenant", "list", "--search", fill("part of the name"))}`;
       }
     } else {
       const me = await client.get<Me>("/api/v1/auth/me", { sendTenant: false });
@@ -261,10 +263,10 @@ export const tenantList: CommandSpec = {
     }
     const columns = page.source === "platform" ? ["name", "slug", "status", "id"] : ["name", "slug", "role", "id"];
     const empty = search ? `No tenant's name or slug contains "${search}".` : note ? "" : "No tenants.";
-    const next = page.items.length ? `\nChoose one: cavelon use <slug>  (or \`cavelon use\` to pick from a list)` : "";
+    const next = page.items.length ? `\nChoose one: ${cavelonCommand("use", fill("slug"))}  (or \`${cavelonCommand("use")}\` to pick from a list)` : "";
     return {
       data: page,
-      text: ((table(page.items, columns) || empty) + moreHint(page.next_cursor, "cavelon tenant list") + note + next).trimStart(),
+      text: ((table(page.items, columns) || empty) + moreHint(page.next_cursor, cavelonCommand("tenant", "list")) + note + next).trimStart(),
     };
   },
 };
@@ -306,7 +308,7 @@ export const harnessList: CommandSpec = {
     const columns = ["slug", "name", "status", ...(marksDefault ? ["default"] : []), ...(boolOption(input, "readiness") ? ["ready_to_activate"] : []), "id"];
     return {
       data: page,
-      text: (table(rows, columns) || "No solutions yet. Create one: cavelon harness new <slug>") + moreHint(page.next_cursor, "cavelon harness list"),
+      text: (table(rows, columns) || `No solutions yet. Create one: ${cavelonCommand("harness", "new", fill("slug"))}`) + moreHint(page.next_cursor, cavelonCommand("harness", "list")),
     };
   },
 };
@@ -331,14 +333,11 @@ export const harnessDefault: CommandSpec = {
   async run(ctx, input) {
     const session = await ctx.session();
     const ref = positional(input, "solution") ?? session.envFile?.harness ?? session.project?.harness;
-    if (!ref) throw usageError("Which solution?", "Pass its name or slug (`cavelon harness list` shows them), or run it in a folder whose cavelon.yaml names one.");
+    if (!ref) throw usageError("Which solution?", `Pass its name or slug (\`${cavelonCommand("harness", "list")}\` shows them), or run it in a folder whose cavelon.yaml names one.`);
     // Refused before anything is read, as every confirming tool refuses true.
     if (ctx.mode === "mcp" && input.options.confirm === true) throw confirmTokenRequired("harness_default");
     const { harness, candidates } = await lookupHarness<Harness>(ctx, ref);
-    if (!harness) {
-      const flags = contextFlags(session);
-      throw harnessNotFoundError(ref, candidates, undefined, (slug) => cavelonCommand("harness", "default", slug) + flags, flags);
-    }
+    if (!harness) throw harnessNotFoundError(ref, candidates, undefined, (slug) => cavelonCommand("harness", "default", slug));
     const route = await readDefaultRoute(ctx);
     const target = { id: harness.id, slug: harness.slug, name: harness.name, status: harness.status };
     const current = route.current ? { id: route.current.id, slug: route.current.slug, name: route.current.name } : null;
@@ -411,7 +410,7 @@ async function checkHarnessCapacity(ctx: Context, slug: string): Promise<void> {
     throw new CavelonError(ExitCode.validation, {
       code: "tenant_quota_reached",
       message: `This tenant has used ${formatQuota(quota)} of its solution quota, so nothing was sent.`,
-      hint: `A platform administrator raises the tenant's quotas; \`cavelon limits\` shows them${quotas.docs ? ` (docs: ${quotas.docs})` : ""}. Archiving an unused solution frees one.`,
+      hint: `A platform administrator raises the tenant's quotas; \`${cavelonCommand("limits")}\` shows them${quotas.docs ? ` (docs: ${quotas.docs})` : ""}. Archiving an unused solution frees one.`,
       docs: quotas.docs ?? undefined,
       details: { quota: { key: quota.key, current: quota.current, limit: quota.limit, path: quotas.path }, sent: false },
     });

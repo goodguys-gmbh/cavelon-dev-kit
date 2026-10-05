@@ -2,6 +2,7 @@ import { capacityCodeIn, capacityHint } from "./capacity.js";
 import { ceilingRefusal, LIMIT_ABOVE_CEILING } from "./limits.js";
 import { CavelonError, ExitCode, type ExitCodeValue } from "./errors.js";
 import { blockerDetails, type BlockerDetail } from "./preview-report.js";
+import { cavelonCommand } from "./printed.js";
 import { KIT_VERSION } from "./version.js";
 
 // The standalone executable runs on Bun, the npm package on Node.js.
@@ -367,7 +368,7 @@ export function errorFromResponse(status: number, body: unknown, what: string, h
   if (status === 429 && !hint) hint = retryAfter ? `Retry after ${retryAfter} seconds.` : "Retry later.";
   // A refusal for run or endpoint capacity: which limit to raise, and who can.
   const capacity = capacityCodeIn(code) ?? (status === 429 || status === 503 ? capacityCodeIn(message) : undefined);
-  if (capacity) hint = [hint, capacityHint(capacity), `\`cavelon explain ${capacity}\` says more.`].filter(Boolean).join(" ");
+  if (capacity) hint = [hint, capacityHint(capacity), `\`${cavelonCommand("explain", capacity)}\` says more.`].filter(Boolean).join(" ");
   // A value above a platform ceiling: the ceiling and the operator's setting that raises it, from the refusal's fields.
   const ceiling = code === LIMIT_ABOVE_CEILING ? ceilingRefusal(body) : undefined;
   if (ceiling) {
@@ -376,7 +377,7 @@ export function errorFromResponse(status: number, body: unknown, what: string, h
   }
   if (changed) details = details && typeof details === "object" && !Array.isArray(details) ? { ...(details as Record<string, unknown>), changed } : { changed };
   if (status === 400 && !hint && message && /select a tenant|tenant context|X-Tenant-Id/i.test(message)) {
-    hint = "Choose a tenant with `cavelon use` (it lists your tenants), --tenant or CAVELON_TENANT.";
+    hint = `Choose a tenant with \`${cavelonCommand("use")}\` (it lists your tenants), --tenant or CAVELON_TENANT.`;
   }
   if ((status === 401 || status === 403) && !hint) {
     hint =
@@ -386,7 +387,7 @@ export function errorFromResponse(status: number, body: unknown, what: string, h
           ? PLATFORM_ROUTE_HINT
           : sent.tenantless
             ? `No tenant was named. ${TENANT_ID_HINT} Otherwise check the token's permission ceiling.`
-            : "The token does not reach this. Check the tenant (`cavelon whoami`) and the token's permission ceiling.";
+            : `The token does not reach this. Check the tenant (\`${cavelonCommand("whoami")}\`) and the token's permission ceiling.`;
   }
   return new CavelonError(exitCode, {
     code: code ?? defaultCode(status),

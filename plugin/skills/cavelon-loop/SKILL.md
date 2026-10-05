@@ -58,7 +58,7 @@ use it when you parse the result.
   pass `--tenant` (and `--instance`) to every command, `harness new` and
   `pull` included: without it a command acts in the tenant `cavelon use`
   chose, which may be another one. The commands `cavelon` prints carry the
-  `--tenant` you gave; run them as printed. `apply` never creates a solution: when the one an env file names
+  `--tenant` (and `--env`) you gave, confirm lines included; run them as printed. `apply` never creates a solution: when the one an env file names
   is missing it stops with `solution_not_found` and names that command. To start from a package file (a blueprint, an
   export from another instance), run
   `cavelon init --instance <url> --tenant <tenant> --from <file>` instead of
@@ -234,7 +234,10 @@ refused (`confirm_token_required`), and a token of another change returns the
 new preview with `token_mismatch` (exit code 4): show that one instead. Tool
 arguments are spelled in snake_case (`make_default`, `keep_both`, `dry_run`);
 an argument a tool does not list is refused (`unknown_argument`) with the
-closest one named.
+closest one named. Over MCP the next steps a tool returns (hints, `next`,
+`resume`, `confirm`) are tool calls, `harness_default {"solution":"support"}`:
+make the call as written, filling a value in angle brackets (a
+`confirm_token` comes from that tool's preview).
 
 **From your shell, `--confirm` takes the same token.** Run by a coding agent,
 `limits set`, `models set-limit`, `loop cancel`, `sandbox seed`,

@@ -23,8 +23,8 @@ import {
 import { deref, jsonBodySchema, operationForPath, validateBody, type Operation } from "../openapi.js";
 import { readGlobalRole, readPrincipal, type MetaPrincipal } from "../principal.js";
 import type { Session } from "../session.js";
-import { cavelonCommand, shellWord } from "../shell.js";
-import { ENV_OPTION, targetFlags } from "./values.js";
+import { cavelonCommand } from "../printed.js";
+import { ENV_OPTION } from "./values.js";
 
 /**
  * `cavelon limits set <key> <value>`: change one limit through the operation
@@ -185,8 +185,8 @@ function findTarget(published: PublishedLimits, key: string, explicitTenant: boo
     code: "limit_not_found",
     message: `This instance lists no limit ${key}.`,
     hint: lines.length
-      ? `${lines.join(" ")} \`cavelon limits\` lists every limit.`
-      : "`cavelon limits` lists every limit; this instance names none that changes through the API.",
+      ? `${lines.join(" ")} \`${cavelonCommand("limits")}\` lists every limit.`
+      : `\`${cavelonCommand("limits")}\` lists every limit; this instance names none that changes through the API.`,
     details: { key, changeable: [...tenant, ...operator], sent: false },
   });
 }
@@ -460,10 +460,10 @@ async function pathParams(ctx: Context, change: LimitChange, principal: MetaPrin
   for (const match of change.path.matchAll(/\{([^}]+)\}/g)) {
     const name = match[1]!;
     if (name !== "tenant_id") {
-      throw notPublished(`${change.method} ${change.path} needs ${name}, which the kit cannot fill, so nothing was sent.`, "The instance names an operation this kit does not know how to call; `cavelon api describe` shows it.");
+      throw notPublished(`${change.method} ${change.path} needs ${name}, which the kit cannot fill, so nothing was sent.`, `The instance names an operation this kit does not know how to call; \`${cavelonCommand("api", "describe")}\` shows it.`);
     }
     const tenantId = (await ctx.client()).target.tenantId ?? principal?.tenant_id ?? undefined;
-    if (!tenantId) throw usageError("Which tenant? Choose one with `cavelon use` (it lists your tenants) or --tenant.");
+    if (!tenantId) throw usageError(`Which tenant? Choose one with \`${cavelonCommand("use")}\` (it lists your tenants) or --tenant.`);
     params[name] = [tenantId];
   }
   return params;
@@ -623,7 +623,7 @@ export const limitsSet: CommandSpec = {
       throw new CavelonError(ExitCode.usage, {
         code: "tenant_required",
         message: "Limits belong to a tenant, and none is chosen.",
-        hint: "Choose one with `cavelon use` (it lists your tenants) or pass --tenant; an operator's change reads the limits of any tenant and sends in Platform mode.",
+        hint: `Choose one with \`${cavelonCommand("use")}\` (it lists your tenants) or pass --tenant; an operator's change reads the limits of any tenant and sends in Platform mode.`,
       });
     }
     if (!published.published) {
@@ -664,7 +664,6 @@ export const limitsSet: CommandSpec = {
     if (refused) throw refused;
     const params = { ...fixed, ...(await pathParams(ctx, change, operator ? undefined : principal)) };
 
-    const flags = targetFlags(session);
     const previous = await previousValue(ctx, published, target);
     const operation = {
       operation: change.operation,
@@ -699,7 +698,7 @@ export const limitsSet: CommandSpec = {
       : `a credential with ${anyOf(change.permissions)} (a session, a personal access token, or an admin API key of the tenant)`;
     const gate = await confirmation(ctx, input, "limits_set", { key, value, previous: previous ?? null, operation });
     if (!gate.confirmed) {
-      const confirm = gate.confirm(`cavelon limits set ${shellWord(key)} ${shellWord(argText(value))}${flags} --confirm`);
+      const confirm = gate.confirm(cavelonCommand("limits", "set", key, argText(value), "--confirm"));
       const source = target.limit && target.kind === "limit" ? ` (source now: ${target.limit.source}${target.limit.origin ? `, origin: ${target.limit.origin}` : ""})` : "";
       const what =
         target.scope === "platform" && target.limit?.tenant_change

@@ -22,7 +22,7 @@ import { clip, keyValues, moreHint, table } from "../format.js";
 import { bodyBytes } from "../http.js";
 import { buildRequest, callStable, workflowOperation } from "../invoke.js";
 import { isUuid } from "../session.js";
-import { cavelonCommand } from "../shell.js";
+import { cavelonCommand, fill } from "../printed.js";
 import { archiveFrom } from "../tar.js";
 import { TIMEOUT_OPTION, timeoutMs, waitAndReport } from "./async.js";
 import { resolveHarnessId } from "../harness-ref.js";
@@ -115,7 +115,7 @@ export async function resolveSandbox(ctx: Context, ref: string): Promise<Sandbox
   throw new CavelonError(ExitCode.failure, {
     code: hits.length ? "sandbox_ambiguous" : "sandbox_not_found",
     message: hits.length ? `${hits.length} Sandboxes are named "${ref}"; pass its id.` : `No Sandbox "${ref}" in this tenant.`,
-    hint: "`cavelon sandbox list` lists them.",
+    hint: `\`${cavelonCommand("sandbox", "list")}\` lists them.`,
   });
 }
 
@@ -125,17 +125,17 @@ const REFUSALS: Record<Offer, { code: string; what: string; elsewhere: (s: Sandb
     what: "archive import and export",
     elsewhere: (s) =>
       `On a customer VM, put the files into its directory on the VM, then run \`${cavelonCommand("sandbox", "refresh", s.name)}\`; ` +
-      `read results with \`${cavelonCommand("sandbox", "files", s.name)}\` and \`${cavelonCommand("sandbox", "cat", s.name)} <path>\`.`,
+      `read results with \`${cavelonCommand("sandbox", "files", s.name)}\` and \`${cavelonCommand("sandbox", "cat", s.name, fill("path"))}\`.`,
   },
   receipt: {
     code: "sandbox_validation_receipt_unavailable",
     what: "a runner validation receipt (it reports agent_reported completion only)",
-    elsewhere: (s) => `The evidence is the files: \`${cavelonCommand("sandbox", "files", s.name)}\` and \`${cavelonCommand("sandbox", "cat", s.name)} <path>\`.`,
+    elsewhere: (s) => `The evidence is the files: \`${cavelonCommand("sandbox", "files", s.name)}\` and \`${cavelonCommand("sandbox", "cat", s.name, fill("path"))}\`.`,
   },
   refresh: {
     code: "sandbox_workspace_refresh_unavailable",
     what: "a workspace refresh (nothing edits it outside Cavelon)",
-    elsewhere: (s) => `Seed an isolated container with \`${cavelonCommand("sandbox", "seed", s.name)} <folder>\`.`,
+    elsewhere: (s) => `Seed an isolated container with \`${cavelonCommand("sandbox", "seed", s.name, fill("folder"))}\`.`,
   },
 };
 
@@ -220,7 +220,7 @@ export const sandboxList: CommandSpec = {
       data: { items, next_cursor: next, instance_modes: modes ?? null },
       text:
         (table(items, ["name", "mode", "state", "ready", "revision", "connection", "id"]) || "No Sandboxes.") +
-        moreHint(next, "cavelon sandbox list") +
+        moreHint(next, cavelonCommand("sandbox", "list")) +
         (modes ? `\n\nNew Sandboxes on this instance: ${modes.join(", ") || "none (switched off)"}.` : ""),
     };
   },
@@ -564,7 +564,7 @@ function jobFailed(job: ArchiveJob): CavelonError {
   return new CavelonError(ExitCode.failure, {
     code: job.error_code ?? "sandbox_artifact_job_failed",
     message: `Archive job ${job.id} ${job.status}${job.error_code ? ": " + job.error_code : ""}.`,
-    hint: job.error_code ? `\`cavelon explain ${job.error_code}\` says what it means.` : undefined,
+    hint: job.error_code ? `\`${cavelonCommand("explain", job.error_code)}\` says what it means.` : undefined,
   });
 }
 
@@ -617,7 +617,7 @@ export const sandboxSeed: CommandSpec = {
       revision,
       archive: { from: archive.from, sha256: archive.sha256, size_bytes: archive.bytes.length, ...(archive.files >= 0 ? { files: archive.files, folders: archive.directories } : {}) },
     };
-    if (sandbox.lifecycle_state !== "ready") ctx.warn(`Sandbox "${sandbox.name}" is ${sandbox.lifecycle_state}; the instance accepts a seed only when it is ready (\`cavelon sandbox validate\`).`);
+    if (sandbox.lifecycle_state !== "ready") ctx.warn(`Sandbox "${sandbox.name}" is ${sandbox.lifecycle_state}; the instance accepts a seed only when it is ready (\`${cavelonCommand("sandbox", "validate", sandbox.name)}\`).`);
     if (sandbox.writer_owner_run_id) ctx.warn(`Run ${sandbox.writer_owner_run_id} holds the Sandbox's writer; the instance refuses a seed until it ends.`);
     const what = archive.files >= 0 ? `${archive.files} files in ${archive.directories} folders` : "the tar archive";
     const gate = await confirmation(ctx, input, "sandbox_seed", { sandbox: sandbox.id, harness, revision, sha256: archive.sha256 });
@@ -662,7 +662,7 @@ export const sandboxSeed: CommandSpec = {
     }
     return {
       data: result,
-      text: `Sent ${what} to "${sandbox.name}"; the import runs on the instance.\nWait with: cavelon wait ${job.operation_id}`,
+      text: `Sent ${what} to "${sandbox.name}"; the import runs on the instance.\nWait with: ${cavelonCommand("wait", job.operation_id)}`,
     };
   },
 };
@@ -721,7 +721,7 @@ async function download(ctx: Context, sandbox: Sandbox, job: ArchiveJob, out: st
       throw new CavelonError(ExitCode.conflict, {
         code: "file_exists",
         message: `${file} exists; cavelon does not overwrite it.`,
-        hint: `Choose another file with --out, then: ${cavelonCommand("artifacts", "export", sandbox.name, "--job", job.id, "--out")} <file>`,
+        hint: `Choose another file with --out, then: ${cavelonCommand("artifacts", "export", sandbox.name, "--job", job.id, "--out", fill("file"))}`,
       });
     }
     throw error;
@@ -778,7 +778,7 @@ export const artifactsExport: CommandSpec = {
       if (!(boolOption(input, "wait") && ctx.mode === "cli")) {
         return {
           data: { ...base, status: job.status, phase: job.phase, download: later },
-          text: `Export job ${job.id} is ${job.phase}.\nWait with: cavelon wait ${job.operation_id}\nThen download: ${later}`,
+          text: `Export job ${job.id} is ${job.phase}.\nWait with: ${cavelonCommand("wait", job.operation_id)}\nThen download: ${later}`,
           exitCode: jobRef ? ExitCode.timeout : ExitCode.ok,
         };
       }

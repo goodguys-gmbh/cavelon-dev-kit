@@ -26,7 +26,7 @@ import { bindsNow, changedBy, limitError, limitsOrWarn, readLimits, type Limit, 
 import { getOperation } from "../operations.js";
 import { caseCounts, caseLabel, countsText, failedCase, caseKnowledgeOutcomes, NOT_PASSED, runVerdict, type TestResultState } from "../results.js";
 import { isUuid } from "../session.js";
-import { cavelonCommand, shellWord } from "../shell.js";
+import { cavelonCommand } from "../printed.js";
 import { readZipSummary, ZipError, type ZipSummary } from "../zip.js";
 import { TIMEOUT_OPTION, timeoutMs, waitAndReport } from "./async.js";
 import { stageErrors, stageErrorText, type StageError } from "./loops.js";
@@ -295,7 +295,7 @@ async function resolveKbId(ctx: Context, ref: string): Promise<{ id: string; nam
   throw new CavelonError(ExitCode.failure, {
     code: hits.length ? "kb_ambiguous" : "kb_not_found",
     message: hits.length ? `${hits.length} knowledge bases are named "${ref}".` : `No knowledge base named "${ref}".`,
-    hint: "Pass its id; `cavelon api list_knowledge_bases` lists them.",
+    hint: `Pass its id; \`${cavelonCommand("api", "list_knowledge_bases")}\` lists them.`,
   });
 }
 
@@ -673,7 +673,7 @@ export const kbUpload: CommandSpec = {
         dirArg,
         "--kb",
         kbRef,
-        ...(boolOption(input, "recursive") ? ["-r"] : []),
+        ...(boolOption(input, "recursive") ? ["--recursive"] : []),
         ...extensions.flatMap((e) => ["--ext", e]),
         "--replace",
         "--confirm",
@@ -773,7 +773,7 @@ export const kbUpload: CommandSpec = {
           `Uploaded ${fileCount(documents.length)}, then: ${failure.error.message}`,
           `Not uploaded (${failure.notUploaded.length}): ${failure.notUploaded.join(", ")}`,
           ...matchLines(),
-          ...(operationIds.length ? [`Wait for the uploaded ones with: cavelon wait ${operationIds.join(" ")}`] : []),
+          ...(operationIds.length ? [`Wait for the uploaded ones with: ${cavelonCommand("wait", ...operationIds)}`] : []),
         ].join("\n"),
         exitCode: failure.error.exitCode,
       };
@@ -798,7 +798,7 @@ export const kbUpload: CommandSpec = {
       text: [
         uploadedText(` to ${kb.name ?? kb.id}`),
         ...matchLines(),
-        ...(operationIds.length ? [`Operations: ${operationIds.length}`, `Wait with: cavelon wait ${operationIds.join(" ")}`] : []),
+        ...(operationIds.length ? [`Operations: ${operationIds.length}`, `Wait with: ${cavelonCommand("wait", ...operationIds)}`] : []),
       ].join("\n"),
       exitCode: refused?.exitCode,
     };
@@ -877,7 +877,7 @@ export const testRun: CommandSpec = {
           throw new CavelonError(ExitCode.failure, {
             code: hit.length ? "suite_ambiguous" : "suite_not_found",
             message: hit.length ? `${hit.length} suites are named "${ref}"; pass its id.` : `No test suite "${ref}"${harnessRef ? ` for ${harnessRef}` : ""}.`,
-            hint: "`cavelon api list_suites` lists the suites.",
+            hint: `\`${cavelonCommand("api", "list_suites")}\` lists the suites.`,
           });
         }
         return hit;
@@ -940,7 +940,7 @@ export const testRun: CommandSpec = {
       data: { runs: started, operation_ids: operationIds },
       text:
         table(started, ["suite", "run_id", "status", "operation_id"]) +
-        (operationIds.length ? `\n\nWait with: cavelon wait ${operationIds.join(" ")}` : ""),
+        (operationIds.length ? `\n\nWait with: ${cavelonCommand("wait", ...operationIds)}` : ""),
     };
   },
 };
@@ -1333,7 +1333,8 @@ export const trace: CommandSpec = {
         limit,
         cursor,
       );
-      const base = cavelonCommand("trace", id, ...(kind ? ["--kind", kind] : []), "--trace", traceId);
+      const words = ["trace", id, ...(kind ? ["--kind", kind] : []), "--trace", traceId];
+      const base = cavelonCommand(...words);
       const open = suggestedSpan(spans);
       return {
         data: { trace: summarizeTrace(detail), spans: page },
@@ -1341,7 +1342,7 @@ export const trace: CommandSpec = {
           `${keyValues(Object.entries(summarizeTrace(detail)))}\n\n` +
           table(page.items, ["seq", "type", "name", "status", ...(outcomes.size ? ["knowledge_outcome"] : []), "duration_ms", "span_id"]) +
           moreHint(page.next_cursor, base) +
-          (open ? `\n\nOne span in full (${spanPick(open)}), by the span_id in its row: ${base} --span ${shellWord(open.id)}` : ""),
+          (open ? `\n\nOne span in full (${spanPick(open)}), by the span_id in its row: ${cavelonCommand(...words, "--span", open.id)}` : ""),
       };
     }
 

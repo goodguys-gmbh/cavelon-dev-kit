@@ -6,6 +6,7 @@ import type { TenantInventory } from "./commands/inventory.js";
 import { locate, schemaSections, tenantWideSections, type Finding, type PackageOnDisk } from "./package-files.js";
 import { PERSONA_SECTION, sectionFields } from "./package-format.js";
 import { kitErrorEntry } from "./kit-codes.js";
+import { cavelonCommand, fill } from "./printed.js";
 import {
   branches,
   checkModels,
@@ -732,8 +733,8 @@ export function schemaPathOf(pkg: Record<string, unknown>, pointer: string): str
 function schemaHint(pkg: Record<string, unknown>, pointer: string): string {
   const at = schemaPathOf(pkg, pointer);
   return at
-    ? `Fix the field the finding names; \`cavelon schema ${at}\` lists the fields there (type, required, allowed values) with a minimal entry.`
-    : "Fix the field the finding names; `cavelon schema` lists the sections, and `cavelon schema <section>` their fields.";
+    ? `Fix the field the finding names; \`${cavelonCommand("schema", at)}\` lists the fields there (type, required, allowed values) with a minimal entry.`
+    : `Fix the field the finding names; \`${cavelonCommand("schema")}\` lists the sections, and \`${cavelonCommand("schema", fill("section"))}\` their fields.`;
 }
 
 interface MisnamedVariant {

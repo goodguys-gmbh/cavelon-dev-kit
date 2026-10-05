@@ -4,7 +4,7 @@ import { CavelonError, ExitCode } from "./errors.js";
 import type { ApiClient } from "./http.js";
 import { readTenantless, type ReachableTenant, type Tenantless } from "./principal.js";
 import { canAsk } from "./prompt.js";
-import { cavelonCommand } from "./shell.js";
+import { cavelonCommand, fill } from "./printed.js";
 
 /**
  * Which tenant a personal access token works in, chosen from the tenants a
@@ -60,7 +60,7 @@ export async function chooseTenant(ctx: Context, client: ApiClient, reach: Reach
   if (!canAsk(ctx)) return { kind: "open" };
   const later = reachesAll && options.later;
   const intro = later
-    ? `This token works in every tenant on ${client.url}, one at a time: \`cavelon use\` switches, ` +
+    ? `This token works in every tenant on ${client.url}, one at a time: \`${cavelonCommand("use")}\` switches, ` +
       `and --tenant or \`tenant:\` in cavelon.yaml choose one per command or per solution folder.${tenants.length ? "\nYours:" : ""}`
     : reachesAll
       ? `This token reaches every tenant on ${client.url}.${tenants.length ? " Yours:" : ""}`
@@ -84,7 +84,7 @@ export function commandLines(tenants: ReachableTenant[], command: (ref: string) 
   const shown = tenants.slice(0, MAX_LISTED).map((t) => ({ text: command(tenantRef(t)), name: t.name && t.name !== t.slug ? t.name : "" }));
   const width = Math.max(...shown.map((s) => s.text.length));
   const lines = shown.map((s) => `  ${s.name ? `${s.text.padEnd(width)}    ${s.name}` : s.text}`);
-  if (tenants.length > shown.length) lines.push(`  … and ${tenants.length - shown.length} more (\`cavelon tenant list\` lists them)`);
+  if (tenants.length > shown.length) lines.push(`  … and ${tenants.length - shown.length} more (\`${cavelonCommand("tenant", "list")}\` lists them)`);
   return lines.join("\n");
 }
 
@@ -101,13 +101,13 @@ export function tenantOpenError(
   url: string,
   reach: Reach,
   lead: string,
-  command: { line(ref: string): string; template: string } = { line: (ref) => cavelonCommand("use", ref), template: "cavelon use <name or slug>" },
+  command: { line(ref: string): string; template: string } = { line: (ref) => cavelonCommand("use", ref), template: cavelonCommand("use", fill("name or slug")) },
 ): CavelonError {
   const { tenants, reachesAll } = reach;
   const what = reachesAll ? "every tenant" : `${tenants.length} tenants`;
   const lines = tenants.length ? `Run the line for the tenant you want:\n${commandLines(tenants, command.line)}` : "";
   const search = reachesAll
-    ? `${lines ? "\nAny other tenant: " : "Choose one: "}\`${command.template}\`; \`cavelon tenant list --search <part of the name>\` finds its slug.`
+    ? `${lines ? "\nAny other tenant: " : "Choose one: "}\`${command.template}\`; \`${cavelonCommand("tenant", "list", "--search", fill("part of the name"))}\` finds its slug.`
     : "";
   return new CavelonError(ExitCode.usage, {
     code: "tenant_required",
@@ -138,8 +138,8 @@ export function tenantMissError(ref: string, pool: ReachableTenant[], reachesAll
   if (listed.length) hints.push(`Run the line for the tenant you mean:\n${commandLines(listed, (r) => cavelonCommand("use", r))}`);
   hints.push(
     reachesAll
-      ? "This token reaches every tenant: `cavelon tenant list --search <part of the name>` finds one."
-      : "`cavelon tenant list` shows the tenants this token reaches with name, slug and id; `cavelon use` alone lets you choose.",
+      ? `This token reaches every tenant: \`${cavelonCommand("tenant", "list", "--search", fill("part of the name"))}\` finds one.`
+      : `\`${cavelonCommand("tenant", "list")}\` shows the tenants this token reaches with name, slug and id; \`${cavelonCommand("use")}\` alone lets you choose.`,
   );
   return new CavelonError(ExitCode.failure, {
     code: "tenant_not_found",

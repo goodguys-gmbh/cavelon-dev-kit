@@ -32,6 +32,7 @@ import {
 
 const commandsList: CommandSpec = {
   name: "commands",
+  tenantless: true,
   summary: "List every command, whether it is read-only, and its MCP tool.",
   readOnly: true,
   idempotent: true,
@@ -50,6 +51,7 @@ const commandsList: CommandSpec = {
 
 const mcp: CommandSpec = {
   name: "mcp",
+  tenantless: true,
   summary: "Serve the commands as MCP tools on stdio (for coding agents).",
   description: "Started by the agent's plugin (`cavelon mcp`); it does not return until the agent disconnects.",
   readOnly: false,

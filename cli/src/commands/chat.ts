@@ -5,8 +5,8 @@ import { CavelonError, ExitCode, usageError } from "../errors.js";
 import { clip } from "../format.js";
 import { harnessNotFoundError, lookupHarness, type HarnessSummary } from "../harness-ref.js";
 import { callStable, workflowOperation } from "../invoke.js";
-import { contextFlags, type Session } from "../session.js";
-import { cavelonCommand } from "../shell.js";
+import type { Session } from "../session.js";
+import { cavelonCommand, fill } from "../printed.js";
 import { MCP_MAX_WAIT_MS } from "./async.js";
 
 /**
@@ -39,8 +39,7 @@ function harnessRef(session: Session, input: Input): { ref?: string; source?: st
 async function findHarness(ctx: Context, ref: string, source: string | undefined, command: (slug: string) => string): Promise<HarnessSummary> {
   const { harness, candidates } = await lookupHarness(ctx, ref);
   if (harness) return harness;
-  const flags = contextFlags(await ctx.session());
-  throw harnessNotFoundError(ref, candidates, source === "option" ? undefined : source, (slug) => command(slug) + flags, flags);
+  throw harnessNotFoundError(ref, candidates, source === "option" ? undefined : source, command);
 }
 
 const HARNESS_OPTION = {
@@ -55,9 +54,9 @@ const DEFAULT_CHAT_TIMEOUT = "2m";
 function chatError(error: unknown, harness: HarnessSummary | undefined): unknown {
   if (!(error instanceof CavelonError) || error.status !== 409) return error;
   const hint = !harness
-    ? "Nothing answers on the tenant's default route yet: name a solution with --harness, or make an active one the default (`cavelon harness default <solution>`)."
+    ? `Nothing answers on the tenant's default route yet: name a solution with --harness, or make an active one the default (\`${cavelonCommand("harness", "default", fill("solution"))}\`).`
     : harness.status !== "active"
-      ? `${named(harness)} is ${harness.status}: a draft answers only a person's token (as a Playground run), never a tenant API key. Use a personal access token, or activate it first (\`cavelon activate --harness ${harness.slug}\`).`
+      ? `${named(harness)} is ${harness.status}: a draft answers only a person's token (as a Playground run), never a tenant API key. Use a personal access token, or activate it first (\`${cavelonCommand("activate", "--harness", harness.slug)}\`).`
       : "A session belongs to the solution it started with: leave out --session to start a new one.";
   return new CavelonError(error.exitCode, { code: error.code, status: error.status, message: error.message, hint, docs: error.docs, details: error.details });
 }
@@ -89,7 +88,7 @@ export const chat: CommandSpec = {
     const timeout = Math.min(parseDuration(raw ?? DEFAULT_CHAT_TIMEOUT), ctx.mode === "mcp" ? MCP_MAX_WAIT_MS : Number.MAX_SAFE_INTEGER);
     const session = await ctx.session();
     const { ref, source } = harnessRef(session, input);
-    const harness = ref ? await findHarness(ctx, ref, source, (slug) => cavelonCommand("chat", "<message>", "--harness", slug)) : undefined;
+    const harness = ref ? await findHarness(ctx, ref, source, (slug) => cavelonCommand("chat", fill("message"), "--harness", slug)) : undefined;
     const body: Record<string, unknown> = { message, stream: false };
     if (harness) body.harness_id = harness.id;
     const sessionId = stringOption(input, "session");
@@ -103,7 +102,7 @@ export const chat: CommandSpec = {
     const target = harness ? { id: harness.id, slug: harness.slug, name: harness.name, status: harness.status } : null;
     if (answer.retrieval_warning) ctx.warn(answer.retrieval_warning);
     const next = {
-      continue: cavelonCommand("chat", "<message>", "--session", answer.session_id),
+      continue: cavelonCommand("chat", fill("message"), "--session", answer.session_id),
       trace: cavelonCommand("trace", answer.conversation_id, "--kind", "conversation"),
     };
     const who = harness ? named(harness) : "The default route";
@@ -148,7 +147,7 @@ export const deactivate: CommandSpec = {
   async run(ctx, input) {
     const session = await ctx.session();
     const { ref, source } = harnessRef(session, input);
-    if (!ref) throw usageError("Which solution?", "Pass --harness <name or slug> (`cavelon harness list` shows them), or set harness in cavelon.yaml or the env file.");
+    if (!ref) throw usageError("Which solution?", `Pass --harness <name or slug> (\`${cavelonCommand("harness", "list")}\` shows them), or set harness in cavelon.yaml or the env file.`);
     // Refused before anything is read, as every confirming tool refuses true.
     if (ctx.mode === "mcp" && input.options.confirm === true) throw confirmTokenRequired("deactivate");
     // Before anything else: an instance without the route cannot do it, whatever the solution.
@@ -157,7 +156,7 @@ export const deactivate: CommandSpec = {
         throw new CavelonError(ExitCode.failure, {
           code: "operation_unavailable",
           message: "This instance publishes no route to deactivate a solution; nothing was changed.",
-          hint: "A person deactivates it in the Admin; the instance may be older than the route (`cavelon status` shows its version).",
+          hint: `A person deactivates it in the Admin; the instance may be older than the route (\`${cavelonCommand("status")}\` shows its version).`,
         });
       }
       throw error;
@@ -172,7 +171,7 @@ export const deactivate: CommandSpec = {
       throw new CavelonError(ExitCode.needsAction, {
         code: "default_route_deactivate",
         message: `${named(harness)} is the tenant's default route: the tenant's chat and widget answer with it. Nothing was changed.`,
-        hint: "Ask the person which solution should answer there instead, make it the default (`cavelon harness default <solution>`, previews first), then deactivate this one.",
+        hint: `Ask the person which solution should answer there instead, make it the default (\`${cavelonCommand("harness", "default", fill("solution"))}\`, previews first), then deactivate this one.`,
         details: { harness: target },
       });
     }
@@ -195,7 +194,7 @@ export const deactivate: CommandSpec = {
     });
     return {
       data: { changed: true, harness: { ...target, status: updated?.status ?? target.status } },
-      text: `Deactivated ${named(harness)}; status ${updated?.status ?? "unknown"}. \`cavelon activate --harness ${harness.slug}\` puts it back through its readiness gate.`,
+      text: `Deactivated ${named(harness)}; status ${updated?.status ?? "unknown"}. \`${cavelonCommand("activate", "--harness", harness.slug)}\` puts it back through its readiness gate.`,
     };
   },
 };

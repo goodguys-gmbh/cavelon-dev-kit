@@ -1,6 +1,6 @@
 import { clip } from "./format.js";
 import { locate, type PackageOnDisk } from "./package-files.js";
-import { cavelonCommand } from "./shell.js";
+import { cavelonCommand } from "./printed.js";
 
 /**
  * The parts of an import preview that recent instances add: structured

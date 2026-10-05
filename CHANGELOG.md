@@ -7,6 +7,30 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Fixed
+
+- Every command `cavelon` prints now carries the `--tenant`, `--env` and
+  `--instance` it was given: the confirm lines of `deactivate`, `activate`'s
+  default route and `harness default` dropped `--tenant`, so outside a
+  solution folder a confirm run as printed acted in the tenant `cavelon use`
+  stored (#119). The commands are built in one place now, which also covers
+  the hints, `next` and `resume` fields and text of the other commands; a
+  command that acts in no tenant (`docs`, `explain`, `use`) gets no
+  `--tenant`, and `login` none of what it just stored.
+- Over MCP, a next step is the tool call with its snake_case arguments, as
+  JSON, never a `cavelon` command line: `activate`'s default route names
+  `harness_default` (its confirm takes the preview's `confirm_token`),
+  `operation_status` resumes with `operation_status`, and `init` names
+  `harness_new` with the solution's slug and name, then `pull` (which writes
+  the manifest `validate` needs), then `validate` and `apply`. A command only
+  a person runs (`secrets set`, `login`) stays a command line. The tools' and
+  arguments' descriptions name the arguments in snake_case (`make_default`,
+  `include_tenant_wide`, `replace`) and other tools by name, and `init`'s
+  `harness` no longer says the tool creates a missing solution (#120). The
+  CLI's help and text output keep the CLI's spelling.
+- `init` from a terminal that creates the draft names `pull` before
+  `validate`, since a new draft's manifest comes from its export.
+
 ## [0.1.9] - 2026-10-05
 
 A developer who works only through a coding agent now hears of a new release:

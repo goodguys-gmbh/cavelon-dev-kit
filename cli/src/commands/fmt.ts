@@ -7,6 +7,7 @@ import { uncommitted } from "../git.js";
 import { fileDigest, fileDigests, readPulledFiles, rememberAppliedFiles } from "../local-state.js";
 import { packageVersionOf } from "../package-check.js";
 import { canonical, contentPath, readPackage } from "../package-files.js";
+import { cavelonCommand } from "../printed.js";
 import { exportForm, sectionContent, toYaml } from "../package-format.js";
 import { requireInstance } from "../session.js";
 import { requireSolution, schemaFor } from "./solution.js";
@@ -40,6 +41,7 @@ function droppedComments(before: string, after: string): number {
 
 export const fmt: CommandSpec = {
   name: "fmt",
+  tenantless: true,
   summary: "Bring the package files into the export's form (field order and defaults from the package schema), offline.",
   description:
     "A file whose value the export would spell differently is rewritten: each field in the schema's order, and each field it\n" +
@@ -73,7 +75,7 @@ export const fmt: CommandSpec = {
       throw new CavelonError(ExitCode.validation, {
         code: "package_file_invalid",
         message: `${invalid.length} package file${invalid.length === 1 ? "" : "s"} cannot be read: ${invalid.map((f) => `${f.file}${f.line ? `:${f.line}` : ""}`).join(", ")}.`,
-        hint: "Fix them first (`cavelon validate` names each); fmt changes nothing until then.",
+        hint: `Fix them first (\`${cavelonCommand("validate")}\` names each); fmt changes nothing until then.`,
       });
     }
     const version = packageVersionOf(disk.package) ?? project.packageVersion;
@@ -82,7 +84,7 @@ export const fmt: CommandSpec = {
       throw new CavelonError(ExitCode.failure, {
         code: "package_schema_unavailable",
         message: `No package schema${version ? ` for format ${version}` : ""} is cached for this instance, and it was not read.`,
-        hint: "Run `cavelon fmt` (or `cavelon validate`) once without --offline while the instance is reachable.",
+        hint: `Run \`${cavelonCommand("fmt")}\` (or \`${cavelonCommand("validate")}\`) once without --offline while the instance is reachable.`,
       });
     }
 
@@ -147,7 +149,7 @@ export const fmt: CommandSpec = {
         text: files.length
           ? [
               ...files.map((f) => `would format  ${f}`),
-              `${files.length} file${files.length === 1 ? "" : "s"} not in the export's form; run \`cavelon fmt\`.`,
+              `${files.length} file${files.length === 1 ? "" : "s"} not in the export's form; run \`${cavelonCommand("fmt")}\`.`,
               ...(lost.length ? [`fmt would drop the comments of ${commentList}; keep notes you need elsewhere first.`] : []),
             ].join("\n")
           : `All ${unchanged} package files are in the export's form.`,
@@ -174,7 +176,7 @@ export const fmt: CommandSpec = {
       text: [
         ...written.map((f) => `formatted  ${f}`),
         `${written.length} file${written.length === 1 ? "" : "s"} formatted, ${unchanged} already in the export's form.`,
-        ...(written.length ? [diffable ? "Check it: cavelon validate; then git diff shows what changed." : "Check it: cavelon validate."] : []),
+        ...(written.length ? [`Check it: ${cavelonCommand("validate")}${diffable ? "; then git diff shows what changed." : "."}`] : []),
       ].join("\n"),
     };
   },

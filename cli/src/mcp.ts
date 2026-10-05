@@ -1,11 +1,12 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListToolsRequestSchema, type Tool } from "@modelcontextprotocol/sdk/types.js";
-import { formerlyWarning, type CommandSpec, type Input } from "./command.js";
+import { formerlyWarning, ownsTenant, propertyName, type CommandSpec, type Input } from "./command.js";
 import { MCP_MAX_WAIT_MS } from "./commands/async.js";
 import { createContext, withWarnings } from "./context.js";
 import { asCavelonError, CavelonError, ExitCode, usageError } from "./errors.js";
 import type { Io } from "./io.js";
 import { closest } from "./package-references.js";
+import { printingFor } from "./printed.js";
 import { startSessionUpdateCheck, type SessionUpdateOptions } from "./update-check.js";
 import { KIT_VERSION } from "./version.js";
 
@@ -68,38 +69,45 @@ export function toolName(spec: CommandSpec): string | undefined {
   return spec.mcpTool || undefined;
 }
 
-/** A command with its own `tenant` argument (use_tenant) takes no tenant override. */
-function ownsTenant(spec: CommandSpec): boolean {
-  return Boolean(spec.positionals?.some((p) => p.name === "tenant") || spec.options?.tenant);
-}
+export { propertyName };
 
 /**
- * A tool's property for a command's option or positional: the CLI's name in
- * snake_case (`make_default` for `--make-default`), as the instructions and
- * docs spell it and as tool arguments are usually written.
+ * A description as a tool's caller reads it. The help text names the
+ * command's options as flags (`--make-default`), which the tool refuses as
+ * arguments, and other commands as `cavelon …` lines; here they are the
+ * argument names (`make_default`) and the tools (`models_list`).
  */
-export function propertyName(name: string): string {
-  return name.replaceAll("-", "_");
+export function mcpSpelling(text: string, spec: CommandSpec, commands: readonly CommandSpec[] = []): string {
+  const own = new Set(Object.entries(spec.options ?? {}).filter(([, o]) => !o.cliOnly).map(([name]) => name));
+  if (!ownsTenant(spec)) own.add("tenant");
+  return text
+    .replace(/`cavelon ([a-z][a-z -]*[a-z])`/g, (whole, words: string) => {
+      const tool = commands.find((c) => c.name === words)?.mcpTool;
+      return tool ? `\`${tool}\`` : whole;
+    })
+    .replace(/--([a-z][a-z0-9-]*)/g, (whole, name: string) => (own.has(name) ? propertyName(name) : whole));
 }
 
-export function inputSchema(spec: CommandSpec): JsonSchema {
+export function inputSchema(spec: CommandSpec, commands: readonly CommandSpec[] = []): JsonSchema {
   const properties: Record<string, JsonSchema> = {};
   const required: string[] = [];
+  const said = (text: string) => mcpSpelling(text, spec, commands);
   for (const p of spec.positionals ?? []) {
     properties[propertyName(p.name)] = p.variadic
-      ? { type: "array", items: { type: "string" }, description: p.description }
-      : { type: "string", description: p.description };
+      ? { type: "array", items: { type: "string" }, description: said(p.description) }
+      : { type: "string", description: said(p.description) };
     if (p.required) required.push(propertyName(p.name));
   }
   for (const [name, option] of Object.entries(spec.options ?? {})) {
     if (option.cliOnly) continue;
+    const description = said(option.mcpDescription ?? option.description);
     properties[propertyName(name)] = option.mcpToken
-      ? { type: "string", description: `${option.description} ${TOKEN_DESCRIPTION}` }
+      ? { type: "string", description: `${description} ${TOKEN_DESCRIPTION}` }
       : option.type === "boolean"
-        ? { type: "boolean", description: option.description }
+        ? { type: "boolean", description }
         : option.multiple
-          ? { type: "array", items: { type: "string" }, description: option.description }
-          : { type: ["string", "number"], description: option.description };
+          ? { type: "array", items: { type: "string" }, description }
+          : { type: ["string", "number"], description };
   }
   if (!ownsTenant(spec)) {
     properties.tenant = { type: "string", description: "Tenant slug or id, when not the one chosen for this directory." };
@@ -107,13 +115,13 @@ export function inputSchema(spec: CommandSpec): JsonSchema {
   return { type: "object", properties, ...(required.length ? { required } : {}), additionalProperties: false };
 }
 
-export function toolFor(spec: CommandSpec): Tool {
+export function toolFor(spec: CommandSpec, commands: readonly CommandSpec[] = []): Tool {
   const marked =
     spec.mcpEffect ?? (spec.readOnly ? "Read-only." : spec.destructive ? "Changes the instance; may delete or overwrite." : "Changes the instance.");
   return {
     name: toolName(spec)!,
-    description: [spec.summary, spec.description, marked].filter(Boolean).join("\n"),
-    inputSchema: inputSchema(spec) as Tool["inputSchema"],
+    description: mcpSpelling([spec.summary, spec.description, marked].filter(Boolean).join("\n"), spec, commands),
+    inputSchema: inputSchema(spec, commands) as Tool["inputSchema"],
     annotations: {
       title: spec.summary,
       readOnlyHint: spec.readOnly,
@@ -202,7 +210,7 @@ export function createMcpServer(io: Io, commands: CommandSpec[], updates: Sessio
   const server = new Server({ name: "cavelon", version: KIT_VERSION }, { capabilities: { tools: {} }, instructions: INSTRUCTIONS });
   const notice = startSessionUpdateCheck(io, updates);
 
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: tools.map(toolFor) }));
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: tools.map((t) => toolFor(t, commands)) }));
 
   /** The tool's `--json` document, or its error. */
   async function call(name: string, given: Record<string, unknown>): Promise<{ body: unknown; isError?: true }> {
@@ -225,7 +233,7 @@ export function createMcpServer(io: Io, commands: CommandSpec[], updates: Sessio
     const ctx = createContext(mcpIo(io), { json: true, tenant, solutionEnv }, "mcp");
     for (const message of renamed) ctx.warn(message);
     try {
-      const result = await spec.run(ctx, inputFrom(spec, args));
+      const result = await printingFor({ mode: "mcp", commands, ...(spec.storesTarget ? {} : { tenant, env: solutionEnv }) }, () => spec.run(ctx, inputFrom(spec, args)));
       let data = result.data;
       if (data && typeof data === "object" && !Array.isArray(data)) {
         data = ctx.warnings.length ? withWarnings(data as Record<string, unknown>, ctx.warnings) : { ...(data as Record<string, unknown>) };

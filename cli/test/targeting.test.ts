@@ -92,7 +92,7 @@ describe("a printed command acts where the command that printed it did", () => {
     expect(preview.code, preview.stdout + preview.stderr).toBe(0);
     expect(preview.stdout).toMatch(/crm_api_token \(Token of the CRM integration user\): cavelon secrets set crm_api_token --env prod --tenant beta\n/);
     const confirmLine = /Import exactly this: (.+)/.exec(preview.stdout)![1]!;
-    expect(confirmLine).toMatch(/^cavelon apply --confirm \S+ --env prod --tenant beta$/);
+    expect(confirmLine).toMatch(/^cavelon apply --env prod --tenant beta --confirm \S+$/);
     const json = (await cli(sb, ["apply", "--env", "prod", "--tenant", "beta", "--json"], { cwd: dir })).json<{ set_commands: { secrets: string[] } }>();
     expect(json.set_commands.secrets[0]).toBe("cavelon secrets set crm_api_token --env prod --tenant beta");
 

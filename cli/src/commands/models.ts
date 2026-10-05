@@ -6,11 +6,11 @@ import { confirmation } from "../confirm-token.js";
 import { moreHint, table } from "../format.js";
 import { callStable, workflowOperation } from "../invoke.js";
 import { deref, jsonBodySchema, validateBody, type Operation } from "../openapi.js";
-import { cavelonCommand, shellWord } from "../shell.js";
+import { cavelonCommand, fill } from "../printed.js";
 import { STATE_DIR } from "../local-state.js";
 import { listedPages } from "./docs.js";
 import { refreshInventory } from "./inventory.js";
-import { ENV_OPTION, targetFlags } from "./values.js";
+import { ENV_OPTION } from "./values.js";
 
 /**
  * The tenant's Model Registry rows and the one limit the kit changes on them:
@@ -86,7 +86,7 @@ async function readRows(ctx: Context): Promise<ModelRow[]> {
 }
 
 /** The row a person named by its id, its model_id or its display name. */
-function findRow(rows: ModelRow[], ref: string, flags: string): ModelRow {
+function findRow(rows: ModelRow[], ref: string): ModelRow {
   const byId = rows.find((r) => r.id === ref) ?? rows.find((r) => r.model_id === ref);
   if (byId) return byId;
   const byName = rows.filter((r) => (r.display_name ?? "").toLowerCase() === ref.toLowerCase());
@@ -94,14 +94,14 @@ function findRow(rows: ModelRow[], ref: string, flags: string): ModelRow {
   if (byName.length > 1) {
     throw usageError(
       `Several Model Registry rows are called "${ref}": ${byName.map((r) => r.model_id).join(", ")}.`,
-      "Name the row by its model_id or id; `cavelon models list` shows them.",
+      `Name the row by its model_id or id; \`${cavelonCommand("models", "list")}\` shows them.`,
     );
   }
   throw new CavelonError(ExitCode.failure, {
     code: "model_not_found",
     status: 404,
     message: `This tenant's Model Registry has no row "${ref}".`,
-    hint: `\`cavelon models list${flags}\` shows its rows by model_id and id.`,
+    hint: `\`${cavelonCommand("models", "list")}\` shows its rows by model_id and id.`,
   });
 }
 
@@ -122,7 +122,7 @@ function requireLimitField(doc: OpenApiDoc | undefined, op: Operation): void {
   throw new CavelonError(ExitCode.failure, {
     code: "operation_unavailable",
     message: `This instance's Model Registry rows have no ${LIMIT_FIELD} (PATCH ${ROW_ROUTE} does not take it), so nothing was sent.`,
-    hint: "The instance is older than endpoint limits; `cavelon status` shows its version.",
+    hint: `The instance is older than endpoint limits; \`${cavelonCommand("status")}\` shows its version.`,
   });
 }
 
@@ -141,7 +141,6 @@ export const modelsList: CommandSpec = {
   async run(ctx, input) {
     const limit = intOption(input, "limit", { min: 1, max: 500, fallback: 50 })!;
     const session = await ctx.session();
-    const flags = targetFlags(session);
     const rows = await readRows(ctx);
     // In a solution folder, validate warns about an agent's model that is not among these.
     if (session.project) {
@@ -165,9 +164,9 @@ export const modelsList: CommandSpec = {
     }));
     const pages = await listedPages(ctx, [CAPACITY_TUTORIAL_PAGE]);
     const lines = [
-      table(shown, ["model_id", "provider", "endpoint", "max_concurrent_requests", "active"], 60) + moreHint(page.next_cursor, `cavelon models list${flags}`),
+      table(shown, ["model_id", "provider", "endpoint", "max_concurrent_requests", "active"], 60) + moreHint(page.next_cursor, cavelonCommand("models", "list")),
       "",
-      `Rows with the same endpoint share one max_concurrent_requests count. Change it with: cavelon models set-limit <model_id> <n|none>${flags}`,
+      `Rows with the same endpoint share one max_concurrent_requests count. Change it with: ${cavelonCommand("models", "set-limit", fill("model_id"), fill("n|none"))}`,
       ...pages.map((p) => `Plan it for a self-hosted endpoint: ${cavelonCommand("docs", "get", p)}`),
     ];
     return { data: { items, next_cursor: page.next_cursor, total: page.total }, text: lines.join("\n") };
@@ -199,13 +198,12 @@ export const modelsSetLimit: CommandSpec = {
   async run(ctx, input) {
     const ref = positional(input, "model")!;
     const limit = parseLimit(positional(input, "limit")!);
-    const flags = targetFlags(await ctx.session());
     const { doc, op } = await workflowOperation(ctx, "PATCH", ROW_ROUTE, "changing Model Registry rows");
     requireLimitField(doc, op);
     // The instance's own bounds, before anything is sent or shown as possible.
     if (doc) validateBody(doc, op, { [LIMIT_FIELD]: limit });
     const rows = await readRows(ctx);
-    const row = findRow(rows, ref, flags);
+    const row = findRow(rows, ref);
     const model = rowView(row, rows);
     const previous = model.max_concurrent_requests;
     if (limit !== null && !model.endpoint) {
@@ -227,7 +225,7 @@ export const modelsSetLimit: CommandSpec = {
     const sharing = model.shares_endpoint_with?.length ? ` It shares the count with ${model.shares_endpoint_with.join(", ")} (same endpoint).` : "";
     const gate = await confirmation(ctx, input, "models_set_limit", { row: row.id, previous, limit });
     if (!gate.confirmed) {
-      const confirm = gate.confirm(`cavelon models set-limit ${shellWord(row.model_id)} ${limitText(limit)}${flags} --confirm`);
+      const confirm = gate.confirm(cavelonCommand("models", "set-limit", row.model_id, limitText(limit), "--confirm"));
       return {
         data: { ...base, changed: false, sent: false, confirm, ...gate.fields },
         text: `${label}: max_concurrent_requests ${limitText(previous)} → ${limitText(limit)}.${sharing}\n${gate.mismatch ? `${gate.mismatch}\n` : ""}Nothing was changed. Change it with: ${confirm}`,

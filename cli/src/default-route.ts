@@ -1,7 +1,7 @@
 import type { Context } from "./command.js";
 import { listHarnesses, type HarnessSummary } from "./harness-ref.js";
 import { callStable } from "./invoke.js";
-import { cavelonCommand } from "./shell.js";
+import { cavelonCommand } from "./printed.js";
 
 /**
  * The tenant's default route: the solution that answers where a conversation

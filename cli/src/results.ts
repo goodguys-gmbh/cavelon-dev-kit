@@ -4,7 +4,7 @@ import { clip } from "./format.js";
 import { failedAssertions } from "./trace-view.js";
 import { callStable } from "./invoke.js";
 import type { Operation } from "./operations.js";
-import { cavelonCommand } from "./shell.js";
+import { cavelonCommand } from "./printed.js";
 
 /**
  * An operation says whether the work finished; the record it points to says

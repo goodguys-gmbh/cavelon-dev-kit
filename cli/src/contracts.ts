@@ -3,6 +3,7 @@ import path from "node:path";
 import { CavelonError, ExitCode } from "./errors.js";
 import { NOT_HERE, type ApiClient } from "./http.js";
 import { cacheDir, instanceKey } from "./paths.js";
+import { cavelonCommand } from "./printed.js";
 import { readJsonFile, readTextFile, writeFileAtomic } from "./fsutil.js";
 import { SUPPORTED_CONTRACTS } from "./version.js";
 
@@ -310,7 +311,7 @@ export class Contracts {
           throw new CavelonError(ExitCode.validation, {
             code: "package_version_unsupported",
             message: `${this.client.url} does not accept package version ${wanted}.`,
-            hint: "Read contracts.package_versions.accepted from `cavelon status --json`, or pull the package again.",
+            hint: `Read contracts.package_versions.accepted from \`${cavelonCommand("status", "--json")}\`, or pull the package again.`,
           });
         }
         return null;

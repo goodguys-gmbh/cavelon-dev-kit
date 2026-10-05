@@ -1,4 +1,5 @@
 import { isOperatorChange, type Limit, type LimitChange, type LimitSwitch, type PublishedLimits } from "./limits.js";
+import { cavelonCommand, fill } from "./printed.js";
 
 /**
  * Branch concurrency, as an instance publishes it:
@@ -63,11 +64,11 @@ export function switchOnText(item: LimitSwitch, change: LimitChange | null): str
   if (item.source !== "tenant") return `the instance operator turns it on with ${item.setting} (a deploy)`;
   if (change && isOperatorChange(change)) {
     return (
-      `an operator turns it on in the Admin (Configure › Feature Flags), or with cavelon limits set ${PARALLEL_BRANCHES_KEY} on ` +
-      "--tenant <tenant> --confirm and a Platform-mode token"
+      `an operator turns it on in the Admin (Configure › Feature Flags), or with ` +
+      `${cavelonCommand("limits", "set", PARALLEL_BRANCHES_KEY, "on", "--tenant", fill("tenant"), "--confirm")} and a Platform-mode token`
     );
   }
-  if (change) return `a tenant admin turns it on with cavelon limits set ${PARALLEL_BRANCHES_KEY} on --confirm`;
+  if (change) return `a tenant admin turns it on with ${cavelonCommand("limits", "set", PARALLEL_BRANCHES_KEY, "on", "--confirm")}`;
   return "the instance operator turns it on for this tenant in the Admin (Configure › Feature Flags)";
 }
 

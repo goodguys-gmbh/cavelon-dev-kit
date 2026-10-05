@@ -7,7 +7,7 @@ import { readJsonFile, writeFileAtomic } from "../fsutil.js";
 import { configDir } from "../paths.js";
 import { canAsk, readLine } from "../prompt.js";
 import { probeMcpServer } from "../run-program.js";
-import { cavelonCommand } from "../shell.js";
+import { cavelonCommand } from "../printed.js";
 import {
   agentByName,
   applyPlan,
@@ -257,7 +257,7 @@ async function runSetup(ctx: Context, input: Input) {
   const ready = results.filter((r) => r.changes.length && r.changes.every((c) => c.outcome === "done" || c.outcome === "unchanged"));
   const changed = results.filter((r) => r.changes.some((c) => c.outcome === "done"));
   const next: string[] = [];
-  if (declined) next.push("Nothing was changed. Run cavelon setup again when you are ready.");
+  if (declined) next.push(`Nothing was changed. Run ${cavelonCommand("setup")} again when you are ready.`);
   else {
     if (loginReport?.next) next.push(loginReport.next);
     if (changed.length) next.push(`Restart ${joinLabels(changed.map((r) => r.plan.agent.label))} if ${changed.length > 1 ? "they are" : "it is"} open, so ${changed.length > 1 ? "they load" : "it loads"} Cavelon.`);
@@ -443,6 +443,8 @@ async function runRemove(ctx: Context, input: Input) {
 
 export const setup: CommandSpec = {
   name: "setup",
+  storesTarget: true,
+  tenantless: true,
   summary: "Set up your coding agents for Cavelon and log in, in one guided step.",
   description:
     "Finds Claude Code, Codex, Cursor, VS Code with GitHub Copilot, Gemini CLI and Kiro, shows what it will change for each, asks once\n" +

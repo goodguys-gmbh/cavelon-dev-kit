@@ -4,6 +4,7 @@ import { parse } from "yaml";
 import { readTextFile } from "./fsutil.js";
 import { CavelonError, ExitCode, usageError } from "./errors.js";
 import { layoutFrom, type Layout } from "./package-files.js";
+import { cavelonCommand } from "./printed.js";
 
 /**
  * The solution a working directory belongs to: the nearest `cavelon.yaml`
@@ -146,7 +147,7 @@ export async function readEnvFile(project: ProjectConfig, name: string): Promise
       `No ${ENV_DIR}/${name}.yaml in this solution; nothing was sent.`,
       known.length
         ? `Its env files: ${known.join(", ")}. Pass one of them to --env, or write ${ENV_DIR}/${name}.yaml first.`
-        : "`cavelon init` writes env/test.yaml and env/prod.yaml.",
+        : `\`${cavelonCommand("init")}\` writes env/test.yaml and env/prod.yaml.`,
     );
   }
   let raw: unknown;

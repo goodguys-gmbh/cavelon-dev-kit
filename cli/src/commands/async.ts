@@ -3,6 +3,7 @@ import { stringOption, parseDuration, type CommandSpec, type Context } from "../
 import { CavelonError, ExitCode, usageError } from "../errors.js";
 import { combinedExitCode, describe, exitCodeFor, getOperation, isSettled, TERMINAL, waitFor, type Operation, type OperationNote } from "../operations.js";
 import { failureLines, resultFailure } from "../results.js";
+import { cavelonCommand } from "../printed.js";
 import { readEvents } from "../sse.js";
 
 /** Long-running work: bounded waits that resume, and a live stream. */
@@ -57,6 +58,7 @@ export async function waitAndReport(ctx: Context, ids: string[], timeout: number
     onChange: progress ? (op) => ctx.io.stderr.write(`${ctx.style.dim(describe(op).split("\n")[0]!)}\n`) : undefined,
   });
   const pending = operations.filter((o) => !isSettled(o)).map((o) => o.id);
+  const resume = cavelonCommand("wait", ...pending);
   // A run queued past a normal start waits for run capacity; a failure for capacity says which limit to raise;
   // a finished test run whose cases failed is a failure.
   const note = capacityNotes(ctx, client);
@@ -71,7 +73,7 @@ export async function waitAndReport(ctx: Context, ids: string[], timeout: number
     timed_out: timedOut,
     timeout_ms: timeout,
     waited_ms: waitedMs,
-    ...(pending.length ? { resume: `cavelon wait ${pending.join(" ")}` } : {}),
+    ...(pending.length ? { resume } : {}),
     ...(waits.length ? { capacity_waits: waits } : {}),
     ...(refusals.length ? { capacity_refusals: refusals } : {}),
     ...(failedResults.length ? { failed_results: failedResults } : {}),
@@ -82,7 +84,7 @@ export async function waitAndReport(ctx: Context, ids: string[], timeout: number
   const why = waits.length === pending.length ? "Waiting for run capacity" : "Still running";
   if (pending.length) {
     lines.push(
-      timeout === 0 ? `${why}. Wait with: cavelon wait ${pending.join(" ")}` : `${why} after the timeout; resume with: cavelon wait ${pending.join(" ")}`,
+      timeout === 0 ? `${why}. Wait with: ${resume}` : `${why} after the timeout; resume with: ${resume}`,
     );
   }
   return { data, text: lines.join("\n"), exitCode, body, pending, why };
@@ -133,6 +135,7 @@ interface OperationFrame {
 
 export const watch: CommandSpec = {
   name: "watch",
+  mcpInstead: "wait",
   summary: "Stream an operation's changes until it ends (server-sent events).",
   description: "Prints one line per change (one JSON object per line with --json). A needs_action state is shown and the stream goes on.",
   readOnly: true,
@@ -163,7 +166,7 @@ export const watch: CommandSpec = {
           throw new CavelonError(ExitCode.server, {
             code: "stream_error",
             message: `The event stream of ${id} kept dropping.`,
-            hint: `\`cavelon wait ${id}\` polls instead.`,
+            hint: `\`${cavelonCommand("wait", id)}\` polls instead.`,
           });
         }
         await ctx.io.sleep(Math.min(1000 * 2 ** (failures - 1), 10_000, Math.max(0, deadline - Date.now())));
@@ -245,7 +248,7 @@ export const watch: CommandSpec = {
     }
     if (!settled) {
       const wait = (await note(last))?.capacity_wait;
-      ctx.io.stderr.write(`Stopped watching; ${id} is still ${last.status}. Resume: cavelon watch ${id}\n${wait ? `  ${wait.note}\n` : ""}`);
+      ctx.io.stderr.write(`Stopped watching; ${id} is still ${last.status}. Resume: ${cavelonCommand("watch", id)}\n${wait ? `  ${wait.note}\n` : ""}`);
     }
     // Lines were streamed already; print nothing more.
     const unsettled = last.status === "needs_action" ? ExitCode.needsAction : ExitCode.timeout;

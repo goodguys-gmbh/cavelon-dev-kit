@@ -6,6 +6,7 @@ import { asCavelonError, CavelonError, ExitCode, usageError } from "./errors.js"
 import { blockerLines } from "./format.js";
 import type { Io } from "./io.js";
 import { blockerLines as detailedBlockerLines } from "./preview-report.js";
+import { printingFor } from "./printed.js";
 import { KIT_VERSION } from "./version.js";
 import { currentInstall, installLabel, type Install } from "./install.js";
 import { startUpdateCheck, type UpdateCheckOptions } from "./update-check.js";
@@ -68,7 +69,10 @@ export async function run(argv: string[], io: Io, commands: CommandSpec[] = COMM
       command: spec.name,
       fetch: updates.fetch,
     });
-    const result = await spec.run(ctx, parsed);
+    const { globals } = ctx;
+    const given = spec.storesTarget ? {} : { instance: globals.instance, tenant: globals.tenant, env: globals.solutionEnv };
+    const target = { mode: "cli" as const, commands, ...given };
+    const result = await printingFor(target, () => spec.run(ctx!, parsed));
     printResult(ctx, result);
     await printNotice(io, notice);
     return result.exitCode ?? ExitCode.ok;
