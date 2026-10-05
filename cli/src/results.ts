@@ -1,6 +1,7 @@
 import type { Context } from "./command.js";
 import { CavelonError } from "./errors.js";
 import { clip } from "./format.js";
+import { failedAssertions } from "./trace-view.js";
 import { callStable } from "./invoke.js";
 import type { Operation } from "./operations.js";
 import { cavelonCommand } from "./shell.js";
@@ -31,6 +32,8 @@ export interface TestResultState {
   agent_run_id?: string | null;
   /** The agent that answered the step. */
   agent_slug?: string | null;
+  /** What the step answered. */
+  generated_answer?: string | null;
   llm_judge_score?: number | null;
   llm_judge_reasoning?: string | null;
   judge_breakdown?: Record<string, unknown> | null;
@@ -183,6 +186,8 @@ function explainedStatuses(counts: Record<string, number>): string[] {
 /** At most this many cases are named per run; `cavelon trace <run>` lists them all. */
 const MAX_CASES = 5;
 const REASON_CHARS = 500;
+/** A failed step's answer is shown this long under it; `cavelon trace <run>` shows more. */
+const ANSWER_CHARS = 200;
 
 export interface FailedCase {
   case: string;
@@ -192,6 +197,10 @@ export interface FailedCase {
   reason: string | null;
   /** The trigger run a trigger case started. */
   run_id: string | null;
+  /** The step's assertions that failed (`answered_by billing`); none when the instance sends no breakdown. */
+  failed_assertions: string[];
+  /** The step's answer, shortened. */
+  answer: string | null;
 }
 
 export interface ResultFailure {
@@ -218,6 +227,8 @@ export function failedCase(r: TestResultState, max = REASON_CHARS): FailedCase {
     status: r.status,
     reason: reason ? clip(reason, max) : null,
     run_id: r.agent_run_id ?? null,
+    failed_assertions: failedAssertions(r.judge_breakdown),
+    answer: r.generated_answer ? clip(r.generated_answer.replace(/\s+/g, " ").trim(), ANSWER_CHARS) : null,
   };
 }
 
@@ -276,7 +287,11 @@ export function failureLines(failure: ResultFailure): string {
       : `${head} it measured nothing comparable and has no pass rate`,
   ];
   if (failure.comparable === false && failure.non_comparable_reasons.length) lines.push(`  Not comparable: ${failure.non_comparable_reasons.join(", ")}`);
-  for (const c of failure.cases) lines.push(`    ${caseLabel(c)}  ${c.status}${c.reason ? ": " + c.reason : ""}`);
+  for (const c of failure.cases) {
+    lines.push(`    ${caseLabel(c)}  ${c.status}${c.reason ? ": " + c.reason : ""}`);
+    if (c.failed_assertions.length) lines.push(`      failed: ${c.failed_assertions.join(", ")}`);
+    if (c.answer) lines.push(`      answer: ${c.answer}`);
+  }
   const shown = failure.cases.length;
   const total = failure.failed_cases + failure.errored_cases + WAITING_COUNTS.reduce((sum, key) => sum + (failure.counts[key] ?? 0), 0);
   if (total > shown) lines.push(`    … ${total - shown} more`);

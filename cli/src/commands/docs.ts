@@ -178,11 +178,83 @@ const CONCEPT_TERMS: Record<string, string> = {
   schleife: "loop",
   kosten: "cost",
   kapazität: "capacity",
+  begrüßung: "greeting",
+  begrüssung: "greeting",
+  begrüßungen: "greeting",
+  begrüßungsnachricht: "greeting",
+  begrüßungstext: "greeting",
+  willkommensnachricht: "greeting",
+  webseite: "website",
+  homepage: "website",
+  einbinden: "embed",
+  binde: "embed",
+  einbetten: "embed",
+  bette: "embed",
+  speichern: "store",
+  speichere: "store",
+  hinterlegen: "store",
+  hinterlege: "store",
+  schlüssel: "key",
+  passwort: "password",
+  zugangsdaten: "credential",
+  falsch: "wrong",
+  falsche: "wrong",
+  falschen: "wrong",
+  geantwortet: "answer",
+  antwortet: "answer",
+  fehler: "error",
+  ändern: "change",
+  ändere: "change",
 };
+
+/**
+ * Words a beginner asks with that the docs' titles and summaries rarely use,
+ * and the words those pages do use: a greeting is set on the persona, a
+ * website gets the widget, a tool's API key is a secret, a wrong answer is
+ * found in the Playground's traces. Keyed by the term's base form (`stem`);
+ * the words added count like the question's own, not as a phrase.
+ */
+const RELATED_TERMS: Record<string, string[]> = {
+  greet: ["persona"],
+  greeting: ["persona"],
+  welcome: ["greeting", "persona"],
+  website: ["widget", "embed"],
+  site: ["widget", "embed"],
+  embed: ["widget"],
+  key: ["secret", "credential"],
+  password: ["secret", "credential"],
+  credential: ["secret"],
+  wrong: ["debug", "trace"],
+  incorrect: ["debug", "trace"],
+  error: ["debug", "trace"],
+  debug: ["trace", "playground"],
+};
+
+/**
+ * Words nearly every page and question shares ("Why did my agent answer
+ * wrong?" is no question about agents): they count, but a fraction of a word
+ * that tells pages apart, so they no longer pull every page about agents to
+ * the top.
+ */
+const GENERIC_TERMS = new Set(["agent", "cavelon"]);
+const GENERIC_WEIGHT = 0.3;
+
+/**
+ * Words whose meaning the rest of the question decides: an API key asked
+ * about with a tool is the tool's credential, kept as a secret, not one of
+ * the tenant's API keys. Then `damp` counts like a generic word.
+ */
+const IN_CONTEXT: Array<{ all: string[]; any: string[]; add: string[]; damp: string[] }> = [
+  { all: ["key"], any: ["tool", "webhook", "integration", "mcp"], add: ["secret"], damp: ["api", "key"] },
+];
 
 /** A word in a simple base form, so "documents" meets "document" and "testing" meets "test". */
 function stem(word: string): string {
-  if (word.length > 5 && word.endsWith("ing")) return word.slice(0, -3);
+  if (word.length > 5 && word.endsWith("ing")) {
+    const base = word.slice(0, -3);
+    // "debugging" meets "debug", "mapping" meets "map": a doubled last letter is the spelling's, not the word's.
+    return base.length > 3 && base[base.length - 1] === base[base.length - 2] && !/[aeiouls]/.test(base[base.length - 1]!) ? base.slice(0, -1) : base;
+  }
   if (word.length > 3 && word.endsWith("s") && !word.endsWith("ss")) return word.slice(0, -1);
   return word;
 }
@@ -195,7 +267,7 @@ function words(text: string): string[] {
 }
 
 /** The query's terms: stop words dropped, German concept words in English, each in its base form. */
-export function queryTerms(query: string): { terms: string[]; phrases: string[][] } {
+export function queryTerms(query: string): { terms: string[]; phrases: string[][]; damped: string[] } {
   const terms: string[] = [];
   const phrases: string[][] = [];
   const raw = words(query).filter((w) => !STOP_WORDS.has(w));
@@ -207,7 +279,14 @@ export function queryTerms(query: string): { terms: string[]; phrases: string[][
   }
   // Two terms in a row of the question are a phrase too: "knowledge base", "test suite".
   for (let i = 0; i + 1 < terms.length; i++) phrases.push([terms[i]!, terms[i + 1]!]);
-  return { terms: [...new Set(terms)], phrases };
+  const related = terms.flatMap((t) => RELATED_TERMS[t] ?? []).map(stem);
+  const damped: string[] = [];
+  for (const rule of IN_CONTEXT) {
+    if (!rule.all.every((t) => terms.includes(t)) || !rule.any.some((t) => terms.includes(t))) continue;
+    related.push(...rule.add.map(stem));
+    damped.push(...rule.damp);
+  }
+  return { terms: [...new Set([...terms, ...related])], phrases, damped };
 }
 
 /** The base forms of a field's words, in order. */
@@ -228,7 +307,7 @@ const MIN_EVIDENCE = 2;
 const MIN_SHARE_OF_BEST = 0.35;
 
 export function searchIndex(entries: DocEntry[], query: string): Array<DocEntry & { score: number }> {
-  const { terms, phrases } = queryTerms(query);
+  const { terms, phrases, damped } = queryTerms(query);
   if (!terms.length) return [];
   const fields = entries.map((entry) => ({
     entry,
@@ -241,7 +320,7 @@ export function searchIndex(entries: DocEntry[], query: string): Array<DocEntry 
   const weight = new Map<string, number>();
   for (const term of terms) {
     const pages = fields.filter((f) => f.title.includes(term) || f.page.includes(term) || f.description.includes(term)).length;
-    weight.set(term, Math.log(1 + entries.length / (1 + pages)));
+    weight.set(term, Math.log(1 + entries.length / (1 + pages)) * (GENERIC_TERMS.has(term) || damped.includes(term) ? GENERIC_WEIGHT : 1));
   }
   const scored = fields
     .map(({ entry, title, page, description, section }) => {

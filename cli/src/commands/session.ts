@@ -4,6 +4,7 @@ import { compareContracts, Contracts, type Capabilities } from "../contracts.js"
 import { deleteToken, saveToken } from "../credentials.js";
 import { CavelonError, ExitCode, usageError } from "../errors.js";
 import { keyValues } from "../format.js";
+import { callStable } from "../invoke.js";
 import { formatQuota, formatValue, limitRef, readLimits, readQuotas, type Limit, type PublishedLimits, type Quota } from "../limits.js";
 import { ApiClient, tokensDisabledError } from "../http.js";
 import { readAll } from "../io.js";
@@ -14,7 +15,7 @@ import { expiryOf, readPrincipal, readTenantless, type Tenantless } from "../pri
 import { readHidden } from "../prompt.js";
 import { isUuid, lookupTenantId, requireInstance, requireToken, tenantRequiredError, type FoundTenant, type Session } from "../session.js";
 import { cavelonCommand } from "../shell.js";
-import { choicesOf, chooseTenant, commandLines, listsTenants, type Reach, noTenantError, tenantOpenError, tenantRef, tenantTitle } from "../tenant-choice.js";
+import { choicesOf, chooseTenant, commandLines, describeTenant, listsTenants, type Reach, noTenantError, tenantOpenError, tenantRef, tenantTitle } from "../tenant-choice.js";
 import { loadUserConfig, saveUserConfig, tokenKind, updateInstance } from "../user-config.js";
 
 interface Me {
@@ -349,8 +350,14 @@ export const whoami: CommandSpec = {
     }
     const listed = reach?.tenants.find((t) => t.id === contextTenant);
     const stored = session.settings.tenant_id === contextTenant ? session.settings : undefined;
-    const tenantName = listed?.name ?? membership?.tenant_name ?? stored?.tenant_name ?? null;
-    const tenantSlug = listed?.slug ?? membership?.tenant_slug ?? stored?.tenant_slug ?? null;
+    let tenantName = listed?.name ?? membership?.tenant_name ?? stored?.tenant_name ?? null;
+    let tenantSlug = listed?.slug ?? membership?.tenant_slug ?? stored?.tenant_slug ?? null;
+    // A tenant named by id in cavelon.yaml or --tenant that is none of the person's memberships (an operator's): ask for it.
+    if (contextTenant && (!tenantName || !tenantSlug)) {
+      const described = await describeTenant(client, contextTenant);
+      tenantName ??= described.name ?? null;
+      tenantSlug ??= described.slug ?? null;
+    }
     if (nowhere && reach) {
       ctx.warn(
         reach.tenants.length
@@ -603,7 +610,16 @@ export const status: CommandSpec = {
     if (!offline && session.url && session.token) {
       try {
         client = await ctx.client();
-        if (client.target.tenantId) (data.tenant as Record<string, unknown>).id = client.target.tenantId;
+        const tenantId = client.target.tenantId;
+        if (tenantId) {
+          const shown = data.tenant as Record<string, unknown>;
+          shown.id = tenantId;
+          // The tenant's name and slug, also for one named by id in cavelon.yaml or --tenant.
+          const stored = session.settings.tenant_id === tenantId ? session.settings : undefined;
+          const described = stored?.tenant_name && stored.tenant_slug ? {} : await describeTenant(client, tenantId);
+          shown.name = stored?.tenant_name ?? described.name ?? null;
+          shown.slug = stored?.tenant_slug ?? described.slug ?? null;
+        }
         const contracts = await ctx.contracts();
         // Read now, never from the cache: status is where a person checks which version the instance runs.
         const caps = await contracts.liveCapabilities();
@@ -617,7 +633,7 @@ export const status: CommandSpec = {
           });
           operations = page.status === 200 ? page.data.items : undefined;
           data.operations = operations
-            ? { items: operations, more: Boolean(page.data.next_cursor) }
+            ? { items: operations, more: Boolean(page.data.next_cursor), scope: "tenant" }
             : { unavailable: "This instance does not offer /api/v1/operations." };
         } else {
           data.operations = { unavailable: "The operations API is turned off on this instance." };
@@ -629,15 +645,29 @@ export const status: CommandSpec = {
           published = limits.published;
           data.limits = limits.data;
           const ref = session.envFile?.harness ?? session.project?.harness;
-          if (session.project && ref) (data.solution as Record<string, unknown>).state = await solutionState(ctx, ref);
+          if (session.project && ref) {
+            const state = await solutionState(ctx, ref);
+            (data.solution as Record<string, unknown>).state = state;
+            // The operations list is the tenant's: leave out what belongs to another solution, and say how many.
+            if (operations && state.harness) {
+              const owners = await operationSolutions(ctx, operations);
+              const others = operations.filter((o) => owners.get(o.id) && owners.get(o.id) !== state.harness!.id);
+              if (others.length) {
+                operations = operations.filter((o) => !others.includes(o));
+                data.operations = { ...(data.operations as Record<string, unknown>), items: operations, other_solutions: others.length };
+              }
+              data.operations = { ...(data.operations as Record<string, unknown>), scope: "solution", harness: state.harness.slug };
+            }
+          }
         }
       } catch (error) {
         reachError = error instanceof Error ? error.message : String(error);
         data.error = error instanceof CavelonError ? error.toJSON() : { message: reachError };
       }
     }
+    const shownTenant = data.tenant as { id?: string; name?: string | null; slug?: string | null } | null;
     const tenantText = session.tenant
-      ? `${session.tenant} (${session.tenantSource})`
+      ? `${shownTenant?.id && (shownTenant.name || shownTenant.slug) ? tenantTitle({ id: shownTenant.id, name: shownTenant.name, slug: shownTenant.slug }) : session.tenant} (${session.tenantSource})`
       : session.tokenKind === "api_key"
         ? "the API key's tenant"
         : "not chosen (`cavelon use` lists your tenants to choose from)";
@@ -680,18 +710,46 @@ export const status: CommandSpec = {
       const waits = await Promise.all(operations.map(async (o) => (await note(o))?.capacity_wait));
       const waiting = waits.flatMap((wait, i) => (wait ? [{ operation_id: operations![i]!.id, ...wait }] : []));
       if (waiting.length) data.capacity_waits = waiting;
+      const ops = data.operations as { scope?: string; harness?: string; other_solutions?: number };
+      const others = ops.other_solutions ? ` (${ops.other_solutions} of other solutions not shown; \`cavelon api list_operations_route\` lists all)` : "";
+      const heading = ops.scope === "solution" ? `Running operations of ${ops.harness} and the tenant's shared work${others}` : "Running operations in the tenant";
       text += operations.length
-        ? `\n\nRunning operations:\n${operations
+        ? `\n\n${heading}:\n${operations
             .map((o, i) => {
               const wait = waits[i];
               return `  ${o.id}  ${o.kind}  ${o.status}${o.progress?.phase ? ` (${o.progress.phase})` : ""}${wait ? `  ${wait.note}` : ""}`;
             })
             .join("\n")}`
-        : "\n\nNo running operations.";
+        : `\n\nNo running operations${ops.scope === "solution" ? ` of ${ops.harness}${others}` : " in the tenant"}.`;
     }
     return { data, text };
   },
 };
+
+/**
+ * Which solution each running operation belongs to, where the kit can tell:
+ * a test run names its solution (`harness_id`). Other kinds (an upload into a
+ * knowledge base, which solutions share) stay unattributed. Bounded: the list
+ * is one page of at most ten.
+ */
+async function operationSolutions(ctx: Context, operations: OperationPage["items"]): Promise<Map<string, string>> {
+  const owners = new Map<string, string>();
+  for (const op of operations) {
+    const harnessId = (op as { harness_id?: unknown }).harness_id;
+    if (typeof harnessId === "string" && harnessId) {
+      owners.set(op.id, harnessId);
+      continue;
+    }
+    if (op.result_ref?.type !== "test_run" || !op.result_ref.id) continue;
+    try {
+      const run = await callStable<{ harness_id?: string | null }>(ctx, "GET", "/api/v1/test-runs/{run_id}", "test runs", { params: { run_id: [op.result_ref.id] } });
+      if (run.harness_id) owners.set(op.id, run.harness_id);
+    } catch {
+      // Unattributed: it stays in the list.
+    }
+  }
+  return owners;
+}
 
 /** Exposed for `tenant create --use`. */
 export async function rememberTenant(ctx: Context, url: string, tenant: { ref: string; id: string; name?: string; slug?: string }): Promise<void> {

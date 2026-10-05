@@ -1,6 +1,7 @@
 import { parseArgs, type ParseArgsConfig } from "node:util";
 import { GLOBAL_OPTIONS, type CommandResult, type CommandSpec, type Context, type Input, type OptionSpec } from "./command.js";
 import { createContext, withWarnings } from "./context.js";
+import { CONFIRM_TOKEN } from "./confirm-token.js";
 import { asCavelonError, CavelonError, ExitCode, usageError } from "./errors.js";
 import { blockerLines } from "./format.js";
 import type { Io } from "./io.js";
@@ -128,8 +129,9 @@ function parse(spec: CommandSpec, args: string[]): Input {
     }
   }
   const options: Record<string, OptionSpec> = { ...GLOBAL_OPTIONS, ...spec.options };
+  const { rest, tokens } = takeTokens(spec, args);
   const config: ParseArgsConfig = {
-    args,
+    args: rest,
     allowPositionals: true,
     strict: true,
     options: Object.fromEntries(
@@ -159,6 +161,7 @@ function parse(spec: CommandSpec, args: string[]): Input {
     throw usageError(message, `Run \`cavelon ${spec.name} --help\`.`);
   }
   if (values.help === true) return { positionals: {}, options: { help: true } };
+  Object.assign(values, tokens);
   const named: Input["positionals"] = {};
   const specs = spec.positionals ?? [];
   let index = 0;
@@ -177,6 +180,41 @@ function parse(spec: CommandSpec, args: string[]): Input {
     throw usageError(`Unexpected argument "${positionals[index]}".`, `Run \`cavelon ${spec.name} --help\`.`);
   }
   return { positionals: named, options: values as Input["options"] };
+}
+
+/**
+ * A confirm flag (`mcpToken`) also takes the token its preview printed:
+ * `--confirm <token>` or `--confirm=<token>`. The next argument is the token
+ * only when it looks like one, so a positional after the flag keeps its
+ * place; the flag alone stays a flag.
+ */
+function takeTokens(spec: CommandSpec, args: string[]): { rest: string[]; tokens: Record<string, string> } {
+  const names = Object.entries(spec.options ?? {})
+    .filter(([, o]) => o.mcpToken && o.type === "boolean")
+    .map(([name]) => name);
+  const tokens: Record<string, string> = {};
+  if (!names.length) return { rest: args, tokens };
+  const rest: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]!;
+    if (arg === "--") {
+      rest.push(...args.slice(i));
+      break;
+    }
+    const name = names.find((n) => arg === `--${n}` || arg.startsWith(`--${n}=`));
+    if (!name) {
+      rest.push(arg);
+      continue;
+    }
+    const inline = arg.startsWith(`--${name}=`) ? arg.slice(name.length + 3) : undefined;
+    const next = args[i + 1];
+    if (inline) tokens[name] = inline;
+    else if (inline === undefined && next !== undefined && CONFIRM_TOKEN.test(next)) {
+      tokens[name] = next;
+      i++;
+    } else rest.push(`--${name}`);
+  }
+  return { rest, tokens };
 }
 
 function missing(spec: CommandSpec, name: string): CavelonError {

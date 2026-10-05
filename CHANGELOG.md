@@ -36,12 +36,39 @@ CLI, the skills and the plugin.
 - `cavelon validate` warns when the package names another solution than
   `cavelon.yaml` (`solution_slug_mismatch`), as after copying an example under
   another name.
+- **Test and trace results show each assertion and the answer.** `cavelon
+  trace <test run>` lists under each step its assertions with pass or FAIL
+  (expected and observed for a failed one), the judge's criteria with their
+  scores, and the answer it judged, shortened (`assertions[]` and `answer` in
+  `--json`, the whole answer with `--full`); `test run --wait` names a failed
+  case's failed assertions and its answer.
+- A knowledge search's retrieval span (`trace … --span <id>`) shows its query,
+  `knowledge_outcome` and hits as a table (`retrieval` in `--json`), and its
+  attributes as the object they hold where the instance sends them as a JSON
+  string, even one encoded twice.
+- `cavelon explain` knows the values of `knowledge_outcome`
+  (`usable_evidence`, `content_gap`, `unusable_hits`, `retrieval_fault`,
+  `deliberately_unanswerable`, and the agent's `no_usable_evidence`): from the
+  instance's error catalog (area `knowledge_outcome`) where it lists them,
+  else from its documented meaning. The cavelon-testing skill maps the value
+  the agent records to the one the trace shows.
+- `cavelon status` says whether the folder's solution is the tenant's default
+  route and which one is, and names the tenant (`name`, `slug`).
+- `cavelon setup --check --strict` fails for every agent found that is not set
+  up.
+- `cavelon api describe` shows whether the instance keeps an operation for a
+  person (`person_only`) and which body fields are secret values
+  (`secret_fields`).
+- `cavelon kb upload` reads each document's `upload_outcome` (created,
+  replaced, deduplicated) where the instance reports it, and on an older
+  instance recognises a file whose content was already an active document:
+  it says nothing new was created instead of "Uploaded".
 
 ### Changed
 
 - **Over MCP, a tool confirms only the change its preview showed.** `api`,
   `limits_set`, `models_set_limit`, `loop_cancel`, `sandbox_seed`,
-  `trigger_identity`, `harness_default`, `activate` with `make-default`, and
+  `trigger_identity`, `harness_default`, `activate` with `make_default`, and
   `kb_upload` where it would deactivate documents return a `confirm_token`
   with their preview, and change something only when `confirm` is that token:
   a hash of the change, the tool, the tenant and the instance. `confirm: true`
@@ -51,6 +78,56 @@ CLI, the skills and the plugin.
   tool's token is the one `cavelon api` prints in an agent's shell for the
   same request. A client that sent `confirm: true` must preview first and pass
   the token.
+- **In a coding agent's shell, `--confirm` takes the preview's token.** Run
+  by a coding agent (`CLAUDECODE`, `CODEX_THREAD_ID`, … or `CAVELON_AGENT=1`),
+  `limits set`, `models set-limit`, `loop cancel`, `sandbox seed`,
+  `trigger identity`, `harness default`, `activate --make-default`,
+  `kb upload --replace`, `variables delete` and `secrets delete` print their
+  preview with the same `confirm_token` the MCP tool returns, and the command
+  that confirms exactly that change (`--confirm <token>`). A bare `--confirm`
+  changes nothing there and exits 5 (`activate` refuses it before it
+  activates); a token of another change exits 4. A person's terminal keeps the
+  plain flag, as before. `cavelon api` with a bare `--confirm` in an agent's
+  shell now exits 5 as well (it exited 0 with the preview).
+- **MCP tool arguments are spelled in snake_case**, as the server's
+  instructions and the docs name them: `make_default`, `keep_both`,
+  `dry_run`, `idempotency_key`. The CLI's spelling (`make-default`) is still
+  taken in this release, with a warning. An argument a tool's schema does not
+  list is refused (`unknown_argument`, exit 2), naming the closest one; it
+  used to be dropped without a word, so `activate` with `make_default`
+  activated without previewing the default route.
+- `cavelon api` refuses an operation kept for a person
+  (`operation_for_a_person`) and a secret body field
+  (`secret_field_for_a_person`) with exit code 5, "needs a person", instead
+  of 2.
+- `cavelon harness default` refuses a draft (`solution_not_active`, exit 4)
+  and names `cavelon activate --harness <slug> --make-default`; it used to
+  preview and exit 0 with "or the instance may refuse".
+- `cavelon tenant create` refuses before sending (`permission_missing`, exit
+  7) when the token may enter Platform mode but its ceiling holds no platform
+  role with `tenants.manage` (a tenant role such as `tenant_builder`).
+- `cavelon setup --check` lists an agent found on the computer but never set
+  up for Cavelon as `skip`, and no longer exits 1 because of it.
+- `cavelon status` in a solution folder leaves out the running operations of
+  another solution (a test run names its solution) and says how many; an
+  active solution no longer reads "active, ready to activate".
+- `whoami`, `status` and the MCP `whoami` name a tenant given by id
+  (`cavelon.yaml`, `--tenant`) that is none of the token's memberships, as an
+  operator's is, instead of showing `name: null`.
+- `cavelon trace … --trace <id>` suggests the span to open first: the one
+  that failed, else the last model call, else the knowledge search; it
+  suggested the root span, which has no content.
+- `cavelon kb upload` says "1 file", and with `--wait` reads the documents'
+  statuses after the wait instead of repeating "pending".
+- `cavelon api list --limit 0` lists every operation, as `api --limit 0`
+  does.
+- `cavelon pull` points at `git status --short` for new files before `git
+  diff` (which shows nothing for an untracked file), and outside git at the
+  files it listed.
+- `cavelon docs search` finds the persona page for greetings, the widget for a
+  website or embedding, the tool and secret pages for a tool's API key, and
+  the Playground and traces for a wrong answer, in German and English; "agent"
+  counts less, and "debugging" matches "debug".
 - **A stale preview no longer imports.** `cavelon apply --confirm <id>` after
   the package files changed in what they hold (not formatting or comments)
   exits 4 with `preview_files_changed`, naming the files, and imports nothing;

@@ -136,7 +136,7 @@ The case's own reason (which knowledge base, which value) is in the output of
 ## Reading what happened
 
 ```bash
-cavelon trace <test-run-id or operation-id>                                   # cases, scores, judge's reasoning
+cavelon trace <test-run-id or operation-id>                                   # cases, assertions, answers, judge's reasoning
 cavelon trace <conversation-id> --kind conversation                           # one case's traces
 cavelon trace <conversation-id> --kind conversation --trace <trace-id>        # one trace's spans
 cavelon trace <conversation-id> --kind conversation --trace <trace-id> --span <span-id>
@@ -148,18 +148,41 @@ retrieval). Output is bounded; run the command each level prints as printed: it
 carries the id its route needs. A case's traces are under its
 `conversation_id` (a trigger case's under its `run_id`, `--kind trigger`), not
 under the test run's id; a wrong id answers with a hint naming the right one.
-A low-scoring pass shows the judge's reasoning too.
+The spans list suggests the span to open first: the one that failed, else the
+last model call, else the knowledge search.
 
+Each step lists its assertions with pass or FAIL (`Assertions (1 of 2
+passed)`, then one line each with the expected and observed value of a failed
+one and the reasoning), the judge's criteria with their scores, and the
+answer it judged, shortened (`assertions[]` and `answer` in `--json`; the
+whole answer with `--full`). Read the assertions, not only the judge's
+sentence: "meets the only criterion" can stand above a failed `answered_by`.
+`test run --wait` names a failed case's failed assertions and its answer too.
 Each step names the agent that answered it (AGENT, `agent` in `--json`), and a
-case that did not pass says `Answered by: <agent>` under its reason: the first
-thing to check when a routing assertion failed. A failed assertion's reason is
-the case's reason, and `--json` carries each assertion's result in
-`judge_breakdown.deterministic_criteria` (expected, observed, reasoning). A
-knowledge search's spans show what the agent recorded the search found
-(`knowledge_outcome`: `usable_evidence`, `content_gap`, `unusable_hits`,
-`retrieval_fault` or `deliberately_unanswerable`) on the search's tool span
-and its retrieval span; a search without one is one the agent did not
-classify. An instance that records none shows no such column.
+case that did not pass says `Answered by: <agent>`: the first thing to check
+when a routing assertion failed.
+
+A knowledge search's retrieval span (`--span <span-id>`) shows the query, its
+`knowledge_outcome` and the hits as a table (rank, title, score, whether it
+may be cited, document id); `retrieval` in `--json`. Its tool span shows the
+outcome too; a search without one is one the agent did not classify, and an
+instance that records none shows no such column. The agent records one of four
+values, and the trace refines `no_usable_evidence` by what the search returned,
+so the trace never shows that value itself (`cavelon explain <value>` says
+more, from the instance's catalog where it lists them):
+
+| The agent records | The retrieval span shows | When |
+|---|---|---|
+| `usable_evidence` | `usable_evidence` | The hits support the answer |
+| `no_usable_evidence` | `content_gap` | The search returned no hits at all |
+| `no_usable_evidence` | `unusable_hits` | It returned hits, and none answers the question |
+| `no_usable_evidence` | `retrieval_fault` | The search failed, returned a partial result, or had no knowledge base it may read |
+| `retrieval_fault` | `retrieval_fault` | The agent saw the search report a fault |
+| `deliberately_unanswerable` | `deliberately_unanswerable` | Policy or the request, not missing content, made the agent decline |
+
+A question the knowledge base does not cover usually shows as `unusable_hits`,
+not `content_gap`: a search almost always returns its closest passages. Read
+both as a gap to fill.
 
 ## Optimizing
 

@@ -98,7 +98,7 @@ activates. Over MCP, `cavelon` limits it further:
 
 - `apply` imports only with the id of a preview, and `limits_set`,
   `models_set_limit`, `loop_cancel`, `sandbox_seed`, `trigger_identity`,
-  `harness_default`, `activate` with `make-default`, `kb_upload` where it
+  `harness_default`, `activate` with `make_default`, `kb_upload` where it
   would deactivate documents, and `api` (for any operation that is not
   read-only) change nothing without the `confirm_token` their preview
   returned. The token is a hash of the change the preview showed, the tool,
@@ -137,15 +137,17 @@ tool. When `cavelon` runs under a coding agent, `cavelon api` applies the same
 guards as the `api` tool:
 
 - an operation kept for a person, and a body with a field marked
-  `x-cavelon-secret`, are refused, with or without `--confirm`; the error says
-  how a person runs it (`operation_for_a_person`,
-  `secret_field_for_a_person`);
+  `x-cavelon-secret`, are refused, with or without `--confirm`, with exit
+  code 5 ("needs a person"); the error says how a person runs it
+  (`operation_for_a_person`, `secret_field_for_a_person`).
+  `cavelon api describe` shows both marks before anything is tried;
 - an operation that is not read-only prints the request it would send
   (method, path, query, headers, body, files) and a confirm token, and sends
   nothing (`sent: false`). Run again with `--confirm <token>`, it sends exactly
   that request. The token is a hash of the request, the instance and the
   tenant, so a changed body, parameter or file needs a new preview; a token
-  that does not match sends nothing and exits 4;
+  that does not match sends nothing and exits 4, and `--confirm` without a
+  token sends nothing and exits 5;
 - the body `@file`, `--file` attachments and `--output` stay inside the
   solution folder, never in `cavelon`'s config or cache directory
   (`path_outside_solution`, `path_in_kit_directory`).
@@ -172,13 +174,22 @@ typed there is guarded; run it in another terminal. A person in a plain
 terminal is unaffected: `cavelon api` sends at once, takes any path and sends
 any field.
 
+The commands with a `--confirm` flag are held to the same as their MCP tools:
+`limits set`, `models set-limit`, `loop cancel`, `sandbox seed`,
+`trigger identity`, `harness default`, `activate --make-default`,
+`kb upload --replace`, `variables delete` and `secrets delete`. Run under a
+coding agent, each prints its preview with a confirm token and the command
+that confirms exactly that change (`--confirm <token>`, the same token the MCP
+tool returns). A bare `--confirm` changes nothing: it shows the preview and
+exits 5, and `activate --make-default --confirm` refuses before it activates.
+A token of another change exits 4. In your own terminal the plain flag
+confirms, as before; a token given there is checked too.
+
 These guards keep an agent from doing by mistake what is meant for a person;
 they are not a boundary. An agent that unsets the variable, or calls the API
 some other way, has whatever your shell and the token allow it. Your agent
 client's permission settings decide what it may run, and the instance enforces
-the token's role and ceiling on every request. The other commands run by an
-agent's shell act as they do in your terminal: `limits set`, `harness default`
-and the other commands with a `--confirm` flag take it without a token there.
+the token's role and ceiling on every request.
 
 ## What is sent where
 

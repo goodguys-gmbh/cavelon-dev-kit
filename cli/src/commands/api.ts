@@ -4,7 +4,6 @@ import { AGENT_VARIABLES, drivenByAgent, type DrivenBy } from "../agent-env.js";
 import {
   CURSOR_OPTION,
   intOption,
-  LIMIT_OPTION,
   listOption,
   pageOf,
   positional,
@@ -19,7 +18,7 @@ import { clip, moreHint, table } from "../format.js";
 import { readAll } from "../io.js";
 import { callOperation, previewRequest, type CallArguments } from "../invoke.js";
 import { confinedPath } from "../paths.js";
-import { describeSchema, findOperation, jsonBodySchema, matchedLoosely, operations, schemaTypes, secretFields, type Operation } from "../openapi.js";
+import { describeSchema, findOperation, jsonBodySchema, matchedLoosely, operations, schemaTypes, secretFields, secretPaths, type Operation } from "../openapi.js";
 import { harnessNotFoundError, lookupHarness } from "../harness-ref.js";
 import { CONFIRM_TOKEN, confirmToken, confirmTokenRequired, confirmWith } from "../confirm-token.js";
 import { cavelonCommand } from "../shell.js";
@@ -207,7 +206,7 @@ function secretsIn(doc: Parameters<typeof secretFields>[0], op: Operation, args:
 
 function secretRefusal(op: Operation, fields: string[], driven: DrivenBy): CavelonError {
   const named = fields.map((f) => `"${f}"`).join(", ");
-  return new CavelonError(ExitCode.usage, {
+  return new CavelonError(ExitCode.needsAction, {
     code: "secret_field_for_a_person",
     message:
       `The request to ${op.alias} sets ${named}, which the instance marks as a secret value (x-cavelon-secret); ` +
@@ -328,7 +327,8 @@ export const api: CommandSpec = {
     if (driven) {
       const kept = keptForPerson(op, operations(doc));
       if (kept) {
-        throw new CavelonError(ExitCode.usage, {
+        // A policy, not a mistyped command: a person has to run it (exit 5, "needs a person").
+        throw new CavelonError(ExitCode.needsAction, {
           code: "operation_for_a_person",
           message: refusal(op, kept, driven),
           hint: personHint(kept.hint, driven),
@@ -383,6 +383,8 @@ async function previewUnlessConfirmed(
   const token = confirmToken({ url: session.url, tenant: session.tenant }, "api", { request, files });
   if (typeof given === "string" && given === token) return undefined;
   const stale = typeof given === "string" && given !== "";
+  // `--confirm` alone, which splitConfirm passes on as an empty token: it shows the preview, as in every changing command.
+  const bare = given === "" && driven.by === "agent";
   const confirm =
     driven.by === "mcp"
       ? confirmWith("api", token)
@@ -390,15 +392,16 @@ async function previewUnlessConfirmed(
   const shown = { operation: op.alias, ...request, ...(files.length ? { files } : {}), sent: false };
   const lines = [`Would send ${request.method} ${request.path}. Nothing was sent.`];
   if (stale) lines.push("The confirm token is not this request's: the request changed since its preview, or the token is another one's.");
+  if (bare && driven.by === "agent") lines.push(`--confirm alone does not send it when a coding agent runs cavelon (${driven.variable} is set).`);
   if (Object.keys(request.query).length) lines.push(`Query: ${JSON.stringify(request.query)}`);
   if (Object.keys(request.headers).length) lines.push(`Headers: ${JSON.stringify(request.headers)}`);
   if (request.body !== null) lines.push("Body:", JSON.stringify(request.body, null, 2));
   for (const f of files) lines.push(`File: ${f.field} = ${f.file}`);
   lines.push(confirm);
   return {
-    data: { ...shown, confirm_token: token, confirm, ...(stale ? { token_mismatch: true } : {}) },
+    data: { ...shown, confirm_token: token, confirm, ...(stale ? { token_mismatch: true } : {}), ...(bare ? { token_required: true } : {}) },
     text: lines.join("\n"),
-    ...(stale ? { exitCode: ExitCode.conflict } : {}),
+    ...(stale ? { exitCode: ExitCode.conflict } : bare ? { exitCode: ExitCode.needsAction } : {}),
   };
 }
 
@@ -413,7 +416,7 @@ export const apiList: CommandSpec = {
     search: { type: "string", value: "<text>", description: "Only operations whose name, path or summary contains the text." },
     method: { type: "string", value: "<method>", description: "Only this HTTP method (GET, POST, …)." },
     tags: { type: "boolean", description: "List the tags with their operation counts instead." },
-    limit: LIMIT_OPTION,
+    limit: { type: "string", value: "<n>", description: "Return at most n operations (default 50, 0 for all)." },
     cursor: CURSOR_OPTION,
   },
   async run(ctx, input) {
@@ -436,7 +439,9 @@ export const apiList: CommandSpec = {
     if (search) {
       ops = ops.filter((o) => [o.operationId, o.path, o.summary ?? ""].some((s) => s.toLowerCase().includes(search)));
     }
-    const limit = intOption(input, "limit", { min: 1, max: 1000, fallback: 50 })!;
+    // 0 lists them all, as `api --limit 0` shows a whole response.
+    const wanted = intOption(input, "limit", { min: 0, max: 1000, fallback: 50 })!;
+    const limit = wanted === 0 ? Math.max(ops.length, 1) : wanted;
     const page = pageOf(
       ops.map((o) => ({
         operation: o.alias,
@@ -480,12 +485,17 @@ export const apiDescribe: CommandSpec = {
         .filter(([code]) => code.startsWith("2"))
         .map(([code, r]) => [code, describeSchema(doc, r.content?.["application/json"]?.schema)]),
     );
+    // Who may send it: the instance's own marker, else the kit's rule for an instance that marks none.
+    const kept = keptForPerson(op, operations(doc));
+    const secrets = secretPaths(doc, bodySchema);
     const data = {
       operation: op.alias,
       operation_id: op.operationId,
       method: op.method,
       path: op.path,
       read_only: op.readOnly,
+      person_only: kept ? { source: kept.source, reason: kept.reason ?? null, hint: kept.hint } : null,
+      secret_fields: secrets,
       tags: op.tags,
       summary: op.summary ?? null,
       description: op.description ? clip(op.description, 1500) : null,
@@ -502,6 +512,14 @@ export const apiDescribe: CommandSpec = {
       responses,
     };
     const lines = [`${op.method} ${op.path}  (${op.readOnly ? "read-only" : "changing"})`, op.summary ?? ""];
+    if (kept) {
+      lines.push(
+        kept.source === "instance"
+          ? `For a person only (x-cavelon-person-only${kept.reason ? `: ${kept.reason}` : ""}): an agent does not send it. ${kept.hint}`
+          : `For a person: it ${kept.reason}, and this instance marks no operation, so an agent does not send it. ${kept.hint}`,
+      );
+    }
+    if (secrets.length) lines.push(`Secret values (x-cavelon-secret): ${secrets.join(", ")}. A person enters them; an agent leaves them out.`);
     if (data.description && data.description !== op.summary) lines.push("", data.description);
     if (data.parameters.length) {
       lines.push("", "Parameters:", table(data.parameters, ["name", "in", "required", "type", "description"]));

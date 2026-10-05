@@ -168,7 +168,7 @@ describe("cavelon api and the api tool, run by an agent and by a person", () => 
       const before = server.state.requests.length;
       for (const extra of [[], ["--confirm", "0123456789ab"]]) {
         const result = await api([...setSecret, ...extra], AGENT);
-        expect(result.code).toBe(2);
+        expect(result.code).toBe(5);
         expect(result.json<{ error: Record<string, unknown> }>().error).toMatchObject({
           code: "operation_for_a_person",
           message: expect.stringMatching(/is for a person only, as the instance marks it .*cavelon api does not send it when a coding agent runs it \(CLAUDECODE is set\)/),
@@ -209,8 +209,10 @@ describe("cavelon api and the api tool, run by an agent and by a person", () => 
       expect(text.stdout).toContain(`--confirm ${shown.confirm_token}`);
       expect(changes(before)).toEqual([]);
 
-      // A bare --confirm, another request's token, or the token for a changed body sends nothing.
-      expect((await api([...setVariable("eu"), "--confirm"], AGENT)).code).toBe(0);
+      // A bare --confirm (exit 5: a person has to see the preview), another request's token, or the token for a changed body sends nothing.
+      const bare = await api([...setVariable("eu"), "--confirm"], AGENT);
+      expect(bare.code).toBe(5);
+      expect(bare.json()).toMatchObject({ sent: false, token_required: true, confirm_token: shown.confirm_token });
       const changed = await api([...setVariable("us"), "--confirm", shown.confirm_token], AGENT);
       expect(changed.code).toBe(4);
       expect(changed.json()).toMatchObject({ sent: false, token_mismatch: true, body: { value: "us" } });
@@ -312,7 +314,7 @@ describe("cavelon api and the api tool, run by an agent and by a person", () => 
         expect(refused.isError).toBe(true);
         expect(refused.body.error).toMatchObject({
           code: "secret_field_for_a_person",
-          exit_code: 2,
+          exit_code: 5,
           message: expect.stringMatching(/^The request to update_model sets "api_key", which the instance marks as a secret value \(x-cavelon-secret\); .*no tool sends it/),
           hint: expect.stringMatching(/cavelon secrets set <name>.*Admin/),
           details: { fields: ["api_key"] },
@@ -333,7 +335,7 @@ describe("cavelon api and the api tool, run by an agent and by a person", () => 
       mark();
       const before = server.state.requests.length;
       const refused = await api(updateModel({ api_key: "sk-agent" }), AGENT);
-      expect(refused.code).toBe(2);
+      expect(refused.code).toBe(5);
       expect(refused.json<{ error: Record<string, unknown> }>().error).toMatchObject({
         code: "secret_field_for_a_person",
         message: expect.stringMatching(/cavelon api does not send it when a coding agent runs it \(CLAUDECODE is set\)/),

@@ -9,6 +9,7 @@ import {
   type CommandSpec,
   type Context,
 } from "../command.js";
+import { confirmation } from "../confirm-token.js";
 import { CavelonError, ExitCode, usageError, validationError } from "../errors.js";
 import { clip, keyValues, moreHint, table } from "../format.js";
 import { callStable, workflowOperation } from "../invoke.js";
@@ -29,7 +30,11 @@ import { shellWord } from "../shell.js";
  */
 
 export const ENV_OPTION = { type: "string" as const, value: "<name>", description: "Act in the tenant that env/<name>.yaml names." };
-const CONFIRM_OPTION = { type: "boolean" as const, description: "Delete it; without this nothing is deleted." };
+const CONFIRM_OPTION = {
+  type: "boolean" as const,
+  mcpToken: true,
+  description: "Delete it; without this nothing is deleted. Run by a coding agent: the token its preview printed.",
+};
 /** Key and token values start like this; they belong in a secret, never in a variable or an argument. */
 const TOKEN_PREFIXES = ["cbp_", "cvpat_"];
 /** A variable's value in a list is cut here; `variables get` returns it whole. */
@@ -229,11 +234,13 @@ export const variablesDelete: CommandSpec = {
     const flags = targetFlags(await ctx.session());
     const current = await readVariable(ctx, name);
     if (!current) return { data: { name, deleted: false, existed: false }, text: `This tenant has no variable "${name}"; nothing to delete.` };
-    if (!boolOption(input, "confirm")) {
-      const confirm = `cavelon variables delete ${shellWord(name)}${flags} --confirm`;
+    const gate = await confirmation(ctx, input, "variables_delete", { name, value: current.value });
+    if (!gate.confirmed) {
+      const confirm = gate.confirm(`cavelon variables delete ${shellWord(name)}${flags} --confirm`);
       return {
-        data: { name, deleted: false, existed: true, value: current.value, confirm },
-        text: `Variable ${name} = ${JSON.stringify(clip(current.value, LIST_VALUE_CHARS))}.\nNothing was deleted. Delete it with: ${confirm}`,
+        data: { name, deleted: false, existed: true, value: current.value, confirm, ...gate.fields },
+        text: `Variable ${name} = ${JSON.stringify(clip(current.value, LIST_VALUE_CHARS))}.\n${gate.mismatch ? `${gate.mismatch}\n` : ""}Nothing was deleted. Delete it with: ${confirm}`,
+        ...(gate.exitCode ? { exitCode: gate.exitCode } : {}),
       };
     }
     try {
@@ -442,11 +449,13 @@ export const secretsDelete: CommandSpec = {
     );
     const nothing = { data: { ...current, deleted: false }, text: `Secret ${name} has no value; nothing to delete.` };
     if (current.status !== "set") return nothing;
-    if (!boolOption(input, "confirm")) {
-      const confirm = `cavelon secrets delete ${shellWord(name)}${flags} --confirm`;
+    const gate = await confirmation(ctx, input, "secrets_delete", { name, changed_at: current.changed_at ?? null });
+    if (!gate.confirmed) {
+      const confirm = gate.confirm(`cavelon secrets delete ${shellWord(name)}${flags} --confirm`);
       return {
-        data: { ...current, deleted: false, confirm },
-        text: `Secret ${name} is set${changedNote(current.changed_at)}.\nNothing was deleted. Delete it with: ${confirm}`,
+        data: { ...current, deleted: false, confirm, ...gate.fields },
+        text: `Secret ${name} is set${changedNote(current.changed_at)}.\n${gate.mismatch ? `${gate.mismatch}\n` : ""}Nothing was deleted. Delete it with: ${confirm}`,
+        ...(gate.exitCode ? { exitCode: gate.exitCode } : {}),
       };
     }
     try {

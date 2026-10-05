@@ -479,7 +479,7 @@ describe("cavelon mcp", () => {
       ]) {
         const refused = await client.callTool({ name: "api", arguments: { ...call, confirm } });
         expect(refused.isError, `${call.operation} confirm=${confirm}`).toBe(true);
-        expect(payload(refused).error).toMatchObject({ code: "operation_for_a_person", exit_code: 2 });
+        expect(payload(refused).error).toMatchObject({ code: "operation_for_a_person", exit_code: 5 });
         expect(payload(refused).error.hint).toMatch(/cavelon secrets set <name>/);
       }
     }

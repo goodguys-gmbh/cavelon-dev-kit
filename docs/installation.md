@@ -287,7 +287,7 @@ its settings folder (`setup.json`), so a second run changes nothing and
 
 | Command | What it does |
 |---|---|
-| `cavelon setup --check` | Says what is set up and working: each agent's plugin or entry and skills, whether the MCP server starts (it starts it and asks it to introduce itself, as an agent does), and the login. Exit 1 when something is missing. |
+| `cavelon setup --check` | Says what is set up and working: each agent's plugin or entry and skills, whether the MCP server starts (it starts it and asks it to introduce itself, as an agent does), and the login. Exit 1 when something is missing. An agent found on the computer but never set up for Cavelon is listed as `skip` and does not fail the check; `--strict` (or naming it with `--agents`) counts it. |
 | `cavelon setup --remove` | Undoes what `setup` did: uninstalls the plugin and removes the marketplace if `setup` added them, takes its entry and block out of each file (a file it created goes when nothing else is left in it) and deletes the skill files it wrote. Your login stays; `cavelon logout` removes it. Asks first; Enter means no. |
 | `cavelon setup --agents claude,codex` | Only these agents, even one `setup` does not find. |
 | `cavelon setup --yes --instance <url>` | Without asking, for scripts. Without a terminal and without `--yes`, `setup` changes nothing and shows its plan (with `--json`, in the error's `details`). Logging in needs a terminal; without one, `setup` prints the `cavelon login` line to run. |

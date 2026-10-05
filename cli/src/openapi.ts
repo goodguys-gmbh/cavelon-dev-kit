@@ -295,6 +295,33 @@ export function secretFields(doc: OpenApiDoc, schema: unknown, body: unknown): s
   return [...found];
 }
 
+/**
+ * Every field of a schema the instance marks as a secret value, as paths
+ * (`credentials.api_key`, `headers[].value`, `vault.*` for any key of a map),
+ * for `api describe`. Bounded like `secretFields`: a schema may refer to itself.
+ */
+export function secretPaths(doc: OpenApiDoc, schema: unknown): string[] {
+  const found = new Set<string>();
+  let budget = 2_000;
+  const list = (value: unknown) => (Array.isArray(value) ? (value as unknown[]) : []);
+  const walk = (raw: unknown, where: string, depth: number): void => {
+    if (depth > 6 || --budget < 0) return;
+    const node = deref(doc, raw);
+    if (!node || typeof node !== "object") return;
+    const s = node as Record<string, unknown>;
+    if (s["x-cavelon-secret"] === true) {
+      found.add(where || "(body)");
+      return;
+    }
+    for (const key of ["allOf", "anyOf", "oneOf"]) for (const sub of list(s[key])) walk(sub, where, depth + 1);
+    if (s.items) walk(s.items, `${where}[]`, depth + 1);
+    for (const [key, sub] of Object.entries((s.properties ?? {}) as Record<string, unknown>)) walk(sub, where ? `${where}.${key}` : key, depth + 1);
+    if (s.additionalProperties && typeof s.additionalProperties === "object") walk(s.additionalProperties, where ? `${where}.*` : "*", depth + 1);
+  };
+  walk(schema, "", 0);
+  return [...found];
+}
+
 function matches(pattern: string, key: string): boolean {
   try {
     return new RegExp(pattern, "u").test(key);
@@ -366,6 +393,7 @@ export function describeSchema(doc: OpenApiDoc, schema: Record<string, unknown> 
     if (required.has(name)) parts.push("required");
     if (Array.isArray(sub.enum)) parts.push(`one of ${(sub.enum as unknown[]).join(", ")}`);
     if (sub.default !== undefined) parts.push(`default ${JSON.stringify(sub.default)}`);
+    if (secretPaths(doc, p).includes("(body)")) parts.push("secret value (x-cavelon-secret): a person enters it");
     fields[name] = parts.join(", ");
     // Three levels are enough for a body, and stop a schema that refers to itself.
     if (items && depth < 3) fields[`${name}[]`] = describeSchema(doc, items, depth + 1);

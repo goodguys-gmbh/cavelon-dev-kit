@@ -13,6 +13,7 @@ import {
   type Context,
 } from "../command.js";
 import { capacityCodeIn, capacityHint, noteLines, runCapacityNote, type CapacityNote, type RunState } from "../capacity.js";
+import { assertionCount, assertionLine, retrievalRows, retrievalView, spanAttributes, stepAssertions, suggestedSpan, type RetrievalView } from "../trace-view.js";
 import { CavelonError, ExitCode, usageError, type ExitCodeValue } from "../errors.js";
 import { confirmation } from "../confirm-token.js";
 import { confinedPath } from "../paths.js";
@@ -50,14 +51,45 @@ interface UploadedDocument {
   operation_id?: string | null;
   /** The documents this upload replaced, newest first; absent on an instance that does not report it. */
   replaced_document_ids?: string[] | null;
+  /** created, replaced or deduplicated (identical content was already active); absent on an older instance. */
+  upload_outcome?: string | null;
 }
 
 /** A document already in the knowledge base, as the instance lists it. */
 interface ExistingDocument {
   id: string;
   filename: string;
+  status?: string;
   is_active?: boolean;
   created_at?: string;
+}
+
+const fileCount = (n: number) => `${n} file${n === 1 ? "" : "s"}`;
+
+/**
+ * What the upload did with a file: the instance's `upload_outcome` where it
+ * reports one. An older instance answers a file whose content is already an
+ * active document of the knowledge base with that document, so an id the
+ * knowledge base listed before the upload is a deduplicated file.
+ */
+function uploadOutcomeOf(d: UploadedDocument, before: Set<string>): string | null {
+  if (typeof d.upload_outcome === "string" && d.upload_outcome) return d.upload_outcome;
+  return before.has(d.id) ? "deduplicated" : null;
+}
+
+/** The documents' statuses now, after a wait: the upload's answer said "pending" for each. */
+async function refreshStatuses(ctx: Context, kbId: string, documents: UploadedDocument[]): Promise<void> {
+  try {
+    const list = await callStable<ExistingDocument[]>(ctx, "GET", DOCUMENTS_ROUTE, "listing a knowledge base's documents", { params: { kb_id: [kbId] } });
+    const byId = new Map((Array.isArray(list) ? list : []).map((d) => [d.id, d]));
+    for (const d of documents) {
+      const status = byId.get(d.id)?.status;
+      if (typeof status === "string" && status) d.status = status;
+    }
+  } catch (error) {
+    if (!(error instanceof CavelonError)) throw error;
+    ctx.warn(`Could not read the documents' statuses after the wait (${error.message}); the operations above say how ingestion ended.`);
+  }
 }
 
 const UPLOAD_ROUTE = "/api/v1/knowledge-bases/{kb_id}/documents/upload";
@@ -563,7 +595,7 @@ export const kbUpload: CommandSpec = {
       return {
         data: { kb: kbRef, files: rel, count: rel.length, dry_run: true, existing: planned },
         text: [
-          `Would upload ${rel.length} files:`,
+          `Would upload ${fileCount(rel.length)}:`,
           ...rel,
           ...matches.map(plannedLine),
           ...(hint ? [hint] : []),
@@ -587,7 +619,7 @@ export const kbUpload: CommandSpec = {
       return {
         data: { kb: { id: kb.id, name: kb.name ?? null }, files: rel, count: rel.length, uploaded: false, existing: planned, confirm, ...gate.fields },
         text: [
-          `--replace uploads ${rel.length} files and then deactivates ${deactivations.length} document${deactivations.length === 1 ? "" : "s"} the instance's upload does not replace itself:`,
+          `--replace uploads ${fileCount(rel.length)} and then deactivates ${deactivations.length} document${deactivations.length === 1 ? "" : "s"} the instance's upload does not replace itself:`,
           ...matches.map(plannedLine),
           ...(gate.mismatch ? [gate.mismatch] : []),
           `Nothing was sent. Upload and deactivate with: ${confirm}`,
@@ -637,6 +669,10 @@ export const kbUpload: CommandSpec = {
     }
     settleMatches(matches, documents, uploadedFiles);
     const operationIds = documents.map((d) => d.operation_id).filter((id): id is string => Boolean(id));
+    const before = new Set((existing ?? []).map((d) => d.id));
+    const outcomes = new Map(documents.map((d) => [d, uploadOutcomeOf(d, before)]));
+    const deduplicated = documents.filter((d) => outcomes.get(d) === "deduplicated");
+    const created = documents.length - deduplicated.length;
     const summary = () => ({
       kb: { id: kb.id, name: kb.name ?? null },
       documents: documents.map((d) => ({
@@ -644,6 +680,7 @@ export const kbUpload: CommandSpec = {
         filename: d.filename,
         status: d.status,
         operation_id: d.operation_id ?? null,
+        upload_outcome: outcomes.get(d) ?? null,
         ...(Array.isArray(d.replaced_document_ids) ? { replaced_document_ids: d.replaced_document_ids } : {}),
       })),
       operation_ids: operationIds,
@@ -651,8 +688,14 @@ export const kbUpload: CommandSpec = {
     });
     const matchLines = () => {
       const note = staysActiveHint(matches, mode);
-      return [...matches.map(outcomeLine), ...(note ? [note] : [])];
+      return [
+        ...deduplicated.map((d) => `${d.filename}: identical to the active document ${shortId(d.id)}; nothing new was created (deduplicated)`),
+        ...matches.filter((m) => !deduplicated.some((d) => d.filename === m.filename)).map(outcomeLine),
+        ...(note ? [note] : []),
+      ];
     };
+    const uploadedText = (where: string) =>
+      created ? `Uploaded ${fileCount(created)}${where}.` : `Nothing new uploaded${where}: the content of ${deduplicated.length === 1 ? "the file is" : "every file is"} already active.`;
     if (operationIds.length < documents.length) ctx.warn("The instance returned no operation id for some documents; it may be older than the operations API.");
     if (failure) {
       const refused = await deactivate(ctx, kb.id, matches);
@@ -660,7 +703,7 @@ export const kbUpload: CommandSpec = {
       return {
         data: { ...summary(), error: failure.error.toJSON(), not_uploaded: failure.notUploaded },
         text: [
-          `Uploaded ${documents.length} files, then: ${failure.error.message}`,
+          `Uploaded ${fileCount(documents.length)}, then: ${failure.error.message}`,
           `Not uploaded (${failure.notUploaded.length}): ${failure.notUploaded.join(", ")}`,
           ...matchLines(),
           ...(operationIds.length ? [`Wait for the uploaded ones with: cavelon wait ${operationIds.join(" ")}`] : []),
@@ -674,9 +717,10 @@ export const kbUpload: CommandSpec = {
       const refused = waited.exitCode === ExitCode.ok ? await deactivate(ctx, kb.id, matches) : undefined;
       if (waited.exitCode !== ExitCode.ok) for (const m of matches) if (m.outcome === undefined) m.outcome = "stays_active";
       if (refused) ctx.warn(`The old documents stay active: ${refused.message}`);
+      await refreshStatuses(ctx, kb.id, documents);
       return {
         data: { ...summary(), ...waited.data },
-        text: [`Uploaded ${documents.length} files.`, ...matchLines(), waited.text].join("\n"),
+        text: [uploadedText(""), ...matchLines(), waited.text].join("\n"),
         exitCode: refused && waited.exitCode === ExitCode.ok ? refused.exitCode : waited.exitCode,
       };
     }
@@ -685,7 +729,7 @@ export const kbUpload: CommandSpec = {
     return {
       data: summary(),
       text: [
-        `Uploaded ${documents.length} files to ${kb.name ?? kb.id}.`,
+        uploadedText(` to ${kb.name ?? kb.id}`),
         ...matchLines(),
         ...(operationIds.length ? [`Operations: ${operationIds.length}`, `Wait with: cavelon wait ${operationIds.join(" ")}`] : []),
       ].join("\n"),
@@ -926,8 +970,7 @@ function summarizeTrace(t: TraceSummary) {
 
 /** The `knowledge_outcome` a span's attributes carry, if any. */
 function outcomeOf(s: Span): string | null {
-  const attributes = s.attributes_json;
-  const outcome = attributes && typeof attributes === "object" ? (attributes as Record<string, unknown>).knowledge_outcome : undefined;
+  const outcome = spanAttributes(s.attributes_json)?.knowledge_outcome;
   return typeof outcome === "string" && outcome ? outcome : null;
 }
 
@@ -962,6 +1005,32 @@ function summarizeSpan(s: Span, outcomes?: Map<string, string>) {
     knowledge_outcome: outcomeOf(s) ?? outcomes?.get(s.id) ?? null,
     error,
   };
+}
+
+/** Why `trace` suggests this span first. */
+function spanPick(s: Span): string {
+  if (s.error_json || s.status === "error" || s.status === "errored") return "the one that failed";
+  if (s.span_type === "llm") return "the last model call";
+  if (s.span_type === "retrieval") return "the knowledge search";
+  return s.span_type ?? "a span";
+}
+
+/** A knowledge search's span as a person reads it: the query, the outcome, and the hits as a table. */
+function retrievalText(data: { span_id: string; name: string | null; agent: string | null; status: string | null; error: unknown }, view: RetrievalView): string {
+  const head = keyValues([
+    ["span", `${data.span_id} (retrieval${data.name ? `, ${data.name}` : ""}${data.agent ? `, agent ${data.agent}` : ""})`],
+    ["status", data.status],
+    ["query", view.query ?? "not recorded"],
+    ["knowledge_outcome", view.knowledge_outcome ?? "not classified by the agent"],
+    ["hits", view.sources_total ?? view.source_count ?? view.sources.length],
+    ["retrieval_status", view.retrieval_status ?? undefined],
+    ["error", data.error ? JSON.stringify(data.error) : undefined],
+  ]);
+  const rows = retrievalRows(view);
+  const hits = rows.length ? `\n\n${table(rows, ["rank", "title", "score", "citable", ...(rows.some((r) => r.cited) ? ["cited"] : []), "document_id"])}` : "";
+  const more = view.sources_total && view.sources_total > rows.length ? `\n… ${view.sources_total - rows.length} more hits than the trace keeps` : "";
+  const outcome = view.knowledge_outcome ? `\n\nWhat it means: ${cavelonCommand("explain", view.knowledge_outcome)}` : "";
+  return `${head}${hits}${more}${outcome}\n\nEverything the span recorded: --json`;
 }
 
 function detailOf(value: unknown, full: boolean): unknown {
@@ -1017,12 +1086,26 @@ async function capacityFooter(ctx: Context, errors: Array<string | null | undefi
   return `\n\n${code}: ${capacityHint(code, await readLimits(ctx).catch(() => undefined))}`;
 }
 
+/** A step's answer, shortened, on one line; a passed step's shorter still. */
+const ANSWER_CHARS = 300;
+const PASSED_ANSWER_CHARS = 150;
+
+/** The step's assertions and its answer, as lines under its case. */
+function stepLines(r: TestResultState, full: boolean, answerChars = ANSWER_CHARS): string[] {
+  const assertions = stepAssertions(r.judge_breakdown, full);
+  const count = assertionCount(assertions);
+  const lines = assertions.length ? [`    Assertions${count ? ` (${count})` : ""}:`, ...assertions.map((a) => `      ${assertionLine(a)}`)] : [];
+  if (r.generated_answer) lines.push(`    Answer: ${clip(r.generated_answer.replace(/\s+/g, " ").trim(), full ? Number.MAX_SAFE_INTEGER : answerChars)}`);
+  return lines;
+}
+
 /** What the instance recorded for a case that did not pass: its error and the judge's reasoning, whole with --full. */
-function notPassedLines(r: TestResultState, max: number): string[] {
+function notPassedLines(r: TestResultState, max: number, full: boolean): string[] {
   const c = failedCase(r, max);
   const lines = [`  ${caseLabel(c)}  ${c.status}`];
   if (c.reason) lines.push(`    ${c.reason}`);
   if (r.llm_judge_reasoning && r.llm_judge_reasoning !== r.error_message) lines.push(`    Judge: ${clip(r.llm_judge_reasoning, max)}`);
+  lines.push(...stepLines(r, full));
   // Whether the right agent answered is often why a routing assertion failed.
   if (r.agent_slug) lines.push(`    Answered by: ${r.agent_slug}`);
   const open = caseTraceCommand(r);
@@ -1030,10 +1113,14 @@ function notPassedLines(r: TestResultState, max: number): string[] {
   return lines;
 }
 
-/** A case that did not fail, as the judge saw it: a low-scoring pass is read, not only counted. */
-function judgedLines(r: TestResultState, max: number): string[] {
+/** A step that did not fail, as the judge saw it (a low-scoring pass is read, not only counted), with its assertions and answer. */
+function judgedLines(r: TestResultState, max: number, full: boolean): string[] {
   const score = r.llm_judge_score === null || r.llm_judge_score === undefined ? "" : `  score ${r.llm_judge_score}`;
-  return [`  ${caseLabel(failedCase(r))}  ${r.status}${score}`, `    Judge: ${clip(r.llm_judge_reasoning!, max)}`];
+  return [
+    `  ${caseLabel(failedCase(r))}  ${r.status}${score}`,
+    ...(r.llm_judge_reasoning ? [`    Judge: ${clip(r.llm_judge_reasoning, max)}`] : []),
+    ...stepLines(r, full, PASSED_ANSWER_CHARS),
+  ];
 }
 
 /** A test run's results: one line per case, then each case that did not pass with the reasons the instance recorded. */
@@ -1050,14 +1137,20 @@ async function testRunView(ctx: Context, id: string, results: TestResultState[],
     conversation_id: r.conversation_id ?? null,
     run_id: r.agent_run_id ?? null,
     error: r.error_message ? clip(r.error_message, 200) : null,
+    // What the step answered, and each assertion with its verdict: the judge's text alone hides how many there were.
+    answer: r.generated_answer ? clip(r.generated_answer, options.full ? max : ANSWER_CHARS) : null,
+    assertions: stepAssertions(r.judge_breakdown, options.full),
     judge_reasoning: r.llm_judge_reasoning ? clip(r.llm_judge_reasoning, max) : null,
     trace_command: caseTraceCommand(r)?.command ?? null,
     // judge_breakdown is an open object in the OpenAPI; it is passed on as the instance sends it.
     ...(NOT_PASSED.has(r.status) ? { reason: failedCase(r, max).reason, judge_breakdown: detailOf(r.judge_breakdown, options.full) } : {}),
   }));
   const notPassed = page.items.filter((r) => NOT_PASSED.has(r.status));
-  // An older instance, or one that keeps the reasoning of failures only, sends none for a pass.
-  const judged = page.items.filter((r) => !NOT_PASSED.has(r.status) && r.llm_judge_reasoning);
+  // An older instance, or one that keeps the reasoning of failures only, sends none for a pass; a step with
+  // assertions or an answer is shown all the same.
+  const judged = page.items.filter(
+    (r) => !NOT_PASSED.has(r.status) && (r.llm_judge_reasoning || stepAssertions(r.judge_breakdown).length || r.generated_answer),
+  );
   const byConversation = page.items.find((r) => r.conversation_id);
   const byRun = page.items.find((r) => !r.conversation_id && r.agent_run_id);
   const where = [
@@ -1069,8 +1162,8 @@ async function testRunView(ctx: Context, id: string, results: TestResultState[],
     text:
       table(items, ["case", "step", "status", "score", ...(items.some((r) => r.agent) ? ["agent"] : []), ...(items.some((r) => r.run_id) ? ["run_id"] : []), "conversation_id"]) +
       moreHint(page.next_cursor, cavelonCommand("trace", id, "--kind", "test")) +
-      (notPassed.length ? `\n\nDid not pass:\n${notPassed.flatMap((r) => notPassedLines(r, max)).join("\n")}` : "") +
-      (judged.length ? `\n\nJudge's reasoning:\n${judged.flatMap((r) => judgedLines(r, options.full ? max : 300)).join("\n")}` : "") +
+      (notPassed.length ? `\n\nDid not pass:\n${notPassed.flatMap((r) => notPassedLines(r, max, options.full)).join("\n")}` : "") +
+      (judged.length ? `\n\nPassed:\n${judged.flatMap((r) => judgedLines(r, options.full ? max : 300, options.full)).join("\n")}` : "") +
       `\n\n${where.length ? where.join("\n") : "The instance recorded no conversation or run for these results, so they have no trace to open."}` +
       (await capacityFooter(ctx, items.map((r) => r.error))),
   };
@@ -1147,17 +1240,21 @@ export const trace: CommandSpec = {
         const span = spans.find((s) => s.id === spanId);
         if (!span) throw new CavelonError(ExitCode.failure, { code: "span_not_found", message: `No span ${spanId} in trace ${traceId}.` });
         const full = boolOption(input, "full");
+        // Attributes that arrive as a JSON string, even one encoded twice, are read as the object they hold.
+        const attributes = spanAttributes(span.attributes_json) ?? span.attributes_json;
+        const retrieval = span.span_type === "retrieval" ? retrievalView(spanAttributes(span.attributes_json)) : undefined;
         const data = {
           ...summarizeSpan(span, outcomes),
           model: span.model ?? null,
           parent_span_id: span.parent_span_id ?? null,
           input: detailOf(span.input_json, full),
           output: detailOf(span.output_json, full),
-          attributes: detailOf(span.attributes_json, full),
+          attributes: detailOf(attributes, full),
+          ...(retrieval ? { retrieval } : {}),
           tokens: span.token_usage_json ?? null,
           error: span.error_json ?? null,
         };
-        return { data, text: JSON.stringify(data, null, 2) };
+        return { data, text: retrieval ? retrievalText(data, retrieval) : JSON.stringify(data, null, 2) };
       }
       const page = pageOf(
         spans.map((s) => summarizeSpan(s, outcomes)),
@@ -1165,13 +1262,14 @@ export const trace: CommandSpec = {
         cursor,
       );
       const base = cavelonCommand("trace", id, ...(kind ? ["--kind", kind] : []), "--trace", traceId);
+      const open = suggestedSpan(spans);
       return {
         data: { trace: summarizeTrace(detail), spans: page },
         text:
           `${keyValues(Object.entries(summarizeTrace(detail)))}\n\n` +
           table(page.items, ["seq", "type", "name", "status", ...(outcomes.size ? ["knowledge_outcome"] : []), "duration_ms", "span_id"]) +
           moreHint(page.next_cursor, base) +
-          (page.items.length ? `\n\nOne span in full, by the span_id in its row: ${base} --span ${shellWord(page.items[0]!.span_id)}` : ""),
+          (open ? `\n\nOne span in full (${spanPick(open)}), by the span_id in its row: ${base} --span ${shellWord(open.id)}` : ""),
       };
     }
 
