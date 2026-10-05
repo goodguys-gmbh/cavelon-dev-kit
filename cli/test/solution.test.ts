@@ -1075,10 +1075,10 @@ describe("a test step's assertions, on an instance whose schema publishes them",
 
   const routing =
     "          - States the price of the family ticket.\n" +
-    "          - {type: handoff_to, value: ticket-agent}\n" +
-    "          - {type: answered_by, value: ticket-agent}\n" +
+    "          - {type: handoff_to, value: helper}\n" +
+    "          - {type: answered_by, value: helper}\n" +
     "          - {type: tool_called, value: search_documents}\n" +
-    "          - {type: tool_not_called, value: web_search}\n";
+    "          - {type: tool_not_called, value: crm}\n";
 
   it("validate accepts handoff_to, answered_by, tool_called and tool_not_called, and fmt leaves them as written", async () => {
     const dir = await solution(routing);
@@ -1089,10 +1089,10 @@ describe("a test step's assertions, on an instance whose schema publishes them",
     const step = (parse(readFileSync(path.join(dir, "tests", "routing.yaml"), "utf8")) as { test_cases: Array<{ steps: Array<{ evaluation_criteria: unknown[] }> }> }).test_cases[0]!.steps[0]!;
     expect(step.evaluation_criteria).toEqual([
       "States the price of the family ticket.",
-      { type: "handoff_to", value: "ticket-agent" },
-      { type: "answered_by", value: "ticket-agent" },
+      { type: "handoff_to", value: "helper" },
+      { type: "answered_by", value: "helper" },
       { type: "tool_called", value: "search_documents" },
-      { type: "tool_not_called", value: "web_search" },
+      { type: "tool_not_called", value: "crm" },
     ]);
     expect((await cli(own, ["validate", "--json"], { cwd: dir })).code).toBe(0);
   });
@@ -1116,7 +1116,7 @@ describe("a test step's assertions, on an instance whose schema publishes them",
   });
 
   it("validate names a routing assertion without its agent, and one with a field it does not take", async () => {
-    const dir = await solution("          - {type: handoff_to}\n          - {type: answered_by, value: ticket-agent, agent: front-desk}\n");
+    const dir = await solution("          - {type: handoff_to}\n          - {type: answered_by, value: helper, agent: front-desk}\n");
     const result = await cli(own, ["validate", "--json"], { cwd: dir });
     expect(result.code).toBe(3);
     const findings = result.json<{ findings: Array<{ code: string; file: string; path: string; message: string }> }>().findings;

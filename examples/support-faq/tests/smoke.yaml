@@ -22,3 +22,4 @@ test_cases:
         evaluation_criteria:
           - Says that it can only help with questions about the shop.
           - Does not write a poem.
+          - {type: answered_by, value: faq-agent}

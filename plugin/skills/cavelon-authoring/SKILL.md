@@ -149,15 +149,24 @@ with `cavelon harness default`).
 2. The schema: `cavelon schema` lists the sections and the file each is kept
    in; `cavelon schema <section>` (the `package_schema` tool) lists a section's
    fields with type, required, allowed values and default, and prints the
-   smallest entry with every required field, to copy into the file. A pulled
-   file that is `[]` shows no shape; this does. `cavelon validate` checks the
-   files against the same schema, and each error names the file, line and
-   field. It also checks the references: a duplicate slug and a handoff to an
-   agent the package lacks are errors; a skill, tool, knowledge base or
-   solution that is neither in the package nor in the tenant's list from the
-   last pull, a field the schema does not have (`package_field_unknown`, "did
-   you mean temperature?") and an `llm_model` outside the tenant's model list
-   are warnings. A finding's `suggestion` (with `--json`) is the closest name.
+   smallest entry with every required field, to copy into the file, and one
+   with an entry of each nested list. A nested entry has its own fields: reach
+   them by path or type name, as the section's output lists them
+   (`cavelon schema agents.handoffs`, `cavelon schema test_suites.test_cases.steps`,
+   `cavelon schema PackageAgentHandoff`); where entries take several shapes
+   (`test_suites.test_cases.steps.evaluation_criteria`), each shape is listed.
+   A pulled file that is `[]` shows no shape; this does. `cavelon validate`
+   checks the files against the same schema, and each error names the file,
+   line and field. It also checks the references: a duplicate slug, and a
+   handoff or a test assertion (`answered_by`, `handoff_to`) naming an agent
+   the package lacks, are errors; a skill, tool, knowledge base or solution
+   that is neither in the package nor in the tenant's list, a field the schema
+   does not have (`package_field_unknown`, "did you mean temperature?"), an
+   `llm_model` outside the tenant's model list, and a package naming another
+   solution than `cavelon.yaml` (`solution_slug_mismatch`) are warnings. A
+   finding's `suggestion` (with `--json`) is the closest name. The import
+   preview blocks a name the instance does not have: then `validate` does not
+   say "Valid", and `cavelon validate --strict` fails on every warning.
 3. Concepts and fields: `cavelon docs search <topic>` (for example "agent
    graph", "tools", "knowledge base", "triggers"), then `cavelon docs get
    <page>`.
@@ -274,9 +283,11 @@ schema has them: `cavelon validate` reports an unknown section):
 
 ## After each edit
 
-1. `cavelon validate` until it reports no errors. After writing files by
-   hand, `cavelon fmt` brings them into the form the instance's export gives
-   them (field order, the schema's defaults filled in), so the first `pull`
+1. `cavelon validate` until it reports no errors (`--strict` before an apply
+   you expect to pass: it fails on the warnings the preview would block on).
+   After writing files by hand, `cavelon fmt` brings them into the form the
+   instance's export gives them (field order, the schema's defaults filled in,
+   test cases and steps numbered in their written order), so the first `pull`
    after `apply` shows only what changed on the instance; `cavelon fmt
    --check` changes nothing and exits 3 when a file would change.
 2. `cavelon apply --env test` to see what the instance makes of it; the

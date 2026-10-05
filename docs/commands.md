@@ -206,12 +206,13 @@ Write the instance's package into package/ (split along the schema's sections) a
 cavelon pull [options]
 ```
 
-With a solution (--harness, or cavelon.yaml's harness), exports that solution; without one, the tenant's full configuration. A file whose content did not change keeps its bytes, so `git diff` shows what changed on the instance. Files of sections the schema does not know are kept byte for byte. Refuses when package files have uncommitted changes, unless --force; outside a git repository, when a file it would overwrite or remove changed since the last pull. A file as the last pull or apply left it (digests in .cavelon/) counts as unchanged, committed or not.
+With a solution (--harness, or cavelon.yaml's harness), exports that solution; without one, the tenant's full configuration. A file whose content did not change keeps its bytes, so `git diff` shows what changed on the instance; a field the export spells out that the file leaves out (an empty list, a default) is no change. A test suite goes back to the file it was pulled into or applied from, whatever its name. Files of sections the schema does not know are kept byte for byte. A solution's export leaves the tenant-wide sections (the tenant's settings, its model list) out of the folder, unless --tenant-wide. Refuses when package files have uncommitted changes, unless --force; outside a git repository, when a file it would overwrite or remove changed since the last pull. A file as the last pull or apply left it (digests in .cavelon/) counts as unchanged, committed or not.
 
 | Option | Description | MCP |
 |---|---|---|
 | `--harness <harness>` | The solution to export, by name, slug or id; its slug is recorded in cavelon.yaml when it names none. | yes |
 | `--force` | Overwrite package files that have uncommitted changes since the last pull or apply. | yes |
+| `--tenant-wide` | With a solution, also write the tenant-wide sections its export carries (tenant_settings, model_registry): apply then sends them for the whole tenant. | yes |
 
 Examples:
 
@@ -230,15 +231,16 @@ Check the package files against the instance's package schema, offline.
 cavelon validate [options]
 ```
 
-Uses the schema and error catalog cached by init, pull or apply; fetches them only when none is cached or a development build's copy is past its time-to-live, and never with --offline. A development build keeps one version while its schema changes, so its copy is read again after a minute (CAVELON_CONTRACT_TTL_SECONDS), or checked with the ETag the instance sent with it; --verbose says which copy was used. Warns (never fails) when a fan-out or Map loop's max_concurrency is above the instance's branch width, and when the tenant runs fan-outs and Map loops in sequence, from the limits the instance last published. Each finding carries a code: `cavelon explain <code>` says more. The import preview checks everything again on the server.
+Uses the schema and error catalog cached by init, pull or apply; fetches them only when none is cached or a development build's copy is past its time-to-live, and never with --offline. A development build keeps one version while its schema changes, so its copy is read again after a minute (CAVELON_CONTRACT_TTL_SECONDS), or checked with the ETag the instance sent with it; --verbose says which copy was used. Warns (never fails) when a fan-out or Map loop's max_concurrency is above the instance's branch width, and when the tenant runs fan-outs and Map loops in sequence, from the limits the instance last published. References to skills, tools, knowledge bases, solutions and models outside the package are checked against the tenant's lists in .cavelon/inventory.json (pull, models list); a list no command has read yet is read now, unless --offline, and a check that cannot be made is named (`skipped` in --json). A reference that is in neither is a warning, as it may be created on the instance before the import; the import preview blocks it otherwise, so validate does not say "Valid" then, and --strict fails on every warning (exit 3). Each finding carries a code: `cavelon explain <code>` says more. The import preview checks everything again on the server.
 
-With --json, `warnings` is always a list of `{code, message}` objects: the warning findings (at most --limit), then the warnings about the run, such as a stale copy of the schema, with code null. `warning_count` counts them all and `error_count` the errors (`errors` is the same number); `findings` has each finding's file, line and hint.
+With --json, `warnings` is always a list of `{code, message}` objects: the warning findings (at most --limit), then the warnings about the run, such as a stale copy of the schema, with code null. `warning_count` counts them all and `error_count` the errors (`errors` is the same number); `findings` has each finding's file, line and hint; `blocking_count` counts the warnings the import preview blocks on.
 
 | Option | Description | MCP |
 |---|---|---|
 | `--offline` | Never contact the instance, even when nothing is cached. | yes |
 | `--limit <n>` | Print at most n findings (default 50). | yes |
 | `--verbose` | Also say which copy of the package schema was used: cached or read now, when, and its hash. | yes |
+| `--strict` | Fail (exit 3) on warnings too, such as a reference the import preview will block unless it exists by then. | yes |
 
 ### cavelon fmt
 
@@ -250,7 +252,7 @@ Bring the package files into the export's form (field order and defaults from th
 cavelon fmt [options]
 ```
 
-A file whose value the export would spell differently is rewritten: each field in the schema's order, and each field it leaves out set to the schema's default, as the export writes it (the instance applies the same defaults, so nothing changes in what apply sends but the spelling). Lists become block lists; the persona file shows every field, the unset ones as comments. Comments in a rewritten file are not kept, as pull does not keep them. A file already in that form keeps its bytes, and so do the files of sections the schema does not know. Run it after writing package files by hand and before `apply`, so the next `pull` shows only what changed on the instance. --check writes nothing and exits 3 when a file would change. Uses the cached package schema (as validate does); --offline never contacts the instance.
+A file whose value the export would spell differently is rewritten: each field in the schema's order, and each field it leaves out set to what the instance gives it, as the export writes it: the schema's default, an empty list or object for a list or object field without one. The instance applies the same values, so nothing changes in what apply sends but the spelling, with one exception: an entry of a list that leaves out an `..._order` field (sort_order, display_order, step_order) gets its position, so the instance keeps the written order instead of ordering entries that all carry the default its own way (test cases by name). Lists become block lists; the persona file shows every field, the unset ones as comments. Comments in a rewritten file are not kept, as pull does not keep them. A file already in that form keeps its bytes, and so do the files of sections the schema does not know. Run it after writing package files by hand and before `apply`, so the next `pull` shows only what changed on the instance. --check writes nothing and exits 3 when a file would change. Uses the cached package schema (as validate does); --offline never contacts the instance.
 
 | Option | Description | MCP |
 |---|---|---|
@@ -266,7 +268,7 @@ cavelon fmt --check
 
 ### cavelon schema
 
-Show the package schema the instance publishes: its sections, or one section's fields with a minimal example.
+Show the package schema the instance publishes: its sections, or the fields of a section or a nested type, with a minimal example.
 
 **read-only** · MCP tool: `package_schema`
 
@@ -274,11 +276,11 @@ Show the package schema the instance publishes: its sections, or one section's f
 cavelon schema [section] [options]
 ```
 
-Without a section, lists the sections with the file each is kept in. With one, lists its fields (type, required, allowed values, default) and prints the smallest entry that has every required field, ready to copy into the file. Placeholders are written &lt;field&gt;. Reads the schema as `validate` does: the cached copy first, the instance otherwise.
+Without an argument, lists the sections with the file each is kept in. With a section, lists its fields (type, required, allowed values, default) and prints the smallest entry that has every required field, ready to copy into the file, and an example with one entry of each nested list. A field whose entries have fields of their own is reached by its path (`agents.handoffs`, `test_suites.test_cases.steps`) or by its type's name (`PackageAgentHandoff`); the section's output names them. Where entries take one of several shapes (a step's evaluation_criteria: a text, a judge criterion, an assertion by type), each shape is listed with its fields. Placeholders are written &lt;field&gt;. Reads the schema as `validate` does: the cached copy first, the instance otherwise.
 
 | Argument | Description |
 |---|---|
-| `section` | A section of the package, such as agents or knowledge_bases. |
+| `section` | A section of the package (agents), a path to a nested field (agents.handoffs, test_suites.test_cases.steps), or a type name (PackageAgentHandoff). |
 
 | Option | Description | MCP |
 |---|---|---|
@@ -289,7 +291,8 @@ Examples:
 ```bash
 cavelon schema
 cavelon schema agents
-cavelon schema knowledge_bases --json
+cavelon schema agents.handoffs
+cavelon schema test_suites.test_cases.steps.evaluation_criteria --json
 ```
 
 ### cavelon apply

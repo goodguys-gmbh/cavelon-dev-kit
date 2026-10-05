@@ -58,18 +58,26 @@ use it when you parse the result.
    uncommitted changes (outside git: files changed since the last pull);
    commit or apply them first. A file as the last pull or confirmed apply left
    it counts as unchanged, so a pull right after an apply goes ahead without a
-   commit. `git diff` then shows what someone changed in the Admin.
+   commit. `git diff` then shows what someone changed in the Admin. A test
+   suite goes back to the file it came from, whatever its name. A solution's
+   pull leaves the tenant-wide sections (the tenant's settings, its model
+   list) out of the folder; `--tenant-wide` writes them, and `apply` then
+   sends them for the whole tenant, so only with the person's say-so.
 2. **Edit** the files in `package/` (one file per schema section) and `tests/`
    (one file per test suite). See the cavelon-authoring skill.
 3. **Validate** offline: `cavelon validate`. Fix every error; `cavelon explain
    <code>` says what a code means and how to fix it. Besides the schema it
-   finds duplicate slugs, handoffs to an agent the package lacks, fields the
-   schema does not have (with "did you mean"), and skills, tools, knowledge
-   bases, solutions and models the tenant did not hold at the last pull
-   (warnings: `cavelon pull` or `cavelon models list` refreshes that list).
-   After writing files by hand, run `cavelon fmt`: it fills in the defaults
-   the export writes, so the first `pull` after the apply rewrites only what
-   changed on the instance.
+   finds duplicate slugs, handoffs and test assertions naming an agent the
+   package lacks, fields the schema does not have (with "did you mean"), and
+   skills, tools, knowledge bases, solutions and models the tenant does not
+   hold (warnings: `cavelon pull` or `cavelon models list` refreshes that
+   list; validate reads a list no command has read yet). The preview blocks
+   those names, so validate does not say "Valid" while one is left;
+   `cavelon validate --strict` fails on every warning. A line `Not checked:`
+   names a check it could not make (offline, no list). After writing files by
+   hand, run `cavelon fmt`: it fills in the defaults the export writes and
+   numbers test cases in their written order, so the first `pull` after the
+   apply rewrites only what changed on the instance.
 4. **Preview**: `cavelon apply --env test` (or `--harness <name or slug>`). Nothing is
    imported yet. Read the preview: what is created, updated or deleted, which
    active solutions it reaches, what the target still needs (variables and

@@ -1555,9 +1555,11 @@ const isNode = (v: unknown): v is Node => Boolean(v) && typeof v === "object" &&
 /**
  * A package as an instance's export gives it: the instance reads an import
  * into its models and writes them back out, so each object comes back with
- * the fields the schema lists, in that order, and those it was sent without
- * hold their non-null default. Written apart from the kit's own `fmt`, so a
- * test of `fmt` against it proves something.
+ * every field the schema lists, in that order. A field it was sent without
+ * holds its non-null default; else a free-form config `{}`, a nullable field
+ * null, and a list or object field without a published default `[]` or `{}`.
+ * Test cases come back by sort_order, then by name. Written apart from the
+ * kit's own `fmt`, so a test of `fmt` against it proves something.
  */
 function withSchemaDefaults(schema: { properties: Record<string, unknown> }, pkg: Record<string, unknown>): Record<string, unknown> {
   const defs = ((schema as Node).$defs ?? {}) as Record<string, Node>;
@@ -1582,12 +1584,24 @@ function withSchemaDefaults(schema: { properties: Record<string, unknown> }, pkg
     const objects = options(at).filter((b) => isNode(b.properties));
     if (objects.length !== 1) return structuredClone(value);
     const props = objects[0]!.properties as Record<string, unknown>;
+    const required = new Set((objects[0]!.required as string[] | undefined) ?? []);
     const out: Record<string, unknown> = {};
     for (const [key, sub] of Object.entries(props)) {
+      const field = deref(sub);
       if (key in value) out[key] = fill(sub, value[key], depth + 1);
-      else if (deref(sub)?.default != null) out[key] = structuredClone(deref(sub)!.default);
+      else if (!field || required.has(key)) continue;
+      else if (field.default != null) out[key] = structuredClone(field.default);
+      else if (options(field).some((b) => b.type === "object" && b.additionalProperties === true)) out[key] = {};
+      else if (options(field).some((b) => b.type === "null")) out[key] = null;
+      else if (field.type === "array") out[key] = [];
+      else if (field.type === "object" || isNode(field.properties)) out[key] = {};
     }
     for (const [key, inner] of Object.entries(value)) if (!(key in props)) out[key] = structuredClone(inner);
+    if (Array.isArray(out.test_cases)) {
+      const order = (c: unknown) => (isNode(c) && typeof c.sort_order === "number" ? c.sort_order : 0);
+      const name = (c: unknown) => (isNode(c) && typeof c.name === "string" ? c.name : "");
+      out.test_cases = [...out.test_cases].sort((a, b) => order(a) - order(b) || name(a).localeCompare(name(b), "en"));
+    }
     return out;
   };
   return Object.fromEntries(Object.entries(pkg).map(([section, value]) => [section, fill(schema.properties[section], value, 0)]));

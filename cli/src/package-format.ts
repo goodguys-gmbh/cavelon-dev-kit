@@ -88,30 +88,71 @@ export function sectionFields(schema: PackageSchema | null, section: string): Re
   return Object.fromEntries(Object.entries(props).map(([k, v]) => [k, resolve(schema, v) ?? {}]));
 }
 
+/** JSON with sorted keys: two values are the same when this is. */
+export function canonical(value: unknown): string {
+  return JSON.stringify(value, (_key, v: unknown) => {
+    if (v && typeof v === "object" && !Array.isArray(v)) {
+      return Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+    }
+    return v;
+  });
+}
+
+const requiredOf = (shape: SchemaNode | undefined) => new Set(Array.isArray(shape?.required) ? (shape.required as string[]) : []);
+
+/** Whether a field may be null: it says so in its type, or one of its branches is the null type. */
+function nullable(schema: PackageSchema, field: SchemaNode): boolean {
+  if (field.type === "null" || (Array.isArray(field.type) && field.type.includes("null"))) return true;
+  return branches(schema, field).some((b) => b.type === "null");
+}
+
+/**
+ * The value the instance gives a field an entry leaves out. The schema's
+ * default when it publishes one that is not null. A list or object field that
+ * is neither required nor nullable and publishes no default has one the
+ * schema cannot show (an empty list or object, made fresh for each entry);
+ * the export writes it as `[]` or `{}`. With a position, an integer `…_order`
+ * field of a list entry (sort_order, display_order, step_order) is the
+ * entry's position counted from its default, which is what fmt writes: left
+ * out, every entry imports with the default, and the instance orders entries
+ * that all carry it its own way (test cases by name), not as written.
+ */
+function implicitDefault(schema: PackageSchema, key: string, sub: unknown, required: Set<string>, position: number | undefined): unknown {
+  const field = resolve(schema, sub);
+  if (!field || required.has(key)) return undefined;
+  if (position !== undefined && key.endsWith("_order") && field.type === "integer" && typeof field.default === "number") return field.default + position;
+  if (field.default !== undefined) return field.default === null ? undefined : field.default;
+  if (nullable(schema, field)) return undefined;
+  if (field.type === "array") return [];
+  if (field.type === "object" || propertiesOf(field)) return {};
+  return undefined;
+}
+
 /**
  * A value in the export's form: an object's fields in the schema's order
  * (fields the schema does not know after them, as written), and each field the
- * value leaves out set to the schema's default when that is not null. The
- * instance fills the same defaults when it imports, so the value means the
+ * value leaves out set to the value the instance gives it (`implicitDefault`).
+ * The instance fills the same values when it imports, so the value means the
  * same; only its spelling changes.
  */
-export function exportForm(schema: PackageSchema, node: unknown, value: unknown, depth = 0): unknown {
+export function exportForm(schema: PackageSchema, node: unknown, value: unknown, depth = 0, position?: number): unknown {
   const resolved = resolve(schema, node);
   if (!resolved || depth > 40) return value;
   if (Array.isArray(value)) {
     const array = arrayBranch(schema, resolved);
-    return array?.items ? value.map((item) => exportForm(schema, array.items, item, depth + 1)) : value;
+    return array?.items ? value.map((item, i) => exportForm(schema, array.items, item, depth + 1, i)) : value;
   }
   if (!isObject(value)) return value;
   const object = objectBranch(schema, resolved, value);
   const props = propertiesOf(object);
   if (!props) return value;
+  const required = requiredOf(object);
   const out: Record<string, unknown> = {};
   for (const [key, sub] of Object.entries(props)) {
     if (key in value) out[key] = exportForm(schema, sub, value[key], depth + 1);
     else {
-      const fallback = resolve(schema, sub)?.default;
-      if (fallback !== undefined && fallback !== null) out[key] = structuredClone(fallback);
+      const fallback = implicitDefault(schema, key, sub, required, position);
+      if (fallback !== undefined) out[key] = structuredClone(fallback);
     }
   }
   for (const [key, inner] of Object.entries(value)) if (!(key in out) && !(key in props)) out[key] = inner;
@@ -146,12 +187,61 @@ function isEmpty(value: unknown): boolean {
   return value === null || value === undefined || (isObject(value) && Object.keys(value).length === 0);
 }
 
+/** Null, an empty list or an empty object: how the export spells a field nothing was set in. */
+const isUnset = (value: unknown) => isEmpty(value) || (Array.isArray(value) && value.length === 0);
+
+/**
+ * A value with every field the instance reads as unset taken out, so two
+ * spellings of one value compare equal: a field that is null, empty (`[]`,
+ * `{}`) or holds the value the instance gives it when it is left out
+ * (`implicitDefault`), unless it is required. The export writes such fields
+ * out (`memory_config: {}`, `tags: []`, `max_output_tokens: null`) where a
+ * hand-written or formatted file leaves them out; both import the same.
+ */
+export function settledForm(schema: PackageSchema, node: unknown, value: unknown, depth = 0): unknown {
+  const resolved = resolve(schema, node);
+  if (!resolved || depth > 40) return withoutNulls(value);
+  if (Array.isArray(value)) {
+    const array = arrayBranch(schema, resolved);
+    return array?.items ? value.map((item) => settledForm(schema, array.items, item, depth + 1)) : withoutNulls(value);
+  }
+  if (!isObject(value)) return value;
+  const object = objectBranch(schema, resolved, value);
+  const props = propertiesOf(object);
+  if (!props) return withoutNulls(value);
+  const required = requiredOf(object);
+  const out: Record<string, unknown> = {};
+  for (const [key, inner] of Object.entries(value)) {
+    if (!(key in props)) {
+      if (inner !== null) out[key] = withoutNulls(inner);
+      continue;
+    }
+    const settled = settledForm(schema, props[key], inner, depth + 1);
+    if (!required.has(key)) {
+      // An order field left out imports as its default, not as the position fmt writes.
+      const fallback = implicitDefault(schema, key, props[key], required, undefined);
+      if (isUnset(settled) && (fallback === undefined || isUnset(fallback))) continue;
+      if (fallback !== undefined && canonical(settled) === canonical(settledForm(schema, props[key], fallback, depth + 1))) continue;
+    }
+    out[key] = settled;
+  }
+  return out;
+}
+
 /** Whether two values of a section say the same, with null fields and an empty persona counted as unset. */
-export function sameSectionValue(section: string, a: unknown, b: unknown, key: (v: unknown) => string): boolean {
-  const left = withoutNulls(a);
-  const right = withoutNulls(b);
+export function sameSectionValue(section: string, a: unknown, b: unknown, schema: PackageSchema | null = null): boolean {
+  const node = schema?.properties?.[section];
+  const left = schema && node ? settledForm(schema, node, a) : withoutNulls(a);
+  const right = schema && node ? settledForm(schema, node, b) : withoutNulls(b);
   if (section === PERSONA_SECTION && isEmpty(left) && isEmpty(right)) return true;
-  return key(left) === key(right);
+  return canonical(left) === canonical(right);
+}
+
+/** Whether two entries of a list section (one file each) say the same, as `sameSectionValue` compares. */
+export function sameEntry(section: string, a: unknown, b: unknown, schema: PackageSchema | null = null): boolean {
+  const node = schema?.properties?.[section];
+  if (!schema || !node) return canonical(withoutNulls(a)) === canonical(withoutNulls(b));
+  return canonical(settledForm(schema, node, [a])) === canonical(settledForm(schema, node, [b]));
 }
 
 /** One field as a placeholder comment, with the schema's default. */

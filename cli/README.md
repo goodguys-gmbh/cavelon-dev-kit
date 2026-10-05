@@ -125,9 +125,9 @@ Every command takes `--json` (one JSON document on stdout, errors included),
 | `harness clone <source> [--slug] [--name] [--no-tests] [--no-triggers]` | changing | Copy a solution into a new draft. |
 | `activate [--harness] [--env]` | changing | Activate through the readiness gate only, never by force. |
 | `init [--harness] [--agents <list>] [--hook] [--update] [--from <file> [--force]]` | changing (files) | Make this folder a solution: `cavelon.yaml`, `package/`, `tests/`, `env/`, `.cavelon/`; on a terminal it asks for the tenant and the solution (or a new one by name); `--from` writes a package file into it. |
-| `pull [--harness] [--force]` | changing (files) | Write the instance's package into `package/` and `tests/`, the inventory into `.cavelon/`. |
-| `validate [--offline]` | read-only | Check the package files against the cached package schema, their references, unknown fields and models. |
-| `schema [<section>] [--offline]` | read-only | The package schema's sections, or one section's fields with a minimal example. |
+| `pull [--harness] [--force] [--tenant-wide]` | changing (files) | Write the instance's package into `package/` and `tests/`, the inventory into `.cavelon/`. A solution's tenant-wide sections only with `--tenant-wide`. |
+| `validate [--offline] [--strict]` | read-only | Check the package files against the cached package schema, their references, unknown fields and models; `--strict` fails on warnings. |
+| `schema [<section>[.<field>…] \| <type>] [--offline]` | read-only | The package schema's sections, or the fields of a section, a nested field (`agents.handoffs`) or a type, with a minimal example. |
 | `apply [--env] [--harness] [--mode]` | changing | Preview the files against the instance; prints and stores a preview id. |
 | `apply --confirm <preview-id>` | changing | Import exactly that preview; a stale one, or one the import's own check refuses (it names the blockers), exits 4. |
 | `explain <code>` | read-only | Look a code up in the instance's error catalog. |
@@ -613,14 +613,24 @@ cavelon activate --harness support
   one the tenant's full configuration, and splits it along the top-level sections
   of the instance's published package schema, so no entity type is built into
   the binary. A file whose content did not change keeps its bytes, so `git diff`
-  shows what changed on the instance; files of sections the schema does not know
-  are kept byte for byte. It refuses when package files have uncommitted changes
+  shows what changed on the instance; a field the export spells out and the file
+  leaves out (an empty list or object, `null`, a default) is no change. A test
+  suite goes back to the file it came from (`.cavelon/pulled-files.json` records
+  which). Files of sections the schema does not know are kept byte for byte. A
+  solution's pull leaves the tenant-wide sections out of the folder (those the
+  schema marks `x-cavelon-scope: tenant`; on an instance that marks none,
+  `tenant_settings` and `model_registry`) unless `--tenant-wide`. It refuses when package files have uncommitted changes
   (exit 4) unless `--force`, and writes the tenant's solutions, knowledge bases,
   tools, test suites and sandboxes to `.cavelon/inventory.md`.
 - **`validate`** checks the files against the package schema that `init`, `pull`
   or `apply` cached, and the package version against those the instance accepts.
-  It contacts the instance only when nothing is cached (never with `--offline`).
-  Each finding has a file, line, path and code; exit 3 on errors. A Model
+  It contacts the instance only when nothing is cached, or to read a tenant's
+  list (models, skills, tools, knowledge bases, solutions) the package refers to
+  and no command has read yet; never with `--offline`, which names the checks it
+  skipped instead. Each finding has a file, line, path and code; exit 3 on
+  errors, and with `--strict` on warnings too. A reference the import preview
+  will block (`package_reference_unknown`, `package_model_unknown`) keeps the
+  summary from saying "Valid". A Model
   Registry row's `max_concurrent_requests` needs a `base_url`
   (`model_endpoint_limit_without_base_url`); where the package schema does not
   carry the field, a warning says the import ignores it.

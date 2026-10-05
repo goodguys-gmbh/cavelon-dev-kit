@@ -21,6 +21,7 @@ import {
   listPreviews,
   loadPreview,
   previewExpiry,
+  readItemFiles,
   readPulledFiles,
   rememberAppliedFiles,
   savePreview,
@@ -34,14 +35,15 @@ import { catalogEntry, checkPackage, KIT_CODES, packageVersionOf } from "../pack
 import { cliFix, similarCodes } from "../code-hints.js";
 import { KIT_ERROR_CODES } from "../kit-codes.js";
 import { pairOrderHint, pairOrderPointer } from "../pair-order.js";
-import { readPackage, writePackage, type Finding, type PackageOnDisk } from "../package-files.js";
+import { readPackage, tenantWideSections, writePackage, type Finding, type ItemFiles, type PackageOnDisk, type WriteOptions } from "../package-files.js";
 import { blockerDetails, blockerLines, changeLines, fieldChanges, locateBlockers, notApplied, notAppliedLines } from "../preview-report.js";
 import { readPrincipal } from "../principal.js";
 import type { ProjectConfig } from "../project.js";
 import { CASE_STATUSES, caseStatus, TESTING_PAGE, type CaseStatus } from "../results.js";
 import { isUuid, requireInstance, type Session } from "../session.js";
 import { listedPages } from "./docs.js";
-import { readInventory, writeInventory } from "./inventory.js";
+import { readInventory, readInventoryKinds, writeInventory, type InventoryKind } from "./inventory.js";
+import { checkedBy, MODEL_UNKNOWN_CODE, missingInventory, REFERENCE_UNKNOWN_CODE } from "../package-references.js";
 import { cavelonCommand, shellWord } from "../shell.js";
 import { secretSetCommand, targetFlags, variableSetCommand } from "./values.js";
 
@@ -191,6 +193,9 @@ async function acceptedVersions(ctx: Context, offline: boolean): Promise<string[
   return ((await capabilitiesFor(ctx, offline)) as CapsShape | null)?.contracts?.package_versions?.accepted;
 }
 
+/** Warnings about what the import preview blocks on: a name it cannot resolve on the instance. */
+const BLOCKING_WARNINGS = new Set([REFERENCE_UNKNOWN_CODE, MODEL_UNKNOWN_CODE]);
+
 function findingLine(f: Finding): string {
   const where = f.file ? `${f.file}${f.line ? `:${f.line}` : ""}` : "";
   const at = f.path ? ` ${f.path}` : "";
@@ -234,8 +239,8 @@ async function unknownStates(root: string, files: string[], known: Record<string
  * not what the last pull left: a local edit, or a file no pull wrote (a suite
  * not applied yet). With no record of a pull, that is every such file.
  */
-async function editedSincePull(project: ProjectConfig, pkg: Record<string, unknown>, schema: PackageSchema | null): Promise<string[]> {
-  const planned = await writePackage(project.root, project.layout, pkg, schema, { dryRun: true });
+async function editedSincePull(project: ProjectConfig, pkg: Record<string, unknown>, schema: PackageSchema | null, options: WriteOptions): Promise<string[]> {
+  const planned = await writePackage(project.root, project.layout, pkg, schema, { ...options, dryRun: true, placed: undefined });
   const pulled = await readPulledFiles(project.root);
   const edited: string[] = [];
   for (const file of [...planned.written, ...planned.removed]) {
@@ -250,8 +255,11 @@ export const pull: CommandSpec = {
   summary: "Write the instance's package into package/ (split along the schema's sections) and the inventory into .cavelon/.",
   description:
     "With a solution (--harness, or cavelon.yaml's harness), exports that solution; without one, the tenant's full configuration.\n" +
-    "A file whose content did not change keeps its bytes, so `git diff` shows what changed on the instance. Files of sections\n" +
-    "the schema does not know are kept byte for byte. Refuses when package files have uncommitted changes, unless --force;\n" +
+    "A file whose content did not change keeps its bytes, so `git diff` shows what changed on the instance; a field the export\n" +
+    "spells out that the file leaves out (an empty list, a default) is no change. A test suite goes back to the file it was\n" +
+    "pulled into or applied from, whatever its name. Files of sections the schema does not know are kept byte for byte.\n" +
+    "A solution's export leaves the tenant-wide sections (the tenant's settings, its model list) out of the folder, unless\n" +
+    "--tenant-wide. Refuses when package files have uncommitted changes, unless --force;\n" +
     "outside a git repository, when a file it would overwrite or remove changed since the last pull. A file as the last pull\n" +
     "or apply left it (digests in .cavelon/) counts as unchanged, committed or not.",
   readOnly: false,
@@ -264,6 +272,10 @@ export const pull: CommandSpec = {
   options: {
     harness: { type: "string", value: "<harness>", description: "The solution to export, by name, slug or id; its slug is recorded in cavelon.yaml when it names none." },
     force: { type: "boolean", description: "Overwrite package files that have uncommitted changes since the last pull or apply." },
+    "tenant-wide": {
+      type: "boolean",
+      description: "With a solution, also write the tenant-wide sections its export carries (tenant_settings, model_registry): apply then sends them for the whole tenant.",
+    },
   },
   examples: ["cavelon pull --harness support", "cavelon pull && git diff -- package tests"],
   async run(ctx, input) {
@@ -294,14 +306,18 @@ export const pull: CommandSpec = {
     const version = packageVersionOf(exported);
     const { schema } = await schemaFor(ctx, version, false);
     if (!schema) ctx.warn("The instance does not publish its package schema; every top-level key became a file of its own.");
+    // A solution's folder holds the solution; the tenant's settings travel with it only when asked.
+    const skip = harness && !boolOption(input, "tenant-wide") ? tenantWideSections(schema) : new Set<string>();
+    const placed: ItemFiles = {};
+    const options: WriteOptions = { skip, itemFiles: await readItemFiles(project.root), placed };
     if (dirty === undefined) {
-      const edited = await editedSincePull(project, exported, schema);
+      const edited = await editedSincePull(project, exported, schema, options);
       if (edited.length) {
         throw uncommittedChanges(edited, "This folder is not in a git repository, and pull would overwrite or remove files that changed since the last pull");
       }
     }
-    const report = await writePackage(project.root, project.layout, exported, schema);
-    await writePulledFiles(project.root, [...report.written, ...report.unchanged]);
+    const report = await writePackage(project.root, project.layout, exported, schema, options);
+    await writePulledFiles(project.root, [...report.written, ...report.unchanged], placed);
 
     if (harness && !project.harness) await setProjectKey(project, "harness", harness.slug);
     if (version && project.packageVersion !== version) await setProjectKey(project, "package_version", version);
@@ -320,6 +336,11 @@ export const pull: CommandSpec = {
     await writeState(project.root, "pull.json", JSON.stringify(record, null, 2));
     for (const file of report.kept) ctx.warn(`Kept ${file}: its section is not in this instance's package schema.`);
     for (const section of report.refused) ctx.warn(`Did not write section ${JSON.stringify(section)}: its name is not a plain file name.`);
+    const tenantFiles = report.tenant_wide.flatMap((section) => [".yaml", ".yml", ".json"].map((ext) => `${project.layout.package}/${section}${ext}`));
+    for (const file of tenantFiles) {
+      if ((await readTextFile(path.join(project.root, file))) === undefined) continue;
+      ctx.warn(`Kept ${file} as it is: it holds a tenant-wide section, which pull leaves out of a solution's folder. apply sends it for the whole tenant; remove the file unless you mean that.`);
+    }
 
     const rewritten = report.written.length + report.removed.length;
     const lines = [
@@ -329,6 +350,9 @@ export const pull: CommandSpec = {
       ...report.written.map((f) => `written    ${f}`),
       ...report.removed.map((f) => `removed    ${f}`),
       `${report.unchanged.length} file${report.unchanged.length === 1 ? "" : "s"} unchanged.`,
+      ...(report.tenant_wide.length
+        ? [`Left out the tenant-wide section${report.tenant_wide.length === 1 ? "" : "s"} ${report.tenant_wide.join(", ")} (--tenant-wide writes them).`]
+        : []),
       `Inventory: ${inventory.file} (${inventory.counts.map((c) => `${c.count} ${c.label}`).join(", ")})`,
       rewritten ? `See what changed: git diff -- ${layoutDirs.join(" ")}` : "Nothing changed on the instance since the last pull.",
     ];
@@ -340,7 +364,41 @@ export const pull: CommandSpec = {
 // validate
 // ---------------------------------------------------------------------------
 
-async function validatePackage(ctx: Context, project: ProjectConfig, offline: boolean): Promise<{ disk: PackageOnDisk; findings: Finding[]; schemaVersion: string | null; used: SchemaUsed }> {
+/** A check validate could not make, and why. */
+interface SkippedCheck {
+  check: string;
+  kind: InventoryKind;
+  reason: string;
+}
+
+/**
+ * The tenant's lists validate checks references against, read now for the
+ * kinds the package needs and no pull or `models list` has read yet; never
+ * offline. What still lacks a list is a check skipped, and said.
+ */
+async function inventoryFor(ctx: Context, project: ProjectConfig, disk: PackageOnDisk, offline: boolean) {
+  let inventory = await readInventory(project.root);
+  const missing = missingInventory(disk, inventory);
+  let failed = missing;
+  if (missing.length && !offline) {
+    failed = await readInventoryKinds(ctx, project.root, missing, ctx.io.now());
+    inventory = await readInventory(project.root);
+  }
+  const skipped: SkippedCheck[] = failed.map((kind) => ({
+    check: checkedBy(kind),
+    kind,
+    reason: offline
+      ? `--offline, and no list of the tenant's ${kind.replace("_", " ")} is cached; \`cavelon ${kind === "models" ? "models list" : "pull"}\` reads it`
+      : `the tenant's ${kind.replace("_", " ")} could not be read`,
+  }));
+  return { inventory, skipped };
+}
+
+async function validatePackage(
+  ctx: Context,
+  project: ProjectConfig,
+  offline: boolean,
+): Promise<{ disk: PackageOnDisk; findings: Finding[]; schemaVersion: string | null; used: SchemaUsed; skipped: SkippedCheck[] }> {
   const disk = await readPackage(project.root, project.layout);
   const version = packageVersionOf(disk.package) ?? project.packageVersion;
   const { schema, used } = await schemaFor(ctx, version, offline);
@@ -353,14 +411,16 @@ async function validatePackage(ctx: Context, project: ProjectConfig, offline: bo
         : "The instance does not publish its package schema (/api/v1/meta/package-schema).",
     });
   }
+  const { inventory, skipped } = await inventoryFor(ctx, project, disk, offline);
   const findings = checkPackage(disk, {
     schema,
     catalog: await catalogFor(ctx, offline),
     accepted: await acceptedVersions(ctx, offline),
     limits: await limitsFor(ctx, offline),
-    inventory: await readInventory(project.root),
+    inventory,
+    solution: project.harness,
   });
-  return { disk, findings, schemaVersion: schema["x-package-version"] ?? version ?? null, used };
+  return { disk, findings, schemaVersion: schema["x-package-version"] ?? version ?? null, used, skipped };
 }
 
 /** For --verbose: which copy of the schema validate checked against. */
@@ -388,10 +448,16 @@ export const validate: CommandSpec = {
     "sent with it; --verbose says which copy was used.\n" +
     "Warns (never fails) when a fan-out or Map loop's max_concurrency is above the instance's branch width, and when the\n" +
     "tenant runs fan-outs and Map loops in sequence, from the limits the instance last published.\n" +
+    "References to skills, tools, knowledge bases, solutions and models outside the package are checked against the tenant's\n" +
+    "lists in .cavelon/inventory.json (pull, models list); a list no command has read yet is read now, unless --offline, and a\n" +
+    "check that cannot be made is named (`skipped` in --json). A reference that is in neither is a warning, as it may be created\n" +
+    "on the instance before the import; the import preview blocks it otherwise, so validate does not say \"Valid\" then, and\n" +
+    "--strict fails on every warning (exit 3).\n" +
     "Each finding carries a code: `cavelon explain <code>` says more. The import preview checks everything again on the server.\n\n" +
     "With --json, `warnings` is always a list of `{code, message}` objects: the warning findings (at most --limit), then the\n" +
     "warnings about the run, such as a stale copy of the schema, with code null. `warning_count` counts them all and\n" +
-    "`error_count` the errors (`errors` is the same number); `findings` has each finding's file, line and hint.",
+    "`error_count` the errors (`errors` is the same number); `findings` has each finding's file, line and hint; `blocking_count`\n" +
+    "counts the warnings the import preview blocks on.",
   readOnly: true,
   idempotent: true,
   mcpTool: "validate",
@@ -399,15 +465,19 @@ export const validate: CommandSpec = {
     offline: { type: "boolean", description: "Never contact the instance, even when nothing is cached." },
     limit: { type: "string", value: "<n>", description: "Print at most n findings (default 50)." },
     verbose: { type: "boolean", description: "Also say which copy of the package schema was used: cached or read now, when, and its hash." },
+    strict: { type: "boolean", description: "Fail (exit 3) on warnings too, such as a reference the import preview will block unless it exists by then." },
   },
   async run(ctx, input) {
     const session = await ctx.session();
     const project = requireSolution(session);
     requireInstance(session);
     const limit = intOption(input, "limit", { min: 1, max: 1000, fallback: 50 })!;
-    const { disk, findings, schemaVersion, used } = await validatePackage(ctx, project, boolOption(input, "offline"));
+    const strict = boolOption(input, "strict");
+    const { disk, findings, schemaVersion, used, skipped } = await validatePackage(ctx, project, boolOption(input, "offline"));
     const errors = findings.filter((f) => f.severity === "error");
     const warnings = findings.filter((f) => f.severity === "warning");
+    const blocking = warnings.filter((f) => BLOCKING_WARNINGS.has(f.code));
+    const failed = errors.length > 0 || (strict && warnings.length > 0);
     if (disk.empty) ctx.warn(`No package files in ${project.layout.package}/ yet; \`cavelon pull\` brings an existing solution.`);
     const contracts = await ctx.contracts();
     const shown = findings.slice(0, limit);
@@ -417,27 +487,38 @@ export const validate: CommandSpec = {
       ...ctx.warnings.map((message) => ({ code: null, message })),
     ];
     const data = {
-      valid: errors.length === 0,
+      valid: !failed,
+      strict,
       schema_version: schemaVersion,
       schema: used,
       sections: Object.keys(disk.package).length,
       error_count: errors.length,
       warning_count: warnings.length + ctx.warnings.length,
+      blocking_count: blocking.length,
       // Kept for readers written before error_count.
       errors: errors.length,
       warnings: listed,
       findings: shown,
       more: Math.max(0, findings.length - shown.length),
+      skipped,
     };
+    const counts = `${errors.length} error${errors.length === 1 ? "" : "s"}, ${warnings.length} warning${warnings.length === 1 ? "" : "s"}`;
+    const verdict = errors.length
+      ? `${counts}. \`cavelon explain <code>\` says more.`
+      : strict && warnings.length
+        ? `${counts}; --strict fails on warnings. \`cavelon explain <code>\` says more.`
+        : blocking.length
+          ? `No errors against package schema ${schemaVersion ?? "?"} (${data.sections} sections), but ${blocking.length === 1 ? "one reference" : `${blocking.length} references`} ` +
+            `the import preview will block unless ${blocking.length === 1 ? "it exists" : "they exist"} on the instance by then (${counts}; --strict fails on warnings).`
+          : `Valid against package schema ${schemaVersion ?? "?"} (${data.sections} sections${warnings.length ? `, ${warnings.length} warning${warnings.length === 1 ? "" : "s"}` : ""}).`;
     const text = [
       ...(boolOption(input, "verbose") ? [schemaUsedLine(used, (v) => contracts.ttlSeconds(v))] : []),
       ...shown.map(findingLine),
       ...(data.more ? [`… and ${data.more} more (--limit).`] : []),
-      errors.length
-        ? `${errors.length} error${errors.length === 1 ? "" : "s"}, ${warnings.length} warning${warnings.length === 1 ? "" : "s"}. \`cavelon explain <code>\` says more.`
-        : `Valid against package schema ${schemaVersion ?? "?"} (${data.sections} sections${warnings.length ? `, ${warnings.length} warning${warnings.length === 1 ? "" : "s"}` : ""}).`,
+      ...skipped.map((s) => `Not checked: ${s.check} (${s.reason}).`),
+      verdict,
     ].join("\n");
-    return { data, text, exitCode: errors.length ? ExitCode.validation : ExitCode.ok };
+    return { data, text, exitCode: failed ? ExitCode.validation : ExitCode.ok };
   },
 };
 
