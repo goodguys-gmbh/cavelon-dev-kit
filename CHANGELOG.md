@@ -7,6 +7,13 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-10-05
+
+`apply` and `pull` take the instance's name for the tenant-wide flag,
+`--include-tenant-wide`, and `apply` shows the instance's own report of the
+tenant-wide sections it leaves out or the active solutions they reach. The MCP
+server now refuses the CLI's spelling of a tool argument.
+
 ### Added
 
 - `cavelon apply` shows the instance's own `tenant_wide` report from the
