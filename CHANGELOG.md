@@ -7,6 +7,23 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Added
+
+- `cavelon apply --tenant-wide` imports a solution package's tenant-wide
+  sections (`tenant_settings`, `model_registry`, …) with it, through the
+  instance's `include_tenant_wide`. Without it a solution's import leaves them
+  out, as the instance now does, and the preview says which it left out. With
+  it, the preview names them (`tenant-wide: … change for every solution of the
+  tenant`, `tenant_wide` in `--json`) and says to show it to a person. On an
+  instance that does not publish `include_tenant_wide`, which imports them with
+  every solution's package, `apply` says so and asks for a person too.
+- `cavelon init --harness <name> --new` creates the solution as a draft even
+  when an existing solution's name is close to it, which `init` otherwise
+  refuses as a likely typo. A name or slug the tenant already has is refused
+  (`solution_exists`).
+- `cavelon validate` warns about a tenant-wide section in a solution's folder
+  (`tenant_wide_section`).
+
 ### Changed
 
 - `cavelon apply` remembers why a stored preview went, so its confirm says so
@@ -33,6 +50,14 @@ CLI, the skills and the plugin.
   other solutions it leaves out ("1 operation of other solutions not shown").
 - `cavelon docs search` finds the agent graph's pages for "handoff" and
   "consult", and suggests English words only for a German question.
+- `cavelon pull --tenant-wide` asks the export for the tenant-wide sections
+  (`include_tenant_wide`), which a recent instance otherwise leaves out of a
+  solution's export, so the flag wrote nothing. It says when the export
+  carries none. A tenant-wide file a pull leaves alone is listed under `kept`.
+- Help and `docs/commands.md` show a confirm flag as `--confirm [<token>]`
+  with both forms: the bare flag in a person's terminal, and the token its
+  preview printed from a coding agent's shell, which refuses the bare flag
+  (exit 5). The examples show both.
 
 ### Fixed
 
@@ -49,6 +74,18 @@ CLI, the skills and the plugin.
   the operations' phases (`ready` for an upload, `completed` for a test run),
   `errors` in a test run's summary, the instance's readiness checks, and
   `init`'s next step for an existing solution.
+- The commands `cavelon` prints carry the `--tenant` and `--instance` given on
+  the command line: the closest solutions and `harness new` after a miss, and
+  the `init` a command outside a solution folder names. Copied, they acted in
+  the tenant `cavelon use` chose. `init` no longer says that `init --harness
+  <name>` creates a solution it has just refused.
+- `cavelon deactivate` and the docs say that a deactivated solution is
+  `inactive`, not a draft again as 0.1.6 said. `deactivate` takes the
+  preview's token in a coding agent's shell, like the other confirming
+  commands; the lists of those commands now name it.
+- `pull`, `apply` and the docs no longer say that `apply` sends a tenant-wide
+  file for the whole tenant: a solution's import leaves it out unless
+  `--tenant-wide`.
 
 ## [0.1.6] - 2026-10-05
 

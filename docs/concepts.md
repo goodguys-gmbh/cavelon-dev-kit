@@ -80,9 +80,11 @@ triggers and its test suites. Cavelon's API calls it a **harness**, which is
 why some commands and files say `harness`.
 
 A solution is a **draft** while you build it and **active** once it is live
-(see [Readiness and activation](#readiness-and-activation)). `cavelon harness
-list` shows the tenant's solutions; `harness new` and `harness clone` create
-drafts.
+(see [Readiness and activation](#readiness-and-activation)); one taken out of
+service with `cavelon deactivate` is **inactive**, not a draft again: it keeps
+its configuration and answers no live traffic until `cavelon activate` puts it
+back through its readiness gate. `cavelon harness list` shows the tenant's
+solutions with their status; `harness new` and `harness clone` create drafts.
 
 ### Persona
 
@@ -112,8 +114,9 @@ An active solution that is not the default still answers a conversation that
 names it: `cavelon chat "<message>" --harness <solution>` sends one message to
 it and prints the answer, with the session to continue and the conversation
 to trace. `cavelon deactivate` takes an active solution out of live traffic
-(it is a draft again); it previews first, changes nothing without `--confirm`,
-and refuses the default route until another solution is the default.
+(its status becomes `inactive`); it previews first, changes nothing without
+`--confirm`, and refuses the default route until another solution is the
+default.
 
 ## Package
 
@@ -121,6 +124,18 @@ A **package** is a solution, or a whole tenant's configuration, as one
 document in the instance's package format (currently `v3`). Exporting and
 importing packages is how `cavelon` reads and writes solutions: `pull` exports,
 `apply` imports.
+
+Some sections hold what the whole tenant shares rather than one solution's:
+the tenant's settings (`tenant_settings`), its model list (`model_registry`)
+and the others the package schema marks `x-cavelon-scope: tenant`. A
+solution's `pull` leaves them out of the folder and a solution's `apply` out of
+the import, so changing one solution never changes the others by the way.
+`pull --tenant-wide` writes them, and `apply --tenant-wide` imports them, for
+every solution of the tenant: the preview then says to show it to a person.
+An instance that does not publish `include_tenant_wide` imports them with
+every solution's package; `apply` says so when the folder holds one, and
+`validate` warns about such a file in a solution's folder
+(`tenant_wide_section`). The tenant's full configuration always carries them.
 
 A package never contains a secret's value. It names the **variables**
 (`{{var:name}}`) and **secrets** (`{{secret:name}}`) the solution needs, in
@@ -191,7 +206,8 @@ command that takes `--env`. `apply` never creates a solution: when the
 solution an env file names is not on the instance, it stops before the preview
 (`solution_not_found`) and names the `cavelon harness new` command that
 creates the draft. `cavelon init --harness <name>` creates it when you set up
-the folder. A typical flow applies to
+the folder; a name close to an existing solution's is refused as a likely
+typo, and `--new` creates it anyway. A typical flow applies to
 `test`, runs the tests, then applies the same files to `prod`. Environment
 files never hold a token or a secret value; a secret is set in each tenant with
 `cavelon secrets set`.
@@ -248,10 +264,13 @@ before confirming, and the Cavelon skills make the agent do so.
 
 Other commands that delete or overwrite follow the same pattern: `limits set`,
 `models set-limit`, `variables delete`, `secrets delete`, `loop cancel`,
-`sandbox seed`, `trigger identity`, `harness default` and `activate
---make-default` show what they would do, and act only with `--confirm`. Over
-MCP, their tools return a `confirm_token` with the preview and act only when
-`confirm` is that token, which confirms exactly the change shown.
+`sandbox seed`, `trigger identity`, `harness default`, `activate
+--make-default` and `deactivate` show what they would do, and act only with
+`--confirm`. In your terminal the flag alone confirms. Run by a coding agent,
+the preview prints the confirm command with a token (`--confirm <token>`), and
+a bare `--confirm` only shows the preview again (exit 5). Over MCP, their tools
+return a `confirm_token` with the preview and act only when `confirm` is that
+token, which confirms exactly the change shown.
 
 ## Operations and waiting
 

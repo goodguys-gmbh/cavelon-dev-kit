@@ -1,5 +1,5 @@
 import { parseArgs, type ParseArgsConfig } from "node:util";
-import { GLOBAL_OPTIONS, type CommandResult, type CommandSpec, type Context, type Input, type OptionSpec } from "./command.js";
+import { GLOBAL_OPTIONS, optionDescription, optionFlag, type CommandResult, type CommandSpec, type Context, type Input, type OptionSpec } from "./command.js";
 import { createContext, withWarnings } from "./context.js";
 import { CONFIRM_TOKEN } from "./confirm-token.js";
 import { asCavelonError, CavelonError, ExitCode, usageError } from "./errors.js";
@@ -268,10 +268,7 @@ export function usageLine(spec: CommandSpec): string {
 }
 
 function optionLines(options: Record<string, OptionSpec>): string[] {
-  const rows = Object.entries(options).map(([name, o]) => {
-    const flag = `${o.short ? `-${o.short}, ` : ""}--${name}${o.type === "string" ? ` ${o.value ?? "<value>"}` : ""}`;
-    return [flag, o.description + (o.multiple ? " Repeatable." : "")] as const;
-  });
+  const rows = Object.entries(options).map(([name, o]) => [optionFlag(name, o), optionDescription(name, o)] as const);
   const width = Math.max(...rows.map(([f]) => f.length));
   return rows.map(([f, d]) => `  ${f.padEnd(width)}  ${d}`);
 }

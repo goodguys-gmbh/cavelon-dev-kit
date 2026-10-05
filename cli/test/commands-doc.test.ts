@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { GLOBAL_OPTIONS, type CommandSpec, type OptionSpec } from "../src/command.js";
+import { GLOBAL_OPTIONS, optionDescription, optionFlag, type CommandSpec, type OptionSpec } from "../src/command.js";
 import { COMMANDS } from "../src/commands/index.js";
 import { usageLine } from "../src/main.js";
 
@@ -97,8 +97,8 @@ function marked(spec: CommandSpec): string {
 function optionRows(options: Record<string, OptionSpec>, withMcp: boolean): string[] {
   const rows = [withMcp ? "| Option | Description | MCP |" : "| Option | Description |", withMcp ? "|---|---|---|" : "|---|---|"];
   for (const [name, o] of Object.entries(options)) {
-    const flag = `${o.short ? `-${o.short}, ` : ""}--${name}${o.type === "string" ? ` ${o.value ?? "<value>"}` : ""}`;
-    const description = md(o.description + (o.multiple ? " Repeatable." : ""));
+    const flag = optionFlag(name, o);
+    const description = md(optionDescription(name, o));
     rows.push(withMcp ? `| \`${flag}\` | ${description} | ${o.cliOnly ? "CLI only" : "yes"} |` : `| \`${flag}\` | ${description} |`);
   }
   return rows;

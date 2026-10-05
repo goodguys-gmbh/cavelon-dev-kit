@@ -99,6 +99,24 @@ export const GLOBAL_OPTIONS: Record<string, OptionSpec> = {
   help: { type: "boolean", short: "h", description: "Show help for the command." },
 };
 
+/**
+ * An option as help and the command reference show it. A confirm flag that
+ * also takes its preview's token shows both forms, since a coding agent's
+ * shell refuses the bare flag.
+ */
+export function optionFlag(name: string, o: OptionSpec): string {
+  const value = o.type === "string" ? ` ${o.value ?? "<value>"}` : o.mcpToken ? " [<token>]" : "";
+  return `${o.short ? `-${o.short}, ` : ""}--${name}${value}`;
+}
+
+export function optionDescription(name: string, o: OptionSpec): string {
+  const token =
+    o.type === "boolean" && o.mcpToken
+      ? ` In a person's terminal the flag alone confirms; run by a coding agent, \`--${name} <token>\` with the token its preview printed (the bare flag only shows the preview there, exit 5).`
+      : "";
+  return o.description + token + (o.multiple ? " Repeatable." : "");
+}
+
 export function stringOption(input: Input, name: string): string | undefined {
   const value = input.options[name];
   if (Array.isArray(value)) return value[value.length - 1];

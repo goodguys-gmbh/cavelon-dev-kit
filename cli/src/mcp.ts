@@ -28,7 +28,9 @@ const INSTRUCTIONS =
   "confirm set to that token: show the person the preview first. The token confirms exactly the change the preview showed; " +
   "a different change needs a new preview, and confirm: true is refused. The default route " +
   "(harness_default, activate's make_default) decides which solution the tenant's chat and widget answer with: live traffic, " +
-  "so ask the person, and confirm only with their yes; the same goes for deactivate, which takes a solution out of live traffic. " +
+  "so ask the person, and confirm only with their yes; the same goes for deactivate, which takes a solution out of live traffic " +
+  "(its status becomes inactive), and for apply with tenant_wide, which imports the tenant-wide sections (tenant_settings, " +
+  "model_registry, …) for every solution of the tenant. " +
   "chat sends one message to a solution and returns its answer: the way to try one that is not the default route. " +
   "kb_upload names files that match an active document of the knowledge base; with replace it replaces them, and where the " +
   "instance's upload cannot, it returns what it would deactivate and uploads nothing without its confirm_token. " +

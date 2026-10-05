@@ -365,7 +365,7 @@ export interface WriteReport {
   written: string[];
   unchanged: string[];
   removed: string[];
-  /** Files of sections the schema does not know, left byte for byte. */
+  /** Files left byte for byte: of sections the schema does not know, and of skipped (tenant-wide) sections. */
   kept: string[];
   /** Sections whose name cannot be a file name here; never written. */
   refused: string[];
@@ -535,6 +535,7 @@ export async function writePackage(
   for (const [section, name] of existing) {
     if (skip.has(section)) {
       if (!report.tenant_wide.includes(section)) report.tenant_wide.push(section);
+      report.kept.push(rel(root, path.join(dir, name)));
       continue;
     }
     if (section in pkg || section === PERSONA_SECTION) continue;

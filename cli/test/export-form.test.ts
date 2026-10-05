@@ -55,7 +55,21 @@ beforeEach(() => {
   server.state.configs.clear();
   server.state.exportFillsDefaults = true;
   server.state.packageSchemaEdit = null;
+  server.state.tenantWideFlag = true;
 });
+
+/** The export and import requests this test made, with what they asked about the tenant-wide sections. */
+const exportsAsked = () => server.state.requests.filter((r) => r.method === "GET" && r.path === "/api/v1/agent-graph/export").map((r) => r.query.get("include_tenant_wide"));
+const importBodies = () =>
+  server.state.requests.filter((r) => r.method === "POST" && r.path.startsWith("/api/v1/agent-graph/import")).map((r) => r.body as Record<string, unknown>);
+
+/** A sandbox of its own, so the OpenAPI it caches is the one the server plays now (an older instance). */
+async function olderInstance(): Promise<Sandbox> {
+  server.state.tenantWideFlag = false;
+  const box = sandbox();
+  await login(box, server.url, server.addToken({ kind: "pat", tenantIds: [tenant], defaultTenant: tenant }));
+  return box;
+}
 
 describe("the export's form", () => {
   it("fmt fills an empty list or object where the schema publishes no default, and each entry's order from its position", () => {
@@ -161,6 +175,127 @@ describe("tenant-wide sections", () => {
     expect(again.stdout).toContain("Left out the tenant-wide sections model_registry, tenant_settings (--tenant-wide writes them).");
     expect(again.stderr).toMatch(/Kept package\/tenant_settings\.yaml as it is: it holds a tenant-wide section/);
     expect(existsSync(path.join(pkgDir, "tenant_settings.yaml"))).toBe(true);
+  });
+
+  it("--tenant-wide asks the export for them where the instance takes include_tenant_wide, and fills kept", async () => {
+    server.state.requests.length = 0;
+    const dir = await pulled();
+    expect(exportsAsked()).toEqual([null]);
+    const asked = await cli(sb, ["pull", "--tenant-wide", "--json"], { cwd: dir });
+    expect(asked.code, asked.stderr).toBe(0);
+    expect(exportsAsked()).toEqual([null, "true"]);
+    expect(asked.json<{ tenant_wide_pulled: string[] }>().tenant_wide_pulled).toEqual(expect.arrayContaining(["tenant_settings", "model_registry"]));
+
+    // Without the flag the export no longer carries them; the files stay, and say so in kept.
+    const again = await cli(sb, ["pull", "--json"], { cwd: dir });
+    expect(again.code, again.stderr).toBe(0);
+    const files = again.json<{ files: { kept: string[]; tenant_wide: string[]; removed: string[] } }>().files;
+    expect(files.kept).toEqual(expect.arrayContaining(["package/tenant_settings.yaml", "package/model_registry.yaml"]));
+    expect(files.tenant_wide).toEqual(expect.arrayContaining(["tenant_settings", "model_registry"]));
+    expect(files.removed).toEqual([]);
+    expect(again.stderr).toMatch(/Kept package\/tenant_settings\.yaml as it is: it holds a tenant-wide section, which pull leaves out of a solution's folder\. apply leaves it out too/);
+    expect(again.stderr).not.toMatch(/tenant_settings\.yaml: its section is not in this instance's package schema/);
+  });
+
+  it("an empty --tenant-wide pull says so", async () => {
+    const dir = await pulled();
+    const config = server.state.configs.get(tenant)!;
+    for (const section of ["tenant_settings", "model_registry"]) delete config.pkg[section];
+    const asked = await cli(sb, ["pull", "--tenant-wide"], { cwd: dir });
+    expect(asked.code, asked.stderr).toBe(0);
+    expect(asked.stdout).toContain("The export carries no tenant-wide sections, so --tenant-wide wrote none.");
+  });
+
+  it("on an older instance, whose export carries them always, pull leaves them out and --tenant-wide asks nothing more", async () => {
+    const box = await olderInstance();
+    try {
+      server.state.requests.length = 0;
+      const dir = await pulled(box);
+      expect(existsSync(path.join(dir, "package", "tenant_settings.yaml"))).toBe(false);
+      const asked = await cli(box, ["pull", "--tenant-wide"], { cwd: dir });
+      expect(asked.code, asked.stderr).toBe(0);
+      expect(exportsAsked()).toEqual([null, null]);
+      expect(existsSync(path.join(dir, "package", "tenant_settings.yaml"))).toBe(true);
+    } finally {
+      box.cleanup();
+    }
+  });
+
+  it("apply leaves them out of a solution's import unless --tenant-wide, which a person sees first", async () => {
+    const dir = await pulled(sb, ["--tenant-wide"]);
+    const config = server.state.configs.get(tenant)!;
+    config.pkg.tenant_settings = { default_guardrail_slugs: [] };
+    writeFileSync(path.join(dir, "package", "tenant_settings.yaml"), "default_guardrail_slugs:\n  - pii\n");
+
+    const validated = await cli(sb, ["validate", "--json"], { cwd: dir });
+    expect(validated.code, validated.stdout).toBe(0);
+    const warned = validated.json<{ findings: Array<{ code: string; file?: string }> }>().findings.filter((f) => f.code === "tenant_wide_section");
+    expect(warned.map((f) => f.file)).toEqual(expect.arrayContaining(["package/tenant_settings.yaml", "package/model_registry.yaml"]));
+    expect((await cli(sb, ["explain", "tenant_wide_section"], { cwd: dir })).stdout).toContain("cavelon apply --tenant-wide");
+
+    server.state.requests.length = 0;
+    const plain = await cli(sb, ["apply", "--json"], { cwd: dir });
+    expect(plain.code, plain.stderr).toBe(0);
+    expect(importBodies()[0]).not.toHaveProperty("include_tenant_wide");
+    const left = plain.json<{ tenant_wide: { left_out: string[]; imported: string[] }; show_to_person: boolean; preview_id: string }>();
+    expect(left.tenant_wide).toMatchObject({ left_out: expect.arrayContaining(["tenant_settings"]), imported: [] });
+    expect(left.show_to_person).toBe(false);
+    const text = await cli(sb, ["apply"], { cwd: dir });
+    expect(text.stdout).toMatch(/tenant-wide: .*tenant_settings.* left out \(`cavelon apply --tenant-wide` imports them, for every solution of the tenant\)/);
+    const kept = await cli(sb, ["apply", "--confirm", left.preview_id], { cwd: dir });
+    expect(kept.code, kept.stderr).toBe(0);
+    expect(server.state.configs.get(tenant)!.pkg.tenant_settings).toEqual({ default_guardrail_slugs: [] });
+
+    server.state.requests.length = 0;
+    const asked = await cli(sb, ["apply", "--tenant-wide", "--json"], { cwd: dir });
+    expect(asked.code, asked.stderr).toBe(0);
+    expect(importBodies()[0]).toMatchObject({ include_tenant_wide: true });
+    const shown = asked.json<{ tenant_wide: { imported: string[] }; show_to_person: boolean; preview_id: string }>();
+    expect(shown.tenant_wide.imported).toEqual(expect.arrayContaining(["tenant_settings"]));
+    expect(shown.show_to_person).toBe(true);
+    expect(asked.stderr).toMatch(/package\/tenant_settings\.yaml.* the whole tenant shares: this import changes .*tenant_settings.* for every solution of the tenant\./);
+    const human = await cli(sb, ["apply", "--tenant-wide"], { cwd: dir });
+    expect(human.stdout).toMatch(/This changes what the whole tenant shares \(.*tenant_settings.*\): show this preview to a person before confirming\./);
+    const done = await cli(sb, ["apply", "--confirm", shown.preview_id], { cwd: dir });
+    expect(done.code, done.stderr).toBe(0);
+    expect(importBodies().at(-1)).toMatchObject({ include_tenant_wide: true, preview_id: shown.preview_id });
+    expect(server.state.configs.get(tenant)!.pkg.tenant_settings).toEqual({ default_guardrail_slugs: ["pii"] });
+  });
+
+  it("names the file when the instance blocks on a tenant-wide section the import leaves out", async () => {
+    const dir = await pulled(sb, ["--tenant-wide"]);
+    server.state.previewBlockers = ["tenant_settings.default_guardrail_slugs references missing guardrail 'pii'."];
+    server.state.previewExtras = {
+      blocker_details: [{ code: "reference_missing", message: "references missing guardrail 'pii'.", path: "tenant_settings.default_guardrail_slugs", hint: null }],
+    };
+    try {
+      const blocked = await cli(sb, ["apply"], { cwd: dir });
+      expect(blocked.code).toBe(3);
+      expect(blocked.stdout).toContain(
+        "hint: A blocker is in package/tenant_settings.yaml, which this import leaves out (tenant-wide); the instance checks it anyway: remove the file, or fix it.",
+      );
+    } finally {
+      server.state.previewBlockers = [];
+      server.state.previewExtras = {};
+    }
+  });
+
+  it("on an older instance, apply says the import takes them anyway, and sends no flag", async () => {
+    const box = await olderInstance();
+    try {
+      const dir = await pulled(box, ["--tenant-wide"]);
+      server.state.requests.length = 0;
+      const preview = await cli(box, ["apply", "--json"], { cwd: dir });
+      expect(preview.code, preview.stderr).toBe(0);
+      expect(importBodies()[0]).not.toHaveProperty("include_tenant_wide");
+      expect(preview.stderr).toMatch(/this instance does not publish include_tenant_wide and imports them with every solution's package\); remove the file unless that is meant\./);
+      expect(preview.json<{ show_to_person: boolean; tenant_wide: { imported: string[] } }>()).toMatchObject({
+        show_to_person: true,
+        tenant_wide: { imported: expect.arrayContaining(["tenant_settings"]) },
+      });
+    } finally {
+      box.cleanup();
+    }
   });
 
   it("the tenant's full configuration keeps them", async () => {

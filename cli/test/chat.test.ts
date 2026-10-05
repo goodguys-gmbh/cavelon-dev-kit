@@ -126,21 +126,21 @@ describe("chat", () => {
 });
 
 describe("deactivate", () => {
-  it("previews, deactivates only with --confirm, and leaves a draft alone", async () => {
+  it("previews, deactivates only with --confirm (status inactive), and leaves an inactive one alone", async () => {
     solution("support").status = "active";
     const preview = await cli(sb, ["deactivate", "--harness", "support"]);
     expect(preview.code, preview.stderr).toBe(0);
-    expect(preview.stdout).toMatch(/^Deactivating Support \(support\) takes it out of live traffic/);
+    expect(preview.stdout).toMatch(/^Deactivating Support \(support\) sets it inactive and takes it out of live traffic/);
     expect(preview.stdout).toContain("Show this to a person; with their yes: cavelon deactivate --harness support --confirm");
     expect(solution("support").status).toBe("active");
 
     const done = await cli(sb, ["deactivate", "--harness", "support", "--confirm", "--json"]);
     expect(done.code, done.stdout).toBe(0);
-    expect(done.json()).toMatchObject({ changed: true, harness: { slug: "support", status: "draft" } });
-    expect(solution("support").status).toBe("draft");
+    expect(done.json()).toMatchObject({ changed: true, harness: { slug: "support", status: "inactive" } });
+    expect(solution("support").status).toBe("inactive");
 
     const again = await cli(sb, ["deactivate", "--harness", "support", "--json"]);
-    expect(again.json()).toMatchObject({ changed: false, harness: { status: "draft" } });
+    expect(again.json()).toMatchObject({ changed: false, harness: { status: "inactive" } });
   });
 
   it("in a coding agent's shell, deactivates only with the preview's token", async () => {
@@ -153,7 +153,7 @@ describe("deactivate", () => {
     expect(solution("support").status).toBe("active");
     const done = await cli(sb, ["deactivate", "--harness", "support", "--confirm", shown.confirm_token, "--json"], agent);
     expect(done.code, done.stdout).toBe(0);
-    expect(solution("support").status).toBe("draft");
+    expect(solution("support").status).toBe("inactive");
   });
 
   it("refuses the tenant's default route before sending anything", async () => {
@@ -187,7 +187,7 @@ describe("deactivate", () => {
       expect(solution("support").status).toBe("active");
       const done = await mcp.call("deactivate", { harness: "support", confirm: shown.body.confirm_token });
       expect(done.body).toMatchObject({ changed: true });
-      expect(solution("support").status).toBe("draft");
+      expect(solution("support").status).toBe("inactive");
     } finally {
       await mcp.close();
     }
@@ -211,6 +211,35 @@ describe("init creates the solution it is given", () => {
       expect(parse(readFileSync(path.join(dir, "cavelon.yaml"), "utf8"))).toMatchObject({ harness: "order-status" });
     } finally {
       await mcp.close();
+    }
+  });
+});
+
+describe("printed commands keep the tenant given on the command line", () => {
+  it("in a miss's hint, and in the init that a command outside a solution folder names", async () => {
+    const other = server.addTenant("globex", "Globex");
+    const box = sandbox();
+    try {
+      // The stored login points at acme; the commands name globex.
+      await login(box, server.url, server.addToken({ kind: "pat", tenantIds: [tenant, other], defaultTenant: tenant }));
+      await cli(box, ["harness", "new", "orders", "--name", "Orders", "--tenant", "globex"]);
+      const miss = await cli(box, ["deactivate", "--harness", "order", "--tenant", "globex", "--json"]);
+      expect(miss.code).toBe(1);
+      const hint = miss.json<{ error: { hint: string } }>().error.hint;
+      expect(hint).toContain("cavelon deactivate --harness orders --tenant globex");
+      expect(hint).toContain("`cavelon harness new <slug> --name <name> --tenant globex` creates one as a draft.");
+
+      const outside = await cli(box, ["pull", "--tenant", "globex", "--harness", "orders", "--json"], { cwd: box.home });
+      expect(outside.code).toBe(2);
+      expect(outside.json<{ error: { code: string; hint: string } }>().error).toMatchObject({
+        code: "no_solution",
+        hint: expect.stringContaining("cavelon init --harness orders --tenant globex, then run this command again"),
+      });
+      // From the stored login's tenant nothing needs adding.
+      const plain = await cli(box, ["pull", "--json"], { cwd: box.home });
+      expect(plain.json<{ error: { hint: string } }>().error.hint).not.toContain("--tenant");
+    } finally {
+      box.cleanup();
     }
   });
 });

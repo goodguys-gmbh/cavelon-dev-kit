@@ -3,7 +3,7 @@ import { BRANCH_WIDTH_KEY, branchConcurrency, offText } from "./branches.js";
 import type { CatalogEntry, ErrorCatalog, PackageSchema } from "./contracts.js";
 import type { PublishedLimits } from "./limits.js";
 import type { TenantInventory } from "./commands/inventory.js";
-import { locate, schemaSections, type Finding, type PackageOnDisk } from "./package-files.js";
+import { locate, schemaSections, tenantWideSections, type Finding, type PackageOnDisk } from "./package-files.js";
 import { PERSONA_SECTION, sectionFields } from "./package-format.js";
 import { kitErrorEntry } from "./kit-codes.js";
 import {
@@ -58,6 +58,9 @@ const PERSONA_MESSAGES = [
 
 /** cavelon.yaml's solution and the one the package's harnesses (or an entry's harness_slug) name differ. */
 const SOLUTION_MISMATCH_CODE = "solution_slug_mismatch";
+
+/** A solution's folder holds a section the whole tenant shares (tenant_settings, model_registry, …). */
+const TENANT_WIDE_CODE = "tenant_wide_section";
 
 /** A test step's criterion with a `type`, on an instance whose schema does not describe a step's criteria. */
 const ASSERTION_UNCHECKED_CODE = "test_assertion_unchecked";
@@ -190,6 +193,15 @@ export const KIT_CODES: CatalogEntry[] = [
     hint:
       "After copying a solution under another name, change the slug in package/harnesses.yaml and every harness_slug to the one cavelon.yaml names " +
       "(or set harness in cavelon.yaml to the package's); the import otherwise works on the solution the package names.",
+    docs: PACKAGE_DOCS,
+  },
+  {
+    code: TENANT_WIDE_CODE,
+    area: "package",
+    message: "A solution's folder holds a section the whole tenant shares, such as tenant_settings or model_registry.",
+    hint:
+      "`cavelon apply` leaves it out of the solution's import; `cavelon apply --tenant-wide` sends it, and then every solution of the tenant sees the change. " +
+      "Remove the file unless that is meant. An instance that does not publish include_tenant_wide imports it with every apply.",
     docs: PACKAGE_DOCS,
   },
   {
@@ -388,6 +400,7 @@ export function checkPackage(disk: PackageOnDisk, options: CheckOptions): Findin
   findings.push(...checkPersonaMessages(disk, options.schema));
   findings.push(...checkUncheckedAssertions(disk, options.schema));
   findings.push(...checkSolutionSlug(disk, options.solution));
+  findings.push(...checkTenantWide(disk, options.schema, options.solution));
 
   for (const finding of findings) {
     const entry = findingEntry(options.catalog, finding.code);
@@ -790,6 +803,30 @@ function misnamedVariants(schema: PackageSchema, pkg: Record<string, unknown>): 
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Sections the whole tenant shares in a solution's folder: a pull leaves them
+ * out unless asked, and an apply sends them only with --tenant-wide, so a
+ * file of one is either meant for the tenant or left over. One warning each.
+ */
+function checkTenantWide(disk: PackageOnDisk, schema: PackageSchema, solution: string | undefined): Finding[] {
+  if (!solution) return [];
+  const shared = tenantWideSections(schema);
+  return Object.keys(disk.package)
+    .filter((section) => shared.has(section))
+    .map((section) => {
+      const source = disk.sources[section];
+      return {
+        code: TENANT_WIDE_CODE,
+        severity: "warning" as const,
+        file: Array.isArray(source) ? source[0]?.file : source?.file,
+        path: section,
+        message:
+          `${section} is shared by the whole tenant, not this solution's: apply leaves it out unless --tenant-wide, which changes it for every solution ` +
+          "(an instance that does not publish include_tenant_wide imports it with every apply). Remove the file unless that is meant.",
+      };
+    });
+}
 
 /**
  * The package names another solution than cavelon.yaml, as after copying an

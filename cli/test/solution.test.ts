@@ -176,8 +176,25 @@ describe("init chooses the tenant and the solution", () => {
     const miss = await cli(other, ["init", "--tenant", "globex", "--harness", "Support FA", "--json"], { cwd: dirFor() });
     expect(miss.code).toBe(1);
     const missed = miss.json<{ error: { code: string; hint: string } }>().error;
-    expect(missed.hint).toContain(`For a new solution of that name: cavelon harness new support-fa --name ${shellWord("Support FA")}, then cavelon init --harness support-fa.`);
-    expect(miss.json<{ error: { code: string; hint: string } }>().error).toMatchObject({ code: "solution_not_found", hint: expect.stringContaining("cavelon init --harness support-faq") });
+    expect(missed.hint).toContain(`For a new solution of that name: cavelon init --harness ${shellWord("Support FA")} --new --tenant globex.`);
+    expect(missed.hint).not.toContain("does too");
+    expect(miss.json<{ error: { code: string; hint: string } }>().error).toMatchObject({ code: "solution_not_found", hint: expect.stringContaining("cavelon init --harness support-faq --tenant globex") });
+    expect(server.state.harnesses.find((h) => h.tenant_id === globex && h.slug === "support-fa")).toBeUndefined();
+
+    // --new creates it on purpose, beside the similar name; and refuses a name the tenant already has.
+    const meant = await cli(other, ["init", "--tenant", "globex", "--harness", "Support FA", "--new", "--json"], { cwd: dirFor() });
+    expect(meant.code, meant.stdout).toBe(0);
+    expect(meant.stderr).toContain("Created the draft solution Support FA (support-fa).");
+    expect(server.state.harnesses.find((h) => h.tenant_id === globex && h.slug === "support-fa")).toMatchObject({ name: "Support FA", status: "draft" });
+    const taken = await cli(other, ["init", "--tenant", "globex", "--harness", "support-faq", "--new", "--json"], { cwd: dirFor() });
+    expect(taken.code).toBe(1);
+    expect(taken.json<{ error: { code: string; hint: string } }>().error).toMatchObject({
+      code: "solution_exists",
+      hint: expect.stringContaining("cavelon init --harness support-faq --tenant globex"),
+    });
+    const bare = await cli(other, ["init", "--tenant", "globex", "--new"], { cwd: dirFor() });
+    expect(bare.code).toBe(2);
+    expect(bare.stderr).toContain("--new needs the new solution's name");
   });
 });
 

@@ -108,13 +108,14 @@ endpoint.
 - On rows that already exist, `cavelon models list` shows each row's endpoint
   and `max_concurrent_requests` (never a key). `cavelon models set-limit
   <model_id> <n|none>` shows the old and the new value and changes nothing;
-  with `--confirm` it changes the row. It refuses a row without a `base_url`.
+  the confirm command it prints changes the row (from your shell it carries the
+  preview's token, `--confirm <token>`). It refuses a row without a `base_url`.
   Where this instance's package format does not carry the field, `validate`
   warns that the import ignores it; set it this way instead.
 
 **Propose a limit; the person decides.** Say which value you would set and
 why (what the endpoint serves, which rows share it, what waits or fails now),
-then wait for the person's answer. Run `models set-limit --confirm` only after
+then wait for the person's answer. Run the confirm command of `models set-limit` only after
 they agreed, and never raise or lower a limit without telling them. A limit
 `cavelon limits` names as the operator's (the run caps, the slot waits, the
 licence) is not yours or the tenant's to change: tell the person who changes
