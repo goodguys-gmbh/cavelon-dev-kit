@@ -551,6 +551,7 @@ describe("trace", () => {
       const runId = await testRunId();
       const view = await cli(sb, ["trace", runId]);
       expect(view.stdout).toContain("Did not pass:\n  Escalates (step 1)  fail\n    Did not escalate.");
+      expect(view.stdout.split("Did not escalate.").length - 1).toBe(1);
       expect(view.stdout).toContain("Passed:\n  Refund limit (step 1)  pass  score 0.55\n    Judge: Names the limit but not the approver.\n    Answer: Hello");
       // A pass the instance sent no reasoning for shows its score and its answer.
       expect(view.stdout).toContain("  Greets (step 1)  pass  score 0.9\n    Answer: Hello");

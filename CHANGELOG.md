@@ -227,6 +227,10 @@ CLI, the skills and the plugin.
 - `cli/scripts/scrub-contracts.mjs` also drops a sentence of the published
   texts that names an issue outside parentheses.
 
+### Fixed
+
+- `cavelon trace <test run>` shows a failed case's judge reasoning once when the instance recorded no error, instead of twice.
+
 ## [0.1.5] - 2026-10-04
 
 Agents get further on their own: validate catches broken references, unknown
