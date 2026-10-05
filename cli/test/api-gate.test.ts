@@ -144,7 +144,7 @@ describe("api over MCP with the instance's person-only marker", () => {
       expect(secret.isError).toBe(true);
       expect(secret.body.error).toMatchObject({
         code: "operation_for_a_person",
-        exit_code: 2,
+        exit_code: 5,
         message: expect.stringMatching(/^set_secret \(PUT \/api\/v1\/secrets\/\{name\}\) is for a person only, as the instance marks it \(Sets or deletes a secret value\)/),
         hint: expect.stringMatching(/cavelon secrets set <name>/),
         details: { source: "instance", reason: "Sets or deletes a secret value" },

@@ -27,6 +27,8 @@ export interface ImportRequest {
   mode: "overwrite" | "replace";
   harness_id?: string;
   runtime_bindings?: Record<string, string>;
+  /** Also import a solution package's tenant-wide sections (`apply --tenant-wide`), on an instance that takes it. */
+  include_tenant_wide?: boolean;
 }
 
 export interface StoredPreview {
@@ -35,9 +37,12 @@ export interface StoredPreview {
   instance: string;
   tenant_id: string | null;
   env: string | null;
-  harness: { id: string; slug: string; created: boolean } | null;
+  /** `created` only in previews stored by kits up to 0.1.5, whose preview could create the solution. */
+  harness: { id: string; slug: string; created?: boolean } | null;
   /** The package files' content when previewed, to tell when they changed since. */
   package_digest: string;
+  /** Each package file's digest when previewed; absent in a preview an older kit stored. */
+  file_digests?: Record<string, string>;
   request: ImportRequest;
   preview: Record<string, unknown>;
 }
@@ -64,6 +69,7 @@ export async function readPull(root: string): Promise<PullRecord | undefined> {
   return readJsonFile<PullRecord>(path.join(stateDir(root), "pull.json"));
 }
 
+/** The package files' digests as the last pull or apply left them (the name is older than the apply). */
 const PULLED_FILES = "pulled-files.json";
 
 /** The SHA-256 of a file's bytes, through a symlink; undefined when there is no file. */
@@ -72,22 +78,57 @@ export async function fileDigest(file: string): Promise<string | undefined> {
   return bytes && createHash("sha256").update(bytes).digest("hex");
 }
 
-/**
- * The package files as the last pull left them, by digest. Outside git it is
- * the only way to tell a local edit from what the instance sent.
- */
-export async function writePulledFiles(root: string, files: string[]): Promise<void> {
+/** The digests of files in a solution folder, by their path relative to it; a missing file is left out. */
+export async function fileDigests(root: string, files: string[]): Promise<Record<string, string>> {
   const digests: Record<string, string> = {};
   for (const file of files) {
     const value = await fileDigest(path.join(root, file));
     if (value) digests[file] = value;
   }
-  await writeState(root, PULLED_FILES, JSON.stringify({ digests }, null, 2));
+  return digests;
 }
 
+interface PulledFiles {
+  digests?: Record<string, string>;
+  /** Which file the last pull put each entry of a one-file-per-entry section in, by section and the entry's slug or name. */
+  items?: Record<string, Record<string, string>>;
+}
+
+const readPulled = async (root: string) => (await readJsonFile<PulledFiles>(path.join(stateDir(root), PULLED_FILES))) ?? {};
+
+/**
+ * The package files as the last pull left them, by digest. Outside git, and
+ * for files not committed yet, it is the only way to tell a local edit from
+ * what the instance holds. `items` says which file holds which entry of a
+ * section kept one file per entry, so the next pull writes it back there.
+ */
+export async function writePulledFiles(root: string, files: string[], items?: Record<string, Record<string, string>>): Promise<void> {
+  const kept = items ?? (await readPulled(root)).items;
+  await writeState(root, PULLED_FILES, JSON.stringify({ digests: await fileDigests(root, files), ...(kept ? { items: kept } : {}) }, null, 2));
+}
+
+/** Which file the last pull put each entry of a one-file-per-entry section in; empty before the first pull. */
+export async function readItemFiles(root: string): Promise<Record<string, Record<string, string>>> {
+  const items = (await readPulled(root)).items;
+  return items && typeof items === "object" && !Array.isArray(items) ? items : {};
+}
+
+/**
+ * After an apply: the files whose bytes the instance now holds (`known`), so
+ * a later pull may replace them like files it wrote, and the files it does
+ * not hold as they are (`unknown`), so pull refuses to overwrite them.
+ */
+export async function rememberAppliedFiles(root: string, known: Record<string, string>, unknown: string[] = []): Promise<void> {
+  const digests = { ...(await readPulledFiles(root)), ...known };
+  for (const file of unknown) delete digests[file];
+  const items = (await readPulled(root)).items;
+  await writeState(root, PULLED_FILES, JSON.stringify({ digests, ...(items ? { items } : {}) }, null, 2));
+}
+
+/** The package files' digests as the last pull or apply left them. */
 export async function readPulledFiles(root: string): Promise<Record<string, string>> {
-  const stored = await readJsonFile<{ digests?: Record<string, string> }>(path.join(stateDir(root), PULLED_FILES));
-  return stored?.digests && typeof stored.digests === "object" ? stored.digests : {};
+  const stored = await readPulled(root);
+  return stored.digests && typeof stored.digests === "object" ? stored.digests : {};
 }
 
 export function digest(value: unknown): string {
@@ -116,8 +157,60 @@ export async function deletePreview(root: string, previewId: string): Promise<vo
   await fs.rm(previewFile(root, previewId), { force: true });
 }
 
-/** The open previews, newest first. */
-export async function listPreviews(root: string): Promise<Array<Pick<StoredPreview, "preview_id" | "created_at" | "env" | "harness">>> {
+/** Why a preview can no longer be confirmed. */
+export type RetiredReason = "applied" | "superseded" | "discarded" | "expired" | "stale";
+
+/** A preview whose file is gone, kept so that a later confirm says why instead of "no open preview". */
+export interface RetiredPreview {
+  preview_id: string;
+  reason: RetiredReason;
+  at: string;
+  /** For superseded: the preview whose import made this one stale. */
+  by?: string;
+}
+
+const RETIRED_PREVIEWS = "retired-previews.json";
+/** Enough for the previews a session leaves behind; the oldest go first. */
+const RETIRED_KEPT = 200;
+
+async function readRetired(root: string): Promise<RetiredPreview[]> {
+  const stored = await readJsonFile<RetiredPreview[]>(path.join(stateDir(root), RETIRED_PREVIEWS));
+  return Array.isArray(stored) ? stored.filter((r) => typeof r?.preview_id === "string") : [];
+}
+
+/** Remove previews and remember why each went. */
+export async function retirePreviews(root: string, retired: RetiredPreview[]): Promise<void> {
+  if (!retired.length) return;
+  for (const r of retired) await deletePreview(root, r.preview_id);
+  const ids = new Set(retired.map((r) => r.preview_id));
+  const kept = (await readRetired(root)).filter((r) => !ids.has(r.preview_id));
+  await writeState(root, RETIRED_PREVIEWS, JSON.stringify([...kept, ...retired].slice(-RETIRED_KEPT), null, 2));
+}
+
+/** Why a preview that is no longer stored went; undefined for an id this folder never stored, or one retired long ago. */
+export async function retiredPreview(root: string, previewId: string): Promise<RetiredPreview | undefined> {
+  return (await readRetired(root)).find((r) => r.preview_id === previewId);
+}
+
+/**
+ * How long the kit keeps a preview confirmable. The instance publishes no
+ * lifetime for its previews; a day bounds how old a preview a later agent
+ * may find and confirm, while leaving a person the time to read it.
+ */
+export const PREVIEW_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+/** When a preview stops being confirmable; an unreadable creation time counts as expired. */
+export function previewExpiry(createdAt: string, now: Date): { expires_at: string | null; expired: boolean } {
+  const created = Date.parse(createdAt);
+  if (Number.isNaN(created)) return { expires_at: null, expired: true };
+  const expires = created + PREVIEW_MAX_AGE_MS;
+  return { expires_at: new Date(expires).toISOString(), expired: now.getTime() >= expires };
+}
+
+export type OpenPreview = Pick<StoredPreview, "preview_id" | "created_at" | "env" | "harness"> & { expires_at: string | null; expired: boolean };
+
+/** The open previews, newest first, each with when it expires. */
+export async function listPreviews(root: string, now: Date): Promise<OpenPreview[]> {
   const dir = path.join(stateDir(root), "previews");
   let names: string[];
   try {
@@ -128,7 +221,9 @@ export async function listPreviews(root: string): Promise<Array<Pick<StoredPrevi
   const out = [];
   for (const name of names.filter((n) => n.endsWith(".json"))) {
     const stored = await readJsonFile<StoredPreview>(path.join(dir, name));
-    if (stored?.preview_id) out.push({ preview_id: stored.preview_id, created_at: stored.created_at, env: stored.env, harness: stored.harness });
+    if (stored?.preview_id) {
+      out.push({ preview_id: stored.preview_id, created_at: stored.created_at, env: stored.env, harness: stored.harness, ...previewExpiry(stored.created_at, now) });
+    }
   }
   return out.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
 }

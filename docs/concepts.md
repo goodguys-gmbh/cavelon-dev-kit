@@ -24,7 +24,10 @@ than your `cavelon` understands. `cavelon whoami` and `cavelon status` show the
 instance's version.
 
 `cavelon docs search <words>` and `cavelon docs get <page>` read the instance's
-own documentation, which describes the version you are connected to.
+own documentation, which describes the version you are connected to. The
+search ranks pages by the words of the question in their titles and summaries,
+ignores stop words, looks German words for the core concepts up in English, and
+lists only pages that match well; `cavelon docs get index` lists them all.
 
 ## Tenant
 
@@ -77,9 +80,43 @@ triggers and its test suites. Cavelon's API calls it a **harness**, which is
 why some commands and files say `harness`.
 
 A solution is a **draft** while you build it and **active** once it is live
-(see [Readiness and activation](#readiness-and-activation)). `cavelon harness
-list` shows the tenant's solutions; `harness new` and `harness clone` create
-drafts.
+(see [Readiness and activation](#readiness-and-activation)); one taken out of
+service with `cavelon deactivate` is **inactive**, not a draft again: it keeps
+its configuration and answers no live traffic until `cavelon activate` puts it
+back through its readiness gate. `cavelon harness list` shows the tenant's
+solutions with their status; `harness new` and `harness clone` create drafts.
+
+### Persona
+
+Each solution has a **persona**: who the assistant is, for every agent of the
+solution. Its name (`bot_name`), its voice and boundaries (`persona_prompt`),
+the greeting a conversation opens with, the fallback it gives when it has no
+answer, its language and the widget's copy. An agent's `system_prompt` says
+what that one agent does. The persona is `package/persona.yaml`: `pull` and
+`init` write every field the instance's schema lists, an unset one as a
+comment with its default. `cavelon validate` warns when a greeting or fallback
+is on but its text is empty (`persona_message_empty`). The instance's page
+`concepts/personas` (`cavelon docs get concepts/personas`) explains the rest.
+
+### Default route
+
+A tenant answers where a conversation names no solution (its chat, its widget)
+with one solution, its **default route**. A new tenant's default is an empty
+`default` solution, so a solution built beside it answers nobody there until it
+becomes the default. `cavelon harness list` marks it (DEFAULT); `cavelon
+activate` says when the solution it activated is not the default, and
+`cavelon harness default <solution>` (or `activate --make-default`) makes it the
+default, showing the current one first and changing it only with `--confirm`.
+That changes live traffic, so a person decides it. `is_default` in
+`harnesses.yaml` is not applied by an import.
+
+An active solution that is not the default still answers a conversation that
+names it: `cavelon chat "<message>" --harness <solution>` sends one message to
+it and prints the answer, with the session to continue and the conversation
+to trace. `cavelon deactivate` takes an active solution out of live traffic
+(its status becomes `inactive`); it previews first, changes nothing without
+`--confirm`, and refuses the default route until another solution is the
+default.
 
 ## Package
 
@@ -87,6 +124,18 @@ A **package** is a solution, or a whole tenant's configuration, as one
 document in the instance's package format (currently `v3`). Exporting and
 importing packages is how `cavelon` reads and writes solutions: `pull` exports,
 `apply` imports.
+
+Some sections hold what the whole tenant shares rather than one solution's:
+the tenant's settings (`tenant_settings`), its model list (`model_registry`)
+and the others the package schema marks `x-cavelon-scope: tenant`. A
+solution's `pull` leaves them out of the folder and a solution's `apply` out of
+the import, so changing one solution never changes the others by the way.
+`pull --tenant-wide` writes them, and `apply --tenant-wide` imports them, for
+every solution of the tenant: the preview then says to show it to a person.
+An instance that does not publish `include_tenant_wide` imports them with
+every solution's package; `apply` says so when the folder holds one, and
+`validate` warns about such a file in a solution's folder
+(`tenant_wide_section`). The tenant's full configuration always carries them.
 
 A package never contains a secret's value. It names the **variables**
 (`{{var:name}}`) and **secrets** (`{{secret:name}}`) the solution needs, in
@@ -119,7 +168,11 @@ schema, offline once the schema is cached.
 `pull` never loses your work silently. In a git repository it refuses to
 overwrite package files with uncommitted changes; outside one, it refuses to
 overwrite or remove a package file that changed since the last pull (an edit,
-or a test suite you have not applied yet). `--force` discards them.
+or a test suite you have not applied yet). A file exactly as the last `pull`
+wrote it or the last confirmed `apply` imported it counts as unchanged in both
+cases, committed or not: `.cavelon/pulled-files.json` keeps a digest of each,
+so a `pull` right after an `apply` goes ahead in a repository without a commit.
+`--force` discards the others.
 
 A package file may be a symlink to a file elsewhere in the solution folder:
 `validate` and `apply` read the file it leads to, and `pull` writes through the
@@ -129,7 +182,10 @@ Files saved with a UTF-8 byte-order mark, as Windows PowerShell 5.1 writes
 them, read like any other.
 
 `cavelon init --from <file>` turns a package file you already have, such as an
-export or a blueprint, into this layout.
+export or a blueprint, into this layout. When the package holds one solution
+that the tenant does not have yet, `init --from` run from a terminal or shell
+creates it as a draft, named as in the package; as an MCP tool it names the
+`cavelon harness new` command instead.
 
 ## Environments
 
@@ -138,7 +194,7 @@ package:
 
 ```yaml
 tenant: acme-prod          # default: the tenant in cavelon.yaml
-harness: support-faq       # created as a draft when it does not exist yet
+harness: support-faq       # must exist: init or `cavelon harness new` creates it
 mode: overwrite            # or replace
 runtime_bindings:          # the package's runtime requirement -> this tenant's resource id
   crm_connection: 6f1c…
@@ -146,7 +202,12 @@ runtime_bindings:          # the package's runtime requirement -> this tenant's 
 
 `init` creates `env/test.yaml` and `env/prod.yaml`. A `--env <name>` without
 its `env/<name>.yaml` is refused (exit 2) before anything is sent, by every
-command that takes `--env`. A typical flow applies to
+command that takes `--env`. `apply` never creates a solution: when the
+solution an env file names is not on the instance, it stops before the preview
+(`solution_not_found`) and names the `cavelon harness new` command that
+creates the draft. `cavelon init --harness <name>` creates it when you set up
+the folder; a name close to an existing solution's is refused as a likely
+typo, and `--new` creates it anyway. A typical flow applies to
 `test`, runs the tests, then applies the same files to `prod`. Environment
 files never hold a token or a secret value; a secret is set in each tenant with
 `cavelon secrets set`.
@@ -159,15 +220,42 @@ Changing a solution always takes two steps:
    **preview**: what would be created, changed and deleted, which active
    solutions it reaches, and what the target still needs (secrets, variables,
    OAuth grants, runtime bindings, trigger identities). Nothing changes. The
-   preview gets an id (`pv_…`), and the exact request is stored in
+   preview gets an id (such as `pv1_…`), and the exact request is stored in
    `.cavelon/previews/`.
-2. **`cavelon apply --confirm <id>`** imports exactly that preview, even if the
-   files changed since (it warns).
+2. **`cavelon apply --confirm <id>`** imports exactly that preview.
 
-If the target changed after the preview, the instance refuses the import
-(`import_preview_stale`, exit 4) and nothing is imported: preview again. If the
-import's own check finds something the preview did not, it refuses with its
-blockers (`package_requirements_changed`, exit 4).
+A recent instance's preview also lists each field it would change
+(`object.field: old → new`), the fields an import does not apply (such as a
+solution's `status` or `is_default`, each with the command that sets it), and,
+when it is blocked, each blocker with its code, package file and path, and a
+hint. An older instance's preview shows what it publishes.
+
+A confirm imports nothing and exits 4 when the preview is **stale**:
+
+- the target changed on the instance after the preview: the instance refuses
+  the import (`import_preview_stale`);
+- the package files changed after the preview, in what they hold rather than
+  in formatting or comments (`preview_files_changed`, naming the files). Preview
+  again; or, to import what the old preview showed anyway, add
+  `--allow-stale` to the confirm;
+- the preview is more than a day old (`preview_expired`);
+- another preview was imported after it (`preview_superseded`), it was
+  imported already (`preview_applied`), or it was discarded
+  (`preview_discarded`). The kit remembers why each preview went, so the
+  confirm says which.
+
+A preview that changes nothing says "Nothing to import" and is not stored, so
+there is nothing to confirm.
+
+If the import's own check finds something the preview did not, it refuses with
+its blockers (`package_requirements_changed`, exit 4).
+
+`cavelon status` lists the open previews with when each expires;
+`cavelon apply --discard <id>` (or `--discard all`) forgets stored previews, so
+none is left for a later agent to confirm. After an import, `pull` takes the
+package files as the instance now holds them as its base: a file that changed
+after the preview stays a local change unless the instance's export holds the
+same content.
 
 `--mode overwrite` (the default) creates and updates; `--mode replace` also
 deletes what the package does not hold. A preview that reaches an active
@@ -176,8 +264,13 @@ before confirming, and the Cavelon skills make the agent do so.
 
 Other commands that delete or overwrite follow the same pattern: `limits set`,
 `models set-limit`, `variables delete`, `secrets delete`, `loop cancel`,
-`sandbox seed` and `trigger identity` show what they would do, and act only
-with `--confirm`.
+`sandbox seed`, `trigger identity`, `harness default`, `activate
+--make-default` and `deactivate` show what they would do, and act only with
+`--confirm`. In your terminal the flag alone confirms. Run by a coding agent,
+the preview prints the confirm command with a token (`--confirm <token>`), and
+a bare `--confirm` only shows the preview again (exit 5). Over MCP, their tools
+return a `confirm_token` with the preview and act only when `confirm` is that
+token, which confirms exactly the change shown.
 
 ## Operations and waiting
 
@@ -224,15 +317,43 @@ test_cases:
           - Says that it can only help with questions about the shop.
 ```
 
+Besides the judge's criteria, a step can carry **assertions**: objects with a
+`type` in `evaluation_criteria`, checked in code before the judge runs. A
+failed assertion fails the step whatever the judge would say. `tool_called` and
+`tool_not_called` check the tools a step called; on a recent instance,
+`answered_by` checks which agent answered and `handoff_to` that the step was
+handed to an agent, both by agent slug:
+
+```yaml
+      - user_message: What does a family ticket cost?
+        evaluation_criteria:
+          - States the price of the family ticket.
+          - {type: handoff_to, value: ticket-agent}
+          - {type: answered_by, value: ticket-agent}
+          - {type: tool_called, value: search_documents}
+```
+
+Where the instance's package schema describes a step's criteria, `validate`
+checks each assertion like any other field; where it does not, `validate`
+warns that it cannot (`test_assertion_unchecked`), and an instance that does
+not know a type grades it as a judge criterion.
+
 `apply` sends the suites with the rest of the package. `cavelon test run`
 starts them on the instance, where a judge scores each answer. With `--wait`,
 a run whose cases failed exits 1 and names them. So does a run that measured
 nothing comparable (steps not run, technical errors, no pass rate): it says
 nothing about the solution. A run whose answers wait for a manual verdict
 exits 5. `cavelon trace <run>` shows
-each case with its score, error and the judge's reasoning (for a pass too, when
-the instance sends it), and leads to the conversation behind it, span by span,
-with each command carrying the id its route needs. The package schema also allows cases
+each case with its score, the agent that answered it, each assertion with pass
+or fail, the answer it judged, its error and the judge's reasoning (for a pass
+too, when the instance sends it), and leads to the conversation behind it,
+span by span, with each command carrying the id its route needs. A knowledge
+search's span shows its query, its hits and what the agent recorded it found
+(`knowledge_outcome`: `usable_evidence`, `content_gap`, `unusable_hits`,
+`retrieval_fault` or `deliberately_unanswerable`), where the instance records
+it; `cavelon explain <value>` says what each one means. The agent records
+`no_usable_evidence`, which the trace shows as `content_gap`, `unusable_hits`
+or `retrieval_fault`, by what the search returned. The package schema also allows cases
 that start a trigger and check how its run ends.
 
 A test run never waits for a person. A pipeline that reaches an approval ends
@@ -280,14 +401,22 @@ platform admin), and sent without a tenant.
 `cavelon` uses Platform mode only where it is needed:
 
 - `cavelon tenant create <slug>` creates a tenant (the role needs
-  `tenants.manage`);
+  `tenants.manage`). It asks the instance first whether the token may enter
+  Platform mode and, there, holds `tenants.manage`, and stops with exit 7
+  before sending anything when it does not. `--use` switches to the new tenant
+  only once the instance confirms the token acts in it;
 - `cavelon limits set <key> <value> --tenant <tenant>` sends an operator's
   limit change in Platform mode, after checking that the token's role is one
   the change names. See [Limits](limits.md#operators-changes).
 
 A Platform-mode token reaches no tenant by default; choose one with
 `cavelon use <name or slug>` before tenant commands. `cavelon whoami` shows
-`tenant: none (Platform mode)` until you do.
+`tenant: none (Platform mode)` until you do. Its `platform mode` line says
+whether the token may enter Platform mode at all, with its ceiling
+(`not allowed (ceiling tenant_builder)`), and `reaches` says which tenants it
+reaches (`every tenant (as operator)` for an operator's token without a tenant
+allowlist). A 403 from a platform route never sends you to check the tenant:
+it says that the route needs a token that allows Platform mode.
 
 ## Built for agents
 

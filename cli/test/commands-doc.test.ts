@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { GLOBAL_OPTIONS, type CommandSpec, type OptionSpec } from "../src/command.js";
+import { GLOBAL_OPTIONS, optionDescription, optionFlag, type CommandSpec, type OptionSpec } from "../src/command.js";
 import { COMMANDS } from "../src/commands/index.js";
 import { usageLine } from "../src/main.js";
 
@@ -21,12 +21,12 @@ const GROUPS: Array<{ title: string; intro: string; names: string[] }> = [
   {
     title: "Solution as code",
     intro: "Turn a folder into a solution, check it, preview it, import it and activate it.",
-    names: ["init", "pull", "validate", "apply", "activate", "explain"],
+    names: ["init", "pull", "validate", "fmt", "schema", "apply", "activate", "explain"],
   },
   {
     title: "Tenants and solutions",
     intro: "Create and list tenants and solutions (harnesses).",
-    names: ["tenant create", "tenant list", "harness list", "harness new", "harness clone"],
+    names: ["tenant create", "tenant list", "harness list", "harness new", "harness clone", "harness default"],
   },
   {
     title: "Knowledge, tests and traces",
@@ -97,8 +97,8 @@ function marked(spec: CommandSpec): string {
 function optionRows(options: Record<string, OptionSpec>, withMcp: boolean): string[] {
   const rows = [withMcp ? "| Option | Description | MCP |" : "| Option | Description |", withMcp ? "|---|---|---|" : "|---|---|"];
   for (const [name, o] of Object.entries(options)) {
-    const flag = `${o.short ? `-${o.short}, ` : ""}--${name}${o.type === "string" ? ` ${o.value ?? "<value>"}` : ""}`;
-    const description = md(o.description + (o.multiple ? " Repeatable." : ""));
+    const flag = optionFlag(name, o);
+    const description = md(optionDescription(name, o));
     rows.push(withMcp ? `| \`${flag}\` | ${description} | ${o.cliOnly ? "CLI only" : "yes"} |` : `| \`${flag}\` | ${description} |`);
   }
   return rows;

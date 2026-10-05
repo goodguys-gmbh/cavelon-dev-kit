@@ -1,7 +1,8 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { startFakeServer, traceFixture, type FakeServer } from "./fake-server.js";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { CASE_STATUSES, NOT_PASSED_COUNTS, WAITING_COUNTS } from "../src/results.js";
+import { CONTRACTS, startFakeServer, toolCallRow, traceFixture, type FakeServer } from "./fake-server.js";
 import { cli, login, sandbox, type Sandbox } from "./helpers.js";
 
 let server: FakeServer;
@@ -39,12 +40,16 @@ describe("wait", () => {
     const first = await cli(sb, ["wait", op.id, "--timeout", "100ms", "--json"]);
     expect(first.code).toBe(6);
     const state = first.json<WaitOutput>();
-    expect(state).toMatchObject({ settled: false, timed_out: true, resume: `cavelon wait ${op.id}` });
+    expect(state).toMatchObject({ settled: false, timed_out: true, timeout_ms: 100, resume: `cavelon wait ${op.id}` });
+    expect((state as WaitOutput & { waited_ms: number }).waited_ms).toBeGreaterThanOrEqual(100);
     expect(state.operations[0]!.status).toBe("running");
 
     const text = await cli(sb, ["wait", op.id, "--timeout", "0"]);
     expect(text.code).toBe(6);
     expect(text.stdout).toMatch(new RegExp(`Wait with: cavelon wait ${op.id}`));
+    // A timeout of 0 reads the state once; it never claims to have waited.
+    const once = await cli(sb, ["wait", op.id, "--timeout", "0", "--json"]);
+    expect(once.json<WaitOutput & { timeout_ms: number }>()).toMatchObject({ settled: false, timed_out: false, timeout_ms: 0 });
 
     const second = await cli(sb, ["wait", op.id, "--timeout", "30s", "--json"]);
     expect(second.code).toBe(0);
@@ -271,6 +276,25 @@ describe("test run", () => {
       expect(wait.json<{ failed_results: Array<Record<string, unknown>> }>().failed_results[0]).toMatchObject({ counts: { pending_review: 2 }, exit_code: 5 });
     });
 
+    it("says why a case waits: the short reason next to the count, the case's own reason, and the explain to run", async () => {
+      server.state.runResults = [
+        { name: "Refund policy", status: "calibration_required", error_message: "knowledge_base_not_ready: Policies has no ready documents" },
+        { name: "Greets", status: "pass" },
+      ];
+      try {
+        const { testRun, wait } = await waitOn({ passed: 1, failed: 0, errors: 0, calibration_required: 1, comparable: false, pass_rate: null });
+        expect(testRun.code, testRun.stdout).toBe(5);
+        expect(testRun.stdout).toContain("smoke: completed  passed 1  failed 0  errors 0  1 calibration required (a knowledge base or value the case needs was not ready)");
+        expect(testRun.stdout).toContain("Refund policy (step 1)  calibration_required: knowledge_base_not_ready: Policies has no ready documents");
+        expect(testRun.stdout).toContain("What to do: cavelon explain calibration_required");
+        expect(wait.json<{ failed_results: Array<{ cases: unknown[] }> }>().failed_results[0]!.cases).toEqual([
+          expect.objectContaining({ case: "Refund policy", status: "calibration_required", reason: expect.stringContaining("knowledge_base_not_ready") }),
+        ]);
+      } finally {
+        server.state.runResults = null;
+      }
+    });
+
     it("exits 1 for a run the instance marks not comparable without a count, and for an older instance's null pass rate", async () => {
       for (const summary of [
         { passed: 0, failed: 0, errors: 0, comparable: false, non_comparable_reasons: ["no_behavior_verdict"], pass_rate: null },
@@ -348,6 +372,92 @@ describe("trace", () => {
     );
   });
 
+  it("shows the knowledge outcome the agent recorded on a search, and none on an instance that records none", async () => {
+    const runId = "7aace000-0000-4000-8000-000000000002";
+    const traceId = "7aace000-0000-4000-8000-0000000000ab";
+    server.state.traces.set(`trigger:${runId}`, [traceFixture(traceId, null, { knowledgeOutcome: "content_gap" })]);
+    const spans = await cli(sb, ["trace", runId, "--trace", traceId, "--json"]);
+    const items = spans.json<{ spans: { items: Array<{ name: string; type: string; knowledge_outcome: string | null }> } }>().spans.items;
+    expect(items.map((s) => [s.type, s.knowledge_outcome])).toEqual([
+      ["agent", null],
+      ["llm", null],
+      ["tool", "content_gap"],
+      ["retrieval", "content_gap"],
+    ]);
+    const text = await cli(sb, ["trace", runId, "--trace", traceId]);
+    expect(text.stdout).toMatch(/STATUS\s+KNOWLEDGE_OUTCOME/);
+    expect(text.stdout).toMatch(/search_documents\s+error\s+content_gap/);
+    const span = await cli(sb, ["trace", runId, "--trace", traceId, "--span", `${traceId}-span-3`, "--json"]);
+    expect(span.json()).toMatchObject({ name: "search_documents", knowledge_outcome: "content_gap" });
+
+    const older = "7aace000-0000-4000-8000-000000000003";
+    server.state.traces.set(`trigger:${older}`, [traceFixture("7aace000-0000-4000-8000-0000000000ac", null)]);
+    const plain = await cli(sb, ["trace", older, "--trace", "7aace000-0000-4000-8000-0000000000ac"]);
+    expect(plain.stdout).not.toMatch(/KNOWLEDGE_OUTCOME/);
+    const plainJson = await cli(sb, ["trace", older, "--trace", "7aace000-0000-4000-8000-0000000000ac", "--json"]);
+    expect(plainJson.json<{ spans: { items: Array<{ knowledge_outcome: string | null }> } }>().spans.items.every((s) => s.knowledge_outcome === null)).toBe(true);
+  });
+
+  it("names the agent that answered each test step, and why a handoff_to step failed", async () => {
+    const reason = "Observed handoffs to []; a handoff to ticket-agent is required.";
+    server.state.runResults = [
+      {
+        name: "Family ticket price",
+        status: "fail",
+        agent_slug: "front-desk",
+        llm_judge_score: 0,
+        error_message: reason,
+        judge_breakdown: {
+          evaluation_kind: "hybrid",
+          judge_skipped: true,
+          deterministic_criteria: [
+            { type: "handoff_to", label: "Handed off to ticket-agent", passed: false, expected: "ticket-agent", observed: [], reasoning: reason },
+            { type: "answered_by", label: "Answered by ticket-agent", passed: false, expected: "ticket-agent", observed: "front-desk", reasoning: "Agent front-desk answered; ticket-agent must answer." },
+          ],
+        },
+      },
+      { name: "Greets", status: "pass", agent_slug: "front-desk" },
+      // An instance that records no agent for a step.
+      { name: "Opening hours", status: "pass", agent_slug: null },
+    ];
+    try {
+      const started = await cli(sb, ["test", "run", "--suite", "smoke", "--json"]);
+      const runId = started.json<{ runs: Array<{ run_id: string }> }>().runs[0]!.run_id;
+      const json = await cli(sb, ["trace", runId, "--json"]);
+      const items = json.json<{ results: { items: Array<{ case: string; agent: string | null; reason?: string; judge_breakdown?: unknown }> } }>().results.items;
+      expect(items.map((r) => [r.case, r.agent])).toEqual([
+        ["Family ticket price", "front-desk"],
+        ["Greets", "front-desk"],
+        ["Opening hours", null],
+      ]);
+      expect(items[0]).toMatchObject({ reason, judge_breakdown: { deterministic_criteria: [expect.objectContaining({ type: "handoff_to", passed: false }), expect.objectContaining({ type: "answered_by" })] } });
+      const text = await cli(sb, ["trace", runId]);
+      expect(text.stdout).toMatch(/^CASE\s+STEP\s+STATUS\s+SCORE\s+AGENT\s/m);
+      expect(text.stdout).toContain(
+        [
+          "Did not pass:",
+          "  Family ticket price (step 1)  fail",
+          `    ${reason}`,
+          "    Assertions (0 of 2 passed):",
+          `      FAIL  Handed off to ticket-agent [handoff_to] (expected "ticket-agent", observed []): ${reason}`,
+          '      FAIL  Answered by ticket-agent [answered_by] (expected "ticket-agent", observed "front-desk"): Agent front-desk answered; ticket-agent must answer.',
+          "    Answer: Hello",
+          "    Answered by: front-desk",
+        ].join("\n"),
+      );
+      // Each step's assertions and answer are in the JSON too, whatever its status.
+      const steps = json.json<{ results: { items: Array<{ answer: string | null; assertions: Array<Record<string, unknown>> }> } }>().results.items;
+      expect(steps[0]!.answer).toBe("Hello");
+      expect(steps[0]!.assertions).toEqual([
+        { type: "handoff_to", label: "Handed off to ticket-agent", passed: false, expected: "ticket-agent", observed: [], reasoning: reason },
+        { type: "answered_by", label: "Answered by ticket-agent", passed: false, expected: "ticket-agent", observed: "front-desk", reasoning: "Agent front-desk answered; ticket-agent must answer." },
+      ]);
+      expect(steps[1]!.assertions).toEqual([]);
+    } finally {
+      server.state.runResults = null;
+    }
+  });
+
   it("follows an operation id to its test run's results", async () => {
     const started = await cli(sb, ["test", "run", "--suite", "smoke", "--json"]);
     const opId = started.json<{ operation_ids: string[] }>().operation_ids[0]!;
@@ -384,6 +494,15 @@ describe("trace", () => {
         { name: "Refund limit", status: "pass", conversation_id: conversation, agent_run_id: caseRun, llm_judge_score: 0.55, llm_judge_reasoning: "Names the limit but not the approver." },
         { name: "Greets", status: "pass", llm_judge_score: 0.9 },
         { name: "Escalates", status: "fail", llm_judge_score: 0.1, llm_judge_reasoning: "Did not escalate." },
+        // A recent instance's rows: what each knowledge search found, beside a tool that searches nothing.
+        {
+          name: "Holiday hours",
+          status: "fail",
+          llm_judge_score: 0.2,
+          llm_judge_reasoning: "Says it does not know.",
+          tool_calls: [toolCallRow("content_gap"), toolCallRow(undefined, "compute"), toolCallRow("unusable_hits"), toolCallRow("content_gap")],
+        },
+        { name: "Return window", status: "pass", tool_calls: [toolCallRow("usable_evidence")] },
       ];
     });
     afterAll(() => {
@@ -417,29 +536,50 @@ describe("trace", () => {
 
       const spans = await cli(sb, spansOf);
       expect(spans.code, spans.stderr).toBe(0);
-      const oneSpan = printed(spans.stdout, "One span in full, by the span_id in its row:");
+      // The span suggested first is the one that failed, never the root span, which carries no content.
+      const oneSpan = printed(spans.stdout, "One span in full (the one that failed), by the span_id in its row:");
       const span = await cli(sb, oneSpan);
       expect(span.code, span.stderr).toBe(0);
-      expect(JSON.parse(span.stdout)).toMatchObject({ span_id: `${traceId}-span-1` });
+      expect(JSON.parse(span.stdout)).toMatchObject({ span_id: `${traceId}-span-3`, name: "search_documents", status: "error" });
 
       const json = await cli(sb, ["trace", runId, "--json"]);
       const items = json.json<{ results: { items: Array<{ case: string; trace_command: string | null }> } }>().results.items;
-      expect(items.map((r) => r.trace_command)).toEqual([`cavelon trace ${conversation} --kind conversation`, null, null]);
+      expect(items.map((r) => r.trace_command)).toEqual([`cavelon trace ${conversation} --kind conversation`, null, null, null, null]);
     });
 
     it("show the judge's reasoning for every judged case, a pass too", async () => {
       const runId = await testRunId();
       const view = await cli(sb, ["trace", runId]);
       expect(view.stdout).toContain("Did not pass:\n  Escalates (step 1)  fail\n    Did not escalate.");
-      expect(view.stdout).toContain("Judge's reasoning:\n  Refund limit (step 1)  pass  score 0.55\n    Judge: Names the limit but not the approver.");
-      // A pass the instance sent no reasoning for is only scored.
-      expect(view.stdout).not.toMatch(/Greets \(step 1\) {2}pass/);
+      expect(view.stdout.split("Did not escalate.").length - 1).toBe(1);
+      expect(view.stdout).toContain("Passed:\n  Refund limit (step 1)  pass  score 0.55\n    Judge: Names the limit but not the approver.\n    Answer: Hello");
+      // A pass the instance sent no reasoning for shows its score and its answer.
+      expect(view.stdout).toContain("  Greets (step 1)  pass  score 0.9\n    Answer: Hello");
       const json = await cli(sb, ["trace", runId, "--json"]);
       const items = json.json<{ results: { items: Array<{ case: string; judge_reasoning: string | null }> } }>().results.items;
       expect(items.map((r) => [r.case, r.judge_reasoning])).toEqual([
         ["Refund limit", "Names the limit but not the approver."],
         ["Greets", null],
         ["Escalates", "Did not escalate."],
+        ["Holiday hours", "Says it does not know."],
+        ["Return window", null],
+      ]);
+    });
+
+    it("name each case's knowledge outcomes from its tool calls, and nothing for an older instance's rows", async () => {
+      const runId = await testRunId();
+      const view = await cli(sb, ["trace", runId]);
+      expect(view.stdout).toMatch(/ {2}Holiday hours \(step 1\) {2}fail\n(?: {4}.*\n)*? {4}Knowledge: content_gap, unusable_hits\n/);
+      // Rows without the field (an older instance) and a case without rows add no line.
+      expect(view.stdout.match(/Knowledge:/g)).toHaveLength(1);
+      const json = await cli(sb, ["trace", runId, "--json"]);
+      const items = json.json<{ results: { items: Array<{ case: string; knowledge_outcomes: string[] | null }> } }>().results.items;
+      expect(items.map((r) => [r.case, r.knowledge_outcomes])).toEqual([
+        ["Refund limit", null],
+        ["Greets", null],
+        ["Escalates", null],
+        ["Holiday hours", ["content_gap", "unusable_hits"]],
+        ["Return window", ["usable_evidence"]],
       ]);
     });
 
@@ -470,5 +610,157 @@ describe("trace", () => {
     const result = await cli(sb, ["trace", "99999999-9999-4999-8999-999999999999", "--json"]);
     expect(result.code).toBe(1);
     expect(result.json<{ error: { code: string } }>().error.code).toBe("run_not_found");
+  });
+});
+
+describe("test-case statuses that are neither pass nor fail", () => {
+  const statuses = CASE_STATUSES.map((s) => s.status);
+
+  it("are the five the instance records, each tied to the summary counts test run prints", () => {
+    expect(statuses).toEqual(["calibration_required", "pending_review", "not_run", "not_evaluated", "skip"]);
+    // Every count test run prints is a failed verdict or one of these statuses, so each has an explanation.
+    const verdicts = ["failed", "errors", "technical_errors", "unmeasurable_cases"];
+    const explained = new Set(CASE_STATUSES.flatMap((s) => s.counts));
+    for (const count of [...NOT_PASSED_COUNTS, ...WAITING_COUNTS].filter((c) => !verdicts.includes(c))) expect(explained, count).toContain(count);
+    // Each count they name is a field of the run summary the instance publishes.
+    const openapi = JSON.parse(readFileSync(path.join(CONTRACTS, "openapi.json"), "utf8")) as { components: { schemas: Record<string, { properties: object }> } };
+    const summary = openapi.components.schemas.TestRunSummary!.properties;
+    for (const count of explained) expect(Object.keys(summary), count).toContain(count);
+  });
+
+  it("explain answers each, by status, summary count or label, with what to do next", async () => {
+    for (const name of [...statuses, "skipped", "cases_not_run", "Calibration Required"]) {
+      const result = await cli(sb, ["explain", name, "--json"]);
+      expect(result.code, `${name}: ${result.stderr}`).toBe(0);
+      expect(result.json()).toMatchObject({ kind: "test_case_status", message: expect.any(String), hint: expect.any(String) });
+    }
+    const text = await cli(sb, ["explain", "calibration_required"]);
+    expect(text.stdout).toMatch(/meaning: +The instance did not run the case\. .*knowledge_base_not_ready/);
+    expect(text.stdout).toMatch(/docs: +http:\/\/\S+\/docs\/concepts\/regression-testing#preflight-is-decided-when-the-run-is-accepted/);
+  });
+
+  it("are listed in the cavelon-testing skill", () => {
+    const skill = readFileSync(path.join(CONTRACTS, "..", "..", "plugin", "skills", "cavelon-testing", "SKILL.md"), "utf8");
+    for (const status of statuses) expect(skill, status).toContain(`\`${status}\``);
+  });
+});
+
+describe("kb upload of a file named like an existing document", () => {
+  const kbId = "4c1b9a3e-0000-4000-8000-00000000d0c5";
+  let folder: string;
+  let file: string;
+  /** A fresh sandbox per test, re-reading the OpenAPI, as the instance changes between them. */
+  let own: Sandbox;
+
+  type Match = { file: string; filename: string; document_id: string; plan: string; outcome?: string };
+  const active = () => server.state.documents.filter((d) => d.kb_id === kbId && !d.deleted && d.is_active);
+  const seed = (filename: string, created_at = "2026-10-01T10:00:00Z") => {
+    const id = crypto.randomUUID();
+    server.state.documents.push({ id, tenant_id: tenant, kb_id: kbId, filename, size: 10, is_active: true, deleted: false, created_at });
+    return id;
+  };
+
+  beforeAll(() => {
+    server.state.kbs.push({ id: kbId, tenant_id: tenant, name: "Bergbahn" });
+  });
+  beforeEach(async () => {
+    server.state.documents = server.state.documents.filter((d) => d.kb_id !== kbId);
+    // An instance whose upload replaces only the ids it is given, unless a test plays another.
+    server.state.uploadReplace = "ids";
+    own = sandbox();
+    own.env.CAVELON_CONTRACT_TTL_SECONDS = "0";
+    await login(own, server.url, server.addToken({ kind: "pat", tenantIds: [tenant], defaultTenant: tenant }));
+    folder = path.join(own.home, "faq");
+    mkdirSync(folder, { recursive: true });
+    file = path.join(folder, "bergbahn-faq.md");
+    writeFileSync(file, "# Bergbahn FAQ\n");
+    writeFileSync(path.join(folder, "new.md"), "# New\n");
+  });
+  afterEach(() => {
+    own.cleanup();
+    server.state.uploadReplace = "name";
+  });
+
+  it("is named in the dry run and after the upload, and stays active without --replace", async () => {
+    const old = seed("bergbahn-faq.md");
+    const dry = await cli(own, ["kb", "upload", folder, "--kb", "Bergbahn", "--dry-run"]);
+    expect(dry.code, dry.stderr).toBe(0);
+    expect(dry.stdout).toContain(`bergbahn-faq.md exists (${old.slice(0, 8)}…) and stays active`);
+    expect(dry.stdout).toMatch(/--replace replaces the existing document/);
+    const dryJson = await cli(own, ["kb", "upload", folder, "--kb", "Bergbahn", "--dry-run", "--json"]);
+    expect(dryJson.json<{ existing: Match[] }>().existing).toEqual([{ file: path.join("faq", "bergbahn-faq.md"), filename: "bergbahn-faq.md", document_id: old, plan: "stays_active" }]);
+    expect(active()).toHaveLength(1);
+
+    const result = await cli(own, ["kb", "upload", folder, "--kb", "Bergbahn", "--json"]);
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.json<{ existing: Match[] }>().existing).toMatchObject([{ document_id: old, outcome: "stays_active" }]);
+    // Both versions answer now: the warning was the point.
+    expect(active().map((d) => d.filename).sort()).toEqual(["bergbahn-faq.md", "bergbahn-faq.md", "new.md"]);
+  });
+
+  it("--replace sends replace_doc_ids where the upload takes it, and needs no --confirm", async () => {
+    const old = seed("bergbahn-faq.md");
+    const dry = await cli(own, ["kb", "upload", file, "--kb", "Bergbahn", "--replace", "--dry-run"]);
+    expect(dry.stdout).toContain(`bergbahn-faq.md exists (${old.slice(0, 8)}…) and is replaced once the new file is verified`);
+    server.state.requests.length = 0;
+    const result = await cli(own, ["kb", "upload", file, "--kb", "Bergbahn", "--replace", "--json"]);
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.json<{ existing: Match[] }>().existing).toMatchObject([{ document_id: old, plan: "replace_by_id", outcome: "replace_requested" }]);
+    expect(active().map((d) => d.id)).not.toContain(old);
+    expect(server.state.requests.some((r) => r.method === "PATCH")).toBe(false);
+  });
+
+  it("reads replaced_document_ids from an instance that replaces by name, by default unless --keep-both", async () => {
+    server.state.uploadReplace = "name";
+    const old = seed("bergbahn-faq.md");
+    const dry = await cli(own, ["kb", "upload", file, "--kb", "Bergbahn", "--dry-run"]);
+    expect(dry.stdout).toContain("and is replaced by the upload (--keep-both keeps it)");
+    const replaced = await cli(own, ["kb", "upload", file, "--kb", "Bergbahn", "--json"]);
+    expect(replaced.code, replaced.stderr).toBe(0);
+    const data = replaced.json<{ existing: Match[]; documents: Array<{ replaced_document_ids?: string[] }> }>();
+    expect(data.existing).toMatchObject([{ document_id: old, plan: "replaced_by_name", outcome: "replaced" }]);
+    expect(data.documents[0]!.replaced_document_ids).toEqual([old]);
+    expect(active()).toHaveLength(1);
+
+    const kept = await cli(own, ["kb", "upload", file, "--kb", "Bergbahn", "--keep-both"]);
+    expect(kept.code, kept.stderr).toBe(0);
+    expect(kept.stdout).toMatch(/exists \(.{8}…\) and stays active/);
+    expect(kept.stdout).not.toMatch(/--replace replaces/);
+    expect(active()).toHaveLength(2);
+  });
+
+  it("falls back to deactivating the old document on an instance without replace_doc_ids, only with --confirm", async () => {
+    server.state.uploadReplace = "none";
+    const old = seed("bergbahn-faq.md");
+    const before = server.state.requests.length;
+    const preview = await cli(own, ["kb", "upload", file, "--kb", "Bergbahn", "--replace", "--json"]);
+    expect(preview.code, preview.stderr).toBe(0);
+    const shown = preview.json<{ uploaded: boolean; confirm: string; existing: Match[] }>();
+    expect(shown).toMatchObject({ uploaded: false, existing: [{ document_id: old, plan: "deactivate" }] });
+    expect(shown.confirm).toMatch(/^cavelon kb upload .*bergbahn-faq\.md"? --kb Bergbahn --replace --confirm$/);
+    expect(server.state.requests.slice(before).filter((r) => r.method !== "GET")).toEqual([]);
+
+    const result = await cli(own, ["kb", "upload", file, "--kb", "Bergbahn", "--replace", "--confirm", "--json"]);
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.json<{ existing: Match[] }>().existing).toMatchObject([{ document_id: old, outcome: "deactivated" }]);
+    expect(active().map((d) => d.id)).not.toContain(old);
+    expect(server.state.documents.find((d) => d.id === old)).toMatchObject({ is_active: false, deleted: false });
+  });
+
+  it("deactivates the older duplicates the instance's replacement does not reach", async () => {
+    const older = seed("bergbahn-faq.md", "2026-09-01T10:00:00Z");
+    const newer = seed("bergbahn-faq.md", "2026-10-01T10:00:00Z");
+    const preview = await cli(own, ["kb", "upload", file, "--kb", "Bergbahn", "--replace", "--json"]);
+    expect(preview.json<{ existing: Match[] }>().existing).toMatchObject([
+      { document_id: newer, plan: "replace_by_id" },
+      { document_id: older, plan: "deactivate" },
+    ]);
+    const result = await cli(own, ["kb", "upload", file, "--kb", "Bergbahn", "--replace", "--confirm", "--json"]);
+    expect(result.code, result.stderr).toBe(0);
+    expect(active().map((d) => d.filename)).toEqual(["bergbahn-faq.md"]);
+  });
+
+  it("refuses --replace with --keep-both", async () => {
+    expect((await cli(own, ["kb", "upload", file, "--kb", "Bergbahn", "--replace", "--keep-both"])).code).toBe(2);
   });
 });

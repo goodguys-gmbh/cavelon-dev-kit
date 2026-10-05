@@ -20,6 +20,13 @@ export interface OptionSpec {
   value?: string;
   /** Hidden from the MCP tool (for example --wait, which would block). */
   cliOnly?: boolean;
+  /**
+   * A confirm option: a string in the MCP tool, the `confirm_token` the
+   * tool's preview returned. A boolean one is a flag in a terminal that also
+   * takes that token after it (`--confirm <token>`), which a coding agent's
+   * shell needs; `api`'s is a string that may be empty.
+   */
+  mcpToken?: boolean;
 }
 
 export interface PositionalSpec {
@@ -67,6 +74,12 @@ export interface CommandSpec {
   readOnly: boolean;
   /** May delete or overwrite something; for the MCP destructive annotation. */
   destructive?: boolean;
+  /**
+   * What the MCP tool's description says the command changes, where the
+   * marking alone would mislead: a command that writes only local files is
+   * not one that "changes the instance".
+   */
+  mcpEffect?: string;
   /** Repeating the call with the same arguments has no further effect. */
   idempotent?: boolean;
   positionals?: PositionalSpec[];
@@ -74,8 +87,8 @@ export interface CommandSpec {
   /** The MCP tool name, or false for commands only a person runs (login, logout). */
   mcpTool: string | false;
   examples?: string[];
-  /** Rewrite raw arguments before parsing (`api --json <body>`). */
-  preprocess?(args: string[]): string[];
+  /** Rewrite raw arguments before parsing (`api --json <body>`); `warn` reaches the command's warnings. */
+  preprocess?(args: string[], warn: (message: string) => void): string[];
   run(ctx: Context, input: Input): Promise<CommandResult>;
 }
 
@@ -85,6 +98,24 @@ export const GLOBAL_OPTIONS: Record<string, OptionSpec> = {
   tenant: { type: "string", value: "<tenant>", description: "Tenant slug, name or id (overrides CAVELON_TENANT and cavelon.yaml)." },
   help: { type: "boolean", short: "h", description: "Show help for the command." },
 };
+
+/**
+ * An option as help and the command reference show it. A confirm flag that
+ * also takes its preview's token shows both forms, since a coding agent's
+ * shell refuses the bare flag.
+ */
+export function optionFlag(name: string, o: OptionSpec): string {
+  const value = o.type === "string" ? ` ${o.value ?? "<value>"}` : o.mcpToken ? " [<token>]" : "";
+  return `${o.short ? `-${o.short}, ` : ""}--${name}${value}`;
+}
+
+export function optionDescription(name: string, o: OptionSpec): string {
+  const token =
+    o.type === "boolean" && o.mcpToken
+      ? ` In a person's terminal the flag alone confirms; run by a coding agent, \`--${name} <token>\` with the token its preview printed (the bare flag only shows the preview there, exit 5).`
+      : "";
+  return o.description + token + (o.multiple ? " Repeatable." : "");
+}
 
 export function stringOption(input: Input, name: string): string | undefined {
   const value = input.options[name];

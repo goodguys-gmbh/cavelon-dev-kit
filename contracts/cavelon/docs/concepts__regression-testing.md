@@ -66,8 +66,36 @@ Add a case from the suite detail page, choose its type, and fill in the steps, o
 | User Message | Yes | The message sent to the bot |
 | Fixed Response | No | A scripted reply injected as history instead of generating one. Use in dialog cases to control context for later steps |
 | Reference Answer | No | The ideal answer, used by the judge for comparison scoring |
-| Evaluation Criteria | No | Specific, checkable qualities the judge should verify (for example, "Mentions the 30-day return window") |
+| Evaluation Criteria | No | Specific, checkable qualities the judge should verify (for example, "Mentions the 30-day return window"), or assertions checked in code, such as `{"type": "must_contain", "value": "…"}`. The package schema (`GET /api/v1/meta/package-schema`) publishes every accepted shape |
 | Evaluate | Auto | Whether this step is scored. Defaults to on for generated steps, off for fixed-response steps |
+
+### Assertions
+
+Besides the judge's criteria, a step can carry **assertions**: facts that have one correct answer and are checked in code before the judge runs. Add them under **Add assertion** in the step editor, or as objects with a `type` in `evaluation_criteria`. A failed assertion fails the step with score 0 and its reason, whatever the judge would have said; when every criterion of a step is an assertion, the judge is not called at all. An assertion whose evidence is missing from the step's trace fails rather than passes.
+
+| Type | Value | Passes when |
+|------|-------|-------------|
+| `must_contain`, `must_not_contain` | text, or a pattern with `"match": "regex"` | the answer contains it, or does not |
+| `language_is` | ISO code such as `de` | the answer, without its links and quotations, is in that language |
+| `url_matches` | absolute URL, `"match": "starts_with"` or `"equals"` | the answer links that address |
+| `date_range_within` | `start`, `end` as `YYYY-MM-DD` | every date in the answer lies in the range |
+| `tool_called`, `tool_not_called` | tool slug | the step called the tool, or did not |
+| `min_results` | count, optional `tool` | the step's tools returned at least that many results |
+| `answered_by` | agent slug | that agent produced the answer: it made the step's last model call |
+| `handoff_to` | agent slug | the step handed the turn to that agent |
+
+The routing assertions answer what the text cannot: an answer can sound right and still come from the wrong agent. For a solution whose entry agent should hand price questions to a ticket agent:
+
+```json
+"evaluation_criteria": [
+  "States the price of the family ticket",
+  {"type": "handoff_to", "value": "ticket-agent"},
+  {"type": "answered_by", "value": "ticket-agent"},
+  {"type": "tool_called", "value": "search_documents"}
+]
+```
+
+`answered_by` with the entry agent's slug checks the opposite, that a question stays where it is. A consulted agent works for the agent that consulted it, which still answers, so a consultation is a tool call (`tool_called` with the consult tool's name), not a handoff. Assertions travel with the case: export, import and solution packages carry them unchanged.
 
 ### Referring to your stored values
 
@@ -280,12 +308,11 @@ The results table has one row per stored step result:
 | Column | Description |
 |--------|-------------|
 | Status | Pass, Fail, Technical Error, Pending Review, Skip, Preparation (not evaluated), Calibration Required, or Not Run |
-| Agent | Which agent in the harness answered the step |
+| Agent | Which agent in the harness answered the step: the one that made its last model call |
 | Tokens | Input plus output tokens the step consumed |
 | Tool calls | Which tools ran, with their status and duration |
 | Test Case | Case name and step number |
 | LLM Score | Judge score as a percentage, color-coded against the threshold |
-| Agent | The agent that handled the response |
 | Latency | Response time in milliseconds |
 | Verdict | The manual verdict badge, if one is set |
 
@@ -297,7 +324,9 @@ An answer cut off by the output budget is also recorded as an **Error**, not as 
 
 An agent run that fails internally is recorded as an **Error** with the underlying cause, not as a low-scoring answer. This matters when comparing models: the Chat API answers such a run with a generic apology, and grading that apology would file an infrastructure failure as a model-quality result. The same applies to a step that comes back empty. A run's buckets therefore add up to its step count, and any step that produced no result at all is reported separately as **not run** rather than folded into the skipped count.
 
-Expand any row for the full detail: the user question, the generated answer (rendered as markdown), the reference answer side by side, the judge's percentage score with its Content and Style badges, its reasoning, the per-criterion breakdown, badges for the tools that were called (for example `search_documents`, `web_search`), triggered guardrail activity with direction/action/refusal, and the error message if the step failed. Guardrails that evaluated safely are omitted from this compact result view; their complete evaluations remain in the conversation trace.
+Expand any row for the full detail: the user question, the generated answer (rendered as markdown), the reference answer side by side, the judge's percentage score with its Content and Style badges, its reasoning, the per-criterion breakdown, badges for the tools that were called (for example `search_documents`, `web_search`; a handoff appears as `transfer_to_<agent>`), triggered guardrail activity with direction/action/refusal, and the error message if the step failed. Guardrails that evaluated safely are omitted from this compact result view; their complete evaluations remain in the conversation trace.
+
+A knowledge search's badge also names the agent's verdict on what it found, for example `search_documents · usable evidence`. An agent that can search a knowledge base calls `platform_record_knowledge_outcome` after each search, and that call is bookkeeping, not a tool call of its own: it adds `knowledge_outcome` (`usable_evidence`, `content_gap`, `unusable_hits`, `retrieval_fault` or `deliberately_unanswerable`) to the search's retrieval span and leaves no span, no tool-call count and no badge. In the trace, look for it on the retrieval span under the search; a search without it is one the agent did not classify.
 
 ### Manual verdicts
 
@@ -513,3 +542,5 @@ A suite can be built and run without the dashboard, with the operations listed u
 ```
 
 In a solution package, suites travel in the `test_suites` section, each with its `settings` and `test_cases`. The package schema (`GET /api/v1/meta/package-schema`, `TestSuiteSettings`) lists the settings keys; an import refuses any other key and names the valid ones. `score_threshold` is a fraction from 0 to 1, not a percentage.
+
+Applying a package again updates its suites in place. A case is matched by name and kind; a case renamed in the package keeps its kind and position, so it is matched there and keeps its results, as a rename in the editor does. A case the package no longer has, or one whose kind changed, is deleted together with its results in every past run, and the import preview names each such case and how many results it takes with it. A suite that reads as someone other than the audience (`reader_mode` `unrestricted` or `as_chat_user`) needs `knowledge_bases.view` to import, as it does in the suite editor, unless the suite already reads that way; `reader_chat_user_id` must name a Chat User of the tenant you import into.

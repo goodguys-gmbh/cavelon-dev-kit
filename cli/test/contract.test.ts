@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { OpenApiDoc } from "../src/contracts.js";
 import { branchConcurrency } from "../src/branches.js";
 import { isOperatorChange, LIMIT_ABOVE_CEILING, parseLimits } from "../src/limits.js";
-import { operationAt, operationForPath, operations, schemaErrors } from "../src/openapi.js";
+import { deref, operationAt, operationForPath, operations, schemaErrors } from "../src/openapi.js";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import { buildArchive } from "../src/tar.js";
 import { CAPACITY_PAGES } from "../src/capacity.js";
@@ -512,8 +512,19 @@ describe("the fake server answers in the published shapes", () => {
       headers: { Authorization: `Bearer ${token}`, "X-Tenant-Id": tenant },
       body: form,
     });
-    const docs = (await upload.json()) as Array<{ operation_id: string }>;
+    const docs = (await upload.json()) as Array<{ id: string; operation_id: string }>;
     check("POST", "/api/v1/knowledge-bases/{kb_id}/documents/upload", 202, docs);
+    const listed = await call("GET", "/api/v1/knowledge-bases/4c1b9a3e-0000-4000-8000-0000000000aa/documents");
+    check("GET", "/api/v1/knowledge-bases/{kb_id}/documents", 200, listed.data);
+    expect(listed.data).toHaveLength(1);
+    const toggled = await call("PATCH", "/api/v1/knowledge-bases/4c1b9a3e-0000-4000-8000-0000000000aa/documents/active", {
+      updates: [{ id: docs[0]!.id, is_active: false }],
+    });
+    check("PATCH", "/api/v1/knowledge-bases/{kb_id}/documents/active", 200, toggled.data);
+    expect(toggled.data).toEqual({ activated: 0, deactivated: 1 });
+    // The upload form of the snapshot's instance takes replace_doc_ids, which kb upload --replace sends.
+    const uploadForm = operationAt(doc, "POST", "/api/v1/knowledge-bases/{kb_id}/documents/upload")!.requestBody!.content["multipart/form-data"]!.schema!;
+    expect(Object.keys((deref(doc, uploadForm) as { properties: Record<string, unknown> }).properties)).toContain("replace_doc_ids");
 
     server.state.suites.push({ id: "5a17e000-0000-4000-8000-0000000000aa", tenant_id: tenant, name: "s", harness_id: null, archived_at: null });
     check("GET", "/api/v1/test-suites", 200, (await call("GET", "/api/v1/test-suites")).data);

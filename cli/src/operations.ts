@@ -100,8 +100,19 @@ export interface WaitOptions {
  * state of each; an unsettled one is simply still running, and the next
  * `wait` picks it up where this one stopped.
  */
-export async function waitFor(ctx: Context, client: ApiClient, ids: string[], options: WaitOptions): Promise<{ operations: Operation[]; timedOut: boolean }> {
-  const deadline = Date.now() + options.timeoutMs;
+/**
+ * Read operations until all settle or the timeout passes. `timedOut` is true
+ * only when it waited and the time ran out, never for a timeout of 0, which
+ * reads the state once and returns it.
+ */
+export async function waitFor(
+  ctx: Context,
+  client: ApiClient,
+  ids: string[],
+  options: WaitOptions,
+): Promise<{ operations: Operation[]; timedOut: boolean; waitedMs: number }> {
+  const started = Date.now();
+  const deadline = started + options.timeoutMs;
   const latest = new Map<string, Operation>();
   let interval = options.intervalMs;
   for (;;) {
@@ -114,9 +125,9 @@ export async function waitFor(ctx: Context, client: ApiClient, ids: string[], op
       latest.set(id, op);
     }
     const ops = ids.map((id) => latest.get(id)!);
-    if (ops.every(isSettled)) return { operations: ops, timedOut: false };
+    if (ops.every(isSettled)) return { operations: ops, timedOut: false, waitedMs: Date.now() - started };
     const left = deadline - Date.now();
-    if (left <= 0) return { operations: ops, timedOut: true };
+    if (left <= 0) return { operations: ops, timedOut: options.timeoutMs > 0, waitedMs: Date.now() - started };
     await ctx.io.sleep(Math.min(interval, left));
     interval = Math.min(Math.round(interval * 1.5), 5000);
   }

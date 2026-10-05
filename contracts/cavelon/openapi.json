@@ -98,6 +98,16 @@
               ],
               "title": "Harness Id"
             }
+          },
+          {
+            "name": "include_tenant_wide",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Tenant Wide"
+            }
           }
         ],
         "responses": {
@@ -205,6 +215,134 @@
               }
             }
           }
+        }
+      }
+    },
+    "/api/v1/bot-persona": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Get Bot Persona",
+        "operationId": "get_bot_persona_api_v1_bot_persona_get",
+        "parameters": [
+          {
+            "name": "effective",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Effective"
+            }
+          },
+          {
+            "name": "harness_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Harness Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {}
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Upsert Bot Persona",
+        "operationId": "upsert_bot_persona_api_v1_bot_persona_put",
+        "parameters": [
+          {
+            "name": "harness_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Harness Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotPersonaSchema"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {}
+        }
+      }
+    },
+    "/api/v1/chat": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Chat",
+        "operationId": "chat_api_v1_chat_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponse"
+                }
+              }
+            }
+          },
+          "400": {},
+          "401": {},
+          "403": {},
+          "404": {},
+          "409": {},
+          "422": {}
         }
       }
     },
@@ -684,6 +822,90 @@
         }
       }
     },
+    "/api/v1/harnesses/{harness_id}/deactivate": {
+      "post": {
+        "tags": [
+          "harnesses"
+        ],
+        "summary": "Deactivate Harness",
+        "operationId": "deactivate_harness_api_v1_harnesses__harness_id__deactivate_post",
+        "parameters": [
+          {
+            "name": "harness_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Harness Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HarnessResponse"
+                }
+              }
+            }
+          },
+          "403": {},
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/harnesses/{harness_id}/default": {
+      "post": {
+        "tags": [
+          "harnesses"
+        ],
+        "summary": "Set Default Harness",
+        "operationId": "set_default_harness_api_v1_harnesses__harness_id__default_post",
+        "parameters": [
+          {
+            "name": "harness_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Harness Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HarnessResponse"
+                }
+              }
+            }
+          },
+          "403": {},
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/harnesses/{harness_id}/readiness": {
       "get": {
         "tags": [
@@ -820,6 +1042,128 @@
               }
             }
           }
+        }
+      }
+    },
+    "/api/v1/knowledge-bases/{kb_id}/documents": {
+      "get": {
+        "tags": [
+          "knowledge_bases"
+        ],
+        "summary": "List Documents",
+        "operationId": "list_documents_api_v1_knowledge_bases__kb_id__documents_get",
+        "parameters": [
+          {
+            "name": "kb_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Kb Id"
+            }
+          },
+          {
+            "name": "include_shards",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Shards"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DocumentResponse"
+                  },
+                  "title": "Response List Documents Api V1 Knowledge Bases  Kb Id  Documents Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/knowledge-bases/{kb_id}/documents/active": {
+      "patch": {
+        "tags": [
+          "knowledge_bases"
+        ],
+        "summary": "Batch Update Document Active",
+        "operationId": "batch_update_document_active_api_v1_knowledge_bases__kb_id__documents_active_patch",
+        "parameters": [
+          {
+            "name": "kb_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Kb Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchDocumentActiveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchDocumentActiveResponse"
+                }
+              }
+            }
+          },
+          "400": {},
+          "404": {},
+          "422": {},
+          "429": {
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": {
+                    "code": "INGESTION_BUDGET_EXCEEDED",
+                    "message": "Monthly ingestion token budget exhausted.",
+                    "used": 100000,
+                    "budget": 100000,
+                    "resets_at": "2026-10-01T00:00:00+00:00"
+                  }
+                }
+              }
+            }
+          },
+          "503": {}
         }
       }
     },
@@ -1065,12 +1409,69 @@
         ],
         "summary": "Read Principal",
         "operationId": "read_principal_api_v1_meta_principal_get",
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 255
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MetaPrincipal"
+                }
+              }
+            }
+          },
+          "400": {},
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -2588,6 +2989,25 @@
         },
         "x-cavelon-person-only": true,
         "x-cavelon-person-only-reason": "Sets or deletes a secret value"
+      }
+    },
+    "/api/v1/skills": {
+      "get": {
+        "tags": [
+          "skills"
+        ],
+        "summary": "List Skill Definitions",
+        "operationId": "list_skill_definitions_api_v1_skills_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {}
+        }
       }
     },
     "/api/v1/tenants": {
@@ -4643,6 +5063,11 @@
               }
             ],
             "title": "Preview Id"
+          },
+          "include_tenant_wide": {
+            "type": "boolean",
+            "title": "Include Tenant Wide",
+            "default": false
           }
         },
         "type": "object",
@@ -6420,6 +6845,41 @@
         "type": "object",
         "title": "ArchiveUploadsChange"
       },
+      "BatchDocumentActiveRequest": {
+        "properties": {
+          "updates": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentActiveUpdate"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Updates"
+          }
+        },
+        "type": "object",
+        "required": [
+          "updates"
+        ],
+        "title": "BatchDocumentActiveRequest"
+      },
+      "BatchDocumentActiveResponse": {
+        "properties": {
+          "activated": {
+            "type": "integer",
+            "title": "Activated"
+          },
+          "deactivated": {
+            "type": "integer",
+            "title": "Deactivated"
+          }
+        },
+        "type": "object",
+        "required": [
+          "activated",
+          "deactivated"
+        ],
+        "title": "BatchDocumentActiveResponse"
+      },
       "Body_upload_documents_api_v1_knowledge_bases__kb_id__documents_upload_post": {
         "properties": {
           "files": {
@@ -6451,6 +6911,11 @@
               }
             ],
             "title": "External Source Urls"
+          },
+          "replace_existing": {
+            "type": "boolean",
+            "title": "Replace Existing",
+            "default": true
           }
         },
         "type": "object",
@@ -6458,6 +6923,346 @@
           "files"
         ],
         "title": "Body_upload_documents_api_v1_knowledge_bases__kb_id__documents_upload_post"
+      },
+      "BotPersonaSchema": {
+        "properties": {
+          "bot_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bot Name"
+          },
+          "persona_prompt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 50000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persona Prompt"
+          },
+          "greeting_message": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Greeting Message"
+          },
+          "greeting_enabled": {
+            "type": "boolean",
+            "title": "Greeting Enabled",
+            "default": true
+          },
+          "greeting_personalization_enabled": {
+            "type": "boolean",
+            "title": "Greeting Personalization Enabled",
+            "default": false
+          },
+          "greeting_personalization_tone": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Greeting Personalization Tone",
+            "default": "personal"
+          },
+          "language_hint": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language Hint"
+          },
+          "response_style": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response Style"
+          },
+          "fallback_message": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback Message"
+          },
+          "fallback_message_enabled": {
+            "type": "boolean",
+            "title": "Fallback Message Enabled",
+            "default": true
+          },
+          "source_citation_prompt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Citation Prompt"
+          },
+          "source_citation_enabled": {
+            "type": "boolean",
+            "title": "Source Citation Enabled",
+            "default": true
+          },
+          "show_processing_steps": {
+            "type": "boolean",
+            "title": "Show Processing Steps",
+            "default": false
+          },
+          "suggest_followups": {
+            "type": "boolean",
+            "title": "Suggest Followups",
+            "default": false
+          },
+          "suggestions_count": {
+            "type": "integer",
+            "maximum": 10,
+            "minimum": 1,
+            "title": "Suggestions Count",
+            "default": 3
+          },
+          "image_prompt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Prompt"
+          },
+          "image_prompt_enabled": {
+            "type": "boolean",
+            "title": "Image Prompt Enabled",
+            "default": false
+          },
+          "action_buttons_enabled": {
+            "type": "boolean",
+            "title": "Action Buttons Enabled",
+            "default": false
+          },
+          "action_buttons_prompt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Buttons Prompt"
+          },
+          "teaser_messages": {
+            "items": {
+              "type": "string",
+              "maxLength": 1000,
+              "minLength": 1
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Teaser Messages"
+          },
+          "teaser_display_count": {
+            "type": "integer",
+            "maximum": 20,
+            "minimum": 1,
+            "title": "Teaser Display Count",
+            "default": 3
+          },
+          "widget_title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Widget Title"
+          },
+          "floating_button_teaser": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Floating Button Teaser"
+          },
+          "disclaimer": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disclaimer"
+          },
+          "image_upload_enabled": {
+            "type": "boolean",
+            "title": "Image Upload Enabled",
+            "default": false
+          },
+          "realtime_voice_enabled": {
+            "type": "boolean",
+            "title": "Realtime Voice Enabled",
+            "default": false
+          },
+          "block_notice_enabled": {
+            "type": "boolean",
+            "title": "Block Notice Enabled",
+            "default": false
+          },
+          "source_citation_widget_enabled": {
+            "type": "boolean",
+            "title": "Source Citation Widget Enabled",
+            "default": false
+          },
+          "study_rating_enabled": {
+            "type": "boolean",
+            "title": "Study Rating Enabled",
+            "default": false
+          },
+          "voice_recording_enabled": {
+            "type": "boolean",
+            "title": "Voice Recording Enabled",
+            "default": false
+          },
+          "voice_answering_enabled": {
+            "type": "boolean",
+            "title": "Voice Answering Enabled",
+            "default": false
+          },
+          "voice_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Id"
+          },
+          "voice_instructions": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Instructions"
+          },
+          "widget_theme": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Widget Theme"
+          },
+          "widget_behavior": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Widget Behavior"
+          },
+          "inject_current_datetime": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inject Current Datetime"
+          },
+          "tenant_timezone": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Timezone"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "BotPersonaSchema"
       },
       "ChangeLogEntry": {
         "properties": {
@@ -6530,6 +7335,528 @@
           "new"
         ],
         "title": "ChangedValue"
+      },
+      "ChatImage": {
+        "properties": {
+          "data_url": {
+            "type": "string",
+            "maxLength": 7500000,
+            "title": "Data Url"
+          },
+          "detail": {
+            "type": "string",
+            "pattern": "^(auto|low|high)$",
+            "title": "Detail",
+            "default": "auto"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data_url"
+        ],
+        "title": "ChatImage"
+      },
+      "ChatProcessingStepCapError": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "const": "PROCESSING_STEP_CAP_REACHED",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "cap": {
+            "type": "integer",
+            "title": "Cap"
+          },
+          "used": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Used"
+          },
+          "period": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period"
+          },
+          "resets_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resets At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "cap"
+        ],
+        "title": "ChatProcessingStepCapError"
+      },
+      "ChatRateLimitError": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "const": "RATE_LIMIT_EXCEEDED",
+            "title": "Code"
+          },
+          "error": {
+            "type": "string",
+            "const": "rate_limit_exceeded",
+            "title": "Error"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "tenant",
+              "visitor"
+            ],
+            "title": "Scope"
+          },
+          "group": {
+            "type": "string",
+            "const": "chat",
+            "title": "Group"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "remaining": {
+            "type": "integer",
+            "title": "Remaining"
+          },
+          "reset_at": {
+            "type": "integer",
+            "title": "Reset At"
+          },
+          "retry_after_seconds": {
+            "type": "integer",
+            "title": "Retry After Seconds"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "error",
+          "message",
+          "scope",
+          "group",
+          "limit",
+          "remaining",
+          "reset_at",
+          "retry_after_seconds"
+        ],
+        "title": "ChatRateLimitError"
+      },
+      "ChatRequest": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "maxLength": 32000,
+            "title": "Message"
+          },
+          "display_message": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Message"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "chat_payload": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chat Payload"
+          },
+          "images": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ChatImage"
+                },
+                "type": "array",
+                "maxItems": 3
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Images"
+          },
+          "file_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "maxItems": 50
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Ids"
+          },
+          "knowledge_base_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Knowledge Base Id"
+          },
+          "harness_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness Id"
+          },
+          "external_refs": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Refs"
+          },
+          "user_confirmed": {
+            "type": "boolean",
+            "title": "User Confirmed",
+            "default": false
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "rollover_conversation": {
+            "type": "boolean",
+            "title": "Rollover Conversation",
+            "default": false
+          },
+          "contact_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Id"
+          },
+          "contact_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Name"
+          },
+          "language_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10,
+                "minLength": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language Code"
+          },
+          "stream": {
+            "type": "boolean",
+            "title": "Stream",
+            "default": false
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(playground|api|widget|test)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "render_document_refs": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Render Document Refs"
+          },
+          "page_context": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PageContext"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reader_mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "audience",
+                  "as_chat_user",
+                  "unrestricted"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reader Mode"
+          },
+          "reader_chat_user_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reader Chat User Id"
+          },
+          "personal_assistant_overdrive": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PersonalAssistantOverdriveRequest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "context_messages": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Messages"
+          },
+          "controlled_datetime": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Controlled Datetime"
+          },
+          "controlled_timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Controlled Timezone"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "ChatRequest"
+      },
+      "ChatResponse": {
+        "properties": {
+          "response": {
+            "type": "string",
+            "title": "Response"
+          },
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "conversation_id": {
+            "type": "string",
+            "title": "Conversation Id"
+          },
+          "agent_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Run Id"
+          },
+          "ui_directives": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ui Directives"
+          },
+          "retrieval_warning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retrieval Warning"
+          },
+          "conversation_rollover": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationRolloverResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rollover_recommendation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationRolloverRecommendationResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "limit_error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatRateLimitError"
+              },
+              {
+                "$ref": "#/components/schemas/ChatProcessingStepCapError"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "response",
+          "session_id",
+          "conversation_id"
+        ],
+        "title": "ChatResponse"
       },
       "ChunkResponse": {
         "properties": {
@@ -6688,6 +8015,95 @@
           "persisted_path"
         ],
         "title": "ContextSourceLimitResponse"
+      },
+      "ConversationRolloverRecommendationResponse": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "enum": [
+              "total_tokens",
+              "message_count",
+              "age"
+            ],
+            "title": "Reason"
+          },
+          "current_total_token_count": {
+            "type": "integer",
+            "title": "Current Total Token Count"
+          },
+          "current_message_count": {
+            "type": "integer",
+            "title": "Current Message Count"
+          },
+          "current_estimated_cost": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Estimated Cost"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reason",
+          "current_total_token_count",
+          "current_message_count"
+        ],
+        "title": "ConversationRolloverRecommendationResponse"
+      },
+      "ConversationRolloverResponse": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "enum": [
+              "total_tokens",
+              "message_count",
+              "age",
+              "user_requested"
+            ],
+            "title": "Reason"
+          },
+          "previous_conversation_id": {
+            "type": "string",
+            "title": "Previous Conversation Id"
+          },
+          "previous_total_token_count": {
+            "type": "integer",
+            "title": "Previous Total Token Count"
+          },
+          "previous_message_count": {
+            "type": "integer",
+            "title": "Previous Message Count"
+          },
+          "previous_estimated_cost": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Estimated Cost"
+          },
+          "context_carried": {
+            "type": "boolean",
+            "title": "Context Carried"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reason",
+          "previous_conversation_id",
+          "previous_total_token_count",
+          "previous_message_count",
+          "context_carried"
+        ],
+        "title": "ConversationRolloverResponse"
       },
       "ConversationTraceDetailResponse": {
         "properties": {
@@ -7346,6 +8762,24 @@
         ],
         "title": "ConversationTraceSpanResponse"
       },
+      "DocumentActiveUpdate": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "is_active"
+        ],
+        "title": "DocumentActiveUpdate"
+      },
       "DocumentBindingInput": {
         "properties": {
           "scope": {
@@ -7885,6 +9319,20 @@
               }
             ],
             "title": "Enrichment Coverage"
+          },
+          "replaced_document_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replaced Document Ids"
           },
           "has_original": {
             "type": "boolean",
@@ -10491,7 +11939,8 @@
             "type": "string",
             "enum": [
               "tenant",
-              "platform"
+              "platform",
+              "none"
             ],
             "title": "Mode"
           },
@@ -10501,6 +11950,28 @@
             },
             "type": "array",
             "title": "Permissions"
+          },
+          "tenants": {
+            "items": {
+              "$ref": "#/components/schemas/PrincipalTenant"
+            },
+            "type": "array",
+            "title": "Tenants"
+          },
+          "reaches_all_tenants": {
+            "type": "boolean",
+            "title": "Reaches All Tenants"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
           }
         },
         "type": "object",
@@ -10511,7 +11982,10 @@
           "api_key",
           "tenant_id",
           "mode",
-          "permissions"
+          "permissions",
+          "tenants",
+          "reaches_all_tenants",
+          "next_cursor"
         ],
         "title": "MetaPrincipal"
       },
@@ -10871,7 +12345,9 @@
                 "type": "null"
               }
             ],
-            "title": "Api Key"
+            "title": "Api Key",
+            "writeOnly": true,
+            "x-cavelon-secret": true
           },
           "capabilities": {
             "anyOf": [
@@ -11305,6 +12781,140 @@
         ],
         "title": "PackageVersions"
       },
+      "PageContext": {
+        "properties": {
+          "pathname": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Pathname"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 256
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "section": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section"
+          },
+          "wizard_entry_intent": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wizard Entry Intent"
+          },
+          "target_tenant_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Tenant Id"
+          },
+          "target_tenant_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Tenant Name"
+          },
+          "target_tenant_slug": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Tenant Slug"
+          },
+          "target_harness_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Harness Id"
+          },
+          "scope_token": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Token"
+          },
+          "confirmation_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmation Id"
+          },
+          "user_pressed_apply": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Pressed Apply"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pathname"
+        ],
+        "title": "PageContext"
+      },
       "PersonalAccessTokenOptions": {
         "properties": {
           "ceiling_roles": {
@@ -11330,6 +12940,27 @@
           "platform_mode_available"
         ],
         "title": "PersonalAccessTokenOptions"
+      },
+      "PersonalAssistantOverdriveRequest": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "operation_families": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 64,
+            "title": "Operation Families"
+          }
+        },
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "title": "PersonalAssistantOverdriveRequest"
       },
       "PrincipalApiKey": {
         "properties": {
@@ -11391,6 +13022,47 @@
           "harness_ids"
         ],
         "title": "PrincipalApiKey"
+      },
+      "PrincipalTenant": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "is_default": {
+            "type": "boolean",
+            "title": "Is Default"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "role",
+          "is_default"
+        ],
+        "title": "PrincipalTenant"
       },
       "PrincipalToken": {
         "properties": {
@@ -13423,7 +15095,9 @@
             "type": "string",
             "maxLength": 16384,
             "minLength": 1,
-            "title": "Value"
+            "title": "Value",
+            "writeOnly": true,
+            "x-cavelon-secret": true
           }
         },
         "type": "object",
@@ -13726,6 +15400,10 @@
             "type": "string",
             "title": "Tenant Name"
           },
+          "tenant_slug": {
+            "type": "string",
+            "title": "Tenant Slug"
+          },
           "role": {
             "type": "string",
             "title": "Role"
@@ -13739,6 +15417,7 @@
         "required": [
           "tenant_id",
           "tenant_name",
+          "tenant_slug",
           "role",
           "is_primary"
         ],

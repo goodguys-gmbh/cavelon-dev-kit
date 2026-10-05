@@ -1533,9 +1533,18 @@
           "title": "Metadata"
         },
         "translations": {
-          "additionalProperties": true,
-          "title": "Translations",
-          "type": "object"
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Ignored.",
+          "title": "Translations"
         }
       },
       "title": "PackagePersona",
@@ -2530,7 +2539,58 @@
         "evaluation_criteria": {
           "anyOf": [
             {
-              "items": {},
+              "items": {
+                "anyOf": [
+                  {
+                    "maxLength": 2000,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/CriterionSpec"
+                  },
+                  {
+                    "discriminator": {
+                      "mapping": {
+                        "answered_by": "#/$defs/RoutingCriterion",
+                        "date_range_within": "#/$defs/DateRangeCriterion",
+                        "handoff_to": "#/$defs/RoutingCriterion",
+                        "language_is": "#/$defs/LanguageCriterion",
+                        "min_results": "#/$defs/MinResultsCriterion",
+                        "must_contain": "#/$defs/TextMatchCriterion",
+                        "must_not_contain": "#/$defs/TextMatchCriterion",
+                        "tool_called": "#/$defs/ToolCriterion",
+                        "tool_not_called": "#/$defs/ToolCriterion",
+                        "url_matches": "#/$defs/URLCriterion"
+                      },
+                      "propertyName": "type"
+                    },
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/MinResultsCriterion"
+                      },
+                      {
+                        "$ref": "#/$defs/TextMatchCriterion"
+                      },
+                      {
+                        "$ref": "#/$defs/LanguageCriterion"
+                      },
+                      {
+                        "$ref": "#/$defs/URLCriterion"
+                      },
+                      {
+                        "$ref": "#/$defs/ToolCriterion"
+                      },
+                      {
+                        "$ref": "#/$defs/RoutingCriterion"
+                      },
+                      {
+                        "$ref": "#/$defs/DateRangeCriterion"
+                      }
+                    ]
+                  }
+                ]
+              },
               "type": "array"
             },
             {
@@ -2538,7 +2598,8 @@
             }
           ],
           "default": null,
-          "title": "Evaluation Criteria"
+          "title": "Evaluation Criteria",
+          "description": "What the step's answer is judged on: criterion strings, {text, dimension} objects, or assertion objects such as {type: must_contain, value}."
         },
         "evaluate": {
           "default": true,
@@ -3340,6 +3401,335 @@
       "title": "TriggerCaseSpec",
       "type": "object"
     },
+    "CriterionSpec": {
+      "additionalProperties": false,
+      "description": "A criterion with its scoring dimension authored alongside it.\n\nThe dimension used to be whatever the judge model decided per call, and it\nselects the aggregation arithmetic — so the same answer could score up to 50\npoints apart between runs. Authoring it here makes the label a property of\nthe suite. Bare strings remain valid and are classified once on read.",
+      "properties": {
+        "text": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "dimension": {
+          "default": "content",
+          "enum": [
+            "content",
+            "style"
+          ],
+          "title": "Dimension",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "CriterionSpec",
+      "type": "object"
+    },
+    "DateRangeCriterion": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "anyOf": [
+            {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "type": {
+          "const": "date_range_within",
+          "title": "Type",
+          "type": "string"
+        },
+        "start": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "title": "Start",
+          "type": "string"
+        },
+        "end": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "title": "End",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "start",
+        "end"
+      ],
+      "title": "DateRangeCriterion",
+      "type": "object"
+    },
+    "LanguageCriterion": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "anyOf": [
+            {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "type": {
+          "const": "language_is",
+          "title": "Type",
+          "type": "string"
+        },
+        "value": {
+          "pattern": "^[A-Za-z]{2,3}$",
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "value"
+      ],
+      "title": "LanguageCriterion",
+      "type": "object"
+    },
+    "MinResultsCriterion": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "anyOf": [
+            {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "type": {
+          "const": "min_results",
+          "title": "Type",
+          "type": "string"
+        },
+        "value": {
+          "maximum": 10000,
+          "minimum": 1,
+          "title": "Value",
+          "type": "integer"
+        },
+        "tool": {
+          "anyOf": [
+            {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tool"
+        }
+      },
+      "required": [
+        "type",
+        "value"
+      ],
+      "title": "MinResultsCriterion",
+      "type": "object"
+    },
+    "RoutingCriterion": {
+      "additionalProperties": false,
+      "description": "Which agent answered the step, or which agent it was handed to.\n\n``answered_by`` names the agent whose model call produced the answer;\n``handoff_to`` an agent a handoff in the step went to. Both read the step's\nown trace and name the agent by slug.",
+      "properties": {
+        "label": {
+          "anyOf": [
+            {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "type": {
+          "enum": [
+            "answered_by",
+            "handoff_to"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "value": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "value"
+      ],
+      "title": "RoutingCriterion",
+      "type": "object"
+    },
+    "TextMatchCriterion": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "anyOf": [
+            {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "type": {
+          "enum": [
+            "must_contain",
+            "must_not_contain"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "value": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        },
+        "match": {
+          "default": "literal",
+          "enum": [
+            "literal",
+            "regex"
+          ],
+          "title": "Match",
+          "type": "string"
+        },
+        "case_sensitive": {
+          "default": false,
+          "title": "Case Sensitive",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "type",
+        "value"
+      ],
+      "title": "TextMatchCriterion",
+      "type": "object"
+    },
+    "ToolCriterion": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "anyOf": [
+            {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "type": {
+          "enum": [
+            "tool_called",
+            "tool_not_called"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "value": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "value"
+      ],
+      "title": "ToolCriterion",
+      "type": "object"
+    },
+    "URLCriterion": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "anyOf": [
+            {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "type": {
+          "const": "url_matches",
+          "title": "Type",
+          "type": "string"
+        },
+        "value": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        },
+        "match": {
+          "default": "starts_with",
+          "enum": [
+            "equals",
+            "starts_with"
+          ],
+          "title": "Match",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "value"
+      ],
+      "title": "URLCriterion",
+      "type": "object"
+    },
     "TestSuiteSettings": {
       "additionalProperties": false,
       "description": "A test suite's settings. A key not listed here is refused.",
@@ -3590,6 +3980,33 @@
           "default": null,
           "description": "Written by the platform: what generating the cases imported.",
           "title": "Generation Result"
+        },
+        "generation_config": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Written by the platform: what the suite's cases were generated from.",
+          "title": "Generation Config"
+        },
+        "rehearsal": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Written by the platform on the suite the Harness Architect rehearses with.",
+          "title": "Rehearsal"
         }
       },
       "title": "TestSuiteSettings",

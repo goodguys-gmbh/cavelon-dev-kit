@@ -450,6 +450,18 @@ describe("login and --check", () => {
     expect(again.stdout).toMatch(/Already logged in to /);
   });
 
+  it("an operator's token that reaches every tenant: Enter at the tenant question logs in without a tenant", async () => {
+    const { env } = agentHome("linux");
+    const operator = server.addToken({ kind: "pat", tenantIds: [], reachesAll: true, globalRole: "superadmin" });
+    const result = await onPlatform("linux", () =>
+      cli(sb, ["setup", "--agents", "cursor"], { env: { ...env, NO_COLOR: "1" }, tty: true, stdin: `\n${server.url}\n${operator}\n\n` }),
+    );
+    expect(result.code, result.stderr + result.stdout).toBe(0);
+    expect(result.stderr).toContain("Which tenant to start in? (type part of its name, or press Enter to choose later)");
+    expect(result.stdout).toContain("No tenant is chosen yet: `cavelon use <name or slug>` chooses one");
+    expect(result.stdout + result.stderr).not.toContain(operator);
+  });
+
   it.skipIf(process.platform === "win32")("reports each agent, the server starting and the login", async () => {
     const { layout } = agentHome(process.platform);
     const env = pathEnv(fakeBin(["cavelon", "claude"]));
@@ -478,6 +490,16 @@ describe("login and --check", () => {
     expect(text.stdout).toMatch(/ok {2}Cursor/);
     expect(text.stdout).toMatch(/ok {2}The Cavelon tools start: cavelon mcp \(cavelon 9\.9\.9\)/);
     expect(text.stdout).toMatch(/ok {2}Logged in to .* tenant Acme/);
+
+    // Agents found but never set up for Cavelon are reported and skipped; --strict counts them.
+    const all = await cli(sb, ["setup", "--check"], { env });
+    expect(all.code, all.stdout).toBe(0);
+    expect(all.stdout).toMatch(/^skip {2}VS Code with GitHub Copilot: found, not set up for Cavelon \(cavelon setup --agents copilot sets it up\)$/m);
+    expect((await cli(sb, ["setup", "--check", "--json"], { env })).json<any>().agents.find((a: any) => a.name === "gemini")).toMatchObject({ ok: false, skipped: true });
+    const strict = await cli(sb, ["setup", "--check", "--strict"], { env });
+    expect(strict.code).toBe(1);
+    expect(strict.stdout).toMatch(/^no {2}VS Code with GitHub Copilot$/m);
+    expect((await cli(sb, ["setup", "--strict"], { env })).code).toBe(2);
   });
 
   it("--check without anything set up says what is missing", async () => {

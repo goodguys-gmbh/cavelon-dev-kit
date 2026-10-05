@@ -1,9 +1,11 @@
 import { parseArgs, type ParseArgsConfig } from "node:util";
-import { GLOBAL_OPTIONS, type CommandResult, type CommandSpec, type Context, type Input, type OptionSpec } from "./command.js";
+import { GLOBAL_OPTIONS, optionDescription, optionFlag, type CommandResult, type CommandSpec, type Context, type Input, type OptionSpec } from "./command.js";
 import { createContext, withWarnings } from "./context.js";
+import { CONFIRM_TOKEN } from "./confirm-token.js";
 import { asCavelonError, CavelonError, ExitCode, usageError } from "./errors.js";
 import { blockerLines } from "./format.js";
 import type { Io } from "./io.js";
+import { blockerLines as detailedBlockerLines } from "./preview-report.js";
 import { KIT_VERSION } from "./version.js";
 import { currentInstall, installLabel, type Install } from "./install.js";
 import { startUpdateCheck, type UpdateCheckOptions } from "./update-check.js";
@@ -43,7 +45,8 @@ export async function run(argv: string[], io: Io, commands: CommandSpec[] = COMM
       );
     }
     const { spec, rest } = found;
-    const args = spec.preprocess ? spec.preprocess(rest) : rest;
+    const early: string[] = [];
+    const args = spec.preprocess ? spec.preprocess(rest, (message) => early.push(message)) : rest;
     const parsed = parse(spec, args);
     if (parsed.options.help === true) {
       io.stdout.write(commandHelp(spec));
@@ -55,6 +58,7 @@ export async function run(argv: string[], io: Io, commands: CommandSpec[] = COMM
       tenant: typeof parsed.options.tenant === "string" ? parsed.options.tenant : undefined,
       solutionEnv: spec.options?.env && typeof parsed.options.env === "string" ? parsed.options.env : undefined,
     });
+    for (const message of early) ctx.warn(message);
     notice = startUpdateCheck({
       io,
       version: KIT_VERSION,
@@ -125,8 +129,9 @@ function parse(spec: CommandSpec, args: string[]): Input {
     }
   }
   const options: Record<string, OptionSpec> = { ...GLOBAL_OPTIONS, ...spec.options };
+  const { rest, tokens } = takeTokens(spec, args);
   const config: ParseArgsConfig = {
-    args,
+    args: rest,
     allowPositionals: true,
     strict: true,
     options: Object.fromEntries(
@@ -144,9 +149,19 @@ function parse(spec: CommandSpec, args: string[]): Input {
       positionals: string[];
     });
   } catch (error) {
-    throw usageError(error instanceof Error ? error.message : String(error), `Run \`cavelon ${spec.name} --help\`.`);
+    const message = error instanceof Error ? error.message : String(error);
+    // `api` takes an operation's parameters as name=value; `--harness_id x` is the likely slip.
+    const unknown = /Unknown option '--([^'=\s]+)/.exec(message)?.[1];
+    if (unknown && spec.positionals?.some((p) => p.variadic && p.name === "params")) {
+      throw usageError(
+        `Unknown option '--${unknown}'.`,
+        `${spec.name} takes an operation's parameters as name=value: pass ${unknown}=<value> (or -p ${unknown}=<value>). Run \`cavelon ${spec.name} --help\`.`,
+      );
+    }
+    throw usageError(message, `Run \`cavelon ${spec.name} --help\`.`);
   }
   if (values.help === true) return { positionals: {}, options: { help: true } };
+  Object.assign(values, tokens);
   const named: Input["positionals"] = {};
   const specs = spec.positionals ?? [];
   let index = 0;
@@ -165,6 +180,41 @@ function parse(spec: CommandSpec, args: string[]): Input {
     throw usageError(`Unexpected argument "${positionals[index]}".`, `Run \`cavelon ${spec.name} --help\`.`);
   }
   return { positionals: named, options: values as Input["options"] };
+}
+
+/**
+ * A confirm flag (`mcpToken`) also takes the token its preview printed:
+ * `--confirm <token>` or `--confirm=<token>`. The next argument is the token
+ * only when it looks like one, so a positional after the flag keeps its
+ * place; the flag alone stays a flag.
+ */
+function takeTokens(spec: CommandSpec, args: string[]): { rest: string[]; tokens: Record<string, string> } {
+  const names = Object.entries(spec.options ?? {})
+    .filter(([, o]) => o.mcpToken && o.type === "boolean")
+    .map(([name]) => name);
+  const tokens: Record<string, string> = {};
+  if (!names.length) return { rest: args, tokens };
+  const rest: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]!;
+    if (arg === "--") {
+      rest.push(...args.slice(i));
+      break;
+    }
+    const name = names.find((n) => arg === `--${n}` || arg.startsWith(`--${n}=`));
+    if (!name) {
+      rest.push(arg);
+      continue;
+    }
+    const inline = arg.startsWith(`--${name}=`) ? arg.slice(name.length + 3) : undefined;
+    const next = args[i + 1];
+    if (inline) tokens[name] = inline;
+    else if (inline === undefined && next !== undefined && CONFIRM_TOKEN.test(next)) {
+      tokens[name] = next;
+      i++;
+    } else rest.push(`--${name}`);
+  }
+  return { rest, tokens };
 }
 
 function missing(spec: CommandSpec, name: string): CavelonError {
@@ -193,7 +243,11 @@ function printError(io: Io, json: boolean, err: CavelonError, warnings: string[]
     return;
   }
   const lines = [`error: ${err.message}`];
-  if (err.blockers?.length) lines.push(blockerLines(err.blockers));
+  if (err.blockerDetails?.length) {
+    const more = err.blockerDetails.length - 10;
+    lines.push(`blockers:${detailedBlockerLines(err.blockerDetails.slice(0, 10))}${more > 0 ? `\n  … ${more} more (--json)` : ""}`);
+  }
+  else if (err.blockers?.length) lines.push(blockerLines(err.blockers));
   if (err.hint) lines.push(`hint: ${err.hint}`);
   if (err.docs) lines.push(`docs: ${err.docs}`);
   io.stderr.write(`${lines.join("\n")}\n`);
@@ -214,10 +268,7 @@ export function usageLine(spec: CommandSpec): string {
 }
 
 function optionLines(options: Record<string, OptionSpec>): string[] {
-  const rows = Object.entries(options).map(([name, o]) => {
-    const flag = `${o.short ? `-${o.short}, ` : ""}--${name}${o.type === "string" ? ` ${o.value ?? "<value>"}` : ""}`;
-    return [flag, o.description + (o.multiple ? " Repeatable." : "")] as const;
-  });
+  const rows = Object.entries(options).map(([name, o]) => [optionFlag(name, o), optionDescription(name, o)] as const);
   const width = Math.max(...rows.map(([f]) => f.length));
   return rows.map(([f, d]) => `  ${f.padEnd(width)}  ${d}`);
 }

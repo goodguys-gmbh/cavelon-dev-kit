@@ -26,7 +26,9 @@ export type TenantChoice =
   /** The token reaches no tenant. */
   | { kind: "none" }
   /** Several, and nobody to ask. */
-  | { kind: "open" };
+  | { kind: "open" }
+  /** Every tenant, and the person chose to pick one later. */
+  | { kind: "later" };
 
 /** What a person types to work in this tenant: its slug, else its id. */
 export function tenantRef(tenant: Pick<ReachableTenant, "slug" | "id">): string {
@@ -45,22 +47,34 @@ export async function searchTenants(client: ApiClient, text: string): Promise<Re
   return found && !found.refused ? (found.tenants ?? []) : [];
 }
 
-export async function chooseTenant(ctx: Context, client: ApiClient, reach: Reach): Promise<TenantChoice> {
+/**
+ * `later`: a token that reaches every tenant may leave the choice for later
+ * (Enter), for `login`, where any tenant stays one `cavelon use` away. A
+ * token for a list of tenants still chooses one: Enter there takes the
+ * default the instance marks.
+ */
+export async function chooseTenant(ctx: Context, client: ApiClient, reach: Reach, options: { later?: boolean } = {}): Promise<TenantChoice> {
   const { tenants, reachesAll } = reach;
   if (!reachesAll && tenants.length === 1) return { kind: "chosen", tenant: tenants[0]!, how: "only" };
   if (!reachesAll && tenants.length === 0) return { kind: "none" };
   if (!canAsk(ctx)) return { kind: "open" };
-  const intro = reachesAll
-    ? `This token reaches every tenant on ${client.url}.${tenants.length ? " Yours:" : ""}`
-    : `This token reaches ${tenants.length} tenants on ${client.url}:`;
+  const later = reachesAll && options.later;
+  const intro = later
+    ? `This token works in every tenant on ${client.url}, one at a time: \`cavelon use\` switches, ` +
+      `and --tenant or \`tenant:\` in cavelon.yaml choose one per command or per solution folder.${tenants.length ? "\nYours:" : ""}`
+    : reachesAll
+      ? `This token reaches every tenant on ${client.url}.${tenants.length ? " Yours:" : ""}`
+      : `This token reaches ${tenants.length} tenants on ${client.url}:`;
   const picked = await pick(ctx, {
     intro,
-    question: "Which tenant?",
+    question: later ? "Which tenant to start in?" : "Which tenant?",
     items: tenants,
     extra: (t) => t.role ?? undefined,
     preferred: tenants.find((t) => t.is_default),
     search: reachesAll ? (text) => searchTenants(client, text) : undefined,
+    ...(later ? { later: "choose later" } : {}),
   });
+  if ("later" in picked) return { kind: "later" };
   if (!("item" in picked)) throw new Error("unreachable: the tenant list offers no other entry");
   return { kind: "chosen", tenant: picked.item, how: "picked" };
 }
@@ -133,4 +147,28 @@ export function tenantMissError(ref: string, pool: ReachableTenant[], reachesAll
     hint: hints.join("\n"),
     details: { tenants: listed.map((t) => ({ id: t.id, slug: t.slug, name: t.name })) },
   });
+}
+
+/**
+ * The name and slug of a tenant known only by its id (from cavelon.yaml,
+ * --tenant or CAVELON_TENANT): the tenant's own record where the token may
+ * read it, else the tenants `/meta/principal` lists for that id. Empty when
+ * the instance tells neither; nothing is ever guessed.
+ */
+export async function describeTenant(client: ApiClient, id: string): Promise<{ name?: string; slug?: string }> {
+  try {
+    const detail = await client.get<{ name?: unknown; slug?: unknown }>(`/api/v1/tenants/${encodeURIComponent(id)}`, {
+      sendTenant: false,
+      headers: { "X-Tenant-Id": id },
+      allow: [400, 401, 403, 404, 405, 422],
+    });
+    const name = typeof detail.data?.name === "string" && detail.data.name ? detail.data.name : undefined;
+    const slug = typeof detail.data?.slug === "string" && detail.data.slug ? detail.data.slug : undefined;
+    if (detail.status === 200 && (name || slug)) return { ...(name ? { name } : {}), ...(slug ? { slug } : {}) };
+    const found = await readTenantless(client, { search: id });
+    const hit = found && !found.refused ? found.tenants?.find((t) => t.id === id) : undefined;
+    return hit ? { ...(hit.name ? { name: hit.name } : {}), ...(hit.slug ? { slug: hit.slug } : {}) } : {};
+  } catch {
+    return {};
+  }
 }

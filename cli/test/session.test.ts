@@ -250,13 +250,43 @@ describe("login without --tenant", () => {
     const token = server.addToken({ kind: "pat", tenantIds: [], reachesAll: true, globalRole: "superadmin" });
     const result = await atTerminal(["login", "--instance", server.url], token, "demo", "long");
     expect(result.code, result.stderr).toBe(0);
-    expect(result.stderr).toContain(`This token reaches every tenant on ${server.url}.`);
-    expect(result.stderr).toContain("Which tenant? (type part of its name)");
+    expect(result.stderr).toContain(
+      `This token works in every tenant on ${server.url}, one at a time: \`cavelon use\` switches, and --tenant or \`tenant:\` in cavelon.yaml choose one per command or per solution folder.`,
+    );
+    expect(result.stderr).toContain("Which tenant to start in? (type part of its name, or press Enter to choose later)");
     expect(result.stderr).toMatch(/2 match "demo":\n {3}1 {2}Demo: Long Document Summaries {2}demo-long-document-summaries/);
     expect(result.stdout).toContain(`Using tenant Demo: Long Document Summaries (demo-long-document-summaries, ${summaries})`);
     // The search went to the instance, without a tenant.
     const searches = server.state.requests.filter((r) => r.path === "/api/v1/meta/principal" && r.query.get("search"));
     expect(searches.map((r) => [r.query.get("search"), r.headers["x-tenant-id"]])).toEqual(expect.arrayContaining([["demo", undefined]]));
+  });
+
+  it("an operator's token that reaches every tenant: Enter on a terminal logs in without a tenant, to choose one later", async () => {
+    const token = server.addToken({ kind: "pat", tenantIds: [], reachesAll: true, globalRole: "superadmin" });
+    const result = await atTerminal(["login", "--instance", server.url], token, "");
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.stderr).not.toContain("Type a number from the list");
+    expect(result.stdout).toContain(`Logged in to ${server.url}. Token stored in the user-only file. No tenant is chosen yet: \`cavelon use <name or slug>\` chooses one`);
+    expect(existsSync(credentials())).toBe(true);
+    expect(config().instances[server.url]).not.toHaveProperty("tenant_id");
+    expect(result.stdout + result.stderr).not.toContain(token);
+
+    const status = await cli(sb, ["status"]);
+    expect(status.code, status.stderr).toBe(0);
+    expect(status.stdout).toMatch(/tenant:\s+not chosen/);
+    expect((await cli(sb, ["status", "--json"])).json<{ tenant: unknown }>().tenant).toBeNull();
+  });
+
+  it("an operator's own tenants on a terminal: Enter chooses later, not the default, and the token acts where the instance places it", async () => {
+    const token = server.addToken({ kind: "pat", tenantIds: [tenantA, tenantB], defaultTenant: tenantB, reachesAll: true, globalRole: "superadmin" });
+    const result = await atTerminal(["login", "--instance", server.url], token, "");
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.stderr).toMatch(/one per command or per solution folder\.\nYours:\n {3}1 {2}Acme/);
+    expect(result.stderr).not.toContain("default, press Enter");
+    expect(result.stderr).toContain("Which tenant to start in? (type its number or part of its name, or press Enter to choose later)");
+    // As with --token-stdin: nothing stored, and the instance's default is where the token acts.
+    expect(result.stdout).toContain(`Acting in tenant Globex (globex, ${tenantB}), the one the instance chooses for this token.`);
+    expect(config().instances[server.url]).not.toHaveProperty("tenant_id");
   });
 
   it("an operator's token that reaches every tenant: --tenant and `use` find a tenant by slug or name; without a terminal it is stored and told how to choose", async () => {
@@ -771,6 +801,65 @@ describe("status", () => {
     expect(data.operations.items.map((o: { id: string }) => o.id)).toContain(op.id);
     const text = await cli(sb, ["status"], { cwd: dir });
     expect(text.stdout).toContain(op.id);
+  });
+
+  it("shows the solution's state, whether it may activate, its latest test run, and quotas it cannot read", async () => {
+    const token = server.addToken({ kind: "pat", tenantIds: [tenantA], defaultTenant: tenantA, ceilingRole: "tenant_builder" });
+    await login(sb, server.url, token);
+    expect((await cli(sb, ["harness", "new", "faq-state"])).code).toBe(0);
+    const dir = path.join(sb.home, "sol-state");
+    mkdirSync(path.join(dir, ".cavelon", "previews"), { recursive: true });
+    writeFileSync(path.join(dir, "cavelon.yaml"), `instance: ${server.url}
+harness: faq-state
+`);
+    writeFileSync(
+      path.join(dir, ".cavelon", "previews", "pv_1.json"),
+      JSON.stringify({ preview_id: "pv_1", created_at: "2026-10-04T10:00:00Z", env: "test", harness: null }),
+    );
+    server.state.ready = false;
+    server.state.failures = [{ method: "GET", path: /\/quota-usage$/, status: 403 }];
+    try {
+      const none = await cli(sb, ["status"], { cwd: dir });
+      expect(none.code, none.stderr).toBe(0);
+      expect(none.stdout).toMatch(/state:\s+draft, not ready to activate \(A passing test run\)/);
+      expect(none.stdout).toMatch(/last test run:\s+none yet/);
+      expect(none.stdout).toMatch(/open previews:\s+\n\s+pv_1\s+env test/);
+      expect(none.stdout).toMatch(/quotas not readable: this token \(ceiling tenant_builder\) may not read the tenant's quota usage/);
+      expect(none.stdout).toMatch(/version:\s+\S+\n/);
+      expect(none.stdout).not.toMatch(/cached at/);
+
+      server.state.ready = true;
+      server.state.latestTestRun = {
+        id: "run-1",
+        status: "completed",
+        summary: { passed: 7, failed: 0, total_cases: 7 },
+        created_at: "2026-10-04T10:00:00Z",
+        completed_at: "2026-10-04T10:02:00Z",
+      };
+      const json = await cli(sb, ["status", "--json"], { cwd: dir });
+      const data = json.json<Record<string, any>>();
+      expect(data.solution.state).toMatchObject({
+        harness: { slug: "faq-state", status: "draft" },
+        ready_to_activate: true,
+        latest_test_run: { id: "run-1", status: "completed", passed: 7, failed: 0, total: 7 },
+      });
+      expect(data.limits.quotas_unavailable).toMatch(/403/);
+      const text = await cli(sb, ["status"], { cwd: dir });
+      expect(text.stdout).toMatch(/state:\s+draft, ready to activate/);
+      expect(text.stdout).toMatch(/last test run:\s+completed: 7 of 7 passed \(2026-10-04T10:02:00Z\)\s+run-1/);
+
+      // An instance whose readiness does not name the latest run says so, and offline the version is marked as cached.
+      server.state.readinessWithoutLatestRun = true;
+      expect((await cli(sb, ["status"], { cwd: dir })).stdout).toMatch(/last test run:\s+not published by this instance/);
+      const offline = await cli(sb, ["status", "--offline"], { cwd: dir });
+      expect(offline.stdout).toMatch(/version:\s+\S+ \(cached at [^;]+; not read now\)/);
+      expect(offline.stdout).not.toMatch(/state:/);
+    } finally {
+      server.state.ready = true;
+      server.state.failures = [];
+      server.state.latestTestRun = undefined;
+      server.state.readinessWithoutLatestRun = undefined;
+    }
   });
 
   it("explains a token in Platform mode instead of reporting an error", async () => {

@@ -3,7 +3,8 @@ import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSy
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { parse, stringify } from "yaml";
-import { CONTRACTS, startFakeServer, type FakeServer } from "./fake-server.js";
+import { shellWord } from "../src/shell.js";
+import { CONTRACTS, modelRow, startFakeServer, type FakeServer } from "./fake-server.js";
 import { cli, login, sandbox, type Sandbox } from "./helpers.js";
 
 /**
@@ -123,7 +124,7 @@ describe("init chooses the tenant and the solution", () => {
     const result = await atTerminal(dir, ["init"], "globex", "2");
     expect(result.code, result.stderr + result.stdout).toBe(0);
     expect(result.stderr).toContain("This token reaches 2 tenants");
-    expect(result.stderr).toMatch(/This tenant has 2 solutions:\n {3}1 {2}Expense Approval {2}expense-approval {2}\(draft\)\n {3}2 {2}Support FAQ {2}support-faq {2}\(draft\)\n {3}3 {2}a new solution \(or type new\)/);
+    expect(result.stderr).toMatch(/This tenant has 2 solutions; choose one, or start a new one:\n {3}1 {2}Expense Approval {2}expense-approval {2}\(draft\)\n {3}2 {2}Support FAQ {2}support-faq {2}\(draft\)\n {3}3 {2}a new solution \(or type new\)/);
     const yaml = read(path.join(dir, "cavelon.yaml"));
     expect(yaml).toContain(`tenant: globex  # Globex, ${globex}\n`);
     expect(parse(yaml)).toMatchObject({ tenant: "globex", harness: "support-faq" });
@@ -163,14 +164,37 @@ describe("init chooses the tenant and the solution", () => {
     expect(byName.code, byName.stderr).toBe(0);
     expect(parse(read(path.join(dir, "cavelon.yaml")))).toMatchObject({ tenant: "globex", harness: "support-faq" });
 
-    // A slug that is not there yet is kept, for `apply --env test` to create; anything else names the closest.
+    // A solution that is not there yet is created as a draft with the name given; a name close to another one's is refused.
     const later = dirFor();
-    const fresh = await cli(other, ["init", "--tenant", "globex", "--harness", "brand-new", "--json"], { cwd: later });
-    expect(fresh.code).toBe(0);
-    expect(fresh.json<{ next: string[] }>().next).toEqual(expect.arrayContaining([expect.stringMatching(/brand-new is not on the instance yet: `cavelon apply --env test` creates it/)]));
+    const fresh = await cli(other, ["init", "--tenant", "globex", "--harness", "Brand New", "--json"], { cwd: later });
+    expect(fresh.code, fresh.stdout).toBe(0);
+    expect(fresh.stderr).toContain("Created the draft solution Brand New (brand-new).");
+    expect(server.state.harnesses.find((h) => h.tenant_id === globex && h.slug === "brand-new")).toMatchObject({ name: "Brand New", status: "draft" });
+    expect(parse(read(path.join(later, "cavelon.yaml")))).toMatchObject({ harness: "brand-new" });
+    expect(parse(read(path.join(later, "env", "test.yaml")))).toEqual({ harness: "brand-new" });
+    expect(fresh.json<{ next: string[] }>().next).toEqual(expect.arrayContaining(["Write the package files in package/, then: cavelon validate"]));
     const miss = await cli(other, ["init", "--tenant", "globex", "--harness", "Support FA", "--json"], { cwd: dirFor() });
     expect(miss.code).toBe(1);
-    expect(miss.json<{ error: { code: string; hint: string } }>().error).toMatchObject({ code: "solution_not_found", hint: expect.stringContaining("cavelon init --harness support-faq") });
+    const missed = miss.json<{ error: { code: string; hint: string } }>().error;
+    expect(missed.hint).toContain(`For a new solution of that name: cavelon init --harness ${shellWord("Support FA")} --new --tenant globex.`);
+    expect(missed.hint).not.toContain("does too");
+    expect(miss.json<{ error: { code: string; hint: string } }>().error).toMatchObject({ code: "solution_not_found", hint: expect.stringContaining("cavelon init --harness support-faq --tenant globex") });
+    expect(server.state.harnesses.find((h) => h.tenant_id === globex && h.slug === "support-fa")).toBeUndefined();
+
+    // --new creates it on purpose, beside the similar name; and refuses a name the tenant already has.
+    const meant = await cli(other, ["init", "--tenant", "globex", "--harness", "Support FA", "--new", "--json"], { cwd: dirFor() });
+    expect(meant.code, meant.stdout).toBe(0);
+    expect(meant.stderr).toContain("Created the draft solution Support FA (support-fa).");
+    expect(server.state.harnesses.find((h) => h.tenant_id === globex && h.slug === "support-fa")).toMatchObject({ name: "Support FA", status: "draft" });
+    const taken = await cli(other, ["init", "--tenant", "globex", "--harness", "support-faq", "--new", "--json"], { cwd: dirFor() });
+    expect(taken.code).toBe(1);
+    expect(taken.json<{ error: { code: string; hint: string } }>().error).toMatchObject({
+      code: "solution_exists",
+      hint: expect.stringContaining("cavelon init --harness support-faq --tenant globex"),
+    });
+    const bare = await cli(other, ["init", "--tenant", "globex", "--new"], { cwd: dirFor() });
+    expect(bare.code).toBe(2);
+    expect(bare.stderr).toContain("--new needs the new solution's name");
   });
 });
 
@@ -438,9 +462,11 @@ describe("init --from", () => {
     const result = await cli(sb, ["init", "--instance", server.url, "--tenant", tenant, "--from", "../counter-parent.json", "--json"], { cwd: dir });
     expect(result.code, result.stderr + result.stdout).toBe(0);
     const data = result.json<{ imported: { files: { written: string[]; removed: string[] }; ignored: string[]; package_version: string }; next: string[] }>();
+    // The blueprint holds no persona: its file shows every field as a placeholder.
     expect(data.imported.files.written).toEqual([
       "package/harnesses.yaml",
       "package/manifest.yaml",
+      "package/persona.yaml",
       "package/registry_entities.yaml",
       "package/runtime_requirements.yaml",
       "tests/counter-loop.yaml",
@@ -470,10 +496,11 @@ describe("init --from", () => {
     expect(again.code, again.stdout).toBe(0);
     expect(again.json<{ imported: { files: { written: string[]; unchanged: string[] } } }>().imported.files).toMatchObject({ written: [] });
 
-    // apply creates the draft the env file names, under the package's harness name.
+    // init created the draft the package holds, under the package's harness name; apply previews into it.
+    expect(result.stderr).toContain("Created the draft solution Blueprint: sandbox-free counter (blueprint-counter).");
+    expect(server.state.harnesses.find((h) => h.slug === "blueprint-counter")).toMatchObject({ name: "Blueprint: sandbox-free counter", status: "draft" });
     const applied = await cli(sb, ["apply", "--env", "test", "--json"], { cwd: dir });
     expect(applied.code, applied.stdout).toBe(0);
-    expect(server.state.harnesses.find((h) => h.slug === "blueprint-counter")).toMatchObject({ name: "Blueprint: sandbox-free counter", status: "draft" });
   });
 
   it("refuses to change or remove a package file that holds something else, unless --force", async () => {
@@ -635,6 +662,50 @@ describe("pull", () => {
     expect(forced.code, forced.stderr).toBe(0);
     expect(read(agentsFile)).toContain("temperature: 0.5");
     expect(existsSync(draft)).toBe(false);
+  });
+
+  it.runIf(gitAvailable())("pull after apply in a repository without a commit: files as the last pull or apply left them are not refused", async () => {
+    // The solution sits in a subfolder of the repository, so git names its files with a prefix.
+    const repo = folder("repo");
+    gitIn(repo, "init", "-q");
+    const dir = path.join(repo, "solution");
+    mkdirSync(dir);
+    expect((await cli(sb, ["init", "--instance", server.url, "--tenant", tenant, "--harness", "support"], { cwd: dir })).code).toBe(0);
+    expect((await cli(sb, ["pull"], { cwd: dir })).code).toBe(0);
+    // Nothing was committed: every pulled file is untracked, and the next pull still takes the instance's.
+    const again = await cli(sb, ["pull"], { cwd: dir });
+    expect(again.code, again.stderr).toBe(0);
+
+    // A local edit that is neither committed nor applied is refused, by its path inside the solution.
+    const agentsFile = path.join(dir, "package", "agents.yaml");
+    writeFileSync(agentsFile, read(agentsFile).replace("temperature: 0.2", "temperature: 0.6"));
+    const refused = await cli(sb, ["pull", "--json"], { cwd: dir });
+    expect(refused.code).toBe(4);
+    expect(refused.json<{ error: { details: { files: string[] } } }>().error.details.files).toEqual(["package/agents.yaml"]);
+
+    // Once applied, the instance holds it: pull goes ahead without --force, and keeps the edit the instance now has.
+    const preview = (await cli(sb, ["apply", "--json"], { cwd: dir })).json<{ preview_id: string }>();
+    expect((await cli(sb, ["apply", "--confirm", preview.preview_id], { cwd: dir })).code).toBe(0);
+    const afterApply = await cli(sb, ["pull"], { cwd: dir });
+    expect(afterApply.code, afterApply.stderr + afterApply.stdout).toBe(0);
+    expect(read(agentsFile)).toContain("temperature: 0.6");
+
+    // A later edit is refused again.
+    writeFileSync(agentsFile, read(agentsFile).replace("temperature: 0.6", "temperature: 0.9"));
+    const later = await cli(sb, ["pull", "--json"], { cwd: dir });
+    expect(later.code).toBe(4);
+    expect(later.json<{ error: { details: { files: string[] } } }>().error.details.files).toEqual(["package/agents.yaml"]);
+  });
+
+  it("outside git, a file an apply imported counts as the instance's, so pull replaces it without --force", async () => {
+    const dir = await initSolution();
+    expect((await cli(sb, ["pull"], { cwd: dir })).code).toBe(0);
+    const suite = path.join(dir, "tests", "smoke.yaml");
+    writeFileSync(suite, stringify({ name: "Smoke", cases: [] }));
+    const preview = (await cli(sb, ["apply", "--json"], { cwd: dir })).json<{ preview_id: string }>();
+    expect((await cli(sb, ["apply", "--confirm", preview.preview_id], { cwd: dir })).code).toBe(0);
+    const pulled = await cli(sb, ["pull"], { cwd: dir });
+    expect(pulled.code, pulled.stderr + pulled.stdout).toBe(0);
   });
 
   it("refuses to overwrite package files outside git when no earlier pull recorded them", async () => {
@@ -824,6 +895,111 @@ describe("validate", () => {
     server.state.tenantFlags.clear();
   });
 
+  it("finds broken references, unknown fields and unknown models offline, one finding each with file and line", async () => {
+    server.state.models.push(modelRow(tenant, { model_id: "gpt-4.1" }));
+    try {
+      const dir = await initSolution();
+      expect((await cli(sb, ["pull"], { cwd: dir })).code).toBe(0);
+      const inventory = JSON.parse(read(path.join(dir, ".cavelon", "inventory.json"))) as { names: Record<string, string[] | null> };
+      expect(inventory.names).toMatchObject({ solutions: expect.arrayContaining(["support"]), skills: ["faq"], models: ["gpt-4.1"], tools: [], knowledge_bases: [] });
+      expect((await cli(sb, ["validate", "--offline", "--json"], { cwd: dir })).json()).toMatchObject({ valid: true, warning_count: 0 });
+
+      const skillsFile = path.join(dir, "package", "skills.yaml");
+      const agentsFile = path.join(dir, "package", "agents.yaml");
+      const skills = parse(read(skillsFile)) as Array<Record<string, unknown>>;
+      skills.push({ slug: "faq", name: "FAQ again", knowledge_base_assignments: [{ knowledge_base_name: "Handbok" }] });
+      writeFileSync(skillsFile, stringify(skills));
+      const agents = parse(read(agentsFile)) as Array<Record<string, unknown>>;
+      Object.assign(agents[0]!, {
+        temprature: 0.9,
+        llm_model: "gpt-9-ultra",
+        harness_slug: "suport",
+        skill_assignments: [{ skill_slug: "fqa" }],
+        tool_assignments: [{ tool_slug: "crn" }],
+        handoffs: [{ to_agent_slug: "billing" }, { target_agent_slug: "helper" }],
+      });
+      writeFileSync(agentsFile, stringify(agents));
+
+      const result = await cli(sb, ["validate", "--offline", "--json"], { cwd: dir });
+      expect(result.code, result.stdout).toBe(3);
+      type Found = { code: string; severity: string; file: string; line: number; path: string; message: string; suggestion?: string };
+      const findings = result.json<{ findings: Found[] }>().findings;
+      const lineOf = (f: Found) => read(path.join(dir, f.file)).split("\n")[f.line - 1];
+      const one = (code: string, at: string) => {
+        const found = findings.filter((f) => f.code === code && f.path === at);
+        expect(found, `${code} at ${at}: ${JSON.stringify(findings, null, 1)}`).toHaveLength(1);
+        return found[0]!;
+      };
+
+      const duplicate = one("package_duplicate_key", "skills[1].slug");
+      expect(duplicate).toMatchObject({ severity: "error", file: "package/skills.yaml" });
+      expect(duplicate.message).toMatch(/^Two skills have the slug "faq" \(also package\/skills\.yaml:\d+\); the import keeps one of them\.$/);
+      expect(lineOf(duplicate)).toMatch(/slug: faq/);
+
+      const kb = one("package_reference_unknown", "skills[1].knowledge_base_assignments[0].knowledge_base_name");
+      expect(kb).toMatchObject({ severity: "warning", file: "package/skills.yaml", suggestion: "Handbook" });
+      expect(kb.message).toMatch(/^The skill "faq" names the knowledge base "Handbok", which is neither in the package nor among the tenant's knowledge bases at the last pull \(.+\)\. Did you mean "Handbook"\?$/);
+      expect(lineOf(kb)).toMatch(/knowledge_base_name: Handbok/);
+
+      expect(one("package_reference_unknown", "agents[0].skill_assignments[0].skill_slug")).toMatchObject({ file: "package/agents.yaml", suggestion: "faq" });
+      expect(one("package_reference_unknown", "agents[0].tool_assignments[0].tool_slug")).toMatchObject({ suggestion: "crm" });
+      expect(one("package_reference_unknown", "agents[0].harness_slug")).toMatchObject({ suggestion: "support" });
+
+      const handoff = one("package_reference_missing", "agents[0].handoffs[0].to_agent_slug");
+      expect(handoff).toMatchObject({ severity: "error", file: "package/agents.yaml" });
+      expect(handoff.message).toBe('The agent "helper" hands off to the agent "billing", which is not in the package.');
+      expect(lineOf(handoff)).toMatch(/to_agent_slug: billing/);
+
+      const field = one("package_field_unknown", "agents[0].temprature");
+      expect(field).toMatchObject({ severity: "warning", suggestion: "temperature" });
+      expect(field.message).toBe('"temprature" is not a field of the package schema here; the import ignores it. Did you mean "temperature"?');
+      expect(lineOf(field)).toMatch(/temprature: 0\.9/);
+
+      // A required field under another name: one finding, the schema's, saying what was meant.
+      const renamed = one("package_schema_invalid", "agents[0].handoffs[1]");
+      expect(renamed).toMatchObject({ severity: "error", suggestion: "to_agent_slug" });
+      expect(renamed.message).toBe('missing required field "to_agent_slug" ("target_agent_slug" is set, which the package schema does not have; did you mean "to_agent_slug"?)');
+      expect(findings.filter((f) => f.path.startsWith("agents[0].handoffs[1]"))).toHaveLength(1);
+
+      const model = one("package_model_unknown", "agents[0].llm_model");
+      expect(model).toMatchObject({ severity: "warning", file: "package/agents.yaml" });
+      expect(model.message).toMatch(/^The agent "helper" uses the model "gpt-9-ultra", which is not in the tenant's model list \(.+\)\.$/);
+      expect(lineOf(model)).toMatch(/llm_model: gpt-9-ultra/);
+
+      // Nothing else: one finding per mistake.
+      expect(findings).toHaveLength(9);
+      for (const code of ["package_duplicate_key", "package_reference_unknown", "package_field_unknown", "package_model_unknown"]) {
+        expect((await cli(sb, ["explain", code, "--json"], { cwd: dir })).json(), code).toMatchObject({ code, kind: "kit" });
+      }
+    } finally {
+      server.state.models = [];
+    }
+  });
+
+  it("keeps the model list validate checks against fresh from models list, and checks nothing without one", async () => {
+    const dir = await initSolution();
+    expect((await cli(sb, ["pull"], { cwd: dir })).code).toBe(0);
+    const agentsFile = path.join(dir, "package", "agents.yaml");
+    const agents = parse(read(agentsFile)) as Array<Record<string, unknown>>;
+    agents[0]!.llm_model = "llama-70b";
+    writeFileSync(agentsFile, stringify(agents));
+    // An empty Model Registry: the instance's defaults serve the agents, so nothing is checked.
+    expect((await cli(sb, ["validate", "--offline", "--json"], { cwd: dir })).json()).toMatchObject({ warning_count: 0 });
+    server.state.models.push(modelRow(tenant, { model_id: "llama-3-70b", base_url: "http://vllm:8000/v1" }));
+    try {
+      expect((await cli(sb, ["models", "list"], { cwd: dir })).code).toBe(0);
+      const warned = await cli(sb, ["validate", "--offline", "--json"], { cwd: dir });
+      expect(warned.json<{ warnings: Array<{ code: string; message: string }> }>().warnings).toEqual([
+        { code: "package_model_unknown", message: expect.stringMatching(/"llama-70b", which is not in the tenant's model list \(.+\)\. Did you mean "llama-3-70b"\?$/) },
+      ]);
+      // Without the inventory, references to the tenant are not checked; those inside the package still are.
+      rmSync(path.join(dir, ".cavelon", "inventory.json"));
+      expect((await cli(sb, ["validate", "--offline", "--json"], { cwd: dir })).json()).toMatchObject({ valid: true, warning_count: 0 });
+    } finally {
+      server.state.models = [];
+    }
+  });
+
   it("warns when an agent is given a knowledge base but no search tool reaches it", async () => {
     const dir = await initSolution();
     await cli(sb, ["pull"], { cwd: dir });
@@ -845,7 +1021,7 @@ describe("validate", () => {
     ]);
     expect(read(skillsFile).split("\n")[result.findings[0]!.line - 1]).toMatch(/knowledge_base_name: Handbook/);
     expect(result.findings[0]!.message).toBe(
-      'The agent "helper" is given the knowledge base "Handbook" through the skill "faq", but no search tool reaches it, so it cannot search it: add search_documents to the skill\'s tool_assignments.',
+      'The agent "helper" is given the knowledge base "Handbook" through the skill "faq", but no tool that searches or lists it reaches the agent, so it cannot read it: add search_documents (or list_documents) to the skill\'s tool_assignments.',
     );
     expect(result.findings[0]!.hint).toMatch(/tool_slug: search_documents/);
     expect(result.findings[0]!.docs).toMatch(/builtin-tools#binding-knowledge-bases-to-search_documents$/);
@@ -856,18 +1032,39 @@ describe("validate", () => {
     writeFileSync(agentsFile, stringify(agents));
     expect((await cli(sb, ["validate", "--offline", "--json"], { cwd: dir })).json()).toMatchObject({ warning_count: 0, warnings: [], findings: [] });
 
+    // list_documents lists the knowledge base's documents, and read_document reads them: that reaches it too.
+    agents[0]!.tool_assignments = [{ tool_slug: "list_documents", config_overrides: { knowledge_base_names: ["Handbook"] } }, { tool_slug: "read_document" }];
+    agents[0]!.skill_assignments = [];
+    writeFileSync(agentsFile, stringify(agents));
+    expect((await cli(sb, ["validate", "--offline", "--json"], { cwd: dir })).json()).toMatchObject({ warning_count: 0, warnings: [] });
+    // So does a tenant's tool whose builtin_key is list_documents, under a slug of its own.
+    agents[0]!.tool_assignments = [{ tool_slug: "list_events", config_overrides: { knowledge_base_names: ["Handbook"] } }];
+    writeFileSync(agentsFile, stringify(agents));
+    const toolsFile = path.join(dir, "package", "tools.yaml");
+    const pulledTools = read(toolsFile);
+    const tools = parse(pulledTools) as Array<Record<string, unknown>>;
+    writeFileSync(toolsFile, stringify([...tools, { slug: "list_events", name: "List events", tool_type: "builtin", builtin_key: "list_documents" }]));
+    const listed = await cli(sb, ["validate", "--offline", "--json"], { cwd: dir });
+    expect(listed.json<{ findings: Array<{ code: string }> }>().findings.filter((f) => f.code === "knowledge_base_without_search_tool")).toEqual([]);
+    writeFileSync(toolsFile, pulledTools);
+    agents[0]!.skill_assignments = [{ skill_slug: "faq" }];
+
     // An agent's tool assignment that names knowledge bases on another tool is no search either.
     agents[0]!.tool_assignments = [{ tool_slug: "crm", config_overrides: { knowledge_base_names: ["Handbook"] } }];
     agents[0]!.skill_assignments = [];
     writeFileSync(agentsFile, stringify(agents));
     const own = await cli(sb, ["validate", "--offline"], { cwd: dir });
     expect(own.stdout).toMatch(
-      /warning knowledge_base_without_search_tool {2}package\/agents\.yaml:\d+ agents\[0\]\.tool_assignments\[0\]\.config_overrides\.knowledge_base_names: The agent "helper" is given the knowledge base "Handbook", but no search tool reaches it/,
+      /warning knowledge_base_without_search_tool {2}package\/agents\.yaml:\d+ agents\[0\]\.tool_assignments\[0\]\.config_overrides\.knowledge_base_names: The agent "helper" is given the knowledge base "Handbook", but no tool that searches or lists it reaches the agent/,
     );
 
-    // A skill this package does not carry may bring the tool: no warning.
+    // A skill this package does not carry, which the tenant holds, may bring the tool: no warning.
     agents[0]!.skill_assignments = [{ skill_slug: "tenant-wide-search" }];
     writeFileSync(agentsFile, stringify(agents));
+    const inventoryFile = path.join(dir, ".cavelon", "inventory.json");
+    const inventory = JSON.parse(read(inventoryFile)) as { names: { skills: string[] } };
+    inventory.names.skills.push("tenant-wide-search");
+    writeFileSync(inventoryFile, JSON.stringify(inventory));
     expect((await cli(sb, ["validate", "--offline", "--json"], { cwd: dir })).json()).toMatchObject({ warning_count: 0, warnings: [] });
 
     const explained = await cli(sb, ["explain", "knowledge_base_without_search_tool", "--json"], { cwd: dir });
@@ -885,6 +1082,92 @@ describe("validate", () => {
     } finally {
       fresh.cleanup();
     }
+  });
+});
+
+describe("a test step's assertions, on an instance whose schema publishes them", () => {
+  /** A step's criteria as an instance before the criterion shapes publishes them: a list of anything. */
+  const withoutCriteria = (schema: { properties: Record<string, unknown> }) => {
+    const all = schema as unknown as { $defs: Record<string, { properties: Record<string, unknown> }> };
+    for (const name of Object.keys(all.$defs)) if (name === "CriterionSpec" || name.endsWith("Criterion")) delete all.$defs[name];
+    all.$defs.PackageTestCaseStep!.properties.evaluation_criteria = { anyOf: [{ type: "array", items: {} }, { type: "null" }], default: null, title: "Evaluation Criteria" };
+  };
+  let own: Sandbox;
+
+  async function solution(steps: string): Promise<string> {
+    await login(own, server.url, token);
+    const dir = path.join(own.home, "solution");
+    mkdirSync(dir);
+    expect((await cli(own, ["init", "--instance", server.url, "--tenant", tenant, "--harness", "support"], { cwd: dir })).code).toBe(0);
+    expect((await cli(own, ["pull"], { cwd: dir })).code).toBe(0);
+    writeFileSync(
+      path.join(dir, "tests", "routing.yaml"),
+      `name: Routing\nharness_slug: support\ntest_cases:\n  - name: Family ticket price\n    steps:\n      - user_message: What does a family ticket cost?\n        evaluation_criteria:\n${steps}`,
+    );
+    return dir;
+  }
+
+  beforeEach(() => {
+    own = sandbox();
+  });
+  afterEach(() => {
+    server.state.packageSchemaEdit = null;
+    own.cleanup();
+  });
+
+  const routing =
+    "          - States the price of the family ticket.\n" +
+    "          - {type: handoff_to, value: helper}\n" +
+    "          - {type: answered_by, value: helper}\n" +
+    "          - {type: tool_called, value: search_documents}\n" +
+    "          - {type: tool_not_called, value: crm}\n";
+
+  it("validate accepts handoff_to, answered_by, tool_called and tool_not_called, and fmt leaves them as written", async () => {
+    const dir = await solution(routing);
+    const valid = await cli(own, ["validate", "--json"], { cwd: dir });
+    expect(valid.code, valid.stdout).toBe(0);
+    expect(valid.json<{ findings: unknown[] }>().findings).toEqual([]);
+    expect((await cli(own, ["fmt"], { cwd: dir })).code).toBe(0);
+    const step = (parse(readFileSync(path.join(dir, "tests", "routing.yaml"), "utf8")) as { test_cases: Array<{ steps: Array<{ evaluation_criteria: unknown[] }> }> }).test_cases[0]!.steps[0]!;
+    expect(step.evaluation_criteria).toEqual([
+      "States the price of the family ticket.",
+      { type: "handoff_to", value: "helper" },
+      { type: "answered_by", value: "helper" },
+      { type: "tool_called", value: "search_documents" },
+      { type: "tool_not_called", value: "crm" },
+    ]);
+    expect((await cli(own, ["validate", "--json"], { cwd: dir })).code).toBe(0);
+  });
+
+  it("on an instance whose schema does not describe a step's criteria, validate warns once per suite file that it cannot check them", async () => {
+    server.state.packageSchemaEdit = withoutCriteria;
+    const dir = await solution(routing);
+    const result = await cli(own, ["validate", "--json"], { cwd: dir });
+    expect(result.code, result.stdout).toBe(0);
+    const findings = result.json<{ findings: Array<{ code: string; severity: string; file: string; line: number; message: string }> }>().findings;
+    expect(findings).toEqual([
+      expect.objectContaining({
+        code: "test_assertion_unchecked",
+        severity: "warning",
+        file: "tests/routing.yaml",
+        line: 9,
+        message: expect.stringContaining("(handoff_to, answered_by, tool_called, tool_not_called) are not checked"),
+      }),
+    ]);
+    expect((await cli(own, ["explain", "test_assertion_unchecked"], { cwd: dir })).stdout).toMatch(/grades it as a judge criterion/);
+  });
+
+  it("validate names a routing assertion without its agent, and one with a field it does not take", async () => {
+    const dir = await solution("          - {type: handoff_to}\n          - {type: answered_by, value: helper, agent: front-desk}\n");
+    const result = await cli(own, ["validate", "--json"], { cwd: dir });
+    expect(result.code).toBe(3);
+    const findings = result.json<{ findings: Array<{ code: string; file: string; path: string; message: string }> }>().findings;
+    // Only what the closest shape (the routing assertion) says, not every other kind of criterion's complaints.
+    const at = "test_suites[1].test_cases[0].steps[0].evaluation_criteria";
+    expect(findings.map((f) => [f.file, f.path, f.message])).toEqual([
+      ["tests/routing.yaml", `${at}[0]`, 'missing required field "value"'],
+      ["tests/routing.yaml", `${at}[1]`, 'field "agent" is not allowed here'],
+    ]);
   });
 });
 
@@ -1039,18 +1322,141 @@ describe("apply", () => {
     expect(text.stdout).toMatch(/needs secrets:\s+- crm_token: cavelon secrets set crm_token/);
     expect(text.stdout).toMatch(new RegExp(`Import exactly this: cavelon apply --confirm ${data.preview_id}`));
 
-    // The files change after the preview; the import still sends what was previewed.
+    // The files change after the preview: the confirm is stale, exits 4 and imports nothing, and the preview stays.
     const agentsFile = path.join(dir, "package", "agents.yaml");
     writeFileSync(agentsFile, read(agentsFile).replace("temperature: 0.2", "temperature: 0.5"));
     server.state.requests.length = 0;
-    const confirmed = await cli(sb, ["apply", "--confirm", data.preview_id, "--json"], { cwd: dir });
+    const stale = await cli(sb, ["apply", "--confirm", data.preview_id, "--json"], { cwd: dir });
+    expect(stale.code, stale.stdout).toBe(4);
+    const error = stale.json<{ error: { code: string; message: string; hint: string; details: { files: string[] } } }>().error;
+    expect(error).toMatchObject({ code: "preview_files_changed", details: { files: ["package/agents.yaml"] } });
+    expect(error.message).toMatch(/changed since preview .* \(package\/agents\.yaml\); nothing was imported/);
+    expect(error.hint).toMatch(/Run `cavelon apply --harness support` for a preview of the files as they are now.*add --allow-stale to the confirm/);
+    expect(server.state.requests.some((r) => r.path === "/api/v1/agent-graph/import")).toBe(false);
+    expect(existsSync(stored)).toBe(true);
+
+    // --allow-stale imports what the preview showed, and says so.
+    const confirmed = await cli(sb, ["apply", "--confirm", data.preview_id, "--allow-stale", "--json"], { cwd: dir });
     expect(confirmed.code, confirmed.stdout).toBe(0);
     expect(confirmed.json<{ applied: boolean; warnings: string[] }>()).toMatchObject({ applied: true });
-    expect(confirmed.json<{ warnings: string[] }>().warnings.join()).toMatch(/files changed since this preview/);
+    expect(confirmed.json<{ warnings: string[] }>().warnings.join()).toMatch(/files changed since this preview \(package\/agents\.yaml\); importing what the preview showed \(--allow-stale\)/);
     const sent = server.state.requests.find((r) => r.path === "/api/v1/agent-graph/import")!.body as Record<string, any>;
     expect(sent.preview_id).toBe(data.preview_id);
     expect(sent.package.agents[0].temperature).toBe(0.2);
     expect(existsSync(stored)).toBe(false);
+    // The file holds what the instance does not, so pull does not take it for the instance's.
+    const refused = await cli(sb, ["pull", "--json"], { cwd: dir });
+    expect(refused.code).toBe(4);
+    expect(refused.json<{ error: { details: { files: string[] } } }>().error.details.files).toEqual(["package/agents.yaml"]);
+    expect(read(agentsFile)).toContain("temperature: 0.5");
+  });
+
+  it("after a confirm, a file whose bytes changed since the preview but whose content the instance holds is the base for pull", async () => {
+    const dir = await pulled();
+    const agentsFile = path.join(dir, "package", "agents.yaml");
+    writeFileSync(agentsFile, read(agentsFile).replace("temperature: 0.2", "temperature: 0.5"));
+    const preview = (await cli(sb, ["apply", "--json"], { cwd: dir })).json<{ preview_id: string }>();
+    // Only the formatting changes since: the package is the previewed one, so the confirm is not stale.
+    writeFileSync(agentsFile, `# Tuned for the FAQ.\n${read(agentsFile)}`);
+    server.state.requests.length = 0;
+    const confirmed = await cli(sb, ["apply", "--confirm", preview.preview_id, "--json"], { cwd: dir });
+    expect(confirmed.code, confirmed.stdout).toBe(0);
+    expect(confirmed.json<{ warnings?: string[] }>().warnings ?? []).toEqual([]);
+    expect(server.state.requests.some((r) => r.method === "GET" && r.path === "/api/v1/agent-graph/export")).toBe(true);
+    const pulledAgain = await cli(sb, ["pull"], { cwd: dir });
+    expect(pulledAgain.code, pulledAgain.stderr + pulledAgain.stdout).toBe(0);
+    expect(read(agentsFile)).toMatch(/^# Tuned for the FAQ\.\n[\s\S]*temperature: 0\.5/);
+  });
+
+  it("after a confirm, a changed file stays a local change for pull when the instance's export cannot be read", async () => {
+    const dir = await pulled();
+    const agentsFile = path.join(dir, "package", "agents.yaml");
+    const preview = (await cli(sb, ["apply", "--json"], { cwd: dir })).json<{ preview_id: string }>();
+    writeFileSync(agentsFile, `# Tuned for the FAQ.\n${read(agentsFile)}`);
+    server.state.failures = [{ method: "GET", path: /\/agent-graph\/export$/, status: 503 }];
+    try {
+      const confirmed = await cli(sb, ["apply", "--confirm", preview.preview_id, "--json"], { cwd: dir });
+      expect(confirmed.code, confirmed.stdout).toBe(0);
+      expect(confirmed.json<{ applied: boolean; warnings: string[] }>()).toMatchObject({ applied: true });
+      expect(confirmed.json<{ warnings: string[] }>().warnings.join()).toMatch(/Could not read what the instance holds after the import .*; pull treats package\/agents\.yaml as local changes/);
+    } finally {
+      server.state.failures = [];
+    }
+    // No base for the file: pull refuses to overwrite it, and keeps it where the instance holds the same.
+    const base = JSON.parse(read(path.join(dir, ".cavelon", "pulled-files.json"))) as { digests: Record<string, string> };
+    expect(Object.keys(base.digests)).not.toContain("package/agents.yaml");
+    expect(Object.keys(base.digests)).toContain("package/manifest.yaml");
+    const pulledAgain = await cli(sb, ["pull"], { cwd: dir });
+    expect(pulledAgain.code, pulledAgain.stderr + pulledAgain.stdout).toBe(0);
+    expect(read(agentsFile)).toMatch(/^# Tuned for the FAQ\./);
+  });
+
+  it("a preview older than a day expires: its confirm exits 4, status says so, and a new preview removes it", async () => {
+    const dir = await pulled();
+    const preview = (await cli(sb, ["apply", "--json"], { cwd: dir })).json<{ preview_id: string }>();
+    const stored = path.join(dir, ".cavelon", "previews", `${preview.preview_id}.json`);
+    const age = (hours: number) => {
+      const record = JSON.parse(read(stored));
+      record.created_at = new Date(Date.now() - hours * 3_600_000).toISOString();
+      writeFileSync(stored, JSON.stringify(record));
+      return record.created_at as string;
+    };
+
+    const fresh = age(23);
+    let status = (await cli(sb, ["status", "--offline", "--json"], { cwd: dir })).json<{ solution: { open_previews: Array<Record<string, unknown>> } }>();
+    expect(status.solution.open_previews).toEqual([
+      expect.objectContaining({ preview_id: preview.preview_id, created_at: fresh, expires_at: new Date(Date.parse(fresh) + 86_400_000).toISOString(), expired: false }),
+    ]);
+
+    age(25);
+    status = (await cli(sb, ["status", "--offline", "--json"], { cwd: dir })).json();
+    expect(status.solution.open_previews).toEqual([expect.objectContaining({ preview_id: preview.preview_id, expired: true })]);
+    expect((await cli(sb, ["status", "--offline"], { cwd: dir })).stdout).toMatch(/expired \(`cavelon apply --discard all` removes it\)/);
+    server.state.requests.length = 0;
+    const expired = await cli(sb, ["apply", "--confirm", preview.preview_id, "--json"], { cwd: dir });
+    expect(expired.code).toBe(4);
+    expect(expired.json<{ error: { code: string; hint: string } }>().error).toMatchObject({ code: "preview_expired", hint: expect.stringMatching(/cavelon apply --harness support` again/) });
+    expect(server.state.requests.some((r) => r.path === "/api/v1/agent-graph/import")).toBe(false);
+    expect(existsSync(stored)).toBe(false);
+
+    // A new preview in the folder removes the expired ones.
+    const replaced = (await cli(sb, ["apply", "--mode", "replace", "--json"], { cwd: dir })).json<{ preview_id: string }>();
+    const again = (await cli(sb, ["apply", "--json"], { cwd: dir })).json<{ preview_id: string }>();
+    const replacedFile = path.join(dir, ".cavelon", "previews", `${replaced.preview_id}.json`);
+    const record = JSON.parse(read(replacedFile));
+    record.created_at = new Date(Date.now() - 48 * 3_600_000).toISOString();
+    writeFileSync(replacedFile, JSON.stringify(record));
+    expect((await cli(sb, ["apply", "--json"], { cwd: dir })).code).toBe(0);
+    expect(readdirSync(path.join(dir, ".cavelon", "previews"))).toEqual([`${again.preview_id}.json`]);
+  });
+
+  it("--discard forgets one stored preview or all of them, and changes nothing on the instance", async () => {
+    const dir = await pulled();
+    const first = (await cli(sb, ["apply", "--json"], { cwd: dir })).json<{ preview_id: string }>();
+    const second = (await cli(sb, ["apply", "--mode", "replace", "--json"], { cwd: dir })).json<{ preview_id: string }>();
+    expect(first.preview_id).not.toBe(second.preview_id);
+    const previews = path.join(dir, ".cavelon", "previews");
+    server.state.requests.length = 0;
+
+    const one = await cli(sb, ["apply", "--discard", first.preview_id, "--json"], { cwd: dir });
+    expect(one.code).toBe(0);
+    expect(one.json()).toEqual({ discarded: [first.preview_id], count: 1 });
+    expect(readdirSync(previews)).toEqual([`${second.preview_id}.json`]);
+    // A discarded preview's confirm says so, as a stale preview's does (exit 4).
+    const discarded = await cli(sb, ["apply", "--confirm", first.preview_id, "--json"], { cwd: dir });
+    expect(discarded.code).toBe(4);
+    expect(discarded.json<{ error: { code: string } }>().error.code).toBe("preview_discarded");
+    expect((await cli(sb, ["apply", "--discard", first.preview_id], { cwd: dir })).code).toBe(2);
+
+    const all = await cli(sb, ["apply", "--discard", "all"], { cwd: dir });
+    expect(all.code).toBe(0);
+    expect(all.stdout).toMatch(new RegExp(`^Discarded preview: ${second.preview_id}\\. Nothing changed on the instance\\.`));
+    expect(readdirSync(previews)).toEqual([]);
+    expect((await cli(sb, ["apply", "--discard", "all", "--json"], { cwd: dir })).json()).toEqual({ discarded: [], count: 0 });
+    expect(server.state.requests.filter((r) => r.path.startsWith("/api/v1/agent-graph"))).toEqual([]);
+
+    expect((await cli(sb, ["apply", "--discard", "all", "--confirm", first.preview_id], { cwd: dir })).code).toBe(2);
+    expect((await cli(sb, ["apply", "--allow-stale"], { cwd: dir })).code).toBe(2);
   });
 
   it("turns a stale preview into exit 4 with the way forward", async () => {
@@ -1067,52 +1473,118 @@ describe("apply", () => {
     expect(existsSync(path.join(dir, ".cavelon", "previews", `${preview.preview_id}.json`))).toBe(false);
   });
 
-  it("creates the draft solution the env file names, and binds runtime requirements from it", async () => {
+  it("names what changed since a stale preview where the instance says it", async () => {
+    try {
+      for (const changed of [["agents of solution 'support'", "tools"], []]) {
+        server.state.staleChanged = changed;
+        const dir = await pulled();
+        const preview = (await cli(sb, ["apply", "--json"], { cwd: dir })).json<{ preview_id: string }>();
+        server.editConfig(tenant, (pkg) => {
+          (pkg.knowledge_bases as Array<Record<string, unknown>>)[0]!.description = `Edited ${changed.length}`;
+        });
+        const result = await cli(sb, ["apply", "--confirm", preview.preview_id, "--json"], { cwd: dir });
+        expect(result.code).toBe(4);
+        const error = result.json<{ error: { code: string; message: string; details?: { changed: string[] } } }>().error;
+        expect(error.code).toBe("import_preview_stale");
+        if (changed.length) {
+          expect(error.message).toBe(`The target changed since preview ${preview.preview_id}: agents of solution 'support'; tools; nothing was imported.`);
+          expect(error.details).toEqual({ preview_id: preview.preview_id, changed });
+        } else {
+          expect(error.message).toBe(`The target changed since preview ${preview.preview_id}; nothing was imported.`);
+          expect(error.details).toBeUndefined();
+        }
+      }
+    } finally {
+      server.state.staleChanged = null;
+    }
+  });
+
+  it("says a confirmed preview was imported, and one made before it superseded (exit 4), instead of not knowing them", async () => {
+    const dir = await pulled();
+    const first = (await cli(sb, ["apply", "--json"], { cwd: dir })).json<{ preview_id: string }>();
+    const second = (await cli(sb, ["apply", "--mode", "replace", "--json"], { cwd: dir })).json<{ preview_id: string }>();
+    expect((await cli(sb, ["apply", "--confirm", second.preview_id], { cwd: dir })).code).toBe(0);
+    const before = server.state.requests.length;
+
+    const superseded = await cli(sb, ["apply", "--confirm", first.preview_id, "--json"], { cwd: dir });
+    expect(superseded.code).toBe(4);
+    const error = superseded.json<{ error: { code: string; message: string; hint: string; details: Record<string, unknown> } }>().error;
+    expect(error).toMatchObject({ code: "preview_superseded", details: { preview_id: first.preview_id, reason: "superseded", superseded_by: second.preview_id } });
+    expect(error.message).toMatch(new RegExp(`^Preview ${first.preview_id} was superseded: preview ${second.preview_id} was imported after it`));
+    expect(error.hint).toMatch(/^Run `cavelon apply` for a new preview/);
+
+    const applied = await cli(sb, ["apply", "--confirm", second.preview_id, "--json"], { cwd: dir });
+    expect(applied.code).toBe(4);
+    expect(applied.json<{ error: { code: string } }>().error.code).toBe("preview_applied");
+    // An id this folder never stored is still a usage error.
+    expect((await cli(sb, ["apply", "--confirm", "pv1_unknown", "--json"], { cwd: dir })).code).toBe(2);
+    expect(server.state.requests.slice(before).filter((r) => r.method !== "GET")).toEqual([]);
+    expect((await cli(sb, ["explain", "preview_superseded", "--json"], { cwd: dir })).json()).toMatchObject({ code: "preview_superseded", kind: "cli" });
+  });
+
+  it("says there is nothing to import when the preview changes nothing, and stores no preview to confirm", async () => {
+    const dir = await pulled();
+    server.state.previewExtras = { summary: { creates: {}, updates: {}, deletes: {}, references: { agents: 1 }, warnings: 0, blockers: 0 } };
+    try {
+      const result = await cli(sb, ["apply"], { cwd: dir });
+      expect(result.code, result.stderr).toBe(0);
+      expect(result.stdout).toMatch(/^changes: +none$/m);
+      expect(result.stdout).toMatch(/Nothing to import: the instance already holds what the package files say\. No preview was stored\.$/m);
+      expect(result.stdout).not.toMatch(/--confirm|preview id/);
+      const json = (await cli(sb, ["apply", "--json"], { cwd: dir })).json<Record<string, unknown>>();
+      expect(json).toMatchObject({ previewed: true, nothing_to_import: true });
+      expect(json.preview_id).toBeUndefined();
+      expect(existsSync(path.join(dir, ".cavelon", "previews")) ? readdirSync(path.join(dir, ".cavelon", "previews")) : []).toEqual([]);
+    } finally {
+      server.state.previewExtras = {};
+    }
+  });
+
+  it("never creates the solution an env file names: it names the command that does, and binds runtime requirements once it exists", async () => {
     const dir = await pulled();
     const binding = "8f2b7c1e-1111-4222-8333-444455556666";
     writeFileSync(path.join(dir, "env", "test.yaml"), `harness: support-test\nruntime_bindings:\n  workspace: ${binding}\n`);
+    server.state.requests.length = 0;
     const result = await cli(sb, ["apply", "--env", "test", "--json"], { cwd: dir });
-    expect(result.code, result.stdout).toBe(0);
-    const data = result.json<{ harness: { slug: string; created: boolean }; env: string; warnings: string[] }>();
-    expect(data).toMatchObject({ env: "test", harness: { slug: "support-test", created: true } });
-    expect(data.warnings.join()).toMatch(/Created the draft solution Support \(support-test\)/);
+    expect(result.code, result.stdout).toBe(1);
+    const error = result.json<{ error: { code: string; message: string; hint: string; details: { create: string } } }>().error;
+    expect(error.code).toBe("solution_not_found");
+    expect(error.message).toBe("Solution support-test, which env/test.yaml names, is not on the instance yet; apply previews into an existing solution and creates none.");
+    // The package's harness of another slug does not name it: a copied package never names someone else's solution.
+    expect(error.details.create).toBe("cavelon harness new support-test");
+    expect(error.hint).toBe("Create it as a draft: cavelon harness new support-test, then run `cavelon apply --env test` again.");
+    expect(server.state.harnesses.find((h) => h.slug === "support-test")).toBeUndefined();
+    expect(server.state.requests.filter((r) => r.method !== "GET")).toEqual([]);
+    // With --tenant, the command that creates the draft creates it in that tenant.
+    const other = await cli(sb, ["apply", "--env", "test", "--tenant", tenant, "--json"], { cwd: dir });
+    expect(other.code).toBe(1);
+    expect(other.json<{ error: { details: { create: string } } }>().error.details.create).toBe(`cavelon harness new support-test --tenant ${tenant}`);
+
+    expect((await cli(sb, ["harness", "new", "support-test", "--name", "Support test"], { cwd: dir })).code).toBe(0);
+    const previewed = await cli(sb, ["apply", "--env", "test", "--json"], { cwd: dir });
+    expect(previewed.code, previewed.stdout).toBe(0);
     const created = server.state.harnesses.find((h) => h.slug === "support-test")!;
-    expect(created.status).toBe("draft");
-    // The draft takes the package's harness name, not the slug.
-    expect(created.name).toBe("Support");
+    expect(previewed.json<{ harness: Record<string, unknown> }>().harness).toEqual({ id: created.id, slug: "support-test" });
     const sent = server.state.requests.filter((r) => r.path === "/api/v1/agent-graph/import/preview").pop()!.body as Record<string, any>;
     expect(sent).toMatchObject({ harness_id: created.id, runtime_bindings: { workspace: binding }, mode: "overwrite" });
 
-    // A harness named on the command line is never created.
+    // A harness named on the command line gets the closest ones, not a create command.
     const missing = await cli(sb, ["apply", "--harness", "nope", "--json"], { cwd: dir });
     expect(missing.code).toBe(1);
-    expect(missing.json<{ error: { code: string } }>().error.code).toBe("solution_not_found");
+    expect(missing.json<{ error: { code: string; message: string } }>().error).toMatchObject({ code: "solution_not_found", message: expect.stringMatching(/^No solution "nope"/) });
   });
 
-  it("names a created draft after the package's harness with that slug, and after the slug when the package has none", async () => {
+  it("names the missing solution after the package's harness with that slug", async () => {
     const dir = await pulled();
-    const harnessesFile = path.join(dir, "package", "harnesses.yaml");
     writeFileSync(
-      harnessesFile,
+      path.join(dir, "package", "harnesses.yaml"),
       "- slug: support-parent\n  name: Support parent\n  status: draft\n- slug: support-loop\n  name: Support loop\n  status: draft\n",
     );
     writeFileSync(path.join(dir, "env", "test.yaml"), "harness: support-loop\n");
     const named = await cli(sb, ["apply", "--env", "test", "--json"], { cwd: dir });
-    expect(named.code, named.stdout).toBe(0);
-    expect(server.state.harnesses.find((h) => h.slug === "support-loop")!.name).toBe("Support loop");
-    const posted = server.state.requests.filter((r) => r.path === "/api/v1/harnesses" && r.method === "POST").pop()!.body;
-    expect(posted).toEqual({ slug: "support-loop", name: "Support loop" });
-
-    // Several harnesses and none with the slug, or none at all: the slug stays the name.
-    writeFileSync(path.join(dir, "env", "test.yaml"), "harness: support-other\n");
-    expect((await cli(sb, ["apply", "--env", "test", "--json"], { cwd: dir })).code).toBe(0);
-    expect(server.state.harnesses.find((h) => h.slug === "support-other")!.name).toBe("support-other");
-    rmSync(harnessesFile);
-    writeFileSync(path.join(dir, "env", "test.yaml"), "harness: support-bare\n");
-    const bare = await cli(sb, ["apply", "--env", "test", "--json"], { cwd: dir });
-    expect(bare.code, bare.stdout).toBe(0);
-    expect(server.state.harnesses.find((h) => h.slug === "support-bare")!.name).toBe("support-bare");
-    expect(bare.json<{ warnings: string[] }>().warnings.join()).toMatch(/Created the draft solution support-bare \(support-bare\)/);
+    expect(named.code, named.stdout).toBe(1);
+    expect(named.json<{ error: { hint: string } }>().error.hint).toContain(`cavelon harness new support-loop --name ${shellWord("Support loop")}, then`);
+    expect(server.state.harnesses.find((h) => h.slug === "support-loop")).toBeUndefined();
   });
 
   it("asks for a person when the preview reaches an active solution", async () => {
@@ -1177,7 +1649,7 @@ describe("explain", () => {
     expect(kit.json()).toMatchObject({ code: "package_schema_invalid", kind: expect.stringMatching(/^(kit|api)$/) });
     const unknown = await cli(sb, ["explain", "fanout_mystery", "--json"], { cwd: dir });
     expect(unknown.code).toBe(1);
-    expect(unknown.json<{ error: { hint: string } }>().error.hint).toMatch(/agent_pipeline_fanout_unsupported/);
+    expect(unknown.json<{ error: { hint: string } }>().error.hint).toMatch(/Similar codes: \w*fanout/);
   });
 
   it("explains a decision an Approval node's approver rule or self-approval refused", async () => {
@@ -1250,6 +1722,9 @@ describe("activate shows the readiness it went through", () => {
         "  warning   Description and outcome: The outcome is undefined.",
         "Warnings:",
         "  - Description and outcome: The outcome is undefined.",
+        // This tenant has no default route; a real one always has, so the line names it then.
+        "Not the default route: the tenant has none where a conversation names no solution.",
+        "Ask the person whether checked should answer there; that changes live traffic. Preview: cavelon harness default checked",
         "",
       ].join("\n"),
     );
@@ -1338,6 +1813,59 @@ describe("a confirmed import its own check refuses", () => {
     const plain = (await cli(sb, ["apply", "--confirm", second, "--json"], { cwd: other })).json<Refusal>().error;
     expect(plain.blockers).toEqual([blockers[0], blockers[2]]);
     expect(plain.hint).toBe("Run `cavelon apply --harness support` again, show the new preview, and confirm its id.");
+  });
+
+  it("shows structured blockers as a preview does: code, package file and path, hint and explain", async () => {
+    const blockers = ["Agent helper names model gpt-9, which this tenant does not have.", "Tool crm needs a connection."];
+    server.state.importRequirementsChanged = {
+      blockers,
+      blocker_details: [
+        { code: "agent_model_unknown", message: blockers[0], path: "agents[0].llm_model", hint: "Choose a model of this tenant." },
+        { code: "import_blocked", message: blockers[1], path: null, hint: null },
+      ],
+    };
+    const { dir, previewId } = await previewed();
+    const text = await cli(sb, ["apply", "--confirm", previewId], { cwd: dir });
+    expect(text.code).toBe(4);
+    expect(text.stderr).toContain(`error: The import's requirements changed since preview ${previewId}; nothing was imported; preview again.\nblockers:\n`);
+    expect(text.stderr).toMatch(/\n {2}- agent_model_unknown {2}package\/agents\.yaml:\d+ agents\[0\]\.llm_model: Agent helper names model gpt-9/);
+    expect(text.stderr).toMatch(/\n {4}hint: Choose a model of this tenant\.\n {4}more: cavelon explain agent_model_unknown\n/);
+    expect(text.stderr).toMatch(/\n {2}- import_blocked {2}Tool crm needs a connection\.\n {4}more: cavelon explain import_blocked\n/);
+    expect(text.stderr).toMatch(/\nhint: Run `cavelon apply --harness support` again/);
+
+    const { dir: other, previewId: second } = await previewed();
+    const error = (await cli(sb, ["apply", "--confirm", second, "--json"], { cwd: other })).json<Refusal & { error: { blocker_details: unknown[] } }>().error;
+    expect(error).toMatchObject({ code: "package_requirements_changed", exit_code: 4, blockers });
+    expect(error.blocker_details).toEqual([
+      { code: "agent_model_unknown", message: blockers[0], path: "agents[0].llm_model", hint: "Choose a model of this tenant.", file: "package/agents.yaml", line: expect.any(Number) },
+      { code: "import_blocked", message: blockers[1], path: null, hint: null },
+    ]);
+    expect(server.state.configs.get(tenant)!.version).toBe(1);
+  });
+
+  it("without blocker_details, a 409 keeps its plain blockers and no blocker_details", async () => {
+    const blockers = ["Tool crm needs a connection."];
+    server.state.importRequirementsChanged = { blockers };
+    const { dir, previewId } = await previewed();
+    const error = (await cli(sb, ["apply", "--confirm", previewId, "--json"], { cwd: dir })).json<Refusal>().error;
+    expect(error.blockers).toEqual(blockers);
+    expect(error).not.toHaveProperty("blocker_details");
+  });
+
+  it("a 422 for an import blocked when it applies shows its structured blockers too", async () => {
+    const { dir, previewId } = await previewed();
+    server.state.previewBlockers = ["Agent helper has no model."];
+    server.state.previewExtras = { blocker_details: [{ code: "agent_model_missing", message: "Agent helper has no model.", path: "agents[0].llm_model", hint: "Set llm_model." }] };
+    try {
+      const text = await cli(sb, ["apply", "--confirm", previewId], { cwd: dir });
+      expect(text.code).toBe(3);
+      expect(text.stderr).toContain(`error: The import's own check refused preview ${previewId} when it applied; nothing was imported.\n`);
+      expect(text.stderr).toMatch(/\nhint: Fix what each blocker names, run `cavelon apply --harness support` again/);
+      expect(text.stderr).toMatch(/blockers:\n {2}- agent_model_missing {2}package\/agents\.yaml:\d+ agents\[0\]\.llm_model: Agent helper has no model\.\n {4}hint: Set llm_model\./);
+    } finally {
+      server.state.previewBlockers = [];
+      server.state.previewExtras = {};
+    }
   });
 
   it("reads an older instance's 409 without blockers as before", async () => {

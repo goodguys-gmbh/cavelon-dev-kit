@@ -7,6 +7,588 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-10-05
+
+Fixes from a second round of agent tests: hints keep the tenant you named,
+`init --new` creates a solution next to a similarly named one, tenant-wide
+sections are left out unless you ask for them, `kb upload --dry-run` says when
+a file is identical, and docs, help and skills match what the commands do.
+
+### Added
+
+- `cavelon apply --tenant-wide` imports a solution package's tenant-wide
+  sections (`tenant_settings`, `model_registry`, …) with it, through the
+  instance's `include_tenant_wide`. Without it a solution's import leaves them
+  out, as the instance now does, and the preview says which it left out. With
+  it, the preview names them (`tenant-wide: … change for every solution of the
+  tenant`, `tenant_wide` in `--json`) and says to show it to a person. On an
+  instance that does not publish `include_tenant_wide`, which imports them with
+  every solution's package, `apply` says so and asks for a person too.
+- `cavelon init --harness <name> --new` creates the solution as a draft even
+  when an existing solution's name is close to it, which `init` otherwise
+  refuses as a likely typo. A name or slug the tenant already has is refused
+  (`solution_exists`).
+- `cavelon validate` warns about a tenant-wide section in a solution's folder
+  (`tenant_wide_section`).
+- `cavelon kb upload --dry-run` names each file whose bytes are those of an
+  active document of the knowledge base, under any name: "identical to the
+  active document …; nothing new would be created (deduplicated)", and in
+  `--json` under `identical` with the document it matches. It compares the
+  SHA-256 of each local file with the `file_sha256` the instance now publishes
+  on its documents; a same-named document the file is identical to is no
+  longer listed as replaced or deactivated. On an instance that does not
+  publish the hash, the dry run stays as it was (`content_compared: false`).
+
+### Changed
+
+- `cavelon apply` remembers why a stored preview went, so its confirm says so
+  (exit 4) instead of "No open preview" (exit 2): `preview_superseded` when
+  another preview was imported after it (`details.superseded_by`),
+  `preview_applied` when it was imported already, `preview_discarded` after
+  `--discard`, and `preview_expired` also for one a newer preview removed. An
+  id the folder never stored stays `preview_unknown` (exit 2).
+- A preview that changes nothing (`changes: none`) says "Nothing to import",
+  stores no preview and prints no confirm command (`nothing_to_import` in
+  `--json`).
+- `apply` for a solution that is not on the instance yet still exits 1
+  (`solution_not_found`); the `cavelon harness new` command it names now
+  carries the `--tenant` you gave, so the draft lands in that tenant.
+- `cavelon fmt` names each file whose comments it drops (`comments_dropped`
+  in `--json`; `--check` says so first) and points at `git diff` only when the
+  files were committed.
+- `cavelon schema` calls a list whose entries take several shapes so (a
+  step's `evaluation_criteria`: "list of 9 shapes", not "list of string"), and
+  never cuts a command in the table of fields with fields of their own.
+- `cavelon status` and `whoami` say where the tenant came from in words:
+  outside a solution folder, the tenant chosen with `cavelon use`, which holds
+  for every folder without a `cavelon.yaml`. `status` counts the operations of
+  other solutions it leaves out ("1 operation of other solutions not shown").
+- `cavelon docs search` finds the agent graph's pages for "handoff" and
+  "consult", and suggests English words only for a German question.
+- `cavelon pull --tenant-wide` asks the export for the tenant-wide sections
+  (`include_tenant_wide`), which a recent instance otherwise leaves out of a
+  solution's export, so the flag wrote nothing. It says when the export
+  carries none. A tenant-wide file a pull leaves alone is listed under `kept`.
+- Help and `docs/commands.md` show a confirm flag as `--confirm [<token>]`
+  with both forms: the bare flag in a person's terminal, and the token its
+  preview printed from a coding agent's shell, which refuses the bare flag
+  (exit 5). The examples show both.
+
+### Fixed
+
+- `cavelon kb upload` of a file whose content is already active says only
+  that it was deduplicated: no "Both versions answer" note and no `cavelon
+  wait` for the operation that ingested the document once (`operation_ids`
+  leaves it out), and `--replace` never deactivates that document.
+- A YAML file with a quote that is never closed is reported at the line where
+  the quote opens, not at the end of the file.
+- `cavelon validate` warns (`solution_slug_mismatch`) when a test suite's
+  `harness_slug` names another solution than `cavelon.yaml`, also when the
+  package has a `harnesses` section.
+- The getting-started sample output matches the CLI: preview ids `pv1_…`,
+  the operations' phases (`ready` for an upload, `completed` for a test run),
+  `errors` in a test run's summary, the instance's readiness checks, and
+  `init`'s next step for an existing solution.
+- The commands `cavelon` prints carry the `--tenant` and `--instance` given on
+  the command line: the closest solutions and `harness new` after a miss, and
+  the `init` a command outside a solution folder names. Copied, they acted in
+  the tenant `cavelon use` chose. `init` no longer says that `init --harness
+  <name>` creates a solution it has just refused.
+- `cavelon deactivate` and the docs say that a deactivated solution is
+  `inactive`, not a draft again as 0.1.6 said. `deactivate` takes the
+  preview's token in a coding agent's shell, like the other confirming
+  commands; the lists of those commands now name it.
+- `pull`, `apply` and the docs no longer say that `apply` sends a tenant-wide
+  file for the whole tenant: a solution's import leaves it out unless
+  `--tenant-wide`.
+- A confirm refused as a stale preview names what changed since, where the
+  instance says it (`changed` in its 409): "The target changed since preview
+  `<id>`: agents of solution 'support'; nothing was imported.", and
+  `details.changed` in `--json`. Without it the message stays as before.
+- `cavelon schema` words a field without listed fields with the right article
+  ("It is an object", "Each entry is an object", not "a object"), and a test
+  covers that an object-or-null field lists its properties
+  (`agents.model_settings_extra` shows `reasoning_effort` where the instance
+  declares it).
+- `cli/README.md` no longer says that `apply` creates a solution the tenant
+  does not have: it stops with `solution_not_found` and names `cavelon harness
+  new`, as since 0.1.6. It says that `init --from` creates the draft (the MCP
+  tool names the command instead), and the command table lists `cavelon chat`.
+
+## [0.1.6] - 2026-10-05
+
+Safer and clearer for agents: confirmations over MCP are bound to the preview
+that was shown, a stale preview no longer imports silently, and a preview never
+creates a solution. Validation and the schema explain more before an import,
+fmt and pull agree, trace shows each assertion and the answer, and new
+`cavelon chat` and `cavelon deactivate` let you try a solution that is not the
+default route and take one back to draft.
+
+### Added
+
+- `cavelon chat <message> --harness <solution>` sends one message to a
+  solution and prints its answer, with the session to continue (`--session`)
+  and the conversation to trace. It is the way to try an active solution that
+  is not the tenant's default route; a draft answers a person's token as a
+  Playground run. MCP tool `chat`.
+- `cavelon deactivate` takes an active solution out of live traffic: it
+  previews, and deactivates only with `--confirm` (over MCP, the preview's
+  `confirm_token`). The tenant's default route is refused before anything is
+  sent (`default_route_deactivate`, exit 5), and an instance that publishes no
+  deactivate route is said so (`operation_unavailable`). MCP tool `deactivate`.
+- `cavelon trace <test run>` names each case's knowledge outcomes from its
+  result's `tool_calls` (`Knowledge: content_gap` under a case that did not
+  pass, `knowledge_outcomes` per case in `--json`); `null` for a result from an
+  older instance or run that records none.
+- `cavelon apply --discard <preview-id>` (or `--discard all`) forgets stored
+  previews, so none is left for a later agent to confirm. A stored preview
+  expires after a day: its confirm exits 4 (`preview_expired`), `cavelon
+  status` lists each open preview with when it expires, and a new preview
+  removes the expired ones.
+- `cavelon apply --confirm <id> --allow-stale` imports what a preview showed
+  although the package files changed since.
+- `cavelon schema` reaches nested types: by path (`cavelon schema
+  agents.handoffs`, `cavelon schema test_suites.test_cases.steps`) or by type
+  name (`cavelon schema PackageAgentHandoff`, which also says where it is
+  used), with required fields, allowed values and a minimal entry. A section
+  names the fields that have fields of their own, and adds an example with one
+  entry of each nested list (a handoff; a test case with a step and its
+  criteria). Where entries take several shapes, as a step's
+  `evaluation_criteria`, each shape is listed with its fields; `--json` carries
+  `nested`, `nested_example`, `shapes` and `used_in`.
+- `cavelon validate --strict` fails (exit 3) on warnings too.
+- `cavelon pull --tenant-wide` writes the tenant-wide sections of a solution's
+  export, which `pull` now leaves out (see below).
+- `cavelon validate` checks the names a test step's assertions point at:
+  `answered_by` and `handoff_to` naming an agent the package lacks is an error,
+  `tool_called`, `tool_not_called` and `min_results`' `tool` naming a tool that
+  is neither in the package nor the tenant's a warning, each with "did you
+  mean".
+- `cavelon validate` warns when the package names another solution than
+  `cavelon.yaml` (`solution_slug_mismatch`), as after copying an example under
+  another name.
+- **Test and trace results show each assertion and the answer.** `cavelon
+  trace <test run>` lists under each step its assertions with pass or FAIL
+  (expected and observed for a failed one), the judge's criteria with their
+  scores, and the answer it judged, shortened (`assertions[]` and `answer` in
+  `--json`, the whole answer with `--full`); `test run --wait` names a failed
+  case's failed assertions and its answer.
+- A knowledge search's retrieval span (`trace … --span <id>`) shows its query,
+  `knowledge_outcome` and hits as a table (`retrieval` in `--json`), and its
+  attributes as the object they hold where the instance sends them as a JSON
+  string, even one encoded twice.
+- `cavelon explain` knows the values of `knowledge_outcome`
+  (`usable_evidence`, `content_gap`, `unusable_hits`, `retrieval_fault`,
+  `deliberately_unanswerable`, and the agent's `no_usable_evidence`): from the
+  instance's error catalog (area `knowledge_outcome`) where it lists them,
+  else from its documented meaning. The cavelon-testing skill maps the value
+  the agent records to the one the trace shows.
+- `cavelon status` says whether the folder's solution is the tenant's default
+  route and which one is, and names the tenant (`name`, `slug`).
+- `cavelon setup --check --strict` fails for every agent found that is not set
+  up.
+- `cavelon api describe` shows whether the instance keeps an operation for a
+  person (`person_only`) and which body fields are secret values
+  (`secret_fields`).
+- `cavelon kb upload` reads each document's `upload_outcome` (created,
+  replaced, deduplicated) where the instance reports it, and on an older
+  instance recognises a file whose content was already an active document:
+  it says nothing new was created instead of "Uploaded".
+
+### Changed
+
+- `cavelon apply` no longer creates the solution an env file names when it is
+  missing, so a preview changes nothing on the instance. It stops with
+  `solution_not_found` and names the `cavelon harness new <slug> --name <name>`
+  that creates the draft (the name only from a `harnesses.yaml` entry with
+  that slug). `cavelon init --harness <name>` creates the draft instead, named
+  as given with a slug from the name, and `init --from` creates the package's
+  only solution; as MCP tools neither creates one, and `init` names the
+  `harness new` call. A name close to an existing solution's is refused with
+  the closest ones, so a typo creates nothing.
+- `init`'s question lists the tenant's solutions as "This tenant has 1
+  solution; choose it, or start a new one:", so the numbered "new" entry is no
+  longer read as a second solution.
+- `knowledge_base_without_search_tool` counts `list_documents` (and its older
+  name `list_kb_docs`) as reaching a knowledge base, beside `search_documents`,
+  also under a tenant tool whose `builtin_key` names it; validate no longer
+  reports the built-in document tools (`list_documents`, `read_document`,
+  `save_document`) as unknown tools.
+- `package_duplicate_key` and `package_field_unknown` link to the instance's
+  page on package import and export (`concepts/harnesses`).
+- The getting-started guide and the skills match the CLI again: `init`'s
+  output, `cavelon login` instead of `npx` in step 2, seven sections, the
+  preview's warnings, copying the example under your own name (knowledge bases
+  are matched by name across the tenant), picking the model with `cavelon
+  models list`, `temperature` on reasoning models, trying and deactivating a
+  solution, re-running the whole suite after a prompt change, and a neutral
+  document id in the loop skill.
+- The examples use `gpt-5.4-mini` with the instance's default temperature
+  (0.4), and say to pick a model the tenant offers with `cavelon models list`.
+- **Over MCP, a tool confirms only the change its preview showed.** `api`,
+  `limits_set`, `models_set_limit`, `loop_cancel`, `sandbox_seed`,
+  `trigger_identity`, `harness_default`, `activate` with `make_default`, and
+  `kb_upload` where it would deactivate documents return a `confirm_token`
+  with their preview, and change something only when `confirm` is that token:
+  a hash of the change, the tool, the tenant and the instance. `confirm: true`
+  is refused (`confirm_token_required`), since it let an agent skip the
+  preview or send another body than it showed; a token of another change
+  returns the new preview with `token_mismatch` and exit code 4. The `api`
+  tool's token is the one `cavelon api` prints in an agent's shell for the
+  same request. A client that sent `confirm: true` must preview first and pass
+  the token.
+- **In a coding agent's shell, `--confirm` takes the preview's token.** Run
+  by a coding agent (`CLAUDECODE`, `CODEX_THREAD_ID`, … or `CAVELON_AGENT=1`),
+  `limits set`, `models set-limit`, `loop cancel`, `sandbox seed`,
+  `trigger identity`, `harness default`, `activate --make-default`,
+  `kb upload --replace`, `variables delete` and `secrets delete` print their
+  preview with the same `confirm_token` the MCP tool returns, and the command
+  that confirms exactly that change (`--confirm <token>`). A bare `--confirm`
+  changes nothing there and exits 5 (`activate` refuses it before it
+  activates); a token of another change exits 4. A person's terminal keeps the
+  plain flag, as before. `cavelon api` with a bare `--confirm` in an agent's
+  shell now exits 5 as well (it exited 0 with the preview).
+- **MCP tool arguments are spelled in snake_case**, as the server's
+  instructions and the docs name them: `make_default`, `keep_both`,
+  `dry_run`, `idempotency_key`. The CLI's spelling (`make-default`) is still
+  taken in this release, with a warning. An argument a tool's schema does not
+  list is refused (`unknown_argument`, exit 2), naming the closest one; it
+  used to be dropped without a word, so `activate` with `make_default`
+  activated without previewing the default route.
+- `cavelon api` refuses an operation kept for a person
+  (`operation_for_a_person`) and a secret body field
+  (`secret_field_for_a_person`) with exit code 5, "needs a person", instead
+  of 2.
+- `cavelon harness default` refuses a draft (`solution_not_active`, exit 4)
+  and names `cavelon activate --harness <slug> --make-default`; it used to
+  preview and exit 0 with "or the instance may refuse".
+- `cavelon tenant create` refuses before sending (`permission_missing`, exit
+  7) when the token may enter Platform mode but its ceiling holds no platform
+  role with `tenants.manage` (a tenant role such as `tenant_builder`).
+- `cavelon setup --check` lists an agent found on the computer but never set
+  up for Cavelon as `skip`, and no longer exits 1 because of it.
+- `cavelon status` in a solution folder leaves out the running operations of
+  another solution (a test run names its solution, a running loop's trigger
+  run its trigger, which names it; an instance that names the solution on the
+  run is read directly) and says how many; an
+  active solution no longer reads "active, ready to activate".
+- `whoami`, `status` and the MCP `whoami` name a tenant given by id
+  (`cavelon.yaml`, `--tenant`) that is none of the token's memberships, as an
+  operator's is, instead of showing `name: null`.
+- `cavelon trace … --trace <id>` suggests the span to open first: the one
+  that failed, else the last model call, else the knowledge search; it
+  suggested the root span, which has no content.
+- `cavelon kb upload` says "1 file", and with `--wait` reads the documents'
+  statuses after the wait instead of repeating "pending".
+- `cavelon api list --limit 0` lists every operation, as `api --limit 0`
+  does.
+- `cavelon pull` points at `git status --short` for new files before `git
+  diff` (which shows nothing for an untracked file), and outside git at the
+  files it listed.
+- `cavelon docs search` finds the persona page for greetings, the widget for a
+  website or embedding, the tool and secret pages for a tool's API key, and
+  the Playground and traces for a wrong answer, in German and English; "agent"
+  counts less, and "debugging" matches "debug".
+- **A stale preview no longer imports.** `cavelon apply --confirm <id>` after
+  the package files changed in what they hold (not formatting or comments)
+  exits 4 with `preview_files_changed`, naming the files, and imports nothing;
+  it used to warn and exit 0. `--allow-stale` keeps the old behaviour.
+- After a confirmed import, `pull` compares with the package files as the
+  instance now holds them. A file that changed after the preview counts as the
+  instance's only when the instance's export holds the same content, so a
+  comment or formatting change after the preview no longer makes the next
+  `pull` refuse, and an edit the instance lacks is still protected.
+- `fmt` and `pull` agree on the export's form. `fmt` also fills `[]` and `{}`
+  for a list or object field that has a default the schema cannot show, and
+  numbers the entries of a list that leave out an `…_order` field
+  (`sort_order`, `display_order`, `step_order`) by their position, so test
+  cases keep their written order instead of the instance's (by name). `pull`
+  compares a file with the export as the instance reads both: a field the
+  export spells out (`memory_config: {}`, `tags: []`, `max_output_tokens:
+  null`, a default) and the file leaves out is no change, so the first pull
+  after an apply rewrites only what changed on the instance.
+- `pull` writes a test suite back to the file it was pulled into or applied
+  from, whatever its name, instead of a file named after the suite; the
+  mapping is kept in `.cavelon/pulled-files.json`.
+- `pull` of a solution leaves the tenant-wide sections out of the solution's
+  folder: those the package schema marks `x-cavelon-scope: tenant`, or on an
+  instance that marks none, `tenant_settings` and `model_registry`. A file of
+  one already there is kept, with a warning that `apply` sends it for the whole
+  tenant. The tenant's full configuration (`pull` without a solution) keeps
+  them.
+- `cavelon validate` does not print "Valid" while a reference the import
+  preview will block is left (`package_reference_unknown`,
+  `package_model_unknown`): it says the preview will block it unless it exists
+  on the instance by then (`blocking_count` in `--json`).
+- `cavelon validate` reads a tenant's list the package needs (models, skills,
+  tools, knowledge bases, solutions) when no pull or `models list` has read it
+  yet, instead of skipping the check; with `--offline` it names each check it
+  skipped (`Not checked: …`, `skipped` in `--json`).
+- `cavelon validate` findings: a misspelt assertion `type` (`answerd_by`) is
+  one finding with the closest type instead of one per criterion shape; an
+  unknown field gets a suggestion that starts with it (`description` →
+  `description_override`); a required field under another name points at the
+  misspelt field's line; invalid YAML names the parser's line, and what names
+  the entries of a file that cannot be read is not reported; a schema
+  finding's hint is the CLI's (`cavelon schema agents.handoffs`), also where
+  the instance's catalog has an API hint for the code.
+
+- The contract snapshot is refreshed from an instance that publishes a test
+  step's criterion shapes in its package schema (judge criteria as text or
+  `{text, dimension}`, assertions by `type`), marks secret body fields
+  (`x-cavelon-secret`), replaces a same-named document on upload
+  (`replace_existing`, `replaced_document_ids`), and documents assertions and
+  knowledge outcomes on its regression-testing page. The tests now check
+  assertions against the published shapes instead of a hand-made fixture, and
+  play an older instance by taking those additions out.
+- `cli/scripts/scrub-contracts.mjs` also drops a sentence of the published
+  texts that names an issue outside parentheses.
+
+### Fixed
+
+- `cavelon trace <test run>` shows a failed case's judge reasoning once when the instance recorded no error, instead of twice.
+
+## [0.1.5] - 2026-10-04
+
+Agents get further on their own: validate catches broken references, unknown
+fields and models before an import, the preview says what will change and
+what blocks it, re-uploading a file replaces it, the persona and the default
+route are part of authoring, test steps can check routing, and `brew install`
+works on macOS and Linux.
+
+### Added
+
+- Homebrew: `brew install goodguys-gmbh/cavelon/cavelon` on macOS and Linux;
+  the release workflow updates the formula in goodguys-gmbh/homebrew-cavelon
+  on every release, and `brew upgrade cavelon` updates.
+
+- `cavelon harness default [solution]` (MCP tool `harness_default`) makes a
+  solution the tenant's default route, the one its chat and widget answer with
+  where no solution is named. Without `--confirm` it changes nothing and names
+  the current default and the one that would replace it
+  (`default → Default (default) now; would become Support (support)`).
+- `cavelon activate` says when the solution is not the tenant's default route,
+  and `--make-default` previews making it the default; with `--confirm` as
+  well, it changes it (`default_route` in `--json`). An instance that does not
+  mark the default says nothing of it.
+- `cavelon harness list` marks the default route in a DEFAULT column; an
+  instance that does not mark it leaves the column out (`is_default: null`).
+- `cavelon fmt` (MCP tool `fmt`) brings hand-written package files into the
+  form the instance's export gives them, from the package schema, offline:
+  the defaults it fills in, its field order, block lists. The first `pull`
+  after an apply then rewrites only what changed on the instance.
+  `--check` writes nothing and exits 3 when a file would change.
+- `pull` and `init` write `package/persona.yaml` with every field the
+  instance's schema lists; a field that is not set is a comment with its
+  default, so the persona's shape is visible. A file of placeholders only sets
+  nothing and sends nothing.
+- `cavelon validate` warns when the persona turns a greeting or fallback on
+  (or leaves it on by default) with an empty text (`persona_message_empty`).
+- `cavelon explain` knows `cavelon`'s own error codes (`operation_not_found`,
+  `uncommitted_changes`, …), and adds the command that does what the instance's
+  fix asks of an API route (for `package_schema_invalid`: `cavelon validate`
+  and `cavelon schema`).
+- `cavelon apply` shows the structured preview of recent instances: each
+  blocker with its code, package file, line and path, hint and the `cavelon
+  explain` command (`blocker_details`); each field it changes as
+  `object.field: old → new` (`field_changes` in `--json` and the MCP result);
+  and the fields it does not apply, with the command that sets each
+  (`not applied: harnesses[0].is_default (set with cavelon harness default
+  support)`; `not_applied`). An instance without them keeps today's output.
+- The authoring skill has a Persona section (who the assistant is, as opposed
+  to an agent's `system_prompt`; greeting and fallback in the content
+  language), and the loop skill tells the agent to ask the person before
+  making a solution the default route.
+- `cavelon schema [section]` (MCP tool `package_schema`) shows the package
+  schema the instance publishes: without a section, every section with the file
+  it is kept in; with one, its fields (type, required, allowed values, default)
+  and the smallest entry that has every required field, as YAML to copy into
+  the file. It reads the schema as `validate` does, the cached copy first, and
+  works with `--offline`.
+- `cavelon whoami` says whether the token may enter Platform mode, with its
+  ceiling (`platform mode: not allowed (ceiling tenant_builder)`), and which
+  tenants it reaches (`reaches: every tenant (as operator; …)`);
+  `credential.platform_mode_allowed` in `--json`.
+- `cavelon status` shows the solution's state: draft or active, whether it is
+  ready to activate (or the blockers), and its latest test run, from the
+  readiness the instance publishes (`solution.state` in `--json`). An instance
+  whose readiness does not name the latest run says so.
+- `cavelon kb upload` names each file whose name matches an active document of
+  the knowledge base, in `--dry-run` and after the upload:
+  "bergbahn-faq.md exists (094e95e9…) and stays active". `--replace` replaces
+  that document: through the instance's own replacement (`replace_doc_ids`),
+  reading what was replaced from `replaced_document_ids` where the instance
+  reports it; on an instance whose upload cannot replace, it uploads and then
+  deactivates the old document, and only with `--confirm`. On an instance that
+  replaces same-named documents by default, `--keep-both` keeps both.
+  `--dry-run` now looks the knowledge base up, so it fails for one that does
+  not exist. The cavelon-loop skill says how to update a document. `pull` writes
+  `.cavelon/inventory.json` next to `inventory.md`, which now lists skills and
+  models too.
+- `cavelon validate` checks what the schema cannot, each with file and line:
+  two entries with one slug (`package_duplicate_key`) and a handoff to an agent
+  the package lacks (`package_reference_missing`) are errors; a skill, tool,
+  knowledge base or solution that is neither in the package nor among what the
+  tenant held at the last pull (`package_reference_unknown`), a field the
+  package schema does not have (`package_field_unknown`, "did you mean
+  temperature?"), and an agent's `llm_model` outside the tenant's model list as
+  `pull` or `models list` last read it (`package_model_unknown`) are warnings.
+  A finding carries the closest name as `suggestion`; a required field under
+  another name is reported once, as the missing field, with the suggestion.
+- `cavelon docs get index` prints the instance's whole docs index.
+- `cavelon trace` shows what the agent recorded a knowledge search found:
+  `knowledge_outcome` (`usable_evidence`, `content_gap`, `unusable_hits`,
+  `retrieval_fault`, `deliberately_unanswerable`) on the search's tool span
+  and its retrieval span, in a KNOWLEDGE_OUTCOME column and in `--json`. For a
+  test run it names the agent that answered each step (AGENT, `agent` in
+  `--json`), and a case that did not pass says `Answered by: <agent>`. An
+  instance that records neither shows neither.
+- The cavelon-testing skill teaches the step assertions `tool_called`,
+  `tool_not_called`, `answered_by` and `handoff_to`, with an example for a
+  solution with a handoff, so routing becomes part of the regression.
+- `cavelon validate` warns `test_assertion_unchecked`, once per suite file,
+  when a test step has assertions (criteria with a `type`) and the instance's
+  package schema does not describe a step's criteria: it cannot check them,
+  and an instance that does not know a type grades it as a judge criterion.
+  Where the schema describes them, each assertion is checked like any other
+  field.
+- `cavelon apply --confirm` shows the structured blockers of an import its own
+  check refuses, as a preview does: code, package file and line, path, hint
+  and the `cavelon explain` command (`blocker_details` in `--json` and the MCP
+  result), for a `409 package_requirements_changed` and for a 422 of an import
+  blocked when it applies. An instance that sends only the `blockers`
+  sentences keeps today's output.
+
+### Changed
+
+- `cavelon apply` looks at `ready` before the preview id: a blocked preview
+  (which has no id on a recent instance) prints its blockers and no longer
+  warns to update the instance.
+- `cavelon explain` suggests, for a code it does not know, the codes a typo
+  away or with the same start, never one that shares only a common word in the
+  middle; `details.similar` in `--json`.
+- `cavelon api describe` shows the item fields of a body field that is a list
+  of objects, under `<field>[]` (`array of <Item>`).
+- `cavelon api` sends the folder's solution as `harness_id` to the persona
+  operations (`get_bot_persona`, `upsert_bot_persona`, …) when none is passed,
+  and says so: without it they reach the tenant's default route.
+- `pull` counts a field spelled `null` and one left out as the same, so a file
+  keeps its bytes when only that differs.
+- `cavelon tenant create` asks the instance first whether the token may enter
+  Platform mode and, there, holds `tenants.manage`. When it does not, it stops
+  with exit 7 before sending anything (`platform_mode_not_allowed`,
+  `permission_missing`) and names the remedy: a token with **Allow Platform
+  mode** and a platform ceiling, or the Admin. `--use` switches to the new
+  tenant only once the instance confirms the token acts in it, and says so
+  otherwise.
+- A 403 from a platform route (the tenants, the platform's settings, the
+  administration routes) no longer tells you to check the tenant: its hint says
+  the route needs a token that allows Platform mode and points to
+  `cavelon whoami`.
+- `cavelon tenant list` with an operator's token that reaches every tenant
+  says "No memberships of your own; …" with the `--search` to find any tenant,
+  and its `--json` marks the list as the person's own memberships
+  (`listed: "own_memberships"`, with a `note` on what `total` counts).
+- `cavelon api` and `cavelon api describe` find an operation by a looser
+  spelling (`createTenant` or `create-tenant` for `create_tenant`) and say
+  which one they took; a near miss names the closest operations. A parameter
+  passed as an option (`--harness_id x`) gets the hint to pass `harness_id=x`.
+- `cavelon api` takes the request body with `--body`. `--json <body>` still
+  sends it, with a warning, and will be removed in a later release; `--json`
+  alone prints JSON as on every command.
+- `pull` no longer refuses files as the last pull wrote them or the last
+  confirmed `apply` imported them, in a git repository without a commit as
+  outside git: `.cavelon/pulled-files.json` now holds the digests of both.
+  Files git lists are matched in a solution that sits in a subfolder of the
+  repository too.
+- The MCP tool `operation_status` waits when given a `timeout`, until the
+  operations settle or the time passes, at most 50 seconds (a longer timeout is
+  cut there, with a warning); without one it returns the state at once.
+  `wait` and `operation_status` report `timeout_ms` and `waited_ms`, and
+  `timed_out` is true only when the whole timeout was waited, never for a
+  state read once. The tool's description and the server's instructions say
+  the same.
+- The MCP descriptions of `init` and `pull` say that they change nothing on
+  the instance (`pull` only reads it) and write files in the solution folder,
+  instead of "Changes the instance; may delete or overwrite."
+- `cavelon status` reads the instance's version now instead of from the
+  cache, and offline marks the cached one with when it was read; `whoami`
+  marks a cached version too. Its text shows the quotas it cannot read, and a
+  403 on the quota usage says that the token's ceiling (named) does not read
+  them and who does, instead of the raw refusal; `limits` says the same.
+- `cavelon docs search` drops English and German stop words, matches whole
+  words (in a simple base form, so "testing" finds "test" but "latest" does
+  not), weighs rare words above common ones, looks German words for the core
+  concepts up in English (Wissensbasis, testen, Standard, Bot), and lists only
+  pages that match well, instead of every page that shares a letter sequence.
+  When nothing matches, it says so, with the words it looked for, English
+  words to try and `cavelon docs get index`. "Wie lade ich Dokumente in eine
+  Wissensbasis hoch?", "Wie teste ich meinen Agenten?" and "Wie mache ich
+  meinen Bot zur Standardantwort für alle Nutzer?" now find the concept page
+  first.
+
+- `cavelon login` and `cavelon setup` let an operator whose token reaches
+  every tenant choose the tenant later: Enter at the question stores the token
+  without a tenant, as `--token-stdin` does, and says how to choose one with
+  `cavelon use`. The question now reads "Which tenant to start in? (type part
+  of its name, or press Enter to choose later)", and the line above it says
+  that the token works in every tenant, one at a time, switched with
+  `cavelon use`, or chosen per command with `--tenant` and per solution folder
+  with `tenant:` in `cavelon.yaml`. A token for a list of tenants still
+  chooses one, with Enter taking the default the instance marks.
+
+### Fixed
+
+- `cavelon fmt` no longer adds a judge criterion's `dimension` to a test
+  step's assertions (`{type: handoff_to, value: …}`) on an instance that
+  describes a step's criteria; the instance refuses an assertion with a field
+  it does not take. Where a value can take several shapes, `fmt` now picks the
+  one whose `type` matches, and leaves a value that fits none as written.
+- `cavelon validate` reports, where a value can take several shapes, only what
+  the closest shape says (`missing required field "value"`) instead of every
+  shape's complaint, and names a field that is not allowed (`field "agent" is
+  not allowed here`).
+
+## [0.1.4] - 2026-10-04
+
+Agents keep to what is meant for them: `cavelon api` run by a coding agent
+now applies the guards of the MCP tool, fields the instance marks as secret
+are never sent from an agent, and every test-case status is explained.
+
+### Added
+
+- `cavelon explain` explains the test-case statuses that are neither pass nor
+  fail: `calibration_required`, `pending_review`, `not_run`, `not_evaluated`
+  and `skip`, with what each means and what to do next. They are no error
+  codes, so the instance's error catalog does not list them.
+
+### Changed
+
+- `cavelon api` run by a coding agent applies the guards of the MCP `api`
+  tool. `cavelon` sees an agent by the variable its shell tool sets
+  (`CLAUDECODE`, `CODEX_THREAD_ID` or `CODEX_SANDBOX`, `CURSOR_AGENT`,
+  `GEMINI_CLI`, `COPILOT_CLI`, `COPILOT_AGENT`, `AI_AGENT`), or by
+  `CAVELON_AGENT=1`. There, it refuses an operation the instance keeps for a
+  person, keeps its files in the solution folder, and for an operation that is
+  not read-only prints the request with a token and sends exactly that request
+  only when run again with `--confirm <token>`. A person's terminal is
+  unaffected.
+- The `api` tool, and `cavelon api` run by a coding agent, refuse a body that
+  sets a field the instance marks as a secret value (`x-cavelon-secret`), in
+  nested objects and arrays too, before sending anything
+  (`secret_field_for_a_person`). An instance that marks no field behaves as
+  before.
+- `test run --wait` and `wait` print a short reason next to a count that waits
+  for a person ("1 calibration required (a knowledge base or value the case
+  needs was not ready)"), name the waiting cases with the reason the instance
+  recorded, and say which `cavelon explain` to run. The cavelon-testing skill
+  lists the statuses.
+- The getting-started guide and the security page say which token ceiling to
+  pick for which task (Observer, Builder, Tenant Owner, Platform mode only for
+  platform operators) and to keep **May activate** off unless the token should
+  put solutions live, and link the instance's page on personal access tokens.
+- CI pins every action by commit, like the release workflow.
+
 ## [0.1.3] - 2026-10-04
 
 The easy start: install with one line on macOS, Linux or Windows without

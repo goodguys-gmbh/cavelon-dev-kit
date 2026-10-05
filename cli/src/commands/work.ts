@@ -1,4 +1,5 @@
-import { promises as fs } from "node:fs";
+import { createHash } from "node:crypto";
+import { createReadStream, promises as fs } from "node:fs";
 import path from "node:path";
 import {
   boolOption,
@@ -13,13 +14,17 @@ import {
   type Context,
 } from "../command.js";
 import { capacityCodeIn, capacityHint, noteLines, runCapacityNote, type CapacityNote, type RunState } from "../capacity.js";
+import { assertionCount, assertionLine, retrievalRows, retrievalView, spanAttributes, stepAssertions, suggestedSpan, type RetrievalView } from "../trace-view.js";
 import { CavelonError, ExitCode, usageError, type ExitCodeValue } from "../errors.js";
+import { confirmation } from "../confirm-token.js";
 import { confinedPath } from "../paths.js";
 import { clip, keyValues, moreHint, table } from "../format.js";
-import { callStable } from "../invoke.js";
+import type { OpenApiDoc } from "../contracts.js";
+import { callStable, workflowOperation } from "../invoke.js";
+import { deref, type Operation } from "../openapi.js";
 import { bindsNow, changedBy, limitError, limitsOrWarn, readLimits, type Limit, type PublishedLimits } from "../limits.js";
 import { getOperation } from "../operations.js";
-import { caseCounts, caseLabel, countsText, failedCase, NOT_PASSED, runVerdict, type TestResultState } from "../results.js";
+import { caseCounts, caseLabel, countsText, failedCase, caseKnowledgeOutcomes, NOT_PASSED, runVerdict, type TestResultState } from "../results.js";
 import { isUuid } from "../session.js";
 import { cavelonCommand, shellWord } from "../shell.js";
 import { readZipSummary, ZipError, type ZipSummary } from "../zip.js";
@@ -45,6 +50,238 @@ interface UploadedDocument {
   filename: string;
   status: string;
   operation_id?: string | null;
+  /** The documents this upload replaced, newest first; absent on an instance that does not report it. */
+  replaced_document_ids?: string[] | null;
+  /** created, replaced or deduplicated (identical content was already active); absent on an older instance. */
+  upload_outcome?: string | null;
+}
+
+/** A document already in the knowledge base, as the instance lists it. */
+interface ExistingDocument {
+  id: string;
+  filename: string;
+  status?: string;
+  is_active?: boolean;
+  created_at?: string;
+  /** SHA-256 of the uploaded bytes, the value the upload's deduplication compares; null for a document that was no file or is older, absent on an older instance. */
+  file_sha256?: string | null;
+}
+
+const fileCount = (n: number) => `${n} file${n === 1 ? "" : "s"}`;
+
+/**
+ * What the upload did with a file: the instance's `upload_outcome` where it
+ * reports one. An older instance answers a file whose content is already an
+ * active document of the knowledge base with that document, so an id the
+ * knowledge base listed before the upload is a deduplicated file.
+ */
+function uploadOutcomeOf(d: UploadedDocument, before: Set<string>): string | null {
+  if (typeof d.upload_outcome === "string" && d.upload_outcome) return d.upload_outcome;
+  return before.has(d.id) ? "deduplicated" : null;
+}
+
+/** The documents' statuses now, after a wait: the upload's answer said "pending" for each. */
+async function refreshStatuses(ctx: Context, kbId: string, documents: UploadedDocument[]): Promise<void> {
+  try {
+    const list = await callStable<ExistingDocument[]>(ctx, "GET", DOCUMENTS_ROUTE, "listing a knowledge base's documents", { params: { kb_id: [kbId] } });
+    const byId = new Map((Array.isArray(list) ? list : []).map((d) => [d.id, d]));
+    for (const d of documents) {
+      const status = byId.get(d.id)?.status;
+      if (typeof status === "string" && status) d.status = status;
+    }
+  } catch (error) {
+    if (!(error instanceof CavelonError)) throw error;
+    ctx.warn(`Could not read the documents' statuses after the wait (${error.message}); the operations above say how ingestion ended.`);
+  }
+}
+
+const UPLOAD_ROUTE = "/api/v1/knowledge-bases/{kb_id}/documents/upload";
+const DOCUMENTS_ROUTE = "/api/v1/knowledge-bases/{kb_id}/documents";
+const ACTIVE_ROUTE = "/api/v1/knowledge-bases/{kb_id}/documents/active";
+
+/**
+ * How this instance's upload treats a file named like an existing document,
+ * from the fields its upload form publishes: `replace_doc_ids` replaces the
+ * documents it names once the new files are verified, and an instance that
+ * offers `replace_existing` replaces a same-named active document by default.
+ * An instance whose OpenAPI cannot be read is taken to do neither.
+ */
+interface ReplaceSupport {
+  byIds: boolean;
+  byName: boolean;
+}
+
+function replaceSupport(doc: OpenApiDoc | undefined, op: Operation): ReplaceSupport {
+  const schema = op.requestBody?.content?.["multipart/form-data"]?.schema;
+  const properties = doc && schema ? (deref(doc, schema) as { properties?: Record<string, unknown> } | undefined)?.properties : undefined;
+  return { byIds: Boolean(properties?.replace_doc_ids), byName: Boolean(properties?.replace_existing) };
+}
+
+/**
+ * What happens to an existing document named like a file: it stays active, the
+ * instance replaces it by name or by the id the kit sends, or the kit
+ * deactivates it after the upload.
+ */
+type ReplacePlan = "stays_active" | "replaced_by_name" | "replace_by_id" | "deactivate";
+type ReplaceOutcome = "stays_active" | "replaced" | "replace_requested" | "deactivated" | "not_uploaded" | "identical";
+
+interface NameMatch {
+  /** The local file, relative to the working folder. */
+  file: string;
+  filename: string;
+  document_id: string;
+  plan: ReplacePlan;
+  outcome?: ReplaceOutcome;
+}
+
+const shortId = (id: string) => `${id.slice(0, 8)}…`;
+
+/** The active documents of the knowledge base; undefined, with a warning, when the instance does not list them here. */
+async function existingDocuments(ctx: Context, kbId: string): Promise<ExistingDocument[] | undefined> {
+  try {
+    const list = await callStable<ExistingDocument[]>(ctx, "GET", DOCUMENTS_ROUTE, "listing a knowledge base's documents", { params: { kb_id: [kbId] } });
+    return (Array.isArray(list) ? list : []).filter((d) => d.is_active !== false && typeof d.filename === "string");
+  } catch (error) {
+    if (!(error instanceof CavelonError)) throw error;
+    ctx.warn(`Could not list the knowledge base's documents (${error.message}); files named like an existing document are not reported.`);
+    return undefined;
+  }
+}
+
+/** A local file whose bytes are those of an active document: the instance would create nothing new for it. */
+interface IdenticalFile {
+  /** The local file, relative to the working folder. */
+  file: string;
+  document_id: string;
+  /** The document's name, which may differ from the file's. */
+  filename: string;
+}
+
+async function sha256Of(file: string): Promise<string> {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(file)) hash.update(chunk as Buffer);
+  return hash.digest("hex");
+}
+
+/**
+ * The files identical to an active document, by the `file_sha256` the instance
+ * publishes on its documents. Undefined when the knowledge base has documents
+ * and none carries a hash, as on an instance that does not publish it: then
+ * nothing can be said about content. A document without a hash (not a file, or
+ * older than the field) matches nothing.
+ */
+async function identicalFiles(files: string[], cwd: string, existing: ExistingDocument[]): Promise<IdenticalFile[] | undefined> {
+  const hashed = existing.filter((d): d is ExistingDocument & { file_sha256: string } => typeof d.file_sha256 === "string" && d.file_sha256 !== "");
+  if (existing.length && !hashed.length) return undefined;
+  const byHash = new Map<string, ExistingDocument>();
+  // The newest document of a content first, as the newest is the one a reader of the list sees.
+  for (const d of [...hashed].sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""))) {
+    const key = d.file_sha256.toLowerCase();
+    if (!byHash.has(key)) byHash.set(key, d);
+  }
+  const out: IdenticalFile[] = [];
+  if (!byHash.size) return out;
+  for (const file of files) {
+    const document = byHash.get(await sha256Of(file));
+    if (document) out.push({ file: path.relative(cwd, file) || file, document_id: document.id, filename: document.filename });
+  }
+  return out;
+}
+
+/**
+ * Each active document named like a file to upload, with what this upload
+ * does to it. With --replace the newest one of a name goes to the instance's
+ * own replacement where it offers one; whatever it does not replace, the kit
+ * deactivates after the upload.
+ */
+function nameMatches(files: string[], cwd: string, existing: ExistingDocument[], mode: "replace" | "keep-both" | "default", support: ReplaceSupport): NameMatch[] {
+  const matches: NameMatch[] = [];
+  const mapped = new Set<string>();
+  for (const file of files) {
+    const filename = path.basename(file);
+    const same = existing.filter((d) => d.filename === filename).sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
+    same.forEach((document, index) => {
+      let plan: ReplacePlan = "stays_active";
+      if (mode === "default" && support.byName) plan = "replaced_by_name";
+      if (mode === "replace") plan = index === 0 && support.byIds && !mapped.has(filename) ? "replace_by_id" : "deactivate";
+      matches.push({ file: path.relative(cwd, file) || file, filename, document_id: document.id, plan });
+    });
+    mapped.add(filename);
+  }
+  return matches;
+}
+
+/** One line per match, as the dry run and the preview say it. */
+function plannedLine(match: NameMatch): string {
+  const head = `${match.filename} exists (${shortId(match.document_id)})`;
+  switch (match.plan) {
+    case "stays_active":
+      return `${head} and stays active`;
+    case "replaced_by_name":
+      return `${head} and is replaced by the upload (--keep-both keeps it)`;
+    case "replace_by_id":
+      return `${head} and is replaced once the new file is verified`;
+    case "deactivate":
+      return `${head} and is deactivated after the upload`;
+  }
+}
+
+function outcomeLine(match: NameMatch): string {
+  const head = `${match.filename} exists (${shortId(match.document_id)})`;
+  switch (match.outcome) {
+    case "replaced":
+      return `${head}: replaced`;
+    case "replace_requested":
+      return `${head}: replaced once the new file is verified`;
+    case "deactivated":
+      return `${head}: deactivated`;
+    case "not_uploaded":
+      return `${head} and stays active: its new version was not uploaded`;
+    default:
+      return `${head} and stays active`;
+  }
+}
+
+/** The hint after the lines, when a same-named document stays active without being asked to. */
+function staysActiveHint(matches: NameMatch[], mode: "replace" | "keep-both" | "default"): string {
+  return mode === "default" && matches.some((m) => (m.outcome ?? m.plan) === "stays_active")
+    ? "Both versions answer. --replace replaces the existing document; --keep-both keeps both without this note."
+    : "";
+}
+
+/**
+ * The outcome of each match from the upload's answer: an instance that reports
+ * `replaced_document_ids` says what it replaced; an older one replaces the ids
+ * the kit sent once the new files are verified, and replaces nothing by name.
+ */
+function settleMatches(matches: NameMatch[], uploaded: UploadedDocument[], uploadedFiles: Set<string>): void {
+  const reported = uploaded.some((d) => Array.isArray(d.replaced_document_ids));
+  const replaced = new Set(uploaded.flatMap((d) => (Array.isArray(d.replaced_document_ids) ? d.replaced_document_ids : [])));
+  for (const match of matches) {
+    if (!uploadedFiles.has(match.file)) match.outcome = "not_uploaded";
+    else if (replaced.has(match.document_id)) match.outcome = "replaced";
+    else if (match.plan === "replace_by_id" && !reported) match.outcome = "replace_requested";
+    else if (match.plan === "deactivate") match.outcome = undefined;
+    else match.outcome = "stays_active";
+  }
+}
+
+/** Deactivate the documents the kit replaces itself; undefined when all went, else the error. */
+async function deactivate(ctx: Context, kbId: string, matches: NameMatch[]): Promise<CavelonError | undefined> {
+  const due = matches.filter((m) => m.plan === "deactivate" && m.outcome === undefined);
+  if (!due.length) return undefined;
+  try {
+    await callStable(ctx, "PATCH", ACTIVE_ROUTE, "deactivating a document", {
+      params: { kb_id: [kbId] },
+      body: { updates: due.map((m) => ({ id: m.document_id, is_active: false })) },
+    });
+    for (const m of due) m.outcome = "deactivated";
+    return undefined;
+  } catch (error) {
+    if (!(error instanceof CavelonError)) throw error;
+    for (const m of due) m.outcome = "stays_active";
+    return error;
+  }
 }
 
 async function resolveKbId(ctx: Context, ref: string): Promise<{ id: string; name?: string }> {
@@ -342,7 +579,13 @@ export const kbUpload: CommandSpec = {
   description:
     "Hidden files are skipped. Ingestion runs on the instance; `cavelon wait` follows it.\n" +
     "Files are checked against the instance's published upload limits first. A .zip goes only to a tenant that expands\n" +
-    "archives, and only within its caps on file count, unpacked size and compression ratio.",
+    "archives, and only within its caps on file count, unpacked size and compression ratio.\n" +
+    "A file named like an active document of the knowledge base is listed, with what happens to that document. An\n" +
+    "instance that replaces same-named documents on upload does so (--keep-both keeps both); elsewhere the old one stays\n" +
+    "active. --replace replaces it: through the instance's own replacement where its upload offers one, else the kit\n" +
+    "deactivates the old document after the upload (after the wait with --wait), and then only with --confirm.\n" +
+    "--dry-run also names each file identical to an active document, which the upload would not create again, where the\n" +
+    "instance publishes its documents' file hashes.",
   readOnly: false,
   mcpTool: "kb_upload",
   positionals: [{ name: "dir", description: "Folder (or single file) to upload.", required: true }],
@@ -350,15 +593,25 @@ export const kbUpload: CommandSpec = {
     kb: { type: "string", value: "<kb>", description: "Knowledge base name or id (required)." },
     recursive: { type: "boolean", short: "r", description: "Include subfolders." },
     ext: { type: "string", multiple: true, value: "<ext>", description: "Only these file extensions (pdf, md, …)." },
-    "dry-run": { type: "boolean", description: "List what would be uploaded, upload nothing." },
+    replace: { type: "boolean", description: "Replace active documents with the same file name." },
+    "keep-both": { type: "boolean", description: "Keep active documents with the same file name next to the new ones." },
+    confirm: { type: "boolean", mcpToken: true, description: "With --replace, deactivate the old documents the instance does not replace itself; without it nothing is sent." },
+    "dry-run": { type: "boolean", description: "List what would be uploaded, replaced and found identical; upload nothing." },
     wait: WAIT_OPTION,
     timeout: TIMEOUT_OPTION,
   },
-  examples: ["cavelon kb upload ./docs --kb FAQ", "cavelon kb upload ./manuals --kb FAQ -r --ext pdf --wait --timeout 5m"],
+  examples: [
+    "cavelon kb upload ./docs --kb FAQ",
+    "cavelon kb upload ./docs/bergbahn-faq.md --kb FAQ --replace --dry-run",
+    "cavelon kb upload ./manuals --kb FAQ -r --ext pdf --wait --timeout 5m",
+  ],
   async run(ctx, input) {
-    const dir = await confinedPath(ctx, positional(input, "dir")!, "The folder");
+    const dirArg = positional(input, "dir")!;
+    const dir = await confinedPath(ctx, dirArg, "The folder");
     const kbRef = stringOption(input, "kb");
     if (!kbRef) throw usageError("Which knowledge base?", "Pass --kb <name-or-id>.");
+    const mode = boolOption(input, "replace") ? "replace" : boolOption(input, "keep-both") ? "keep-both" : "default";
+    if (mode === "replace" && boolOption(input, "keep-both")) throw usageError("--replace and --keep-both exclude each other.");
     const extensions = listOption(input, "ext").flatMap((e) => e.split(",")).map((e) => e.replace(/^\./, "").toLowerCase()).filter(Boolean);
     let stat;
     try {
@@ -374,11 +627,68 @@ export const kbUpload: CommandSpec = {
       const found = await uploadRefusals(files, ctx.io.cwd, published, (message) => ctx.warn(message));
       if (found.refusals.length) throw refusalError(found, files.length);
     }
-    if (boolOption(input, "dry-run")) {
-      const rel = files.map((f) => path.relative(ctx.io.cwd, f) || f);
-      return { data: { kb: kbRef, files: rel, count: rel.length, dry_run: true }, text: `Would upload ${rel.length} files:\n${rel.join("\n")}` };
-    }
     const kb = await resolveKbId(ctx, kbRef);
+    const { doc, op } = await workflowOperation(ctx, "POST", UPLOAD_ROUTE, "document upload");
+    const support = replaceSupport(doc, op);
+    const existing = await existingDocuments(ctx, kb.id);
+    const matches = existing ? nameMatches(files, ctx.io.cwd, existing, mode, support) : [];
+    const rel = files.map((f) => path.relative(ctx.io.cwd, f) || f);
+    const planned = matches.map(({ outcome: _outcome, ...m }) => m);
+    const deactivations = matches.filter((m) => m.plan === "deactivate");
+    if (boolOption(input, "dry-run")) {
+      const identical = existing ? await identicalFiles(files, ctx.io.cwd, existing) : undefined;
+      // A same-named document the file is identical to is what the upload answers with: nothing of it is replaced or deactivated.
+      const isIdentical = (m: NameMatch) => Boolean(identical?.some((i) => i.file === m.file && i.document_id === m.document_id));
+      const differing = matches.filter((m) => !isIdentical(m));
+      const dryHint = staysActiveHint(differing, mode);
+      const dryDeactivations = differing.filter((m) => m.plan === "deactivate");
+      return {
+        data: {
+          kb: kbRef,
+          files: rel,
+          count: rel.length,
+          dry_run: true,
+          existing: planned.map((m, index) => (identical ? { ...m, identical: isIdentical(matches[index]!) } : m)),
+          content_compared: identical !== undefined,
+          identical: identical ?? [],
+        },
+        text: [
+          `Would upload ${fileCount(rel.length)}:`,
+          ...rel,
+          ...(identical ?? []).map(
+            (i) =>
+              `${i.file}: identical to the active document ${shortId(i.document_id)}${i.filename === path.basename(i.file) ? "" : ` (${i.filename})`}; nothing new would be created (deduplicated)`,
+          ),
+          ...differing.map(plannedLine),
+          ...(dryHint ? [dryHint] : []),
+          ...(dryDeactivations.length ? [`The kit deactivates ${dryDeactivations.length === 1 ? "that document" : "those documents"} only with --replace --confirm.`] : []),
+        ].join("\n"),
+      };
+    }
+    const gate = deactivations.length ? await confirmation(ctx, input, "kb_upload", { kb: kb.id, files: rel, existing: planned }) : undefined;
+    if (gate && !gate.confirmed) {
+      const confirm = gate.confirm(cavelonCommand(
+        "kb",
+        "upload",
+        dirArg,
+        "--kb",
+        kbRef,
+        ...(boolOption(input, "recursive") ? ["-r"] : []),
+        ...extensions.flatMap((e) => ["--ext", e]),
+        "--replace",
+        "--confirm",
+      ));
+      return {
+        data: { kb: { id: kb.id, name: kb.name ?? null }, files: rel, count: rel.length, uploaded: false, existing: planned, confirm, ...gate.fields },
+        text: [
+          `--replace uploads ${fileCount(rel.length)} and then deactivates ${deactivations.length} document${deactivations.length === 1 ? "" : "s"} the instance's upload does not replace itself:`,
+          ...matches.map(plannedLine),
+          ...(gate.mismatch ? [gate.mismatch] : []),
+          `Nothing was sent. Upload and deactivate with: ${confirm}`,
+        ].join("\n"),
+        ...(gate.exitCode ? { exitCode: gate.exitCode } : {}),
+      };
+    }
     // Batches keep each request bounded in size and time.
     const batches: string[][] = [];
     let current: string[] = [];
@@ -395,15 +705,23 @@ export const kbUpload: CommandSpec = {
     }
     if (current.length) batches.push(current);
     const documents: UploadedDocument[] = [];
+    const uploadedFiles = new Set<string>();
     let failure: { error: CavelonError; notUploaded: string[] } | undefined;
     for (const [index, batch] of batches.entries()) {
+      const names = new Set(batch.map((f) => path.basename(f)));
+      const replaceIds = Object.fromEntries(matches.filter((m) => m.plan === "replace_by_id" && names.has(m.filename)).map((m) => [m.filename, m.document_id]));
+      const fields: Record<string, unknown> = {};
+      if (Object.keys(replaceIds).length) fields.replace_doc_ids = JSON.stringify(replaceIds);
+      if (mode === "keep-both" && support.byName) fields.replace_existing = false;
       try {
-        const uploaded = await callStable<UploadedDocument[]>(ctx, "POST", "/api/v1/knowledge-bases/{kb_id}/documents/upload", "document upload", {
+        const uploaded = await callStable<UploadedDocument[]>(ctx, "POST", UPLOAD_ROUTE, "document upload", {
           params: { kb_id: [kb.id] },
+          body: Object.keys(fields).length ? fields : undefined,
           files: batch.map((f) => ({ field: "files", path: f })),
           timeoutMs: 300_000,
         });
         documents.push(...uploaded);
+        for (const f of batch) uploadedFiles.add(path.relative(ctx.io.cwd, f) || f);
       } catch (error) {
         if (!(error instanceof CavelonError) || documents.length === 0) throw error;
         // Earlier batches are uploaded and ingesting: report them, and what is left.
@@ -411,32 +729,78 @@ export const kbUpload: CommandSpec = {
         break;
       }
     }
-    const operationIds = documents.map((d) => d.operation_id).filter((id): id is string => Boolean(id));
-    const summary = {
+    settleMatches(matches, documents, uploadedFiles);
+    const before = new Set((existing ?? []).map((d) => d.id));
+    const outcomes = new Map(documents.map((d) => [d, uploadOutcomeOf(d, before)]));
+    const deduplicated = documents.filter((d) => outcomes.get(d) === "deduplicated");
+    // A deduplicated file is the active document it matched, and the same-named document is that one: nothing of it to replace.
+    const same = new Set(deduplicated.map((d) => d.id));
+    for (const m of matches) if (same.has(m.document_id)) m.outcome = "identical";
+    const fresh = documents.filter((d) => !deduplicated.includes(d));
+    // A deduplicated document answers with the operation that ingested it once; there is nothing new to wait for.
+    const operationIds = fresh.map((d) => d.operation_id).filter((id): id is string => Boolean(id));
+    const created = fresh.length;
+    const summary = () => ({
       kb: { id: kb.id, name: kb.name ?? null },
-      documents: documents.map((d) => ({ id: d.id, filename: d.filename, status: d.status, operation_id: d.operation_id ?? null })),
+      documents: documents.map((d) => ({
+        id: d.id,
+        filename: d.filename,
+        status: d.status,
+        operation_id: d.operation_id ?? null,
+        upload_outcome: outcomes.get(d) ?? null,
+        ...(Array.isArray(d.replaced_document_ids) ? { replaced_document_ids: d.replaced_document_ids } : {}),
+      })),
       operation_ids: operationIds,
+      existing: matches,
+    });
+    const matchLines = () => {
+      const note = staysActiveHint(matches, mode);
+      return [
+        ...deduplicated.map((d) => `${d.filename}: identical to the active document ${shortId(d.id)}; nothing new was created (deduplicated)`),
+        ...matches.filter((m) => m.outcome !== "identical").map(outcomeLine),
+        ...(note ? [note] : []),
+      ];
     };
-    if (operationIds.length < documents.length) ctx.warn("The instance returned no operation id for some documents; it may be older than the operations API.");
+    const uploadedText = (where: string) =>
+      created ? `Uploaded ${fileCount(created)}${where}.` : `Nothing new uploaded${where}: the content of ${deduplicated.length === 1 ? "the file is" : "every file is"} already active.`;
+    if (operationIds.length < fresh.length) ctx.warn("The instance returned no operation id for some documents; it may be older than the operations API.");
     if (failure) {
+      const refused = await deactivate(ctx, kb.id, matches);
+      if (refused) ctx.warn(`The old documents stay active: ${refused.message}`);
       return {
-        data: { ...summary, error: failure.error.toJSON(), not_uploaded: failure.notUploaded },
-        text:
-          `Uploaded ${documents.length} files, then: ${failure.error.message}\n` +
-          `Not uploaded (${failure.notUploaded.length}): ${failure.notUploaded.join(", ")}\n` +
-          (operationIds.length ? `Wait for the uploaded ones with: cavelon wait ${operationIds.join(" ")}` : ""),
+        data: { ...summary(), error: failure.error.toJSON(), not_uploaded: failure.notUploaded },
+        text: [
+          `Uploaded ${fileCount(documents.length)}, then: ${failure.error.message}`,
+          `Not uploaded (${failure.notUploaded.length}): ${failure.notUploaded.join(", ")}`,
+          ...matchLines(),
+          ...(operationIds.length ? [`Wait for the uploaded ones with: cavelon wait ${operationIds.join(" ")}`] : []),
+        ].join("\n"),
         exitCode: failure.error.exitCode,
       };
     }
     if (boolOption(input, "wait") && ctx.mode === "cli" && operationIds.length) {
       const waited = await waitAndReport(ctx, operationIds, timeoutMs(ctx, stringOption(input, "timeout")));
-      return { data: { ...summary, ...waited.data }, text: `Uploaded ${documents.length} files.\n${waited.text}`, exitCode: waited.exitCode };
+      // The old documents keep answering until the new ones are ingested; a failed ingestion keeps them.
+      const refused = waited.exitCode === ExitCode.ok ? await deactivate(ctx, kb.id, matches) : undefined;
+      if (waited.exitCode !== ExitCode.ok) for (const m of matches) if (m.outcome === undefined) m.outcome = "stays_active";
+      if (refused) ctx.warn(`The old documents stay active: ${refused.message}`);
+      await refreshStatuses(ctx, kb.id, documents);
+      return {
+        data: { ...summary(), ...waited.data },
+        text: [uploadedText(""), ...matchLines(), waited.text].join("\n"),
+        exitCode: refused && waited.exitCode === ExitCode.ok ? refused.exitCode : waited.exitCode,
+      };
     }
+    const refused = await deactivate(ctx, kb.id, matches);
+    if (refused) ctx.warn(`The old documents stay active: ${refused.message}`);
     return {
-      data: summary,
-      text:
-        `Uploaded ${documents.length} files to ${kb.name ?? kb.id}.` +
-        (operationIds.length ? `\nOperations: ${operationIds.length}\nWait with: cavelon wait ${operationIds.join(" ")}` : ""),
+      data: summary(),
+      text: [
+        uploadedText(` to ${kb.name ?? kb.id}`),
+        ...matchLines(),
+        ...(operationIds.length ? [`Operations: ${operationIds.length}`, `Wait with: cavelon wait ${operationIds.join(" ")}`] : []),
+      ].join("\n"),
+      exitCode: refused?.exitCode,
     };
   },
 };
@@ -671,7 +1035,31 @@ function summarizeTrace(t: TraceSummary) {
   };
 }
 
-function summarizeSpan(s: Span) {
+/** The `knowledge_outcome` a span's attributes carry, if any. */
+function outcomeOf(s: Span): string | null {
+  const outcome = spanAttributes(s.attributes_json)?.knowledge_outcome;
+  return typeof outcome === "string" && outcome ? outcome : null;
+}
+
+/**
+ * What the agent recorded each knowledge search found, by span id. The
+ * agent's outcome call leaves no span of its own: it writes
+ * `knowledge_outcome` onto the search's retrieval span, so the search's tool
+ * span above it shows the outcome too. An instance that records none leaves
+ * this empty.
+ */
+function knowledgeOutcomes(spans: Span[]): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const s of spans) {
+    const outcome = outcomeOf(s);
+    if (!outcome) continue;
+    out.set(s.id, outcome);
+    if (s.span_type === "retrieval" && s.parent_span_id && !out.has(s.parent_span_id)) out.set(s.parent_span_id, outcome);
+  }
+  return out;
+}
+
+function summarizeSpan(s: Span, outcomes?: Map<string, string>) {
   const error = s.error_json ? clip(typeof s.error_json === "string" ? s.error_json : JSON.stringify(s.error_json), 200) : null;
   return {
     span_id: s.id,
@@ -681,8 +1069,35 @@ function summarizeSpan(s: Span) {
     agent: s.agent_slug ?? null,
     status: s.status ?? null,
     duration_ms: s.duration_ms ?? null,
+    knowledge_outcome: outcomeOf(s) ?? outcomes?.get(s.id) ?? null,
     error,
   };
+}
+
+/** Why `trace` suggests this span first. */
+function spanPick(s: Span): string {
+  if (s.error_json || s.status === "error" || s.status === "errored") return "the one that failed";
+  if (s.span_type === "llm") return "the last model call";
+  if (s.span_type === "retrieval") return "the knowledge search";
+  return s.span_type ?? "a span";
+}
+
+/** A knowledge search's span as a person reads it: the query, the outcome, and the hits as a table. */
+function retrievalText(data: { span_id: string; name: string | null; agent: string | null; status: string | null; error: unknown }, view: RetrievalView): string {
+  const head = keyValues([
+    ["span", `${data.span_id} (retrieval${data.name ? `, ${data.name}` : ""}${data.agent ? `, agent ${data.agent}` : ""})`],
+    ["status", data.status],
+    ["query", view.query ?? "not recorded"],
+    ["knowledge_outcome", view.knowledge_outcome ?? "not classified by the agent"],
+    ["hits", view.sources_total ?? view.source_count ?? view.sources.length],
+    ["retrieval_status", view.retrieval_status ?? undefined],
+    ["error", data.error ? JSON.stringify(data.error) : undefined],
+  ]);
+  const rows = retrievalRows(view);
+  const hits = rows.length ? `\n\n${table(rows, ["rank", "title", "score", "citable", ...(rows.some((r) => r.cited) ? ["cited"] : []), "document_id"])}` : "";
+  const more = view.sources_total && view.sources_total > rows.length ? `\n… ${view.sources_total - rows.length} more hits than the trace keeps` : "";
+  const outcome = view.knowledge_outcome ? `\n\nWhat it means: ${cavelonCommand("explain", view.knowledge_outcome)}` : "";
+  return `${head}${hits}${more}${outcome}\n\nEverything the span recorded: --json`;
 }
 
 function detailOf(value: unknown, full: boolean): unknown {
@@ -738,21 +1153,45 @@ async function capacityFooter(ctx: Context, errors: Array<string | null | undefi
   return `\n\n${code}: ${capacityHint(code, await readLimits(ctx).catch(() => undefined))}`;
 }
 
+/** A step's answer, shortened, on one line; a passed step's shorter still. */
+const ANSWER_CHARS = 300;
+const PASSED_ANSWER_CHARS = 150;
+
+/** The step's assertions and its answer, as lines under its case. */
+function stepLines(r: TestResultState, full: boolean, answerChars = ANSWER_CHARS): string[] {
+  const assertions = stepAssertions(r.judge_breakdown, full);
+  const count = assertionCount(assertions);
+  const lines = assertions.length ? [`    Assertions${count ? ` (${count})` : ""}:`, ...assertions.map((a) => `      ${assertionLine(a)}`)] : [];
+  if (r.generated_answer) lines.push(`    Answer: ${clip(r.generated_answer.replace(/\s+/g, " ").trim(), full ? Number.MAX_SAFE_INTEGER : answerChars)}`);
+  return lines;
+}
+
 /** What the instance recorded for a case that did not pass: its error and the judge's reasoning, whole with --full. */
-function notPassedLines(r: TestResultState, max: number): string[] {
+function notPassedLines(r: TestResultState, max: number, full: boolean): string[] {
   const c = failedCase(r, max);
   const lines = [`  ${caseLabel(c)}  ${c.status}`];
   if (c.reason) lines.push(`    ${c.reason}`);
-  if (r.llm_judge_reasoning && r.llm_judge_reasoning !== r.error_message) lines.push(`    Judge: ${clip(r.llm_judge_reasoning, max)}`);
+  // Without an error the reason above is the judge's reasoning already; show it once.
+  if (r.llm_judge_reasoning && r.error_message && r.llm_judge_reasoning !== r.error_message) lines.push(`    Judge: ${clip(r.llm_judge_reasoning, max)}`);
+  // A case that failed because the knowledge base lacks the answer shows it here, before its spans are opened.
+  const knowledge = caseKnowledgeOutcomes(r);
+  if (knowledge) lines.push(`    Knowledge: ${knowledge.join(", ")}`);
+  lines.push(...stepLines(r, full));
+  // Whether the right agent answered is often why a routing assertion failed.
+  if (r.agent_slug) lines.push(`    Answered by: ${r.agent_slug}`);
   const open = caseTraceCommand(r);
   if (open) lines.push(`    Its traces (${open.label}): ${open.command}`);
   return lines;
 }
 
-/** A case that did not fail, as the judge saw it: a low-scoring pass is read, not only counted. */
-function judgedLines(r: TestResultState, max: number): string[] {
+/** A step that did not fail, as the judge saw it (a low-scoring pass is read, not only counted), with its assertions and answer. */
+function judgedLines(r: TestResultState, max: number, full: boolean): string[] {
   const score = r.llm_judge_score === null || r.llm_judge_score === undefined ? "" : `  score ${r.llm_judge_score}`;
-  return [`  ${caseLabel(failedCase(r))}  ${r.status}${score}`, `    Judge: ${clip(r.llm_judge_reasoning!, max)}`];
+  return [
+    `  ${caseLabel(failedCase(r))}  ${r.status}${score}`,
+    ...(r.llm_judge_reasoning ? [`    Judge: ${clip(r.llm_judge_reasoning, max)}`] : []),
+    ...stepLines(r, full, PASSED_ANSWER_CHARS),
+  ];
 }
 
 /** A test run's results: one line per case, then each case that did not pass with the reasons the instance recorded. */
@@ -764,17 +1203,26 @@ async function testRunView(ctx: Context, id: string, results: TestResultState[],
     step: r.step_order ?? null,
     status: r.status,
     score: r.llm_judge_score ?? null,
+    // The agent that answered the step: on recent instances the one that made its last model call.
+    agent: r.agent_slug ?? null,
     conversation_id: r.conversation_id ?? null,
     run_id: r.agent_run_id ?? null,
     error: r.error_message ? clip(r.error_message, 200) : null,
+    // What the step answered, and each assertion with its verdict: the judge's text alone hides how many there were.
+    answer: r.generated_answer ? clip(r.generated_answer, options.full ? max : ANSWER_CHARS) : null,
+    assertions: stepAssertions(r.judge_breakdown, options.full),
     judge_reasoning: r.llm_judge_reasoning ? clip(r.llm_judge_reasoning, max) : null,
+    knowledge_outcomes: caseKnowledgeOutcomes(r),
     trace_command: caseTraceCommand(r)?.command ?? null,
     // judge_breakdown is an open object in the OpenAPI; it is passed on as the instance sends it.
     ...(NOT_PASSED.has(r.status) ? { reason: failedCase(r, max).reason, judge_breakdown: detailOf(r.judge_breakdown, options.full) } : {}),
   }));
   const notPassed = page.items.filter((r) => NOT_PASSED.has(r.status));
-  // An older instance, or one that keeps the reasoning of failures only, sends none for a pass.
-  const judged = page.items.filter((r) => !NOT_PASSED.has(r.status) && r.llm_judge_reasoning);
+  // An older instance, or one that keeps the reasoning of failures only, sends none for a pass; a step with
+  // assertions or an answer is shown all the same.
+  const judged = page.items.filter(
+    (r) => !NOT_PASSED.has(r.status) && (r.llm_judge_reasoning || stepAssertions(r.judge_breakdown).length || r.generated_answer),
+  );
   const byConversation = page.items.find((r) => r.conversation_id);
   const byRun = page.items.find((r) => !r.conversation_id && r.agent_run_id);
   const where = [
@@ -784,10 +1232,10 @@ async function testRunView(ctx: Context, id: string, results: TestResultState[],
   return {
     data: { kind: "test", run_id: id, results: { ...page, items } },
     text:
-      table(items, ["case", "step", "status", "score", ...(items.some((r) => r.run_id) ? ["run_id"] : []), "conversation_id"]) +
+      table(items, ["case", "step", "status", "score", ...(items.some((r) => r.agent) ? ["agent"] : []), ...(items.some((r) => r.run_id) ? ["run_id"] : []), "conversation_id"]) +
       moreHint(page.next_cursor, cavelonCommand("trace", id, "--kind", "test")) +
-      (notPassed.length ? `\n\nDid not pass:\n${notPassed.flatMap((r) => notPassedLines(r, max)).join("\n")}` : "") +
-      (judged.length ? `\n\nJudge's reasoning:\n${judged.flatMap((r) => judgedLines(r, options.full ? max : 300)).join("\n")}` : "") +
+      (notPassed.length ? `\n\nDid not pass:\n${notPassed.flatMap((r) => notPassedLines(r, max, options.full)).join("\n")}` : "") +
+      (judged.length ? `\n\nPassed:\n${judged.flatMap((r) => judgedLines(r, options.full ? max : 300, options.full)).join("\n")}` : "") +
       `\n\n${where.length ? where.join("\n") : "The instance recorded no conversation or run for these results, so they have no trace to open."}` +
       (await capacityFooter(ctx, items.map((r) => r.error))),
   };
@@ -859,31 +1307,41 @@ export const trace: CommandSpec = {
         }
       }
       const spans = (detail.spans ?? []).slice().sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+      const outcomes = knowledgeOutcomes(spans);
       if (spanId) {
         const span = spans.find((s) => s.id === spanId);
         if (!span) throw new CavelonError(ExitCode.failure, { code: "span_not_found", message: `No span ${spanId} in trace ${traceId}.` });
         const full = boolOption(input, "full");
+        // Attributes that arrive as a JSON string, even one encoded twice, are read as the object they hold.
+        const attributes = spanAttributes(span.attributes_json) ?? span.attributes_json;
+        const retrieval = span.span_type === "retrieval" ? retrievalView(spanAttributes(span.attributes_json)) : undefined;
         const data = {
-          ...summarizeSpan(span),
+          ...summarizeSpan(span, outcomes),
           model: span.model ?? null,
           parent_span_id: span.parent_span_id ?? null,
           input: detailOf(span.input_json, full),
           output: detailOf(span.output_json, full),
-          attributes: detailOf(span.attributes_json, full),
+          attributes: detailOf(attributes, full),
+          ...(retrieval ? { retrieval } : {}),
           tokens: span.token_usage_json ?? null,
           error: span.error_json ?? null,
         };
-        return { data, text: JSON.stringify(data, null, 2) };
+        return { data, text: retrieval ? retrievalText(data, retrieval) : JSON.stringify(data, null, 2) };
       }
-      const page = pageOf(spans.map(summarizeSpan), limit, cursor);
+      const page = pageOf(
+        spans.map((s) => summarizeSpan(s, outcomes)),
+        limit,
+        cursor,
+      );
       const base = cavelonCommand("trace", id, ...(kind ? ["--kind", kind] : []), "--trace", traceId);
+      const open = suggestedSpan(spans);
       return {
         data: { trace: summarizeTrace(detail), spans: page },
         text:
           `${keyValues(Object.entries(summarizeTrace(detail)))}\n\n` +
-          table(page.items, ["seq", "type", "name", "status", "duration_ms", "span_id"]) +
+          table(page.items, ["seq", "type", "name", "status", ...(outcomes.size ? ["knowledge_outcome"] : []), "duration_ms", "span_id"]) +
           moreHint(page.next_cursor, base) +
-          (page.items.length ? `\n\nOne span in full, by the span_id in its row: ${base} --span ${shellWord(page.items[0]!.span_id)}` : ""),
+          (open ? `\n\nOne span in full (${spanPick(open)}), by the span_id in its row: ${base} --span ${shellWord(open.id)}` : ""),
       };
     }
 

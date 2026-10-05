@@ -143,18 +143,22 @@ from the release page in a browser:
 
 Check the checksum or the attestation (above) before you do either.
 
-### Homebrew and winget
+### Homebrew
 
-A Homebrew tap and a winget package are being prepared. Once the
-[changelog](../CHANGELOG.md) announces them:
+On macOS (Apple silicon and Intel) and Linux (x64 and arm64):
 
 ```bash
-brew install goodguys-gmbh/cavelon/cavelon      # macOS, Linux
-winget install goodguys.Cavelon                 # Windows
+brew install goodguys-gmbh/cavelon/cavelon
 ```
 
-They install the same executables, and update with `brew upgrade cavelon` and
-`winget upgrade goodguys.Cavelon`.
+It installs the same executable from the same release, and `brew upgrade
+cavelon` updates it; `cavelon --version` names Homebrew as the install method.
+The release workflow updates the formula in
+[goodguys-gmbh/homebrew-cavelon](https://github.com/goodguys-gmbh/homebrew-cavelon)
+on every release.
+
+A winget package for Windows follows once the Windows executable is signed;
+until then, use the one-line install above.
 
 ### With Node.js: npx or npm
 
@@ -283,7 +287,7 @@ its settings folder (`setup.json`), so a second run changes nothing and
 
 | Command | What it does |
 |---|---|
-| `cavelon setup --check` | Says what is set up and working: each agent's plugin or entry and skills, whether the MCP server starts (it starts it and asks it to introduce itself, as an agent does), and the login. Exit 1 when something is missing. |
+| `cavelon setup --check` | Says what is set up and working: each agent's plugin or entry and skills, whether the MCP server starts (it starts it and asks it to introduce itself, as an agent does), and the login. Exit 1 when something is missing. An agent found on the computer but never set up for Cavelon is listed as `skip` and does not fail the check; `--strict` (or naming it with `--agents`) counts it. |
 | `cavelon setup --remove` | Undoes what `setup` did: uninstalls the plugin and removes the marketplace if `setup` added them, takes its entry and block out of each file (a file it created goes when nothing else is left in it) and deletes the skill files it wrote. Your login stays; `cavelon logout` removes it. Asks first; Enter means no. |
 | `cavelon setup --agents claude,codex` | Only these agents, even one `setup` does not find. |
 | `cavelon setup --yes --instance <url>` | Without asking, for scripts. Without a terminal and without `--yes`, `setup` changes nothing and shows its plan (with `--json`, in the error's `details`). Logging in needs a terminal; without one, `setup` prints the `cavelon login` line to run. |

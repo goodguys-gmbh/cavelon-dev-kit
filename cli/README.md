@@ -111,23 +111,26 @@ Every command takes `--json` (one JSON document on stdout, errors included),
 | `setup [--agents] [--yes] [--check] [--remove]` | changing (destructive) | Set up the coding agents on this computer (the plugin for Claude Code and Codex; the MCP server and skills in the user settings of Cursor, VS Code with GitHub Copilot, Gemini CLI and Kiro) and log in. `--check` reports what works, `--remove` undoes it. A person runs this; not an MCP tool. |
 | `login [--token-stdin]` | changing | Store a token for an instance. A person runs this. |
 | `logout [--all]` | changing | Delete the stored token. |
-| `whoami` | read-only | Owner or key, tenant (name, slug and id), role, and where the credential came from. |
+| `whoami` | read-only | Owner or key, tenant (name, slug and id), role, where the credential came from, whether it may enter Platform mode and which tenants it reaches. |
 | `use [<tenant>]` / `use --clear` | changing | Choose the tenant for this instance, by name, slug or id, or from a list. |
-| `status [--offline]` | read-only | Instance, credential, tenant, solution folder, running operations, quotas close to full. |
+| `status [--offline]` | read-only | Instance, credential, tenant, solution folder and the solution's state (draft or active, ready to activate, latest test run), open previews, running operations, quotas close to full or why they cannot be read. |
 | `limits [--key <key>] [--source <source>]` | read-only | The instance's limits for this tenant by source, who changes each and how; the tenant's quotas with their use (the monthly Processing Step cap among them); branch concurrency. |
 | `limits set <key> <value> [--confirm]` | changing (destructive) | Change a limit through the operation the instance names: a tenant admin's, a quota of the Tenant Owner's (inference budget, Processing Step cap), or an operator's run cap with a Platform-mode token; without `--confirm`, shows the old and new value. |
 | `models list` | read-only | The tenant's Model Registry rows with their endpoint and `max_concurrent_requests`; never a key. |
 | `models set-limit <model> <n\|none> [--confirm]` | changing (destructive) | Set or clear a row's `max_concurrent_requests`; without `--confirm`, shows the old and new value. |
-| `tenant create <slug> [--name] [--use]` | changing | Create a tenant (personal token in Platform mode with `tenants.manage`). |
+| `tenant create <slug> [--name] [--use]` | changing | Create a tenant (personal token in Platform mode with `tenants.manage`); refused before sending when the token cannot. |
 | `tenant list [--search]` | read-only | Tenants the token can see, with name, slug, role and id. |
 | `harness list [--readiness]` | read-only | The tenant's solutions, with slug, name, status and id. |
 | `harness new <slug> [--name] [--description]` | changing | Create an empty draft solution. |
 | `harness clone <source> [--slug] [--name] [--no-tests] [--no-triggers]` | changing | Copy a solution into a new draft. |
 | `activate [--harness] [--env]` | changing | Activate through the readiness gate only, never by force. |
-| `init [--harness] [--agents <list>] [--hook] [--update] [--from <file> [--force]]` | changing (files) | Make this folder a solution: `cavelon.yaml`, `package/`, `tests/`, `env/`, `.cavelon/`; on a terminal it asks for the tenant and the solution (or a new one by name); `--from` writes a package file into it. |
-| `pull [--harness] [--force]` | changing (files) | Write the instance's package into `package/` and `tests/`, the inventory into `.cavelon/`. |
-| `validate [--offline]` | read-only | Check the package files against the cached package schema. |
-| `apply [--env] [--harness] [--mode]` | changing | Preview the files against the instance; prints and stores a preview id. |
+| `chat <message> [--harness] [--env] [--session <id>] [--timeout 90s]` | changing | Send one message to a solution and print its answer, with the session to continue and the conversation to trace; tries a draft or an active solution that is not the default route. |
+| `deactivate [--harness] [--env] [--confirm [<token>]]` | changing (destructive) | Take an active solution out of live traffic: its status becomes `inactive` (not `draft`); previews first. |
+| `init [--harness [--new]] [--agents <list>] [--hook] [--update] [--from <file> [--force]]` | changing (files) | Make this folder a solution: `cavelon.yaml`, `package/`, `tests/`, `env/`, `.cavelon/`; on a terminal it asks for the tenant and the solution (or a new one by name); a name close to an existing solution's is refused unless `--new`; `--from` writes a package file into it. |
+| `pull [--harness] [--force] [--tenant-wide]` | changing (files) | Write the instance's package into `package/` and `tests/`, the inventory into `.cavelon/`. A solution's tenant-wide sections only with `--tenant-wide`, which says when the export carries none. |
+| `validate [--offline] [--strict]` | read-only | Check the package files against the cached package schema, their references, unknown fields and models; `--strict` fails on warnings. |
+| `schema [<section>[.<field>…] \| <type>] [--offline]` | read-only | The package schema's sections, or the fields of a section, a nested field (`agents.handoffs`) or a type, with a minimal example. |
+| `apply [--env] [--harness] [--mode] [--tenant-wide]` | changing | Preview the files against the instance; prints and stores a preview id. A solution's tenant-wide sections go along only with `--tenant-wide`, for the whole tenant. |
 | `apply --confirm <preview-id>` | changing | Import exactly that preview; a stale one, or one the import's own check refuses (it names the blockers), exits 4. |
 | `explain <code>` | read-only | Look a code up in the instance's error catalog. |
 | `variables list` / `variables get <name>` | read-only | The tenant's plain-text variables (`{{var:…}}`) with their values. |
@@ -136,14 +139,14 @@ Every command takes `--json` (one JSON document on stdout, errors included),
 | `secrets list [--missing]` | read-only | The tenant's secret names (`{{secret:…}}`): set or not, declared, changed when. Never a value. |
 | `secrets set <name>` | changing | Set a secret's value from the terminal or stdin. A person runs this. |
 | `secrets delete <name> [--confirm]` | changing (destructive) | Delete a secret's value; without `--confirm`, shows its status. A person runs this. |
-| `api <operation> [name=value…] [--json <body>]` | changing | Call any operation of the instance's OpenAPI. |
+| `api <operation> [name=value…] [--body <body>]` | changing | Call any operation of the instance's OpenAPI. |
 | `api list [--tag] [--search] [--method] [--tags]` | read-only | The operations the instance publishes. |
 | `api describe <operation>` | read-only | One operation's parameters, body and responses. |
 | `docs search <query>` | read-only | Search the instance's own docs. |
 | `docs get <page> [--max-chars] [--cursor]` | read-only | One docs page as markdown. |
-| `wait <operation…> [--timeout 90s]` | read-only | Wait for operations; resumable. A test run with failed cases is a failure. |
+| `wait <operation…> [--timeout 90s]` | read-only | Wait for operations; resumable, and reports `waited_ms`. A test run with failed cases is a failure. |
 | `watch <operation> [--timeout 10m]` | read-only | Stream an operation's changes (server-sent events). |
-| `kb upload <dir> --kb <kb> [-r] [--ext pdf] [--wait]` | changing | Upload documents; returns operation ids. |
+| `kb upload <dir> --kb <kb> [-r] [--ext pdf] [--replace] [--dry-run] [--wait]` | changing | Upload documents; returns operation ids. Names files that match an active document; `--replace` replaces those. `--dry-run` also names files identical to an active document. |
 | `test run [--suite <s>] [--harness <h>] [--wait]` | changing | Start test-suite runs; returns operation ids. |
 | `trace <run> [--trace <id>] [--span <id>]` | read-only | Summarise a run's traces (or a test run's results, with why a case did not pass), then one trace's spans, then one span. |
 | `loop start <trigger> [--input <json>] [--wait]` | changing | Start a loop through its trigger, as you; returns the run and operation ids. |
@@ -168,15 +171,18 @@ Every command takes `--json` (one JSON document on stdout, errors included),
 cavelon api list --search harness
 cavelon api describe create_harness
 cavelon api get_harness_by_slug slug=support
-cavelon api create_knowledge_base --json '{"name": "FAQ"}'
-cavelon api create_knowledge_base --json @kb.json      # or --json - for stdin
+cavelon api create_knowledge_base --body '{"name": "FAQ"}'
+cavelon api create_knowledge_base --body @kb.json      # or --body - for stdin
 ```
 
 An operation is named by its `operationId` or by its short name (the part before
-FastAPI's path suffix, `list_harnesses` for `list_harnesses_api_v1_harnesses_get`).
-Parameters are `name=value` or `-p name=value`; the body is checked against the
-operation's schema before it is sent. On `api`, `--json` followed by a value is
-the body; a bare `--json` is the output switch as everywhere else.
+FastAPI's path suffix, `list_harnesses` for `list_harnesses_api_v1_harnesses_get`);
+a looser spelling such as `createTenant` finds `create_tenant` and says so.
+Parameters are `name=value` or `-p name=value`, never `--name value`; the body
+(`--body`) is checked against the operation's schema before it is sent. `--json`
+is the output switch, as everywhere else. `--json <body>` still sends the body
+for now, with a warning: it is deprecated and will be removed in a later
+release.
 
 ### Limits
 
@@ -391,6 +397,38 @@ op read op://dev/crm/token | cavelon secrets set crm_api_token
 - `--env <name>` acts in the tenant `env/<name>.yaml` names, like `apply`. A
   name without its env file is refused (exit 2) before anything is sent.
 
+### Updating a document
+
+`kb upload` names each file that matches an active document of the knowledge
+base by file name, with what happens to that document, in `--dry-run` too:
+
+```text
+bergbahn-faq.md exists (094e95e9…) and stays active
+```
+
+A file whose bytes are those of an active document, under any name, is not
+created again: the instance deduplicates it, and `kb upload` says
+"identical to the active document …; nothing new was created (deduplicated)".
+`--dry-run` says so before the upload ("nothing new would be created") where
+the instance publishes each document's `file_sha256` (the SHA-256 of the
+uploaded bytes, which its deduplication compares): it hashes each local file
+the same way, and `--json` lists those files under `identical` with the
+document each one matches, and sets `content_compared`. A same-named document
+the file is identical to is then neither replaced nor deactivated. On an
+instance that does not publish the hash, `content_compared` is `false` and
+the dry run names no file identical; a document without a hash (not a file,
+or uploaded before the instance published it) matches none.
+
+- Without a flag the old document stays active next to the new one, and both
+  answer, unless the instance replaces same-named documents itself (its upload
+  offers `replace_existing`); there `--keep-both` keeps both.
+- `--replace` replaces it. It uses the instance's own replacement
+  (`replace_doc_ids`) and reads what was replaced from each document's
+  `replaced_document_ids`. On an instance whose upload offers neither, it shows
+  the documents it would deactivate after the upload and sends nothing; with
+  `--confirm` it uploads, then deactivates them (after the wait, with
+  `--wait`).
+
 ### Long-running work
 
 `kb upload` and `test run` return operation ids at once. `--wait` waits for them,
@@ -569,8 +607,11 @@ cavelon activate --harness support
   Sections the instance's package schema does not know are written, reported as
   `ignored` and warned about, as `validate` does. With no `--harness`,
   a package with one harness names the solution in a new `cavelon.yaml` and
-  `env/test.yaml`, so `apply --env test` creates that draft. The rest of `init`
-  runs as without `--from`: its own files, the marked blocks.
+  `env/test.yaml`. A solution the tenant does not have yet, `init` creates as a
+  draft, named as in the package, so `apply --env test` previews into it; the
+  MCP tool `init` creates none and names the `cavelon harness new` command
+  instead. The rest of `init` runs as without `--from`: its own files, the
+  marked blocks.
 
   ```bash
   mkdir counter && cd counter
@@ -590,14 +631,27 @@ cavelon activate --harness support
   one the tenant's full configuration, and splits it along the top-level sections
   of the instance's published package schema, so no entity type is built into
   the binary. A file whose content did not change keeps its bytes, so `git diff`
-  shows what changed on the instance; files of sections the schema does not know
-  are kept byte for byte. It refuses when package files have uncommitted changes
+  shows what changed on the instance; a field the export spells out and the file
+  leaves out (an empty list or object, `null`, a default) is no change. A test
+  suite goes back to the file it came from (`.cavelon/pulled-files.json` records
+  which). Files of sections the schema does not know are kept byte for byte. A
+  solution's pull leaves the tenant-wide sections out of the folder (those the
+  schema marks `x-cavelon-scope: tenant`; on an instance that marks none,
+  `tenant_settings` and `model_registry`) unless `--tenant-wide`, which asks the
+  export for them (`include_tenant_wide`) where the instance takes it, and says
+  when the export carries none. A file of one already there is kept (listed
+  under `kept`). It refuses when package files have uncommitted changes
   (exit 4) unless `--force`, and writes the tenant's solutions, knowledge bases,
   tools, test suites and sandboxes to `.cavelon/inventory.md`.
 - **`validate`** checks the files against the package schema that `init`, `pull`
   or `apply` cached, and the package version against those the instance accepts.
-  It contacts the instance only when nothing is cached (never with `--offline`).
-  Each finding has a file, line, path and code; exit 3 on errors. A Model
+  It contacts the instance only when nothing is cached, or to read a tenant's
+  list (models, skills, tools, knowledge bases, solutions) the package refers to
+  and no command has read yet; never with `--offline`, which names the checks it
+  skipped instead. Each finding has a file, line, path and code; exit 3 on
+  errors, and with `--strict` on warnings too. A reference the import preview
+  will block (`package_reference_unknown`, `package_model_unknown`) keeps the
+  summary from saying "Valid". A Model
   Registry row's `max_concurrent_requests` needs a `base_url`
   (`model_endpoint_limit_without_base_url`); where the package schema does not
   carry the field, a warning says the import ignores it.
@@ -612,12 +666,19 @@ cavelon activate --harness support
   finds what the preview did not answers `409 package_requirements_changed`
   with `blockers`: exit 4, each blocker on its own line (in `--json`, the
   error's `blockers`), "nothing was imported; preview again", and for a code
-  the kit knows (such as `runtime_draft_iteration_needs_draft_parent`) its hint. When the env file names a solution that does not exist
-  yet, `apply` creates it as a draft first, named as `package/harnesses.yaml`
-  names the harness with that slug (or its only harness), and after the slug
-  where the package has none; `runtime_bindings` from the env file
-  bind the package's runtime requirements. A preview that reaches an active
-  solution, deletes, or goes to `env/prod` says to show it to a person first.
+  the kit knows (such as `runtime_draft_iteration_needs_draft_parent`) its hint.
+  `apply` previews into an existing solution and never creates one: when the
+  env file, `cavelon.yaml` or `--harness` names a solution the tenant does not
+  have, it stops with `solution_not_found` (exit 1) before anything is sent,
+  and names the `cavelon harness new <slug>` command that creates the draft
+  (with `--name` as `package/harnesses.yaml` names that harness); preview again
+  after it. `runtime_bindings` from the env file
+  bind the package's runtime requirements. A solution's import leaves the
+  package's tenant-wide sections out; `--tenant-wide` sends them
+  (`include_tenant_wide`), for every solution of the tenant. An instance that
+  does not publish that flag imports them with every solution's package, and
+  `apply` says so. A preview that reaches an active solution, deletes, changes
+  tenant-wide sections or goes to `env/prod` says to show it to a person first.
 - **`explain <code>`** looks a rule code or API error code up in the instance's
   error catalog (and the codes `validate` reports itself): meaning, fix and docs
   link. For `run_capacity_busy` and `model_endpoint_busy` it adds which limit to
@@ -681,10 +742,13 @@ The same commands as MCP tools over stdio, for agents that prefer tools to a
 shell. The tools are coarse, one per workflow command plus `api`, `api_list`,
 `api_describe`, `docs_search` and `docs_get`, and carry the standard read-only and
 destructive annotations. The repository tools (`init`, `pull`, `validate`,
-`apply`, `explain`, `activate`) and `sandbox_seed` and `artifacts_export` work in
-the folder the agent started `cavelon mcp` in. They never block: `kb_upload`,
-`test_run`, `loop_start`, `sandbox_seed` and `artifacts_export` return operation
-ids, `operation_status` reads them, and `loop_iterations` follows a loop
+`package_schema`, `apply`, `explain`, `activate`) and `sandbox_seed` and
+`artifacts_export` work in the folder the agent started `cavelon mcp` in;
+`init` and `pull` change nothing on the instance. Tools that start work never
+block: `kb_upload`, `test_run`, `loop_start`, `sandbox_seed` and
+`artifacts_export` return operation ids, `operation_status` reads them (at
+once, or waiting up to its `timeout`, at most 50 seconds, with `waited_ms` in
+the answer), and `loop_iterations` follows a loop
 (`loop watch` and `watch` stream, so they are no tools). `loop_cancel`,
 `sandbox_seed` and `trigger_identity` are marked destructive and change nothing
 without `confirm: true`. `limits` is read-only; the server's instructions tell

@@ -5,6 +5,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AddressInfo } from "node:net";
 import { handleLongRunning, longRunningState, type LiveView, type LongRunningState } from "./fake-long-running.js";
+import { tenantWideSections } from "../src/package-files.js";
+import type { PackageSchema } from "../src/contracts.js";
 
 /**
  * A fake Cavelon instance for tests. It serves the contract snapshots in
@@ -20,9 +22,29 @@ export function openapiSnapshot(): string {
   openapiText ??= readFileSync(path.join(CONTRACTS, "openapi.json"), "utf8");
   return openapiText;
 }
-/** The snapshot with its person-only markers changed, or without any (null). */
-function withPersonOnly(marks: Record<string, string | false> | null): string {
-  const doc = JSON.parse(openapiSnapshot()) as { paths: Record<string, Record<string, Record<string, unknown>>> };
+/**
+ * The snapshot with its person-only markers changed, or without any (null),
+ * and the body fields `secrets` names (component schema → its properties)
+ * marked as an instance marks a secret value, or without any marked (null).
+ */
+function withMarkers(marks: Record<string, string | false> | null, secrets: Record<string, string[]> | null): string {
+  if (marks && !Object.keys(marks).length && secrets && !Object.keys(secrets).length) return openapiSnapshot();
+  const doc = JSON.parse(openapiSnapshot()) as {
+    paths: Record<string, Record<string, Record<string, unknown>>>;
+    components: { schemas: Record<string, { properties?: Record<string, Record<string, unknown>> }> };
+  };
+  if (secrets === null) {
+    for (const schema of Object.values(doc.components.schemas)) {
+      for (const property of Object.values(schema.properties ?? {})) {
+        if (!property["x-cavelon-secret"]) continue;
+        delete property["x-cavelon-secret"];
+        delete property.writeOnly;
+      }
+    }
+  }
+  for (const [schema, fields] of Object.entries(secrets ?? {})) {
+    for (const field of fields) Object.assign(doc.components.schemas[schema]!.properties![field]!, { "x-cavelon-secret": true, writeOnly: true });
+  }
   for (const [route, item] of Object.entries(doc.paths)) {
     for (const [method, op] of Object.entries(item)) {
       if (method === "parameters") continue;
@@ -32,6 +54,42 @@ function withPersonOnly(marks: Record<string, string | false> | null): string {
       delete op["x-cavelon-person-only-reason"];
       if (mark !== false) Object.assign(op, { "x-cavelon-person-only": true, "x-cavelon-person-only-reason": mark });
     }
+  }
+  return JSON.stringify(doc);
+}
+/**
+ * The upload as an instance of each kind publishes it: as the snapshot, with
+ * `replace_existing` and `replaced_document_ids`, for a recent one; without
+ * those for an older one, and also without `replace_doc_ids` for the oldest.
+ */
+function withUploadReplace(text: string, kind: FakeState["uploadReplace"]): string {
+  if (kind === "name") return text;
+  const doc = JSON.parse(text) as { components: { schemas: Record<string, { properties: Record<string, unknown>; required?: string[] }> } };
+  const form = doc.components.schemas.Body_upload_documents_api_v1_knowledge_bases__kb_id__documents_upload_post!;
+  delete form.properties.replace_existing;
+  delete doc.components.schemas.DocumentResponse!.properties.replaced_document_ids;
+  if (kind === "none") delete form.properties.replace_doc_ids;
+  return JSON.stringify(doc);
+}
+/** The OpenAPI without `include_tenant_wide` on the export and the import, as an instance older than it publishes it. */
+function withTenantWideFlag(text: string, on: boolean): string {
+  if (on) return text;
+  const doc = JSON.parse(text) as {
+    paths: Record<string, Record<string, { parameters?: Array<{ name: string }> }>>;
+    components: { schemas: Record<string, { properties: Record<string, unknown> }> };
+  };
+  const exportOp = doc.paths["/api/v1/agent-graph/export"]!.get!;
+  exportOp.parameters = exportOp.parameters?.filter((p) => p.name !== "include_tenant_wide");
+  delete doc.components.schemas.AgentGraphPackageImportRequest!.properties.include_tenant_wide;
+  return JSON.stringify(doc);
+}
+/** The OpenAPI without these operations ("METHOD /path"), as an instance older than them publishes it. */
+function withoutOperations(text: string, operations: string[]): string {
+  if (!operations.length) return text;
+  const doc = JSON.parse(text) as { paths: Record<string, Record<string, unknown>> };
+  for (const entry of operations) {
+    const [method, route] = entry.split(" ");
+    delete doc.paths[route!]?.[method!.toLowerCase()];
   }
   return JSON.stringify(doc);
 }
@@ -86,6 +144,8 @@ export interface TokenInfo {
   globalRole?: string;
   /** The token's ceiling role; the global role in Platform mode, tenant_admin otherwise, by default. */
   ceilingRole?: string;
+  /** A Platform-mode token that enters only the tenants it lists, and is not given one it creates. */
+  platformOnly?: boolean;
 }
 
 export interface TenantConfig {
@@ -122,8 +182,40 @@ export interface FakeState {
   tenants: Array<{ id: string; slug: string; name: string; plan: string; status: string; created_at: string }>;
   harnesses: Array<Record<string, unknown> & { id: string; tenant_id: string; slug: string; name: string }>;
   kbs: Array<{ id: string; tenant_id: string; name: string }>;
+  /** Uploaded documents; a replaced one is soft-deleted and no longer listed. */
+  documents: Array<{ id: string; tenant_id: string; kb_id: string; filename: string; size: number; is_active: boolean; deleted: boolean; created_at: string; sha256?: string }>;
+  /**
+   * Whether an upload reuses an active document of the same content instead of
+   * creating one, as the instance's content-hash dedup does; off by default.
+   */
+  uploadDedup: boolean;
+  /** Whether each uploaded document says `upload_outcome` (created, replaced, deduplicated); off is an older instance. */
+  uploadOutcome: boolean;
+  /** Whether the document list publishes `file_sha256`, the hash the upload's dedup compares; off is an older instance. */
+  documentHashes: boolean;
+  /**
+   * How an upload replaces a document named like an existing one: "name" also
+   * a same-named active one by default (`replace_existing`), reporting
+   * `replaced_document_ids`, as the snapshot's instance; "ids" only the ones
+   * `replace_doc_ids` names, as an older instance; "none" neither, as an
+   * instance whose upload form has no `replace_doc_ids` either.
+   */
+  uploadReplace: "none" | "ids" | "name";
+  /**
+   * Whether a solution's export and import carry its tenant-wide sections only
+   * when `include_tenant_wide` asks, as the snapshot's instance; off is an
+   * older instance, whose OpenAPI has no such flag and whose solution export
+   * and import carry them always.
+   */
+  tenantWideFlag: boolean;
+  /**
+   * How a stale confirm is refused: null as an older instance (the code in
+   * `detail`); a list as a recent one (`code` at the top), with `changed`
+   * naming what changed when the list is not empty.
+   */
+  staleChanged: string[] | null;
   suites: Array<{ id: string; tenant_id: string; name: string; harness_id: string | null; archived_at: string | null }>;
-  runs: Array<{ id: string; tenant_id: string; suite_id: string; summary: Record<string, unknown> }>;
+  runs: Array<{ id: string; tenant_id: string; suite_id: string; summary: Record<string, unknown>; harness_id?: string | null }>;
   operations: Map<string, FakeOperation>;
   /** By "trigger:<run id>" or "conversation:<conversation id>". */
   traces: Map<string, Array<Record<string, unknown>>>;
@@ -162,6 +254,16 @@ export interface FakeState {
    * OpenAPI without any marker, as an instance older than the marker.
    */
   personOnly: Record<string, string | false> | null;
+  /** Operations ("METHOD /path") the served OpenAPI leaves out, as an instance older than them. */
+  openapiWithout: string[];
+  /** The chat turns the instance answered: the solution, the message and the session. */
+  chats: Array<{ harness_id: string; message: string; session_id: string }>;
+  /**
+   * Body fields marked `x-cavelon-secret` beside the snapshot's own, by
+   * component schema; `null` serves the OpenAPI without any, as an instance
+   * older than the marker.
+   */
+  secretFields: Record<string, string[]> | null;
   /**
    * Answers that break off after the status and part of the body, as a proxy
    * or a dropped connection leaves them: "cut" closes the connection, "stall"
@@ -177,15 +279,30 @@ export interface FakeState {
   dropStreams: number;
   /** Each tenant's configuration, as export returns it and import replaces it. */
   configs: Map<string, TenantConfig>;
+  /**
+   * Whether the export fills in the package schema's non-null defaults and
+   * orders each object's fields as the schema lists them, as an instance's
+   * export does. Off returns a package as it was imported, the fixture the
+   * tests that compare pulled bytes rely on.
+   */
+  exportFillsDefaults: boolean;
+  /** Each solution's persona, by harness id, as GET/PUT /bot-persona read and write it. */
+  personas: Map<string, Record<string, unknown>>;
+  /** An older instance whose solution list has no is_default. */
+  harnessesWithoutDefault: boolean;
   /** Merged into every import preview (impact, target_needs, loop_budgets). */
   previewExtras: Record<string, unknown>;
   previewBlockers: string[];
   /**
    * When set, a confirmed import's own check refuses it as
    * 409 package_requirements_changed: with these
-   * `blockers`, or without the field, as an older instance answers.
+   * `blockers`, or without the field, as an older instance answers; and with
+   * `blocker_details` (code, message, path, hint) beside them, as a preview
+   * sends them, where a test sets them. The published contracts describe
+   * neither field (the OpenAPI leaves the body open, and the error catalog's
+   * hint names `blockers` only), so this body follows the catalog's entry.
    */
-  importRequirementsChanged: { blockers?: string[] } | null;
+  importRequirementsChanged: { blockers?: string[]; blocker_details?: Array<Record<string, unknown>> } | null;
   /** Whether readiness lets a solution activate. */
   ready: boolean;
   /** The blockers readiness names while not ready; a missing test run by default. */
@@ -195,6 +312,12 @@ export interface FakeState {
   readinessWarnings?: Array<{ key: string; label: string; state: string; detail: string; href: string }>;
   /** An older instance's readiness, without `checks`. */
   readinessWithoutChecks?: boolean;
+  /** The latest test run readiness names; none by default. */
+  latestTestRun?: Record<string, unknown> | null;
+  /** An instance whose /meta/principal does not say whether a token allows Platform mode. */
+  principalWithoutPlatformMode?: boolean;
+  /** An instance whose readiness does not name the latest test run. */
+  readinessWithoutLatestRun?: boolean;
   servePrincipal: boolean;
   /** False is an instance older than the /api/v1/meta routes: they answer 404 before any check of the caller, as unknown routes do. */
   serveMeta: boolean;
@@ -355,7 +478,7 @@ function permissionsOf(info: TokenInfo, tenantId: string | undefined): string[] 
   if (!tenantId) {
     // A Platform-mode token carries its global role's permissions.
     const role = effectiveRole(info);
-    return role === "platform_support" ? ["platform.maintenance"] : role ? ["limits.manage", "platform.maintenance"] : [];
+    return role === "platform_support" ? ["platform.maintenance"] : role ? ["limits.manage", "platform.maintenance", "tenants.manage"] : [];
   }
   return tenantPermissions();
 }
@@ -402,6 +525,10 @@ export async function startFakeServer(): Promise<FakeServer> {
     tenants: [],
     harnesses: [],
     kbs: [],
+    documents: [],
+    uploadReplace: "name",
+    tenantWideFlag: true,
+    staleChanged: null,
     suites: [],
     runs: [],
     operations: new Map(),
@@ -422,13 +549,22 @@ export async function startFakeServer(): Promise<FakeServer> {
     rootPathsReachApi: true,
     serveOpenapi: true,
     personOnly: {},
+    openapiWithout: [],
+    chats: [],
+    secretFields: {},
     interruptions: [],
     failures: [],
     uploadsBeforeFailure: Infinity,
+    uploadDedup: false,
+    uploadOutcome: false,
+    documentHashes: false,
     dropStreams: 0,
     configs: new Map(),
+    exportFillsDefaults: false,
     previewExtras: {},
     previewBlockers: [],
+    personas: new Map(),
+    harnessesWithoutDefault: false,
     importRequirementsChanged: null,
     ready: true,
     servePrincipal: true,
@@ -506,7 +642,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     }
     if (p === "/openapi.json" || (p === "/api/v1/openapi.json" && !state.rootPathsReachApi)) {
       res.writeHead(200, { "content-type": "application/json" });
-      return res.end(state.personOnly && !Object.keys(state.personOnly).length ? openapiSnapshot() : withPersonOnly(state.personOnly));
+      return res.end(withoutOperations(withTenantWideFlag(withUploadReplace(withMarkers(state.personOnly, state.secretFields), state.uploadReplace), state.tenantWideFlag), state.openapiWithout));
     }
 
     // Auth: every API and docs route needs a known bearer token.
@@ -528,7 +664,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     let tenantId: string | undefined;
     if (info.kind === "key") tenantId = info.tenantIds[0];
     else if (headerTenant) {
-      if (!info.tenantIds.includes(headerTenant) && !info.platform && !info.reachesAll) {
+      if (!info.tenantIds.includes(headerTenant) && !(info.platform && !info.platformOnly) && !info.reachesAll) {
         return send(res, 403, { detail: "This personal access token does not reach this tenant" });
       }
       tenantId = headerTenant;
@@ -577,8 +713,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     if (p === "/api/v1/meta/package-schema" && state.servePackageSchema) {
       const version = url.searchParams.get("version") ?? "v3";
       if (version !== "v3") return send(res, 404, { detail: "package_version_unsupported" });
-      const schema = JSON.parse(readContract("meta-package-schema-v3.json")) as { properties: Record<string, unknown> };
-      state.packageSchemaEdit?.(schema);
+      const schema = packageSchema();
       if (!state.packageSchemaEtag) return send(res, 200, schema);
       const text = JSON.stringify(schema);
       const etag = `"${createHash("sha256").update(text).digest("hex").slice(0, 16)}"`;
@@ -602,7 +737,7 @@ export async function startFakeServer(): Promise<FakeServer> {
                 prefix,
                 expires_at: info.expiresAt ?? new Date(Date.now() + 60 * 86_400_000).toISOString(),
                 ceiling_role: ceilingRole(info),
-                platform_mode_allowed: Boolean(info.platform),
+                ...(state.principalWithoutPlatformMode ? {} : { platform_mode_allowed: Boolean(info.platform) }),
                 may_activate: info.mayActivate ?? false,
               }
             : null,
@@ -618,7 +753,8 @@ export async function startFakeServer(): Promise<FakeServer> {
               }
             : null,
         tenant_id: tenantId ?? null,
-        mode: tenantId ? "tenant" : info.platform || info.kind === "key" ? "platform" : "none",
+        // A token whose ceiling holds no platform role is answered in no mode, with no permission, as the instance does.
+        mode: tenantId ? "tenant" : info.kind === "key" || (info.platform && effectiveRole(info)) ? "platform" : "none",
         ...(state.servePermissions ? { permissions: permissionsOf(info, tenantId) } : {}),
         ...(info.kind === "pat" && state.serveTenantReach ? reachOf(info, url.searchParams) : {}),
       });
@@ -652,13 +788,14 @@ export async function startFakeServer(): Promise<FakeServer> {
     if (p === "/api/v1/tenants") {
       if (info.kind === "key") return send(res, 403, { detail: "API keys cannot manage tenants" });
       if (!info.platform || headerTenant) return send(res, 403, { detail: "Insufficient permissions" });
+      if (!effectiveRole(info)) return send(res, 403, { detail: "This personal access token's ceiling leaves no access here" });
       if (method === "POST") {
         const b = body.json as { slug: string; name: string; plan?: string };
         if (!b?.slug || !/^[a-z0-9-]+$/.test(b.slug)) return send(res, 422, { detail: [{ loc: ["body", "slug"], msg: "invalid slug", type: "value_error" }] });
         if (state.tenants.some((t) => t.slug === b.slug)) return send(res, 409, { detail: "Tenant slug already exists" });
         const tenant = { id: randomUUID(), slug: b.slug, name: b.name, plan: b.plan ?? "starter", status: "active", created_at: now() };
         state.tenants.push(tenant);
-        info.tenantIds.push(tenant.id);
+        if (!info.platformOnly) info.tenantIds.push(tenant.id);
         return send(res, 201, tenant);
       }
       const search = url.searchParams.get("search")?.toLowerCase();
@@ -697,7 +834,9 @@ export async function startFakeServer(): Promise<FakeServer> {
     if (tenantLimitsRoute && method === "PATCH") return handleInferenceBudget(res, tenantLimitsRoute[1]!, tid, body.json, info);
 
     if (p === "/api/v1/harnesses" && method === "GET") {
-      return send(res, 200, state.harnesses.filter((h) => h.tenant_id === tid));
+      const listed = state.harnesses.filter((h) => h.tenant_id === tid);
+      if (state.harnessesWithoutDefault) return send(res, 200, listed.map(({ is_default: _d, ...h }) => h));
+      return send(res, 200, listed);
     }
     if (p === "/api/v1/harnesses" && method === "POST") {
       const b = body.json as Record<string, unknown>;
@@ -718,7 +857,7 @@ export async function startFakeServer(): Promise<FakeServer> {
         ...(state.readinessWithoutChecks ? {} : { checks: state.readinessChecks ?? [] }),
         blockers: state.ready ? [] : (state.readinessBlockers ?? [{ key: "test_run", label: "A passing test run", state: "missing", detail: "Run the regression suite.", href: null }]),
         warnings: state.readinessWarnings ?? [],
-        latest_test_run: null,
+        ...(state.readinessWithoutLatestRun ? {} : { latest_test_run: state.latestTestRun ?? null }),
         activation_override: null,
       };
       if (m[2] === "/readiness" && method === "GET") return send(res, 200, readiness);
@@ -733,10 +872,52 @@ export async function startFakeServer(): Promise<FakeServer> {
         return send(res, 200, h);
       }
     }
+    m = /^\/api\/v1\/harnesses\/([0-9a-f-]{36})\/deactivate$/.exec(p);
+    if (m && method === "POST") {
+      const h = state.harnesses.find((x) => x.tenant_id === tid && x.id === m![1]);
+      if (!h) return send(res, 404, { detail: "Harness not found." });
+      // As the instance: out of service, not back to draft.
+      h.status = "inactive";
+      return send(res, 200, h);
+    }
+    if (p === "/api/v1/chat" && method === "POST") {
+      const b = (body.json ?? {}) as { message?: string; harness_id?: string | null; session_id?: string | null };
+      if (!b.message) return send(res, 422, { detail: [{ loc: ["body", "message"], msg: "Field required", type: "missing" }] });
+      const h = b.harness_id
+        ? state.harnesses.find((x) => x.tenant_id === tid && x.id === b.harness_id)
+        : state.harnesses.find((x) => x.tenant_id === tid && x.is_default);
+      if (!h) return send(res, 404, { detail: "Harness not found." });
+      if (!b.harness_id && h.status !== "active") {
+        return send(res, 409, { detail: "Nothing in this tenant is live to answer yet.", code: "chat_route_not_live" });
+      }
+      // A draft answers a person as a Playground run, never an API key.
+      if (h.status !== "active" && info.kind !== "pat") return send(res, 409, { detail: "The selected solution is not active." });
+      const session = b.session_id ?? randomUUID();
+      state.chats.push({ harness_id: h.id, message: b.message, session_id: session });
+      return send(res, 200, { response: `${h.name} answers: ${b.message}`, session_id: session, conversation_id: randomUUID(), agent_run_id: null, ui_directives: null });
+    }
     m = /^\/api\/v1\/harnesses\/by-slug\/([^/]+)$/.exec(p);
     if (m) {
       const h = state.harnesses.find((x) => x.tenant_id === tid && x.slug === decodeURIComponent(m![1]!));
       return h ? send(res, 200, h) : send(res, 404, { detail: "Harness not found" });
+    }
+    m = /^\/api\/v1\/harnesses\/([^/]+)\/default$/.exec(p);
+    if (m && method === "POST") {
+      const h = state.harnesses.find((x) => x.tenant_id === tid && x.id === m![1]);
+      if (!h) return send(res, 404, { detail: "Harness not found." });
+      // Only an active solution answers the tenant's chat, as the instance refuses a draft.
+      if (h.status !== "active") return send(res, 409, { detail: `Harness '${h.slug}' is ${String(h.status)}, not active.` });
+      // One default route per tenant: the instance moves it.
+      for (const other of state.harnesses) if (other.tenant_id === tid) other.is_default = other.id === h.id;
+      return send(res, 200, h);
+    }
+    if (p === "/api/v1/bot-persona" && (method === "GET" || method === "PUT")) {
+      // Without harness_id, the tenant's default route, as the instance answers.
+      const wanted = url.searchParams.get("harness_id") ?? state.harnesses.find((h) => h.tenant_id === tid && h.is_default)?.id;
+      const h = state.harnesses.find((x) => x.tenant_id === tid && x.id === wanted);
+      if (!h) return send(res, 404, { detail: "Harness not found." });
+      if (method === "PUT") state.personas.set(h.id, { ...(body.json as Record<string, unknown>) });
+      return send(res, 200, { harness_id: h.id, ...(state.personas.get(h.id) ?? {}) });
     }
     m = /^\/api\/v1\/harnesses\/([^/]+)\/clone$/.exec(p);
     if (m && method === "POST") {
@@ -761,15 +942,72 @@ export async function startFakeServer(): Promise<FakeServer> {
       state.uploadsBeforeFailure--;
       const files = (body.form?.getAll("files") ?? []) as File[];
       if (!files.length) return send(res, 422, { detail: [{ loc: ["body", "files"], msg: "Field required", type: "missing" }] });
-      const docs = files.map((file) => {
+      const mappedRaw = state.uploadReplace !== "none" ? body.form?.get("replace_doc_ids") : null;
+      const mapped = typeof mappedRaw === "string" ? (JSON.parse(mappedRaw) as Record<string, string>) : {};
+      const byName = state.uploadReplace === "name" && body.form?.get("replace_existing") !== "false";
+      const before = state.documents.filter((d) => d.kb_id === kb.id && !d.deleted);
+      const hashes = await Promise.all(files.map(async (file) => createHash("sha256").update(Buffer.from(await file.arrayBuffer())).digest("hex")));
+      const docs = files.map((file, index) => {
+        const same = state.uploadDedup ? before.find((d) => d.is_active && d.sha256 === hashes[index]) : undefined;
+        if (same) {
+          // Identical content is already active: the instance answers with that document, and the operation that once ingested it, and creates none.
+          const view = { ...documentView(same.id, same.filename, same.size, opId("document_ingestion", same.id)), status: "ready" };
+          return state.uploadOutcome ? { ...view, upload_outcome: "deduplicated" } : view;
+        }
         const id = randomUUID();
         const op = addOperation("document_ingestion", tid, [...state.defaultSteps], {
           id: opId("document_ingestion", id),
           resultRef: { type: "document", id, href: `/api/v1/knowledge-bases/${kb.id}/documents/${id}/content` },
         });
-        return documentView(id, file.name, file.size, state.serveOperations ? op.id : null);
+        // A name replace_doc_ids maps is replaced by that id only, never by name.
+        const replaced = mapped[file.name]
+          ? before.filter((d) => d.id === mapped[file.name])
+          : byName
+            ? before.filter((d) => d.filename === file.name && d.is_active).sort((a, b) => b.created_at.localeCompare(a.created_at))
+            : [];
+        for (const d of replaced) d.deleted = true;
+        state.documents.push({ id, tenant_id: tid, kb_id: kb.id, filename: file.name, size: file.size, is_active: true, deleted: false, created_at: now(), sha256: hashes[index] });
+        const view = documentView(id, file.name, file.size, state.serveOperations ? op.id : null);
+        const outcome = state.uploadOutcome ? { upload_outcome: replaced.length ? "replaced" : "created" } : {};
+        return state.uploadReplace === "name" ? { ...view, replaced_document_ids: replaced.map((d) => d.id), ...outcome } : { ...view, ...outcome };
       });
       return send(res, 202, docs);
+    }
+    m = /^\/api\/v1\/knowledge-bases\/([^/]+)\/documents$/.exec(p);
+    if (m && method === "GET") {
+      const kb = state.kbs.find((k) => k.tenant_id === tid && k.id === m![1]);
+      if (!kb) return send(res, 404, { detail: "Knowledge base not found" });
+      const listed = state.documents.filter((d) => d.kb_id === kb.id && !d.deleted);
+      return send(
+        res,
+        200,
+        listed.map((d) => ({
+          ...documentView(d.id, d.filename, d.size, null),
+          status: "ready",
+          is_active: d.is_active,
+          created_at: d.created_at,
+          ...(state.documentHashes ? { file_sha256: d.sha256 ?? null } : {}),
+        })),
+      );
+    }
+    m = /^\/api\/v1\/knowledge-bases\/([^/]+)\/documents\/active$/.exec(p);
+    if (m && method === "PATCH") {
+      const kb = state.kbs.find((k) => k.tenant_id === tid && k.id === m![1]);
+      if (!kb) return send(res, 404, { detail: "Knowledge base not found" });
+      const updates = ((body.json ?? {}) as { updates?: Array<{ id: string; is_active: boolean }> }).updates ?? [];
+      if (!updates.length) return send(res, 422, { detail: [{ loc: ["body", "updates"], msg: "List should have at least 1 item", type: "too_short" }] });
+      let activated = 0;
+      let deactivated = 0;
+      for (const u of updates) {
+        const d = state.documents.find((x) => x.kb_id === kb.id && x.id === u.id && !x.deleted);
+        if (!d) return send(res, 404, { detail: `Document ${u.id} not found` });
+        if (d.is_active !== u.is_active) {
+          if (u.is_active) activated++;
+          else deactivated++;
+        }
+        d.is_active = u.is_active;
+      }
+      return send(res, 200, { activated, deactivated });
     }
 
     if (p === "/api/v1/test-suites" && method === "GET") {
@@ -781,7 +1019,8 @@ export async function startFakeServer(): Promise<FakeServer> {
       const suite = state.suites.find((s) => s.tenant_id === tid && s.id === m![1]);
       if (!suite) return send(res, 404, { detail: "Suite not found" });
       const id = randomUUID();
-      const run = { id, tenant_id: tid, suite_id: suite.id, summary: { ...state.runSummary } };
+      const asked = (body.json as { harness_id?: unknown } | undefined)?.harness_id;
+      const run = { id, tenant_id: tid, suite_id: suite.id, summary: { ...state.runSummary }, harness_id: typeof asked === "string" ? asked : suite.harness_id };
       state.runs.push(run);
       const op = addOperation("test_run", tid, [...state.defaultSteps], {
         id: opId("test_run", id),
@@ -808,6 +1047,11 @@ export async function startFakeServer(): Promise<FakeServer> {
     }
 
     if (p === "/api/v1/tools" && method === "GET") return send(res, 200, []);
+    // The skills the tenant holds: the ones of its configuration.
+    if (p === "/api/v1/skills" && method === "GET") {
+      const skills = state.configs.get(tid)?.pkg.skills;
+      return send(res, 200, Array.isArray(skills) ? skills.map((sk: { slug?: string; name?: string }) => ({ id: randomUUID(), slug: sk.slug, name: sk.name })) : []);
+    }
     if (p === "/api/v1/model-registry" || p.startsWith("/api/v1/model-registry/")) {
       return handleModel(res, method, tid, p.slice("/api/v1/model-registry".length + 1), body.json);
     }
@@ -844,15 +1088,37 @@ export async function startFakeServer(): Promise<FakeServer> {
         return send(res, 403, { detail: "full_config export requires admin authentication (JWT), not API key" });
       }
       const config = configFor(tid);
-      const pkg = structuredClone(config.pkg);
+      const pkg = state.exportFillsDefaults ? withSchemaDefaults(packageSchema(), config.pkg) : structuredClone(config.pkg);
       pkg.manifest = { ...(pkg.manifest as object), exported_at: now(), scope };
+      // A recent instance's solution export leaves what the whole tenant shares out unless asked.
+      if (state.tenantWideFlag && scope === "agent_graph" && url.searchParams.get("include_tenant_wide") !== "true") {
+        for (const section of tenantWideSections(packageSchema() as PackageSchema)) delete pkg[section];
+      }
       return send(res, 200, pkg);
     }
     if ((p === "/api/v1/agent-graph/import/preview" || p === "/api/v1/agent-graph/import") && method === "POST") {
-      const b = body.json as { package: Record<string, unknown>; mode?: string; harness_id?: string | null; runtime_bindings?: Record<string, string>; preview_id?: string | null };
+      const b = body.json as {
+        package: Record<string, unknown>;
+        mode?: string;
+        harness_id?: string | null;
+        runtime_bindings?: Record<string, string>;
+        preview_id?: string | null;
+        include_tenant_wide?: boolean;
+      };
       const config = configFor(tid);
       const schema = JSON.parse(readContract("meta-package-schema-v3.json")) as { properties: Record<string, unknown> };
-      const request = { package: b.package, mode: b.mode ?? "overwrite", harness_id: b.harness_id ?? null, runtime_bindings: b.runtime_bindings ?? {} };
+      const request = {
+        package: b.package,
+        mode: b.mode ?? "overwrite",
+        harness_id: b.harness_id ?? null,
+        runtime_bindings: b.runtime_bindings ?? {},
+        ...(state.tenantWideFlag ? { include_tenant_wide: b.include_tenant_wide === true } : {}),
+      };
+      // A recent instance's solution import keeps the tenant's shared sections as they are unless asked.
+      const sharedKept =
+        state.tenantWideFlag && request.harness_id && !b.include_tenant_wide
+          ? [...tenantWideSections(packageSchema() as PackageSchema)].filter((section) => section in b.package)
+          : [];
       const previewId = `pv_${createHash("sha256").update(`${tid}:${config.version}:${canonical(request)}`).digest("hex").slice(0, 32)}`;
       const ignored = Object.keys(b.package).filter((k) => !(k in schema.properties));
       const preview = {
@@ -860,7 +1126,9 @@ export async function startFakeServer(): Promise<FakeServer> {
         text_blocks: [],
         mode: request.mode,
         summary: { creates: { agents: 1 }, updates: { knowledge_bases: 1 }, deletes: {}, references: {}, warnings: 0, blockers: state.previewBlockers.length },
-        warnings: [],
+        warnings: sharedKept.map(
+          (section) => `This solution import leaves ${section} out: they hold what the whole tenant shares, so every solution would see the change. Import with include_tenant_wide to apply them.`,
+        ),
         blockers: state.previewBlockers,
         ignored: { sections: ignored, fields: [], count: ignored.length },
         impact: { changed_tools: [], changed_knowledge_bases: [], active_harnesses: [], sandbox_writers: [] },
@@ -872,6 +1140,16 @@ export async function startFakeServer(): Promise<FakeServer> {
       if (info.kind === "key") return send(res, 403, { detail: "Agent graph import requires admin authentication (JWT), not API key" });
       if (state.previewBlockers.length) return send(res, 422, { detail: preview });
       if (b.preview_id && b.preview_id !== previewId) {
+        // A recent instance answers at the top level and names what changed where it still knows.
+        if (state.staleChanged) {
+          const what = state.staleChanged;
+          return send(res, 409, {
+            code: "import_preview_stale",
+            message: `The target changed since this preview${what.length ? `: ${what.join("; ")}` : ""}; nothing was imported.`,
+            hint: "Preview again, show the new result, and import with the new preview_id.",
+            ...(what.length ? { changed: what } : {}),
+          });
+        }
         return send(res, 409, {
           detail: {
             error: "import_preview_stale",
@@ -885,9 +1163,10 @@ export async function startFakeServer(): Promise<FakeServer> {
         const catalog = JSON.parse(readContract("meta-error-catalog.json")) as { api_error_codes: Array<{ code: string; message: string; hint: string; docs: string }> };
         const entry = catalog.api_error_codes.find((e) => e.code === "package_requirements_changed")!;
         const said = "Import requirements changed. Preview again; no changes were saved.";
-        const blockers = state.importRequirementsChanged.blockers;
+        const { blockers, blocker_details } = state.importRequirementsChanged;
         return send(res, 409, {
           ...(blockers ? { blockers } : {}),
+          ...(blocker_details ? { blocker_details } : {}),
           detail: said,
           code: entry.code,
           message: said,
@@ -895,7 +1174,8 @@ export async function startFakeServer(): Promise<FakeServer> {
           docs: `http://${req.headers.host}${entry.docs}`,
         });
       }
-      const kept = Object.fromEntries(Object.entries(b.package).filter(([k]) => k in schema.properties));
+      const kept = Object.fromEntries(Object.entries(b.package).filter(([k]) => k in schema.properties && !sharedKept.includes(k)));
+      for (const section of sharedKept) if (section in config.pkg) kept[section] = config.pkg[section];
       state.configs.set(tid, { pkg: kept, version: config.version + 1 });
       // Like the instance: an import adds the names a package declares, and never forgets one.
       const values = valuesFor(tid);
@@ -1228,7 +1508,8 @@ export async function startFakeServer(): Promise<FakeServer> {
     if (rest.includes("/") || method !== "PATCH") return send(res, 404, { detail: "Not Found" });
     const row = state.models.find((m) => m.tenant_id === tid && m.id === rest);
     if (!row) return send(res, 404, { detail: "Model not found" });
-    const changes = (json && typeof json === "object" ? json : {}) as Record<string, unknown>;
+    // The provider key is write-only: accepted, never stored or answered here.
+    const { api_key: _key, ...changes } = (json && typeof json === "object" ? json : {}) as Record<string, unknown>;
     const extra = Object.keys(changes).filter((k) => !["max_concurrent_requests", "base_url", "display_name", "is_active"].includes(k));
     if (extra.length) return send(res, 422, { detail: extra.map((k) => ({ type: "extra_forbidden", loc: ["body", k], msg: "Extra inputs are not permitted" })) });
     const limit = changes.max_concurrent_requests;
@@ -1336,6 +1617,13 @@ export async function startFakeServer(): Promise<FakeServer> {
     };
   }
 
+  /** The package schema as the instance serves it, with the test's edit. */
+  function packageSchema(): { properties: Record<string, unknown> } {
+    const schema = JSON.parse(readContract("meta-package-schema-v3.json")) as { properties: Record<string, unknown> };
+    state.packageSchemaEdit?.(schema);
+    return schema;
+  }
+
   function configFor(tenantId: string): TenantConfig {
     let config = state.configs.get(tenantId);
     if (!config) {
@@ -1400,6 +1688,64 @@ export async function startFakeServer(): Promise<FakeServer> {
 }
 
 /** A secret's name and status, as the instance answers; never its value. */
+type Node = Record<string, unknown>;
+const isNode = (v: unknown): v is Node => Boolean(v) && typeof v === "object" && !Array.isArray(v);
+
+/**
+ * A package as an instance's export gives it: the instance reads an import
+ * into its models and writes them back out, so each object comes back with
+ * every field the schema lists, in that order. A field it was sent without
+ * holds its non-null default; else a free-form config `{}`, a nullable field
+ * null, and a list or object field without a published default `[]` or `{}`.
+ * Test cases come back by sort_order, then by name. Written apart from the
+ * kit's own `fmt`, so a test of `fmt` against it proves something.
+ */
+function withSchemaDefaults(schema: { properties: Record<string, unknown> }, pkg: Record<string, unknown>): Record<string, unknown> {
+  const defs = ((schema as Node).$defs ?? {}) as Record<string, Node>;
+  const deref = (node: unknown): Node | undefined => {
+    let at = isNode(node) ? node : undefined;
+    for (let i = 0; at && typeof at.$ref === "string" && i < 10; i++) at = defs[(at.$ref as string).replace("#/$defs/", "")];
+    return at;
+  };
+  const options = (node: Node): Node[] => {
+    const list = (node.anyOf ?? node.oneOf) as unknown[] | undefined;
+    return list ? list.flatMap((b) => (deref(b) ? options(deref(b)!) : [])) : [node];
+  };
+  const fill = (node: unknown, value: unknown, depth: number): unknown => {
+    const at = deref(node);
+    if (!at || depth > 40) return structuredClone(value);
+    if (Array.isArray(value)) {
+      const list = options(at).filter((b) => b.type === "array");
+      return list.length === 1 && list[0]!.items ? value.map((v) => fill(list[0]!.items, v, depth + 1)) : structuredClone(value);
+    }
+    if (!isNode(value)) return value;
+    // An object field with several shapes is passed through, as the models keep a plain dict.
+    const objects = options(at).filter((b) => isNode(b.properties));
+    if (objects.length !== 1) return structuredClone(value);
+    const props = objects[0]!.properties as Record<string, unknown>;
+    const required = new Set((objects[0]!.required as string[] | undefined) ?? []);
+    const out: Record<string, unknown> = {};
+    for (const [key, sub] of Object.entries(props)) {
+      const field = deref(sub);
+      if (key in value) out[key] = fill(sub, value[key], depth + 1);
+      else if (!field || required.has(key)) continue;
+      else if (field.default != null) out[key] = structuredClone(field.default);
+      else if (options(field).some((b) => b.type === "object" && b.additionalProperties === true)) out[key] = {};
+      else if (options(field).some((b) => b.type === "null")) out[key] = null;
+      else if (field.type === "array") out[key] = [];
+      else if (field.type === "object" || isNode(field.properties)) out[key] = {};
+    }
+    for (const [key, inner] of Object.entries(value)) if (!(key in props)) out[key] = structuredClone(inner);
+    if (Array.isArray(out.test_cases)) {
+      const order = (c: unknown) => (isNode(c) && typeof c.sort_order === "number" ? c.sort_order : 0);
+      const name = (c: unknown) => (isNode(c) && typeof c.name === "string" ? c.name : "");
+      out.test_cases = [...out.test_cases].sort((a, b) => order(a) - order(b) || name(a).localeCompare(name(b), "en"));
+    }
+    return out;
+  };
+  return Object.fromEntries(Object.entries(pkg).map(([section, value]) => [section, fill(schema.properties[section], value, 0)]));
+}
+
 function secretStatus(values: TenantValues, name: string) {
   const stored = values.secrets.get(name);
   const declared = values.declared.secrets.has(name);
@@ -1521,11 +1867,11 @@ function suiteView(s: { id: string; name: string; harness_id: string | null; arc
   };
 }
 
-function runView(run: { id: string; suite_id: string; summary: Record<string, unknown> }, suiteName: string | null, status: string, operationId: string | null) {
+function runView(run: { id: string; suite_id: string; summary: Record<string, unknown>; harness_id?: string | null }, suiteName: string | null, status: string, operationId: string | null) {
   return {
     id: run.id,
     suite_id: run.suite_id,
-    harness_id: null,
+    harness_id: run.harness_id ?? null,
     suite_name: suiteName,
     status,
     started_at: now(),
@@ -1540,6 +1886,24 @@ function runView(run: { id: string; suite_id: string; summary: Record<string, un
     created_at: now(),
     covers_suite: true,
     operation_id: operationId,
+  };
+}
+
+/**
+ * A row of a test result's `tool_calls`, as the instance records it; a recent
+ * instance adds the knowledge search's `knowledge_outcome`, an older one
+ * leaves it out.
+ */
+export function toolCallRow(knowledgeOutcome?: string, name = "search_documents") {
+  return {
+    name,
+    type: "builtin",
+    status: "ok",
+    arguments: { query: "opening hours" },
+    result_count: knowledgeOutcome === "content_gap" ? 0 : 3,
+    duration_ms: 85,
+    error: null,
+    ...(knowledgeOutcome ? { knowledge_outcome: knowledgeOutcome } : {}),
   };
 }
 
@@ -1558,7 +1922,8 @@ function resultView(runId: string, name: string, status: string, conversationId:
     response_latency_ms: 120,
     token_count: 42,
     retrieval_chunks: null,
-    tool_calls: null,
+    // An older instance's row: no knowledge_outcome.
+    tool_calls: [toolCallRow()],
     guardrail_events: null,
     llm_judge_score: 0.9,
     llm_judge_reasoning: null,
@@ -1571,10 +1936,19 @@ function resultView(runId: string, name: string, status: string, conversationId:
   };
 }
 
-export function traceFixture(id: string, conversationId: string | null) {
-  const span = (n: number, type: string, name: string, status = "ok") => ({
+/**
+ * A trace of three spans: the agent, a model call, and a search that failed.
+ * `knowledgeOutcome` adds the search's retrieval span with the outcome the
+ * agent recorded on it, as a recent instance writes it.
+ */
+export function traceFixture(
+  id: string,
+  conversationId: string | null,
+  options: { knowledgeOutcome?: string; retrievalAttributes?: unknown; failedSearch?: boolean } = {},
+) {
+  const span = (n: number, type: string, name: string, status = "ok", parent = 1, attributes: unknown = {}) => ({
     id: `${id}-span-${n}`,
-    parent_span_id: n === 1 ? null : `${id}-span-1`,
+    parent_span_id: n === 1 ? null : `${id}-span-${parent}`,
     span_key: `k${n}`,
     span_type: type,
     name,
@@ -1590,9 +1964,10 @@ export function traceFixture(id: string, conversationId: string | null) {
     started_at: now(),
     ended_at: now(),
     duration_ms: 10 * n,
-    input_json: { prompt: "x".repeat(5000) },
-    output_json: { text: "done" },
-    attributes_json: {},
+    // A retrieval span records its search in its attributes only.
+    input_json: type === "retrieval" ? null : { prompt: "x".repeat(5000) },
+    output_json: type === "retrieval" ? null : { text: "done" },
+    attributes_json: attributes,
     token_usage_json: { input: 10, output: 5 },
     error_json: status === "error" ? { message: "tool exploded" } : null,
   });
@@ -1611,7 +1986,7 @@ export function traceFixture(id: string, conversationId: string | null) {
     ended_at: now(),
     duration_ms: 60,
     error_summary: null,
-    total_spans: 3,
+    total_spans: options.knowledgeOutcome || options.retrievalAttributes !== undefined ? 4 : 3,
     total_tool_calls: 1,
     total_llm_calls: 1,
     total_input_tokens: 10,
@@ -1620,6 +1995,15 @@ export function traceFixture(id: string, conversationId: string | null) {
     total_reasoning_tokens: 0,
     has_retrieval: false,
     created_at: now(),
-    spans: [span(1, "agent", "Main"), span(2, "llm", "generate"), span(3, "tool", "search_documents", "error")],
+    spans: [
+      span(1, "agent", "Main"),
+      span(2, "llm", "generate"),
+      span(3, "tool", "search_documents", options.failedSearch === false ? "ok" : "error"),
+      ...(options.retrievalAttributes !== undefined
+        ? [span(4, "retrieval", "retrieval", "ok", 3, options.retrievalAttributes)]
+        : options.knowledgeOutcome
+          ? [span(4, "retrieval", "retrieve", "ok", 3, { knowledge_outcome: options.knowledgeOutcome })]
+          : []),
+    ],
   };
 }

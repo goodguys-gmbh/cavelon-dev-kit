@@ -10,14 +10,17 @@ import {
   type Context,
 } from "../command.js";
 import { CavelonError, ExitCode, usageError } from "../errors.js";
+import { confirmation, confirmTokenRequired } from "../confirm-token.js";
 import { keyValues, moreHint, table } from "../format.js";
 import { callStable } from "../invoke.js";
 import { formatQuota, limitError, limitsOrWarn, readQuotas } from "../limits.js";
 import { containing } from "../choose.js";
-import { readTenantless } from "../principal.js";
-import { requireInstance } from "../session.js";
+import { readPrincipal, readTenantless, type MetaPrincipal } from "../principal.js";
+import type { ApiClient } from "../http.js";
+import { contextFlags, requireInstance } from "../session.js";
 import { listsTenants, searchTenants } from "../tenant-choice.js";
-import { resolveHarnessId } from "../harness-ref.js";
+import { harnessNotFoundError, lookupHarness, resolveHarnessId } from "../harness-ref.js";
+import { defaultChangeLine, defaultCommands, named, readDefaultRoute, setDefaultRoute } from "../default-route.js";
 import { cavelonCommand } from "../shell.js";
 import { rememberTenant } from "./session.js";
 
@@ -55,17 +58,94 @@ const IDEMPOTENCY_OPTION = {
   description: "Send an Idempotency-Key, so a retry does not create a second one.",
 };
 
+/** The permission creating a tenant needs, in Platform mode. */
+const TENANTS_MANAGE = "tenants.manage";
+
+/** What a person does instead, when this token cannot create a tenant. */
+const CREATE_TENANT_REMEDY =
+  "Create a personal access token with Allow Platform mode and a platform ceiling on /account/access-tokens " +
+  `(its owner needs ${TENANTS_MANAGE}) and run \`cavelon login\` with it, or create the tenant in the Admin (Platform › Tenants).`;
+
+/**
+ * Refuse a tenant the token cannot create, before sending it: `/meta/principal`
+ * says whether the token may enter Platform mode at all and, in Platform mode,
+ * which permissions it carries. An instance without the route, or one that
+ * refuses the question, leaves the decision to the instance.
+ */
+function checkCanCreateTenant(principal: MetaPrincipal | undefined): void {
+  const token = principal?.token;
+  if (!token) return;
+  const ceiling = token.ceiling_role ? ` (ceiling ${token.ceiling_role})` : "";
+  // An instance that does not publish the field leaves the decision to the route.
+  if (token.platform_mode_allowed === false) {
+    throw new CavelonError(ExitCode.unauthorized, {
+      code: "platform_mode_not_allowed",
+      message:
+        `The personal access token "${token.name}" may not enter Platform mode${ceiling}, and creating a tenant needs Platform mode ` +
+        `with ${TENANTS_MANAGE}, so nothing was sent.`,
+      hint: CREATE_TENANT_REMEDY,
+      details: { platform_mode_allowed: false, ceiling_role: token.ceiling_role ?? null, sent: false },
+    });
+  }
+  if (principal.mode === "platform" && principal.permissions && !principal.permissions.includes(TENANTS_MANAGE)) {
+    throw new CavelonError(ExitCode.unauthorized, {
+      code: "permission_missing",
+      message: `The personal access token "${token.name}" enters Platform mode${ceiling}, but without ${TENANTS_MANAGE}, so it cannot create a tenant; nothing was sent.`,
+      hint: `A token whose ceiling and owner's global role grant ${TENANTS_MANAGE} can; or create the tenant in the Admin (Platform › Tenants).`,
+      details: { permission: TENANTS_MANAGE, ceiling_role: token.ceiling_role ?? null, sent: false },
+    });
+  }
+  // Asked without a tenant, as the creation is sent, the instance caps the owner's role by the token's ceiling. A
+  // ceiling that holds no platform role (a tenant role such as tenant_builder) leaves the token in no mode, or in a
+  // tenant, never in Platform mode: the instance would answer 403, so the kit says so first.
+  const outside = principal.mode !== "platform" && (principal.permissions ? !principal.permissions.includes(TENANTS_MANAGE) : principal.mode === "none");
+  if (token.platform_mode_allowed === true && outside) {
+    throw new CavelonError(ExitCode.unauthorized, {
+      code: "permission_missing",
+      message:
+        `The personal access token "${token.name}" may enter Platform mode, but its ceiling${token.ceiling_role ? ` ${token.ceiling_role}` : ""} gives it no ` +
+        `role there with ${TENANTS_MANAGE} (asked without a tenant, the instance answers it ${principal.mode === "none" ? "in no mode" : "in a tenant"}), ` +
+        "so it cannot create a tenant; nothing was sent.",
+      hint: CREATE_TENANT_REMEDY,
+      details: { permission: TENANTS_MANAGE, ceiling_role: token.ceiling_role ?? null, mode: principal.mode, sent: false },
+    });
+  }
+}
+
+/**
+ * Whether the token acts in a tenant: `/meta/principal` asked with that
+ * tenant answers for it. Undefined when the instance does not say (no such
+ * route); a refusal's own words otherwise.
+ */
+async function entersTenant(client: ApiClient, tenantId: string): Promise<{ ok: boolean; said?: string } | undefined> {
+  const before = client.target.tenantId;
+  client.target.tenantId = tenantId;
+  try {
+    const response = await client.get<{ tenant_id?: unknown; detail?: unknown }>("/api/v1/meta/principal", { allow: [400, 403, 404, 405] });
+    if (response.status === 404 || response.status === 405) return undefined;
+    // An answer without `tenant_id` tells nothing; the switch goes ahead as before.
+    if (response.status === 200) return { ok: response.data?.tenant_id === undefined || response.data.tenant_id === tenantId };
+    const detail = response.data?.detail;
+    return { ok: false, said: typeof detail === "string" && detail ? detail : `${response.status}` };
+  } finally {
+    client.target.tenantId = before;
+  }
+}
+
 export const tenantCreate: CommandSpec = {
   name: "tenant create",
   summary: "Create a tenant (personal access token in Platform mode with tenants.manage).",
-  description: "A tenant API key never can. Inviting people and assigning roles stay in the Admin.",
+  description:
+    "A tenant API key never can. Before sending, the token is checked: one that may not enter Platform mode, or enters it\n" +
+    "without tenants.manage, is refused with exit 7 and nothing is sent. With --use, the new tenant is chosen only once the\n" +
+    "instance confirms the token acts in it. Inviting people and assigning roles stay in the Admin.",
   readOnly: false,
   mcpTool: "tenant_create",
   positionals: [{ name: "slug", description: "Lower-case letters, digits and dashes.", required: true }],
   options: {
     name: { type: "string", value: "<name>", description: "Display name (default: the slug)." },
     plan: { type: "string", value: "<plan>", description: "Licence plan, when the instance knows several." },
-    use: { type: "boolean", description: "Switch to the new tenant afterwards (`cavelon use`)." },
+    use: { type: "boolean", description: "Switch to the new tenant afterwards (`cavelon use`), once the token is known to act in it." },
     "idempotency-key": IDEMPOTENCY_OPTION,
   },
   async run(ctx, input) {
@@ -77,6 +157,8 @@ export const tenantCreate: CommandSpec = {
         hint: "Use a personal access token that allows Platform mode, owned by someone with tenants.manage.",
       });
     }
+    const client = await ctx.client({ tenant: false });
+    checkCanCreateTenant(await readPrincipal(client, { sendTenant: false }));
     const slug = positional(input, "slug")!;
     const body: Record<string, unknown> = { slug, name: stringOption(input, "name") ?? slug };
     const plan = stringOption(input, "plan");
@@ -86,11 +168,20 @@ export const tenantCreate: CommandSpec = {
       sendTenant: false,
       headers: idempotency(stringOption(input, "idempotency-key")),
     });
-    if (boolOption(input, "use")) await rememberTenant(ctx, requireInstance(session), { ref: tenant.slug, id: tenant.id, name: tenant.name });
-    return {
-      data: tenant,
-      text: `Created tenant ${tenant.name} (${tenant.slug}, ${tenant.id}).${boolOption(input, "use") ? " Now using it." : " Switch with: " + cavelonCommand("use", tenant.slug)}`,
-    };
+    const created = `Created tenant ${tenant.name} (${tenant.slug}, ${tenant.id}).`;
+    if (!boolOption(input, "use")) return { data: tenant, text: `${created} Switch with: ${cavelonCommand("use", tenant.slug)}` };
+    // The instance does not say ahead which tenants a token will reach, so the new one is asked right after.
+    const enters = await entersTenant(client, tenant.id);
+    if (enters && !enters.ok) {
+      ctx.warn(
+        `This token does not act in the new tenant${enters.said ? ` (the instance said: ${enters.said})` : ""}, so the tenant chosen before stays. ` +
+          "A token that reaches the new tenant (an operator's token that reaches every tenant, or one that lists it) can switch with " +
+          `\`${cavelonCommand("use", tenant.slug)}\`.`,
+      );
+      return { data: { ...tenant, used: false }, text: `${created} Not switched: this token does not act in it.` };
+    }
+    await rememberTenant(ctx, requireInstance(session), { ref: tenant.slug, id: tenant.id, name: tenant.name });
+    return { data: { ...tenant, used: true }, text: `${created} Now using it.` };
   },
 };
 
@@ -129,7 +220,15 @@ export const tenantList: CommandSpec = {
       sendTenant: false,
       allow: [403],
     });
-    let page: { items: Array<Record<string, unknown>>; next_cursor: string | null; total: number; source: string; reaches_all_tenants?: boolean };
+    let page: {
+      items: Array<Record<string, unknown>>;
+      next_cursor: string | null;
+      total: number;
+      source: string;
+      reaches_all_tenants?: boolean;
+      listed?: string;
+      note?: string;
+    };
     let note = "";
     const reach = listing.status === 200 ? undefined : await readTenantless(client);
     if (listing.status === 200) {
@@ -145,7 +244,12 @@ export const tenantList: CommandSpec = {
       const all = found.map((t) => ({ id: t.id, slug: t.slug, name: t.name, role: t.role, is_default: t.is_default }));
       page = { ...pageOf(all, limit, cursor), source: "token", reaches_all_tenants: reach.reachesAll };
       if (reach.reachesAll && !search) {
-        note = `\nThis token reaches every tenant on ${client.url}${all.length ? "; these are your own" : ""}. Find any other: cavelon tenant list --search <part of the name>`;
+        // Without a search, the list holds the person's own memberships only; `total` counts those, not the instance's tenants.
+        page.listed = "own_memberships";
+        page.note = "This token reaches every tenant; items and total count only your own memberships. Find any tenant with --search <part of the name>.";
+        note = all.length
+          ? `\nThese are your own memberships; this token reaches every tenant on ${client.url}. Find any other: cavelon tenant list --search <part of the name>`
+          : `No memberships of your own; this token reaches every tenant on ${client.url}. Find any tenant with: cavelon tenant list --search <part of the name>`;
       }
     } else {
       const me = await client.get<Me>("/api/v1/auth/me", { sendTenant: false });
@@ -167,7 +271,10 @@ export const tenantList: CommandSpec = {
 
 export const harnessList: CommandSpec = {
   name: "harness list",
-  summary: "List the tenant's solutions (harnesses).",
+  summary: "List the tenant's solutions (harnesses), marking the default route.",
+  description:
+    "DEFAULT marks the tenant's default route: the solution that answers where a conversation names none (the tenant's chat\n" +
+    "and widget). An instance that does not say which one it is leaves the column out; `is_default` in --json is null then.",
   readOnly: true,
   idempotent: true,
   mcpTool: "harness_list",
@@ -181,22 +288,98 @@ export const harnessList: CommandSpec = {
       query: { include_readiness: boolOption(input, "readiness") ? true : undefined },
     });
     const limit = intOption(input, "limit", { min: 1, max: 500, fallback: 50 })!;
+    // An older instance does not mark the default route; then nobody is shown as it.
+    const marksDefault = harnesses.some((h) => typeof h.is_default === "boolean");
     const page = pageOf(
       harnesses.map((h) => ({
         id: h.id,
         slug: h.slug,
         name: h.name,
         status: h.status,
-        is_default: h.is_default ?? false,
+        is_default: marksDefault ? h.is_default === true : null,
         ...(h.readiness ? { ready_to_activate: h.readiness.ready_to_activate ?? null } : {}),
       })),
       limit,
       stringOption(input, "cursor"),
     );
-    const columns = ["slug", "name", "status", ...(boolOption(input, "readiness") ? ["ready_to_activate"] : []), "id"];
+    const rows = page.items.map((h) => ({ ...h, default: h.is_default ? "yes" : "" }));
+    const columns = ["slug", "name", "status", ...(marksDefault ? ["default"] : []), ...(boolOption(input, "readiness") ? ["ready_to_activate"] : []), "id"];
     return {
       data: page,
-      text: (table(page.items, columns) || "No solutions yet. Create one: cavelon harness new <slug>") + moreHint(page.next_cursor, "cavelon harness list"),
+      text: (table(rows, columns) || "No solutions yet. Create one: cavelon harness new <slug>") + moreHint(page.next_cursor, "cavelon harness list"),
+    };
+  },
+};
+
+export const harnessDefault: CommandSpec = {
+  name: "harness default",
+  summary: "Make a solution the tenant's default route; previews first, --confirm changes it.",
+  description:
+    "The default route is the solution that answers where a conversation names none: the tenant's chat and widget. A new\n" +
+    "tenant's default is an empty `default` solution, so a solution built beside it answers nobody there until it becomes the\n" +
+    "default. Without --confirm nothing changes: the preview names the current default and the one that would replace it.\n" +
+    "This changes live traffic, so show the preview to a person and confirm only with their yes. `is_default` in\n" +
+    "harnesses.yaml is not applied by `apply`; this is the way to set it.",
+  readOnly: false,
+  idempotent: true,
+  mcpTool: "harness_default",
+  positionals: [{ name: "solution", description: "Name, slug or id of the solution; default: cavelon.yaml's harness." }],
+  options: {
+    confirm: { type: "boolean", mcpToken: true, description: "Change the default route (after a person saw the preview)." },
+  },
+  examples: ["cavelon harness default support", "cavelon harness default support --confirm", "cavelon harness default support --confirm <token>"],
+  async run(ctx, input) {
+    const session = await ctx.session();
+    const ref = positional(input, "solution") ?? session.envFile?.harness ?? session.project?.harness;
+    if (!ref) throw usageError("Which solution?", "Pass its name or slug (`cavelon harness list` shows them), or run it in a folder whose cavelon.yaml names one.");
+    // Refused before anything is read, as every confirming tool refuses true.
+    if (ctx.mode === "mcp" && input.options.confirm === true) throw confirmTokenRequired("harness_default");
+    const { harness, candidates } = await lookupHarness<Harness>(ctx, ref);
+    if (!harness) {
+      const flags = contextFlags(session);
+      throw harnessNotFoundError(ref, candidates, undefined, (slug) => cavelonCommand("harness", "default", slug) + flags, flags);
+    }
+    const route = await readDefaultRoute(ctx);
+    const target = { id: harness.id, slug: harness.slug, name: harness.name, status: harness.status };
+    const current = route.current ? { id: route.current.id, slug: route.current.slug, name: route.current.name } : null;
+    if (route.current?.id === harness.id) {
+      return { data: { changed: false, already_default: true, harness: target, default_route: current }, text: `${named(harness)} is already the tenant's default route.` };
+    }
+    const commands = defaultCommands(harness.slug);
+    // The instance routes the tenant's chat and widget only to an active solution, and refuses a draft as the default.
+    if (harness.status !== "active") {
+      throw new CavelonError(ExitCode.conflict, {
+        code: "solution_not_active",
+        message: `${named(harness)} is ${harness.status}, and only an active solution can be the tenant's default route; nothing was changed.`,
+        hint:
+          `Activate it through the readiness gate and preview the default route in one step: ${cavelonCommand("activate", "--harness", harness.slug, "--make-default")}. ` +
+          `The default route stays ${current ? named(current) : "as it is"} until then.`,
+        details: { harness: target, default_route: current },
+      });
+    }
+    const gate = await confirmation(ctx, input, "harness_default", { harness: harness.id, from: current?.id ?? null });
+    if (!gate.confirmed) {
+      return {
+        data: {
+          changed: false,
+          harness: target,
+          default_route: current,
+          default_known: route.known,
+          confirm: gate.confirm(commands.confirm),
+          ...gate.fields,
+        },
+        text: [
+          defaultChangeLine(harness, route),
+          ...(gate.mismatch ? [gate.mismatch] : []),
+          `Show this to a person; with their yes: ${gate.confirm(commands.confirm)}`,
+        ].join("\n"),
+        ...(gate.exitCode ? { exitCode: gate.exitCode } : {}),
+      };
+    }
+    const updated = await setDefaultRoute<Harness>(ctx, harness.id);
+    return {
+      data: { changed: true, harness: { ...target, status: updated?.status ?? target.status }, previous_default: current },
+      text: `Default route: ${named(harness)}${current ? ` (was ${named(current)})` : ""}.`,
     };
   },
 };

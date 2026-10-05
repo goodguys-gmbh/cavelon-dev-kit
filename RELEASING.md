@@ -145,6 +145,15 @@ since 2023; replace the signing step with that provider's tool then.
 4. Announce it: the changelog, and in `docs/installation.md` drop the note that
    the tap is being prepared.
 
+**Set up on 2026-10-04.** The tap exists and the token is in place: a
+fine-grained token named `homebrew-cavelon release`, owned by `goodguys-gmbh`,
+limited to that repository, which **expires on 2027-10-05** (the organisation
+allows at most 366 days). After that date the `homebrew` job fails to push and
+the formula stays on the last version, while the rest of the release still
+succeeds. Before then, create a new token the same way and replace the secret
+`HOMEBREW_TAP_TOKEN`; the reminder is the issue "Renew HOMEBREW_TAP_TOKEN before
+2027-10-05". A failed `homebrew` job in a release run means the same.
+
 ### winget
 
 The release workflow writes the manifest for each version

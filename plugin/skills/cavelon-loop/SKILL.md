@@ -14,8 +14,11 @@ use it when you parse the result.
 ## Before anything
 
 - `cavelon status` says which instance, tenant and solution this folder is
-  bound to, the last pull and the open previews. `cavelon whoami` says who the
-  token acts as and when it expires.
+  bound to, the solution's state (draft, active, or inactive after a
+  deactivate; whether it is ready to
+  activate, its latest test run), the last pull and the open previews.
+  `cavelon whoami` says who the token acts as, when it expires, whether it may
+  enter Platform mode and which tenants it reaches.
 - **Never handle a token.** If a command exits 7 (not authorised) or says no
   token, ask the person to run `cavelon login --instance <url>` themselves (in a
   terminal, or with a `!` prefix where your client offers one). Never ask them
@@ -40,10 +43,23 @@ use it when you parse the result.
 - No `cavelon.yaml` here or above: for a new solution run
   `cavelon init --instance <url> --tenant <tenant> --harness <solution>`, where
   the tenant and the solution are each a name, slug or id; for an existing one
-  add `cavelon pull` after it. To start from a package file (a blueprint, an
+  add `cavelon pull` after it. From your shell, `init --harness "<name>"`
+  creates a solution that does not exist yet as a draft; the MCP tool `init`
+  never creates one and names the `cavelon harness new <slug> --name "<name>"`
+  that does. A name close to an existing solution's is refused as a likely
+  typo (`solution_not_found`, naming the closest ones, creating nothing): ask
+  the person whether they meant that one, and only for a new solution run
+  `cavelon init ... --harness "<name>" --new`. Until a `cavelon.yaml` exists,
+  pass `--tenant` (and `--instance`) to every command, `harness new` and
+  `pull` included: without it a command acts in the tenant `cavelon use`
+  chose, which may be another one. The commands `cavelon` prints carry the
+  `--tenant` you gave; run them as printed. `apply` never creates a solution: when the one an env file names
+  is missing it stops with `solution_not_found` and names that command. To start from a package file (a blueprint, an
   export from another instance), run
   `cavelon init --instance <url> --tenant <tenant> --from <file>` instead of
-  splitting it by hand or importing it in the Admin. Never guess a tenant or a
+  splitting it by hand or importing it in the Admin; from your shell it creates
+  the package's only solution as a draft when the tenant lacks it (the MCP tool
+  names the `cavelon harness new` command instead). Never guess a tenant or a
   solution, and never ask the person for an id they would have to look up:
   `cavelon tenant list --json` and `cavelon harness list --json` list the
   names, slugs and ids to choose from, and the person names one by its name.
@@ -54,29 +70,87 @@ use it when you parse the result.
 
 1. **Pull** what is live: `cavelon pull`. It refuses when `package/` has
    uncommitted changes (outside git: files changed since the last pull);
-   commit or apply them first. `git diff` then shows what someone changed
-   in the Admin.
+   commit or apply them first. A file as the last pull or confirmed apply left
+   it counts as unchanged, so a pull right after an apply goes ahead without a
+   commit. `git diff` then shows what someone changed in the Admin. A test
+   suite goes back to the file it came from, whatever its name. A solution's
+   pull leaves the tenant-wide sections (the tenant's settings, its model
+   list) out of the folder, and `apply` leaves them out of the solution's
+   import. `pull --tenant-wide` writes them; `apply --tenant-wide` imports
+   them, for every solution of the tenant, so only with the person's say-so.
+   `validate` warns about a tenant-wide file in the folder
+   (`tenant_wide_section`); on an instance that does not publish
+   `include_tenant_wide`, `apply` imports such a file anyway and says so:
+   remove it unless the person wants it.
 2. **Edit** the files in `package/` (one file per schema section) and `tests/`
    (one file per test suite). See the cavelon-authoring skill.
 3. **Validate** offline: `cavelon validate`. Fix every error; `cavelon explain
-   <code>` says what a code means and how to fix it.
+   <code>` says what a code means and how to fix it. Besides the schema it
+   finds duplicate slugs, handoffs and test assertions naming an agent the
+   package lacks, fields the schema does not have (with "did you mean"), and
+   skills, tools, knowledge bases, solutions and models the tenant does not
+   hold (warnings: `cavelon pull` or `cavelon models list` refreshes that
+   list; validate reads a list no command has read yet). The preview blocks
+   those names, so validate does not say "Valid" while one is left;
+   `cavelon validate --strict` fails on every warning. A line `Not checked:`
+   names a check it could not make (offline, no list). After writing files by
+   hand, run `cavelon fmt`: it fills in the defaults the export writes and
+   numbers test cases in their written order, so the first `pull` after the
+   apply rewrites only what changed on the instance. It drops comments, as
+   pull does, and names each file whose comments it drops (`cavelon fmt
+   --check` says so first): keep notes the person needs elsewhere.
 4. **Preview**: `cavelon apply --env test` (or `--harness <name or slug>`). Nothing is
    imported yet. Read the preview: what is created, updated or deleted, which
    active solutions it reaches, what the target still needs (variables and
    secrets with the command that sets each, OAuth grants, runtime bindings,
-   trigger identities), loop budgets, and what the instance ignores.
+   trigger identities), loop budgets, and what the instance ignores. A recent
+   instance also lists each field it changes (`field changes`, `object.field:
+   old → new`) and the fields it does not apply ("not applied", with the
+   command that sets each). A blocked preview names each blocker with its
+   code, package file and path, and hint; `cavelon explain <code>` says more.
+   A preview that changes nothing says "Nothing to import" and stores no
+   preview: there is nothing to confirm.
 5. **Confirm** exactly that preview: `cavelon apply --confirm <preview-id>`
-   (the line `apply` printed, with the same `--env` and `--tenant`). Exit 4 means the target changed since the preview:
-   preview again and confirm the new id. When the error lists `blockers`, the
-   import's own check found them as it applied: fix what each names (the hint
-   says how for a code the kit knows), then preview again.
+   (the line `apply` printed, with the same `--env` and `--tenant`). Exit 4
+   means the preview is stale and nothing was imported: the target changed on
+   the instance (`import_preview_stale`; a recent instance names what changed), the package files changed since
+   (`preview_files_changed`, naming them), the preview is more than a day
+   old (`preview_expired`), another preview was imported after it
+   (`preview_superseded`), it was imported already (`preview_applied`), or it
+   was discarded (`preview_discarded`). Preview again, show the new preview when the rules
+   below say so, and confirm the new id. Use `--allow-stale` only when the
+   person wants exactly the old preview imported. When the error lists
+   `blockers`, the import's own check found them as it applied: fix what each
+   names (the hint says how for a code the kit knows), then preview again.
+   Discard a preview you will not confirm (`cavelon apply --discard <id>`, or
+   `--discard all`), so no later agent confirms it; `cavelon status` lists the
+   open ones with when each expires.
 6. **Seed** knowledge when needed: `cavelon kb upload <dir> --kb <kb>`. It
    refuses before sending when a file is larger than the instance allows or of
    a type it does not accept, and a `.zip` unless the tenant has archive
    uploads on (`kb_upload_archive_enabled`) and it stays within their file
    count, unpacked size and compression ratio (exit 3, naming the limit and who
-   changes it). A test
-   Sandbox gets its files with `cavelon sandbox seed <sandbox> <folder>`
+   changes it).
+   **Updating a document**: upload the new version under the same file name.
+   `kb upload` names each file that matches an active document of the
+   knowledge base, and what happens to it depends on the instance (try it with
+   `--dry-run` first):
+   - An instance that replaces same-named documents does so on every upload:
+     "faq.md exists (0f3c…) and is replaced by the upload (--keep-both keeps
+     it)". `--keep-both` keeps both.
+   - On an older instance the old version stays active next to the new one,
+     and both answer: "faq.md exists (0f3c…) and stays active". Upload with
+     `--replace`: where the instance's upload can replace by id, the old
+     document is replaced once the new file is verified; where it cannot,
+     `--replace` shows the documents it would deactivate after the upload and
+     needs `--confirm`: show the person that first.
+   - A file whose content is already an active document is not uploaded
+     again: "identical to the active document …; nothing new was created
+     (deduplicated)", with nothing to wait for and nothing replaced. Where the
+     instance publishes its documents' file hashes, `--dry-run` says it first
+     ("nothing new would be created"; `--json`: `identical`, and
+     `content_compared` false where it cannot tell).
+   A test Sandbox gets its files with `cavelon sandbox seed <sandbox> <folder>`
    (isolated container) or `cavelon sandbox refresh <sandbox>` after the files
    were put on the VM (customer VM).
 7. **Test**: `cavelon test run --suite <suite>`, then `cavelon wait <operation>`.
@@ -85,6 +159,37 @@ use it when you parse the result.
    see the cavelon-long-running skill.
 8. **Fix** what the results and traces show, and go back to step 2. Commit
    when a step works.
+
+## The default route
+
+A tenant answers its chat and widget, where a conversation names no solution,
+with one solution: its **default route**. A fresh tenant's default is an empty
+`default` solution, so a new solution built beside it answers nobody there.
+`cavelon harness list` marks the default (DEFAULT), and `cavelon activate`
+says when the solution it activated is not the default.
+
+- **Ask the person** whether the new solution should become the default. It
+  changes live traffic; never decide it yourself.
+- With their yes: `cavelon activate --make-default` (or `cavelon harness
+  default <solution>`) shows the change, naming the current default; show it,
+  then run the confirm command it printed (from your shell it carries the
+  change's token: `--confirm <token>`). `harness default` refuses a draft
+  (`solution_not_active`, exit 4): only an active solution can be the
+  default, so use `cavelon activate --make-default`.
+- `is_default` in `harnesses.yaml` is not applied by `apply`; the preview
+  lists it under "not applied".
+- To try an active solution that is not the default, talk to it by name:
+  `cavelon chat "<message>" --harness <solution>` (the `chat` tool over MCP)
+  prints its answer, the session to continue with `--session`, and the
+  conversation to trace. A draft answers only a person's token, as a
+  Playground run.
+- `cavelon deactivate --harness <solution>` takes an active solution out of
+  live traffic: it previews, and only the confirm command it prints
+  deactivates. Its status becomes `inactive`, not `draft`: it keeps its
+  configuration, answers no live traffic, and `cavelon activate` puts it back
+  through its readiness gate. It is the person's decision, like the default
+  route; the default route itself is refused until another solution is the
+  default.
 
 ## Show the person before confirming
 
@@ -95,14 +200,63 @@ show the preview to the person, and confirm only after they agree, when:
   solution is active;
 - the environment is `prod` (`--env prod`), or the preview deletes anything
   (`--mode replace`);
+- the preview changes tenant-wide sections (`tenant-wide: … change for every
+  solution of the tenant`, after `--tenant-wide` or on an instance that
+  imports them anyway): every solution of the tenant sees the change;
 - the preview lists target needs (secrets, grants, identities): only a person
   can provide them, with `cavelon secrets set <name>` or in the Admin.
 
 The same holds for the other commands that take `--confirm`: without it they
 only show what would happen. Show it to the person before `cavelon trigger
-identity <trigger> <key> --confirm` (it gives a trigger standing authority), and
+identity <trigger> <key> --confirm` (it gives a trigger standing authority),
+before `cavelon harness default … --confirm`, `cavelon activate
+--make-default --confirm` or `cavelon deactivate --confirm` (they move live
+traffic), and
 before `cavelon sandbox seed … --confirm` or `cavelon loop cancel … --confirm` on
 anything but a test Sandbox or a run you started yourself.
+
+**Over MCP, confirm with the preview's token.** `api`, `limits_set`,
+`models_set_limit`, `loop_cancel`, `sandbox_seed`, `trigger_identity`,
+`harness_default`, `deactivate`, `activate` with `make_default`, and
+`kb_upload` where it would deactivate documents return a `confirm_token` with
+their preview. Show
+the preview, then call the tool again with the same arguments and `confirm`
+set to that token; it makes exactly the change shown. `confirm: true` is
+refused (`confirm_token_required`), and a token of another change returns the
+new preview with `token_mismatch` (exit code 4): show that one instead. Tool
+arguments are spelled in snake_case (`make_default`, `keep_both`, `dry_run`);
+an argument a tool does not list is refused (`unknown_argument`) with the
+closest one named.
+
+**From your shell, `--confirm` takes the same token.** Run by a coding agent,
+`limits set`, `models set-limit`, `loop cancel`, `sandbox seed`,
+`trigger identity`, `harness default`, `activate --make-default`,
+`deactivate`, `kb upload --replace`, `variables delete` and `secrets delete`
+print their preview with a confirm token and the command that confirms it
+(`… --confirm <token>`). Show the preview, then run exactly that command. A
+bare `--confirm`, as the docs show it for a person's terminal, changes nothing
+from your shell and exits 5; a token of another change exits 4 with the new
+preview.
+
+**`cavelon api` from your shell has the guards of the MCP `api` tool**, since
+`cavelon` sees that a coding agent runs it (`CLAUDECODE`, `CODEX_THREAD_ID`, `CODEX_SANDBOX`,
+`CURSOR_AGENT`, `GEMINI_CLI`, `COPILOT_CLI`, `COPILOT_AGENT`, `AI_AGENT` or
+`CAVELON_AGENT=1`):
+
+- For an operation that is not read-only, it prints the request and a confirm
+  token and sends nothing. Show the request to the person when the rules above
+  say so, then run the same command again with `--confirm <token>`; it sends
+  exactly that request. A changed body or parameter needs a new preview (exit 4).
+- It refuses an operation the instance keeps for a person
+  (`operation_for_a_person`) and a body that sets a field the instance marks as
+  a secret value (`secret_field_for_a_person`), with or without `--confirm`,
+  with exit code 5 (needs a person). `cavelon api describe <operation>` shows
+  both marks up front.
+  Tell the person what the error's hint says; for a secret field, send the rest
+  without it and let the person enter the value (`cavelon secrets set <name>`
+  or the Admin). Never work around a refusal, by unsetting the variable or by
+  any other way.
+- Its `@file` body, `--file` and `--output` stay inside the solution folder.
 
 `activate` goes through the readiness gate only, and only with a token that
 may activate. It never forces: activating without the evidence stays a person's
@@ -137,8 +291,10 @@ return operation ids at once. `cavelon wait <ids> --timeout 90s` returns the
 state when the time is up (exit 6 means still running; the same `wait` again
 resumes). Keep each wait under your shell's command time limit, and run longer
 waits in the background if your client can. Over MCP, the `operation_status`
-tool reads an operation without blocking. Exit 5 means a person must act (an
-approval, a paused loop): tell them, with the link `wait` prints.
+tool returns the state at once, or, given a `timeout`, waits up to it (at most
+50 seconds) and reports `waited_ms`; `timed_out` is true only when it waited
+the whole timeout. Exit 5 means a person must act (an approval, a paused
+loop): tell them, with the link `wait` prints.
 
 **Never approve anything.** An approval is decided by a person, or by an API
 key an owner granted the explicit scope `approvals.decide`; never by you, and
@@ -156,9 +312,11 @@ preview · 5 needs a person · 6 timed out (still running) · 7 not authorised �
 ## Where to read more
 
 - `cavelon docs search <query>` and `cavelon docs get <page>`: the instance's
-  own docs, for its version.
-- `.cavelon/inventory.md`: the tenant's solutions, knowledge bases, tools, test
-  suites and sandboxes from the last pull; `cavelon sandbox list` for their
+  own docs, for its version. They are in English; a German question works for
+  the core concepts, English words for the rest. `cavelon docs get index`
+  lists every page.
+- `.cavelon/inventory.md`: the tenant's solutions, knowledge bases, tools,
+  skills, models, test suites and sandboxes from the last pull; `cavelon sandbox list` for their
   current state and mode.
 - `cavelon api list --search <word>` and `cavelon api <operation>`: any API
   operation the workflow commands do not cover.

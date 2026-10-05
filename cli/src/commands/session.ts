@@ -4,16 +4,18 @@ import { compareContracts, Contracts, type Capabilities } from "../contracts.js"
 import { deleteToken, saveToken } from "../credentials.js";
 import { CavelonError, ExitCode, usageError } from "../errors.js";
 import { keyValues } from "../format.js";
+import { callStable } from "../invoke.js";
 import { formatQuota, formatValue, limitRef, readLimits, readQuotas, type Limit, type PublishedLimits, type Quota } from "../limits.js";
 import { ApiClient, tokensDisabledError } from "../http.js";
 import { readAll } from "../io.js";
 import { listPreviews, readPull } from "../local-state.js";
 import type { Operation } from "../operations.js";
+import { solutionState, solutionStateLines, type SolutionState } from "./solution.js";
 import { expiryOf, readPrincipal, readTenantless, type Tenantless } from "../principal.js";
 import { readHidden } from "../prompt.js";
 import { isUuid, lookupTenantId, requireInstance, requireToken, tenantRequiredError, type FoundTenant, type Session } from "../session.js";
 import { cavelonCommand } from "../shell.js";
-import { choicesOf, chooseTenant, commandLines, listsTenants, type Reach, noTenantError, tenantOpenError, tenantRef, tenantTitle } from "../tenant-choice.js";
+import { choicesOf, chooseTenant, commandLines, describeTenant, listsTenants, type Reach, noTenantError, tenantOpenError, tenantRef, tenantTitle } from "../tenant-choice.js";
 import { loadUserConfig, saveUserConfig, tokenKind, updateInstance } from "../user-config.js";
 
 interface Me {
@@ -89,7 +91,7 @@ export const login: CommandSpec = {
     "The token is kept in the operating system's credential store, or in a file only you can read.\n" +
     "Without --tenant, login finds the tenants the token reaches: one is used; from several, a person chooses on a terminal by number or name; " +
     "without a terminal the token is stored and login prints one `cavelon use` line per tenant (exit 2). " +
-    "An operator's token that reaches every tenant asks for part of the tenant's name. " +
+    "An operator's token that reaches every tenant asks for part of the tenant's name to start in; Enter leaves the choice for later (`cavelon use`). " +
     "--tenant takes the tenant's name, slug or id. An older instance that lists no tenants places the token itself, or needs --tenant <tenant-id>.",
   readOnly: false,
   mcpTool: false,
@@ -134,15 +136,20 @@ export const login: CommandSpec = {
     const reach = listsTenants(tenantless) && !tenantless.platform ? tenantless : undefined;
     /** Several tenants, nobody to ask, and none the instance chooses: stored, then refused with one line per tenant. */
     let open = false;
+    /** Every tenant, and the person chose to pick one later: stored without a tenant, as without a terminal, but not refused. */
+    let later = false;
     if (reach) {
-      const choice = await chooseTenant(ctx, client, reach);
+      const choice = await chooseTenant(ctx, client, reach, { later: true });
       if (choice.kind === "none") throw noTenantError(url);
       if (choice.kind === "chosen") {
         const t = choice.tenant;
         tenant = { ref: tenantRef(t), id: t.id, ...(t.name ? { name: t.name } : {}), ...(t.slug ? { slug: t.slug } : {}) };
         chosen = choice.how;
         client.target.tenantId = t.id;
-      } else if (!reach.tenantId) open = true;
+      } else if (!reach.tenantId) {
+        open = true;
+        later = choice.kind === "later";
+      }
     }
     // Check the token before storing it: a refused token is never kept. Who it
     // is comes first, so a token refused without a tenant is named as that.
@@ -189,7 +196,15 @@ export const login: CommandSpec = {
     );
     if (ctx.io.env.CAVELON_TOKEN) ctx.warn("CAVELON_TOKEN is set and takes precedence over this login.");
     if (store.kind === "file") ctx.warn("No operating-system credential store; the token is in a file only you can read (0600).");
-    if (open) throw tenantOpenError(url, reach!, `The token is stored for ${url}, but no tenant is chosen yet. `);
+    if (open && !later) throw tenantOpenError(url, reach!, `The token is stored for ${url}, but no tenant is chosen yet. `);
+    if (later) {
+      return {
+        data: { instance: url, credential: { kind, store: store.kind }, owner: null, tenant: null, instance_version: null, contracts: null },
+        text:
+          `Logged in to ${url}. Token stored in the ${store.kind === "keyring" ? "credential store" : "user-only file"}. ` +
+          "No tenant is chosen yet: `cavelon use <name or slug>` chooses one; `cavelon tenant list --search <part of the name>` finds its slug.",
+      };
+    }
 
     if (needsTenant) {
       ctx.warn("This token works in Platform mode; choose a tenant with `cavelon use <tenant>` before tenant commands.");
@@ -274,9 +289,48 @@ export const logout: CommandSpec = {
   },
 };
 
+/**
+ * Where the tenant a command acts in came from, in words. The tenant chosen
+ * with `cavelon use` holds in every folder whose cavelon.yaml names none, so
+ * outside a solution folder that is said.
+ */
+function tenantSourceText(session: Session): string | undefined {
+  switch (session.tenantSource) {
+    case undefined:
+      return undefined;
+    case "option":
+      return "--tenant";
+    case "CAVELON_TENANT":
+      return "the CAVELON_TENANT variable";
+    case "use":
+      return session.project
+        ? "`cavelon use` (this folder's cavelon.yaml names no tenant for this instance)"
+        : "`cavelon use`, for every folder without a cavelon.yaml (--tenant chooses another for one command)";
+    default:
+      return session.tenantSource;
+  }
+}
+
 function credentialSource(session: Session): string {
   if (session.tokenSource === "CAVELON_TOKEN") return "CAVELON_TOKEN";
   return session.tokenStore === "file" ? "login (user-only file)" : "login (credential store)";
+}
+
+/** Whether the token may enter Platform mode, with the ceiling that bounds it. */
+function platformModeText(token: { platform_mode_allowed: boolean; ceiling_role: string }): string {
+  const ceiling = token.ceiling_role ? ` (ceiling ${token.ceiling_role})` : "";
+  return token.platform_mode_allowed
+    ? `allowed${ceiling}`
+    : `not allowed${ceiling}; creating tenants and other platform routes need a token that allows it`;
+}
+
+/** Which tenants the token reaches, as the instance lists them. */
+function reachText(reach: Reach): string {
+  if (reach.reachesAll) {
+    const own = reach.tenants.length;
+    return `every tenant (as operator; ${own ? `${own} membership${own === 1 ? "" : "s"} of your own` : "no memberships of your own"})`;
+  }
+  return `${reach.tenants.length} tenant${reach.tenants.length === 1 ? "" : "s"} (\`cavelon tenant list\`)`;
 }
 
 export const whoami: CommandSpec = {
@@ -299,7 +353,9 @@ export const whoami: CommandSpec = {
     // A token that acts in no tenant yet: only /meta/principal answers it.
     const nowhere = Boolean(reach && !reach.tenantId && !reach.platform);
     const me = nowhere ? undefined : await readMe(client);
-    const { caps, needsTenant } = nowhere ? { caps: null, needsTenant: false } : await readCapabilities(await ctx.contracts(), false);
+    const contracts = await ctx.contracts();
+    const { caps, needsTenant } = nowhere ? { caps: null, needsTenant: false } : await readCapabilities(contracts, false);
+    const versionCachedAt = caps ? contracts.cachedAt : undefined;
     const principal = needsTenant ? undefined : await readPrincipal(client);
     const contextTenant = me?.context?.tenant_id ?? principal?.tenant_id ?? client.target.tenantId ?? null;
     const tenants = [...(me?.memberships ?? []), ...(me?.accessible_tenants ?? [])];
@@ -309,10 +365,21 @@ export const whoami: CommandSpec = {
       const tenantless = await readTenantless(client);
       if (listsTenants(tenantless)) reach = tenantless;
     }
+    // Which tenants the token reaches, for its own line; an older instance does not say.
+    if (pat && !reach) {
+      const tenantless = await readTenantless(client).catch(() => undefined);
+      if (listsTenants(tenantless)) reach = tenantless;
+    }
     const listed = reach?.tenants.find((t) => t.id === contextTenant);
     const stored = session.settings.tenant_id === contextTenant ? session.settings : undefined;
-    const tenantName = listed?.name ?? membership?.tenant_name ?? stored?.tenant_name ?? null;
-    const tenantSlug = listed?.slug ?? membership?.tenant_slug ?? stored?.tenant_slug ?? null;
+    let tenantName = listed?.name ?? membership?.tenant_name ?? stored?.tenant_name ?? null;
+    let tenantSlug = listed?.slug ?? membership?.tenant_slug ?? stored?.tenant_slug ?? null;
+    // A tenant named by id in cavelon.yaml or --tenant that is none of the person's memberships (an operator's): ask for it.
+    if (contextTenant && (!tenantName || !tenantSlug)) {
+      const described = await describeTenant(client, contextTenant);
+      tenantName ??= described.name ?? null;
+      tenantSlug ??= described.slug ?? null;
+    }
     if (nowhere && reach) {
       ctx.warn(
         reach.tenants.length
@@ -323,7 +390,13 @@ export const whoami: CommandSpec = {
     const expiry = expiryOf(principal, ctx.io.now());
     if (expiry.warning) ctx.warn(expiry.warning);
     const data = {
-      instance: { url: session.url, source: session.urlSource, version: caps?.instance.version ?? null },
+      instance: {
+        url: session.url,
+        source: session.urlSource,
+        version: caps?.instance.version ?? null,
+        // When the version is the cached one, when it was read; it may be behind the instance by up to the cache's time-to-live.
+        ...(versionCachedAt ? { version_cached_at: versionCachedAt } : {}),
+      },
       credential: {
         kind: principal?.kind ?? session.tokenKind,
         source: session.tokenSource,
@@ -334,6 +407,7 @@ export const whoami: CommandSpec = {
         expires_in_days: expiry.days_left,
         may_activate: principal?.token ? principal.token.may_activate : null,
         ceiling_role: principal?.token?.ceiling_role ?? null,
+        platform_mode_allowed: principal?.token?.platform_mode_allowed ?? null,
         scopes: principal?.api_key?.scopes ?? null,
         // False only when the instance is too old to say who the credential is.
         published: Boolean(principal),
@@ -375,12 +449,15 @@ export const whoami: CommandSpec = {
         ["instance", `${session.url} (${session.urlSource})`],
         ["acting as", owner],
         ["tenant", contextTenant ? tenantTitle({ id: contextTenant, name: tenantName, slug: tenantSlug }) : nowhere ? "none chosen (`cavelon use` chooses one)" : "none (Platform mode)"],
-        ["tenant from", session.tenant ? session.tenantSource : nowhere ? undefined : "the token's default"],
+        ["tenant from", session.tenant ? tenantSourceText(session) : nowhere ? undefined : "the token's default"],
         ["role", data.role ?? undefined],
         ["credential", `${session.tokenKind === "api_key" ? "tenant API key" : session.tokenKind === "personal_access_token" ? "personal access token" : "token"}${tokenName} from ${credentialSource(session)}`],
         ["expires", expires],
         ["may activate", principal?.token ? (principal.token.may_activate ? "yes" : "no (a person activates in the Admin)") : undefined],
-        ["version", data.instance.version ?? undefined],
+        // An instance that does not say whether the token allows Platform mode gets no line.
+        ["platform mode", typeof principal?.token?.platform_mode_allowed === "boolean" ? platformModeText(principal.token) : undefined],
+        ["reaches", reach ? reachText(reach) : undefined],
+        ["version", data.instance.version ? `${data.instance.version}${versionCachedAt ? ` (cached at ${versionCachedAt})` : ""}` : undefined],
       ]),
     };
   },
@@ -435,7 +512,7 @@ export const use: CommandSpec = {
       }
       const choice = await chooseTenant(ctx, client, tenantless);
       if (choice.kind === "none") throw noTenantError(url, false);
-      if (choice.kind === "open") throw tenantOpenError(url, tenantless, "");
+      if (choice.kind !== "chosen") throw tenantOpenError(url, tenantless, "");
       const t = choice.tenant;
       ref = tenantRef(t);
       found = { id: t.id, ...(t.name ? { name: t.name } : {}), ...(t.slug ? { slug: t.slug } : {}) };
@@ -499,13 +576,14 @@ function capacityLine(capacity: Limit[]): string {
     .join("; ");
 }
 
-type LimitsState = { published: boolean | null; unavailable?: string };
+type LimitsState = { published: boolean | null; unavailable?: string; quotas_unavailable?: string };
 
 function limitsLine(state: LimitsState, near: Quota[]): string {
   if (state.published === null) return `not readable: ${state.unavailable}`;
   if (!state.published) return "not published by this instance";
-  if (!near.length) return "none close to a quota (`cavelon limits` lists them)";
-  return `close to a quota: ${near.map((q) => `${q.key} ${formatQuota(q)}`).join("; ")}`;
+  const quotas = state.quotas_unavailable ? `\n  quotas not readable: ${state.quotas_unavailable}` : "";
+  if (!near.length) return `${state.quotas_unavailable ? "quotas unknown" : "none close to a quota"} (\`cavelon limits\` lists them)${quotas}`;
+  return `close to a quota: ${near.map((q) => `${q.key} ${formatQuota(q)}`).join("; ")}${quotas}`;
 }
 
 export const status: CommandSpec = {
@@ -530,7 +608,7 @@ export const status: CommandSpec = {
             root: session.project.root,
             harness: session.project.harness ?? null,
             last_pull: (await readPull(session.project.root)) ?? null,
-            open_previews: await listPreviews(session.project.root),
+            open_previews: await listPreviews(session.project.root, ctx.io.now()),
           }
         : null,
       logged_in_at: session.settings.logged_in_at ?? null,
@@ -541,12 +619,32 @@ export const status: CommandSpec = {
     let published: PublishedLimits | undefined;
     let reachError: string | undefined;
     let client: ApiClient | undefined;
+    if (offline && session.url) {
+      // Offline, the version is the one cached last, and says so.
+      const cached = await new Contracts(new ApiClient({ url: session.url }, ctx.io.env), ctx.io.env, ctx.io.now)
+        .cachedOnly<Capabilities>("capabilities.json")
+        .catch(() => undefined);
+      if (cached?.value?.instance?.version) {
+        data.instance_version = cached.value.instance.version;
+        data.instance_version_cached_at = cached.fetched_at;
+      }
+    }
     if (!offline && session.url && session.token) {
       try {
         client = await ctx.client();
-        if (client.target.tenantId) (data.tenant as Record<string, unknown>).id = client.target.tenantId;
+        const tenantId = client.target.tenantId;
+        if (tenantId) {
+          const shown = data.tenant as Record<string, unknown>;
+          shown.id = tenantId;
+          // The tenant's name and slug, also for one named by id in cavelon.yaml or --tenant.
+          const stored = session.settings.tenant_id === tenantId ? session.settings : undefined;
+          const described = stored?.tenant_name && stored.tenant_slug ? {} : await describeTenant(client, tenantId);
+          shown.name = stored?.tenant_name ?? described.name ?? null;
+          shown.slug = stored?.tenant_slug ?? described.slug ?? null;
+        }
         const contracts = await ctx.contracts();
-        const caps = await contracts.capabilities();
+        // Read now, never from the cache: status is where a person checks which version the instance runs.
+        const caps = await contracts.liveCapabilities();
         data.instance_version = caps?.instance.version ?? null;
         if (contracts.needsTenant) {
           data.operations = { unavailable: "No tenant chosen; operations belong to a tenant." };
@@ -557,7 +655,7 @@ export const status: CommandSpec = {
           });
           operations = page.status === 200 ? page.data.items : undefined;
           data.operations = operations
-            ? { items: operations, more: Boolean(page.data.next_cursor) }
+            ? { items: operations, more: Boolean(page.data.next_cursor), scope: "tenant" }
             : { unavailable: "This instance does not offer /api/v1/operations." };
         } else {
           data.operations = { unavailable: "The operations API is turned off on this instance." };
@@ -568,14 +666,30 @@ export const status: CommandSpec = {
           capacity = limits.capacity;
           published = limits.published;
           data.limits = limits.data;
+          const ref = session.envFile?.harness ?? session.project?.harness;
+          if (session.project && ref) {
+            const state = await solutionState(ctx, ref);
+            (data.solution as Record<string, unknown>).state = state;
+            // The operations list is the tenant's: leave out what belongs to another solution, and say how many.
+            if (operations && state.harness) {
+              const owners = await operationSolutions(ctx, operations);
+              const others = operations.filter((o) => owners.get(o.id) && owners.get(o.id) !== state.harness!.id);
+              if (others.length) {
+                operations = operations.filter((o) => !others.includes(o));
+                data.operations = { ...(data.operations as Record<string, unknown>), items: operations, other_solutions: others.length };
+              }
+              data.operations = { ...(data.operations as Record<string, unknown>), scope: "solution", harness: state.harness.slug };
+            }
+          }
         }
       } catch (error) {
         reachError = error instanceof Error ? error.message : String(error);
         data.error = error instanceof CavelonError ? error.toJSON() : { message: reachError };
       }
     }
+    const shownTenant = data.tenant as { id?: string; name?: string | null; slug?: string | null } | null;
     const tenantText = session.tenant
-      ? `${session.tenant} (${session.tenantSource})`
+      ? `${shownTenant?.id && (shownTenant.name || shownTenant.slug) ? tenantTitle({ id: shownTenant.id, name: shownTenant.name, slug: shownTenant.slug }) : session.tenant}, from ${tenantSourceText(session)}`
       : session.tokenKind === "api_key"
         ? "the API key's tenant"
         : "not chosen (`cavelon use` lists your tenants to choose from)";
@@ -586,17 +700,27 @@ export const status: CommandSpec = {
       ["solution", session.project ? session.project.file : "none (no cavelon.yaml here or above)"],
     ];
     if (session.project) {
-      const solution = data.solution as { last_pull: { at: string; harness: { slug: string } | null } | null; open_previews: Array<{ preview_id: string; env: string | null; created_at: string }> };
+      const solution = data.solution as {
+        last_pull: { at: string; harness: { slug: string } | null } | null;
+        open_previews: Array<{ preview_id: string; env: string | null; created_at: string; expires_at: string | null; expired: boolean }>;
+        state?: SolutionState;
+      };
       if (session.project.harness) lines.push(["harness", session.project.harness]);
+      if (solution.state) lines.push(...solutionStateLines(solution.state));
       lines.push(["last pull", solution.last_pull ? `${solution.last_pull.at}${solution.last_pull.harness ? ` (${solution.last_pull.harness.slug})` : ""}` : "never"]);
       lines.push([
         "open previews",
         solution.open_previews.length
-          ? solution.open_previews.map((p) => `\n  ${p.preview_id}${p.env ? `  env ${p.env}` : ""}  ${p.created_at}`).join("")
+          ? solution.open_previews
+              .map((p) => `\n  ${p.preview_id}${p.env ? `  env ${p.env}` : ""}  ${p.created_at}  ${p.expired ? "expired (`cavelon apply --discard all` removes it)" : `expires ${p.expires_at}`}`)
+              .join("")
           : "none",
       ]);
     }
-    if (data.instance_version) lines.push(["version", data.instance_version]);
+    if (data.instance_version) {
+      const cachedAt = data.instance_version_cached_at as string | null | undefined;
+      lines.push(["version", `${data.instance_version}${cachedAt !== undefined ? ` (cached at ${cachedAt ?? "an unknown time"}; not read now)` : ""}`]);
+    }
     if (data.limits) lines.push(["limits", limitsLine(data.limits as LimitsState, near ?? [])]);
     if (capacity.length) lines.push(["run capacity", capacityLine(capacity)]);
     if (reachError) lines.push(["instance error", reachError]);
@@ -608,18 +732,73 @@ export const status: CommandSpec = {
       const waits = await Promise.all(operations.map(async (o) => (await note(o))?.capacity_wait));
       const waiting = waits.flatMap((wait, i) => (wait ? [{ operation_id: operations![i]!.id, ...wait }] : []));
       if (waiting.length) data.capacity_waits = waiting;
+      const ops = data.operations as { scope?: string; harness?: string; other_solutions?: number };
+      const others = ops.other_solutions
+        ? ` (${ops.other_solutions} operation${ops.other_solutions === 1 ? "" : "s"} of other solutions not shown; \`cavelon api list_operations_route\` lists all)`
+        : "";
+      const heading = ops.scope === "solution" ? `Running operations of ${ops.harness} and the tenant's shared work${others}` : "Running operations in the tenant";
       text += operations.length
-        ? `\n\nRunning operations:\n${operations
+        ? `\n\n${heading}:\n${operations
             .map((o, i) => {
               const wait = waits[i];
               return `  ${o.id}  ${o.kind}  ${o.status}${o.progress?.phase ? ` (${o.progress.phase})` : ""}${wait ? `  ${wait.note}` : ""}`;
             })
             .join("\n")}`
-        : "\n\nNo running operations.";
+        : `\n\nNo running operations${ops.scope === "solution" ? ` of ${ops.harness}${others}` : " in the tenant"}.`;
     }
     return { data, text };
   },
 };
+
+/**
+ * Which solution each running operation belongs to, where the kit can tell:
+ * a test run names its solution (`harness_id`); a trigger run (a loop) names
+ * its trigger, and the trigger its solution, unless the run names the
+ * solution itself. Other kinds (an upload into a knowledge base, which
+ * solutions share) stay unattributed, as does one whose record cannot be
+ * read. Bounded: the list is one page of at most ten, and each trigger is
+ * read once.
+ */
+async function operationSolutions(ctx: Context, operations: OperationPage["items"]): Promise<Map<string, string>> {
+  const owners = new Map<string, string>();
+  const triggers = new Map<string, Promise<string | undefined>>();
+  const triggerSolution = (id: string) => {
+    if (!triggers.has(id)) {
+      triggers.set(
+        id,
+        callStable<{ harness_id?: string | null }>(ctx, "GET", "/api/v1/triggers/{trigger_id}", "reading triggers", { params: { trigger_id: [id] } }).then(
+          (t) => t.harness_id ?? undefined,
+          () => undefined,
+        ),
+      );
+    }
+    return triggers.get(id)!;
+  };
+  for (const op of operations) {
+    const harnessId = (op as { harness_id?: unknown }).harness_id;
+    if (typeof harnessId === "string" && harnessId) {
+      owners.set(op.id, harnessId);
+      continue;
+    }
+    const ref = op.result_ref;
+    if (!ref?.id) continue;
+    try {
+      if (ref.type === "test_run") {
+        const run = await callStable<{ harness_id?: string | null }>(ctx, "GET", "/api/v1/test-runs/{run_id}", "test runs", { params: { run_id: [ref.id] } });
+        if (run.harness_id) owners.set(op.id, run.harness_id);
+      } else if (ref.type === "agent_run") {
+        const run = await callStable<{ harness_id?: string | null; trigger_definition_id?: string | null }>(ctx, "GET", "/api/v1/triggers/runs/{run_id}", "reading runs", {
+          params: { run_id: [ref.id] },
+        });
+        const owner = run.harness_id ?? (run.trigger_definition_id ? await triggerSolution(run.trigger_definition_id) : undefined);
+        if (owner) owners.set(op.id, owner);
+      }
+    } catch {
+      // Unattributed: it stays in the list.
+    }
+  }
+  return owners;
+}
 
 /** Exposed for `tenant create --use`. */
 export async function rememberTenant(ctx: Context, url: string, tenant: { ref: string; id: string; name?: string; slug?: string }): Promise<void> {

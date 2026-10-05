@@ -2,7 +2,7 @@ import { closest, displayName, exactMatch } from "./choose.js";
 import type { Context } from "./command.js";
 import { CavelonError, ExitCode } from "./errors.js";
 import { callStable } from "./invoke.js";
-import { isUuid } from "./session.js";
+import { contextFlags, isUuid } from "./session.js";
 import { shellWord } from "./shell.js";
 
 /**
@@ -53,8 +53,12 @@ export async function lookupHarness<T extends HarnessSummary = HarnessSummary>(c
   return { candidates: closest(all, ref) };
 }
 
-/** A solution that is not in this tenant, naming the closest ones and the command for each. */
-export function harnessNotFoundError(ref: string, candidates: HarnessSummary[], source?: string, command?: (slug: string) => string): CavelonError {
+/**
+ * A solution that is not in this tenant, naming the closest ones and the
+ * command for each. `flags` (`contextFlags`) go on the commands it names, so
+ * a copied one acts in the tenant this command did.
+ */
+export function harnessNotFoundError(ref: string, candidates: HarnessSummary[], source?: string, command?: (slug: string) => string, flags = ""): CavelonError {
   const near = candidates.map(displayName).join(", ");
   const lines = candidates.map((h) => `  ${command ? command(h.slug) : `--harness ${shellWord(h.slug)}`}`).join("\n");
   return new CavelonError(ExitCode.failure, {
@@ -62,7 +66,7 @@ export function harnessNotFoundError(ref: string, candidates: HarnessSummary[], 
     message: `No solution "${ref}" in this tenant${source ? ` (from ${source})` : ""}.${near ? ` Closest: ${near}.` : ""}`,
     hint:
       (candidates.length ? `If you meant one of them:\n${lines}\n` : "") +
-      "`cavelon harness list` shows this tenant's solutions with name, slug and id; `cavelon harness new <slug>` creates one, and an env file's harness is created by `apply`.",
+      `\`cavelon harness list${flags}\` shows this tenant's solutions with name, slug and id; \`cavelon harness new <slug> --name <name>${flags}\` creates one as a draft.`,
     details: candidates.length ? { candidates: candidates.map((h) => ({ id: h.id, slug: h.slug, name: h.name })) } : undefined,
   });
 }
@@ -71,6 +75,20 @@ export function harnessNotFoundError(ref: string, candidates: HarnessSummary[], 
 export async function resolveHarnessId(ctx: Context, ref: string): Promise<string> {
   if (isUuid(ref)) return ref;
   const { harness, candidates } = await lookupHarness(ctx, ref);
-  if (!harness) throw harnessNotFoundError(ref, candidates);
+  if (!harness) throw harnessNotFoundError(ref, candidates, undefined, undefined, contextFlags(await ctx.session()));
   return harness.id;
 }
+
+/** A slug from a solution's name: lower-case letters, digits and single dashes. */
+export function slugFromName(name: string): string {
+  const plain = name.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  let slug = plain.replace(/[^a-z0-9]+/g, "-");
+  while (slug.startsWith("-")) slug = slug.slice(1);
+  while (slug.endsWith("-")) slug = slug.slice(0, -1);
+  slug = slug.slice(0, 60);
+  while (slug.endsWith("-")) slug = slug.slice(0, -1);
+  return slug;
+}
+
+/** What a solution's slug looks like. */
+export const SLUG = /^[a-z0-9][a-z0-9-]*$/;

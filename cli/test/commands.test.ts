@@ -1,9 +1,10 @@
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { splitJsonBody } from "../src/commands/api.js";
+import { parseIndex, searchIndex } from "../src/commands/docs.js";
 import { aliasOf } from "../src/openapi.js";
-import { startFakeServer, type FakeServer } from "./fake-server.js";
+import { CONTRACTS, startFakeServer, type FakeServer } from "./fake-server.js";
 import { cli, login, sandbox, type Sandbox } from "./helpers.js";
 
 let server: FakeServer;
@@ -108,6 +109,36 @@ describe("api", () => {
     expect(unauth.json<{ error: { status: number } }>().error.status).toBe(401);
   });
 
+  it("finds an operation by a looser spelling and says which one it took", async () => {
+    const described = await cli(sb, ["api", "describe", "createTenant", "--json"]);
+    expect(described.code, described.stderr).toBe(0);
+    expect(described.json()).toMatchObject({ operation: "create_tenant", method: "POST", path: "/api/v1/tenants" });
+    expect(described.stderr).toMatch(/"createTenant" is taken as create_tenant/);
+    expect((await cli(sb, ["api", "describe", "list-harnesses", "--json"])).json()).toMatchObject({ operation: "list_harnesses" });
+    const missing = await cli(sb, ["api", "describe", "createTenantNow"]);
+    expect(missing.code).toBe(2);
+    expect(missing.stderr).toMatch(/Did you mean: create_tenant/);
+  });
+
+  it("takes the body with --body; --json <body> still works, with a deprecation warning", async () => {
+    const body = await cli(sb, ["api", "create_harness", "--body", '{"slug":"by-body","name":"By body"}', "--json"]);
+    expect(body.code, body.stderr).toBe(0);
+    expect(body.stderr).not.toMatch(/deprecated/);
+    const alias = await cli(sb, ["api", "create_harness", "--json", '{"slug":"by-alias","name":"By alias"}']);
+    expect(alias.code, alias.stderr).toBe(0);
+    expect(alias.stderr).toMatch(/`--json <body>` as the request body is deprecated/);
+    const warned: string[] = [];
+    splitJsonBody(["op", "--json", "{}"], (m) => warned.push(m));
+    splitJsonBody(["op", "--json"], (m) => warned.push(m));
+    expect(warned).toHaveLength(1);
+  });
+
+  it("says to pass a parameter as name=value when it was given as an option", async () => {
+    const result = await cli(sb, ["api", "get_harness_by_slug", "--slug", "support", "--json"]);
+    expect(result.code).toBe(2);
+    expect(result.json<{ error: { hint: string } }>().error.hint).toMatch(/pass slug=<value> \(or -p slug=<value>\)/);
+  });
+
   it("bounds a long list response", async () => {
     for (let i = 0; i < 5; i++) await cli(sb, ["harness", "new", `bulk-${i}`]);
     const result = await cli(sb, ["api", "list_harnesses", "--limit", "2", "--json"]);
@@ -176,6 +207,99 @@ describe("tenant", () => {
     const result = await cli(platformSb, ["tenant", "create", "Bad Slug!"]);
     expect(result.code).toBe(3);
   });
+
+  /** An operator's token that reaches every tenant but may not enter Platform mode, as an instance names its ceiling. */
+  const operatorEnv = () => ({
+    CAVELON_URL: server.url,
+    CAVELON_TOKEN: server.addToken({ kind: "pat", tenantIds: [], reachesAll: true, ceilingRole: "tenant_builder", tokenName: "operator" }),
+  });
+
+  it("refuses before sending when the token may not enter Platform mode, and names the remedy (exit 7)", async () => {
+    server.state.requests.length = 0;
+    const result = await cli(sb, ["tenant", "create", "blocked", "--json"], { env: operatorEnv() });
+    expect(result.code).toBe(7);
+    const error = result.json<{ error: { code: string; message: string; hint: string; details: { sent: boolean } } }>().error;
+    expect(error.code).toBe("platform_mode_not_allowed");
+    expect(error.message).toMatch(/may not enter Platform mode \(ceiling tenant_builder\)/);
+    expect(error.hint).toMatch(/Allow Platform mode/);
+    expect(error.hint).toMatch(/in the Admin/);
+    expect(error.hint).not.toMatch(/cavelon whoami/);
+    expect(error.details.sent).toBe(false);
+    expect(server.state.requests.some((r) => r.method === "POST" && r.path === "/api/v1/tenants")).toBe(false);
+  });
+
+  it("refuses before sending when Platform mode lacks tenants.manage (exit 7)", async () => {
+    const env = { CAVELON_URL: server.url, CAVELON_TOKEN: server.addToken({ kind: "pat", tenantIds: [], platform: true, permissions: ["platform.maintenance"] }) };
+    server.state.requests.length = 0;
+    const result = await cli(sb, ["tenant", "create", "blocked", "--json"], { env });
+    expect(result.code).toBe(7);
+    expect(result.json<{ error: { code: string } }>().error.code).toBe("permission_missing");
+    expect(server.state.requests.some((r) => r.method === "POST" && r.path === "/api/v1/tenants")).toBe(false);
+  });
+
+  it("an instance whose /meta/principal does not say whether the token allows Platform mode: sends, and the route decides", async () => {
+    server.state.principalWithoutPlatformMode = true;
+    try {
+      server.state.requests.length = 0;
+      const result = await cli(sb, ["tenant", "create", "unsaid", "--json"], { env: operatorEnv() });
+      expect(result.code).toBe(7);
+      expect(result.json<{ error: { status: number } }>().error.status).toBe(403);
+      expect(server.state.requests.some((r) => r.method === "POST" && r.path === "/api/v1/tenants")).toBe(true);
+      const created = await cli(platformSb, ["tenant", "create", "unsaid-ok", "--json"]);
+      expect(created.code, created.stdout).toBe(0);
+    } finally {
+      server.state.principalWithoutPlatformMode = undefined;
+    }
+  });
+
+  it("an instance without /meta/principal: sends, and the refusal's hint is about Platform mode, not the tenant", async () => {
+    server.state.servePrincipal = false;
+    try {
+      const env = { CAVELON_URL: server.url, CAVELON_TOKEN: server.addToken({ kind: "pat", tenantIds: [tenant], defaultTenant: tenant }) };
+      const result = await cli(sb, ["tenant", "create", "blocked", "--json"], { env });
+      expect(result.code).toBe(7);
+      const error = result.json<{ error: { status: number; hint: string } }>().error;
+      expect(error.status).toBe(403);
+      expect(error.hint).toMatch(/platform route/);
+      expect(error.hint).toMatch(/tenants\.manage/);
+      expect(error.hint).not.toMatch(/Check the tenant/);
+    } finally {
+      server.state.servePrincipal = true;
+    }
+  });
+
+  it("--use switches only when the token acts in the new tenant", async () => {
+    const env = { CAVELON_URL: server.url, CAVELON_TOKEN: server.addToken({ kind: "pat", tenantIds: [], platform: true, platformOnly: true }) };
+    const created = await cli(sb, ["tenant", "create", "kept-out", "--use", "--json"], { env });
+    expect(created.code, created.stdout + created.stderr).toBe(0);
+    const data = created.json<{ slug: string; used: boolean; warnings: string[] }>();
+    expect(data).toMatchObject({ slug: "kept-out", used: false });
+    expect(data.warnings.join()).toMatch(/does not act in the new tenant/);
+    const status = await cli(sb, ["status", "--offline", "--json"], { env });
+    expect(status.json<{ tenant: { ref: string } | null }>().tenant?.ref).not.toBe("kept-out");
+  });
+
+  it("an operator's token without memberships: tenant list says so and how to find any tenant", async () => {
+    const env = operatorEnv();
+    const text = await cli(sb, ["tenant", "list"], { env });
+    expect(text.code).toBe(0);
+    expect(text.stdout).toMatch(/^No memberships of your own; this token reaches every tenant/);
+    expect(text.stdout).toContain("cavelon tenant list --search <part of the name>");
+    const json = await cli(sb, ["tenant", "list", "--json"], { env });
+    expect(json.json()).toMatchObject({ items: [], total: 0, reaches_all_tenants: true, listed: "own_memberships", note: expect.stringMatching(/total count only your own/) });
+  });
+
+  it("whoami says whether the token may enter Platform mode and which tenants it reaches", async () => {
+    const env = operatorEnv();
+    const text = await cli(sb, ["whoami"], { env });
+    expect(text.code, text.stderr).toBe(0);
+    expect(text.stdout).toMatch(/platform mode:\s+not allowed \(ceiling tenant_builder\)/);
+    expect(text.stdout).toMatch(/reaches:\s+every tenant \(as operator; no memberships of your own\)/);
+    const json = await cli(sb, ["whoami", "--json"], { env });
+    expect(json.json()).toMatchObject({ credential: { platform_mode_allowed: false, ceiling_role: "tenant_builder" }, reaches: { every_tenant: true } });
+    const platform = await cli(platformSb, ["whoami"]);
+    expect(platform.stdout).toMatch(/platform mode:\s+allowed/);
+  });
 });
 
 describe("harness", () => {
@@ -195,7 +319,7 @@ describe("harness", () => {
     const slugs = list.json<{ items: Array<{ slug: string }> }>().items.map((h) => h.slug);
     expect(slugs).toEqual(expect.arrayContaining(["support", "support-v2"]));
     const text = await cli(sb, ["harness", "list"]);
-    expect(text.stdout).toMatch(/^SLUG\s+NAME\s+STATUS\s+ID/);
+    expect(text.stdout).toMatch(/^SLUG\s+NAME\s+STATUS\s+DEFAULT\s+ID/);
   });
 
   it("says which source is unknown", async () => {
@@ -247,6 +371,60 @@ describe("docs", () => {
     expect(first.markdown).toHaveLength(1000);
     const rest = await cli(sb, ["docs", "get", "concepts/regression-testing", "--max-chars", "1000", "--cursor", first.next_cursor, "--json"]);
     expect(rest.json<{ markdown: string }>().markdown.slice(0, 20)).toBe(doc.markdown.slice(1000, 1020));
+  });
+
+  it("finds the concept page first for beginner questions in German and English", async () => {
+    const first = async (question: string) => {
+      const result = await cli(sb, ["docs", "search", question, "--json"]);
+      expect(result.code, result.stderr).toBe(0);
+      return result.json<{ items: Array<{ page: string }>; total: number; terms: string[] }>();
+    };
+    for (const [question, page] of [
+      ["Wie lade ich Dokumente in eine Wissensbasis hoch?", "concepts/knowledge-bases"],
+      ["Wie teste ich meinen Agenten?", "concepts/regression-testing"],
+      ["Wie mache ich meinen Bot zur Standardantwort für alle Nutzer?", "concepts/harnesses"],
+      ["how do I upload documents to a knowledge base", "concepts/knowledge-bases"],
+      ["how do I test my agent", "concepts/regression-testing"],
+      ["triggers", "concepts/triggers"],
+      // The agent graph's pages say "agent graph" in their titles; a handoff is one of its edges.
+      ["handoff", "concepts/agent-graph"],
+      ["handoffs", "concepts/agent-graph"],
+    ] as const) {
+      const found = await first(question);
+      expect(found.items[0]?.page, question).toBe(page);
+      // Only the pages that match well, never most of the index.
+      expect(found.total, question).toBeLessThanOrEqual(12);
+    }
+    expect((await first("Wie lade ich Dokumente in eine Wissensbasis hoch?")).terms).toEqual(["upload", "document", "knowledge", "base"]);
+  });
+
+  it("matches whole words and drops stop words", async () => {
+    const entries = parseIndex(readFileSync(path.join(CONTRACTS, "docs", "llms.txt"), "utf8"), "https://cavelon.example.com");
+    // "test" is in "latest" and "contest" as letters only.
+    const latest = { page: "x/latest", title: "The latest release", description: "What is new.", section: "Reference", url: "https://x" };
+    expect(searchIndex([latest], "test")).toEqual([]);
+    expect(searchIndex(entries, "wie ist das in der")).toEqual([]);
+    expect(searchIndex(entries, "how do I use it")).toEqual([]);
+  });
+
+  it("says so when nothing matches, with English words and the index to try", async () => {
+    const result = await cli(sb, ["docs", "search", "Quarkstrudel", "--json"]);
+    expect(result.code).toBe(0);
+    const data = result.json<{ items: unknown[]; total: number; hint: string }>();
+    expect(data).toMatchObject({ items: [], total: 0 });
+    // An English-looking word gets no advice to use English.
+    expect(data.hint).toMatch(/^No page matches "Quarkstrudel" \(looked for: quarkstrudel\)\. No page's title or summary uses them: try another word/);
+    expect(data.hint).toContain("cavelon docs get index");
+    const german = (await cli(sb, ["docs", "search", "wie", "geht", "Quarkstrudel", "--json"])).json<{ hint: string }>();
+    expect(german.hint).toMatch(/The docs are in English: try English words/);
+    const text = await cli(sb, ["docs", "search", "Wie", "ist", "das?"]);
+    expect(text.stdout).toMatch(/No page matches "Wie ist das\?" \(it has only stop words\)/);
+
+    const index = await cli(sb, ["docs", "get", "index", "--max-chars", "200", "--json"]);
+    expect(index.code, index.stderr).toBe(0);
+    const head = index.json<{ page: string; markdown: string; next_cursor: string }>();
+    expect(head).toMatchObject({ page: "index", next_cursor: "200" });
+    expect(head.markdown).toMatch(/^# Cavelon Documentation/);
   });
 
   it("suggests pages for an unknown one", async () => {

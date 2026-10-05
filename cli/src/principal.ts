@@ -27,7 +27,8 @@ export interface MetaPrincipal {
     harness_ids: string[] | null;
   } | null;
   tenant_id: string | null;
-  mode: "tenant" | "platform";
+  /** "none": asked without a tenant, a token that acts only in a tenant it names (its ceiling leaves it no platform role). */
+  mode: "tenant" | "platform" | "none";
   /**
    * The request's effective permission names in the tenant it acts in (its
    * global role's in Platform mode). Absent on an

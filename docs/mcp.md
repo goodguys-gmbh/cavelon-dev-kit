@@ -53,7 +53,7 @@ cavelon login --instance https://cavelon.example.com
 
 The agent never sees or passes the token, and there is no login tool. Without
 a login, tools answer `not_logged_in` and tell the agent to ask you.
-Repository tools (`init`, `pull`, `validate`, `apply`, `explain`, `activate`,
+Repository tools (`init`, `pull`, `validate`, `package_schema`, `apply`, `explain`, `activate`,
 `sandbox_seed`, `artifacts_export`) work in the folder the agent started the
 server in, and use its `cavelon.yaml`.
 
@@ -61,7 +61,10 @@ server in, and use its `cavelon.yaml`.
 
 Each tool carries the MCP annotations `readOnlyHint` and `destructiveHint`, so
 your agent can ask you before it calls a tool that changes or deletes
-something. Most tools take an optional `tenant` argument as well.
+something. Most tools take an optional `tenant` argument as well. `init` and
+`pull` are marked destructive because they may overwrite files in the solution
+folder; their descriptions say that they change nothing on the instance (`pull`
+only reads it).
 
 | Tool | Command | Marked |
 |---|---|---|
@@ -77,10 +80,15 @@ something. Most tools take an optional `tenant` argument as well.
 | `harness_list` | `cavelon harness list` | read-only |
 | `harness_new` | `cavelon harness new` | changing |
 | `harness_clone` | `cavelon harness clone` | changing |
+| `harness_default` | `cavelon harness default` | changing |
 | `activate` | `cavelon activate` | changing |
-| `init` | `cavelon init` | destructive |
-| `pull` | `cavelon pull` | destructive |
+| `deactivate` | `cavelon deactivate` | destructive |
+| `chat` | `cavelon chat` | changing |
+| `init` | `cavelon init` | destructive (local files only) |
+| `pull` | `cavelon pull` | destructive (local files only) |
 | `validate` | `cavelon validate` | read-only |
+| `fmt` | `cavelon fmt` | changing (local files only) |
+| `package_schema` | `cavelon schema` | read-only |
 | `apply` | `cavelon apply` | destructive |
 | `explain` | `cavelon explain` | read-only |
 | `variables_list` | `cavelon variables list` | read-only |
@@ -114,8 +122,14 @@ something. Most tools take an optional `tenant` argument as well.
 | `artifacts_export` | `cavelon artifacts export` | changing |
 
 Each tool's arguments are the command's arguments and options, as listed in the
-[command reference](commands.md); options marked "CLI only" there, such as
-`--wait`, are not offered to the agent.
+[command reference](commands.md), spelled in snake_case: `--make-default` is
+`make_default`, `--keep-both` is `keep_both`, `--dry-run` is `dry_run`.
+Options marked "CLI only" there, such as `--wait`, are not offered to the
+agent. A call with an argument the tool's schema does not list is refused
+(`unknown_argument`, exit code 2) and nothing is done; the error names the
+closest argument. The CLI's spelling of a multi-word option (`make-default`)
+is still taken in this release, with a warning, and will be refused in a later
+one.
 
 ### What is not a tool
 
@@ -135,22 +149,42 @@ Each tool's arguments are the command's arguments and options, as listed in the
 The server tells the agent these rules when it connects, and the Cavelon skills
 repeat them:
 
-- **Nothing blocks.** Tools that start work (`kb_upload`, `test_run`,
+- **Nothing blocks for long.** Tools that start work (`kb_upload`, `test_run`,
   `loop_start`, `sandbox_seed`, `artifacts_export`) return operation ids at
   once; the agent reads them with `operation_status` and follows a loop with
-  `loop_iterations`.
+  `loop_iterations`. `operation_status` returns the state at once, or, given a
+  `timeout`, waits until the operations settle or the timeout passes, at most
+  50 seconds (a longer timeout is cut there, with a warning). Its answer says
+  `waited_ms`, and `timed_out` is true only when it waited the whole timeout.
 - **What needs `confirm`.** `apply` returns a preview and imports only with
   `confirm` set to that preview's id. `limits_set`, `models_set_limit`,
-  `loop_cancel`, `sandbox_seed`, `trigger_identity`, and `api` for any
-  operation that is not read-only (anything but GET, HEAD and OPTIONS), return
-  what they would do (for `api`: the method, path, parameters and body) and
-  act only with `confirm: true`. The agent shows that to you first, and must
-  show you any preview that reaches an active solution or production.
-- **What changes without `confirm`.** `init` and `pull` write files in the
-  solution folder (`pull` refuses to replace package files with uncommitted
-  changes, or outside git files changed since the last pull, unless `force`), and the other tools marked changing act at once:
+  `loop_cancel`, `sandbox_seed`, `trigger_identity`, `harness_default`,
+  `activate` with `make_default`, `deactivate`, and `api` for any operation that is not
+  read-only (anything but GET, HEAD and OPTIONS), return what they would do
+  (for `api`: the method, path, parameters and body) and a `confirm_token`,
+  and act only when called again with the same arguments and `confirm` set to
+  that token. The token is a hash of the change the preview showed, the tool,
+  the tenant and the instance: a different change (another body, value or
+  target) needs a new preview, a token of another change returns the new
+  preview with `token_mismatch` and exit code 4, and `confirm: true` is
+  refused (`confirm_token_required`). `kb_upload` with `replace` needs it only
+  on an instance whose upload cannot replace a document itself: there it
+  returns the documents it would deactivate after the upload, and uploads
+  nothing without its token. The agent shows that to you first, and must show you any
+  preview that reaches an active solution or production. Making a solution
+  the tenant's default route changes which solution the tenant's chat and
+  widget answer with, and deactivating one takes it out of live traffic, so
+  the agent asks you before it confirms either.
+- **What changes without `confirm`.** `init`, `pull` and `fmt` change nothing
+  on the instance; they write files in the solution folder (`pull` refuses to
+  replace a package file that is neither committed nor as the last pull or
+  apply left it, unless `force`), and the other tools marked changing act at
+  once:
   `use_tenant`, `tenant_create`, `harness_new`, `harness_clone`, `activate`
-  (through the readiness gate), `variables_set`, `kb_upload`, `test_run`,
+  (through the readiness gate), `chat` (one turn of a conversation with the
+  solution it names, the way to try one that is not the default route),
+  `variables_set`, `kb_upload` (without
+  `replace`, or where the instance replaces itself), `test_run`,
   `loop_start`, `loop_pause`, `loop_resume`, `sandbox_validate`,
   `sandbox_refresh` and `artifacts_export`.
 - **What no tool does, even with `confirm`.** `api` refuses an operation the
@@ -164,6 +198,23 @@ repeat them:
   by the words of the path instead and refuses an operation that changes a
   secret, creates or revokes a credential (personal access tokens, API keys,
   sign-in) or decides an approval.
+- **No secret value in a body.** `api` also refuses, even with `confirm`, a
+  body that sets a field the instance marks as holding a secret value
+  (`"x-cavelon-secret": true`, with `"writeOnly": true`), in nested objects
+  and arrays too (`secret_field_for_a_person`). The error names the field and
+  points to `cavelon secrets set` or the Admin; the agent can send the rest
+  without the field. A field set to `null` passes, and an instance whose
+  OpenAPI marks no field is checked as before. A secret typed into a free-form
+  map, such as a headers or settings object, cannot be detected.
+- **The same guards in the agent's shell.** When a coding agent runs
+  `cavelon api` in its shell (`CLAUDECODE`, `CODEX_THREAD_ID`, `CODEX_SANDBOX`, `CURSOR_AGENT`,
+  `GEMINI_CLI`, `COPILOT_CLI`, `COPILOT_AGENT`, `AI_AGENT` or
+  `CAVELON_AGENT=1` is set), the rules of the `api` tool hold there too: it
+  refuses what the tool refuses, keeps its files in the solution folder, and
+  for an operation that is not read-only prints the request and a token and
+  sends it only when run again with `--confirm <token>`.
+  [Security](security.md#when-the-agent-runs-cavelon-in-its-shell) lists the
+  variables and the limits of this guard.
 - **Files stay in the solution folder.** Every path a tool takes (`api`'s
   `file` and `body` `@file`, `loop_start`'s `input` `@file`, `kb_upload`'s
   folder, `sandbox_seed`'s source, `artifacts_export`'s `out`, `init`'s
@@ -171,7 +222,8 @@ repeat them:
   folder the server started in when there is none (`path_outside_solution`),
   and never into cavelon's own config or cache directory, which hold the
   stored token (`path_in_kit_directory`). In your terminal, `cavelon` takes
-  any path you name.
+  any path you name; `cavelon api` run by a coding agent confines its paths as
+  the tool does.
 - **Limits are read, not changed.** The agent reads `limits` before planning a
   solution. It never changes a limit on its own: it proposes the old and new
   value and lets you decide; an operator's limit goes to the operator.

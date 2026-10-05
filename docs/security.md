@@ -13,6 +13,22 @@ may activate solutions, whether it may work in Platform mode, and when it
 expires. Give each machine or purpose its own token, so you can revoke one
 without the others.
 
+**Choosing its ceiling.** Pick the lowest one that does the job, as the
+instance's token dialog recommends:
+
+| Task | Ceiling |
+|---|---|
+| read-only checks: `status`, `limits`, `trace`, reading docs and results | **Observer** |
+| building and testing a solution: `validate`, `apply`, `test run` | **Builder** |
+| changing the tenant's limits or settings (`limits set`) | **Tenant Owner** |
+| operating the platform itself | **Platform mode**, for platform operators only |
+
+Keep **May activate** off unless the token should put solutions live; without
+it, `cavelon activate` is refused and a person activates in the Admin. The
+instance's page on personal access tokens explains each ceiling:
+`/docs/administration/personal-access-tokens` on your instance, or
+`cavelon docs get administration/personal-access-tokens`.
+
 **Storing it.** `cavelon login` reads the token without echoing it, from your
 terminal or from standard input (`--token-stdin`), and keeps it in your
 operating system's credential store:
@@ -81,9 +97,14 @@ activate** for day-to-day work, so the agent can build and test but a person
 activates. Over MCP, `cavelon` limits it further:
 
 - `apply` imports only with the id of a preview, and `limits_set`,
-  `models_set_limit`, `loop_cancel`, `sandbox_seed`, `trigger_identity` and
-  `api` (for any operation that is not read-only) change nothing without
-  `confirm: true`. The other changing tools act at once; the
+  `models_set_limit`, `loop_cancel`, `sandbox_seed`, `trigger_identity`,
+  `harness_default`, `activate` with `make_default`, `kb_upload` where it
+  would deactivate documents, and `api` (for any operation that is not
+  read-only) change nothing without the `confirm_token` their preview
+  returned. The token is a hash of the change the preview showed, the tool,
+  the tenant and the instance, so the agent cannot skip the preview or
+  confirm another change than the one it showed; `confirm: true` is refused.
+  The other changing tools act at once; the
   [MCP page](mcp.md#how-agents-use-it) lists which they are. The Cavelon
   skills tell the agent to show you any preview that reaches an active
   solution or production first.
@@ -94,14 +115,81 @@ activates. Over MCP, `cavelon` limits it further:
   instance that marks no operation, `api` refuses by the words of the path an
   operation that changes a secret, creates or revokes a credential (personal
   access tokens, API keys, sign-in) or decides an approval.
+- `api` refuses, even with `confirm`, a body that sets a field the instance
+  marks as holding a secret value (`"x-cavelon-secret": true`, published with
+  `"writeOnly": true`: provider keys, passwords, one-time codes), at any depth
+  of the body, in nested objects and arrays too (`secret_field_for_a_person`).
+  The error names the field, never its value, and points to
+  `cavelon secrets set` or the Admin; the agent can send the rest without the
+  field. A field set to `null`, which clears it, passes. On an instance whose
+  OpenAPI marks no field, bodies are checked as before. A secret typed into a
+  free-form map, such as a headers or settings object, carries no marker and
+  cannot be detected.
 - A tool reads and writes files only inside the solution folder (the folder
   of `cavelon.yaml`, or the one the server started in), following symlinks,
   and never in `cavelon`'s config or cache directory, which hold the stored
   token.
 
-These limits apply to the MCP tools. An agent that runs shell commands has
-whatever your shell allows it; your agent client's permission settings decide
-that.
+### When the agent runs `cavelon` in its shell
+
+An agent with a shell can run `cavelon api` itself instead of calling the MCP
+tool. When `cavelon` runs under a coding agent, `cavelon api` applies the same
+guards as the `api` tool:
+
+- an operation kept for a person, and a body with a field marked
+  `x-cavelon-secret`, are refused, with or without `--confirm`, with exit
+  code 5 ("needs a person"); the error says how a person runs it
+  (`operation_for_a_person`, `secret_field_for_a_person`).
+  `cavelon api describe` shows both marks before anything is tried;
+- an operation that is not read-only prints the request it would send
+  (method, path, query, headers, body, files) and a confirm token, and sends
+  nothing (`sent: false`). Run again with `--confirm <token>`, it sends exactly
+  that request. The token is a hash of the request, the instance and the
+  tenant, so a changed body, parameter or file needs a new preview; a token
+  that does not match sends nothing and exits 4, and `--confirm` without a
+  token sends nothing and exits 5;
+- the body `@file`, `--file` attachments and `--output` stay inside the
+  solution folder, never in `cavelon`'s config or cache directory
+  (`path_outside_solution`, `path_in_kit_directory`).
+
+`cavelon` runs under a coding agent when one of these variables, which the
+agents set for the commands their shell tool runs, is set (and is not empty,
+`0` or `false`):
+
+| Variable | Set by |
+|---|---|
+| `CLAUDECODE` | Claude Code |
+| `CODEX_THREAD_ID`, `CODEX_SANDBOX` | Codex (`CODEX_SANDBOX` only inside its macOS sandbox) |
+| `CURSOR_AGENT` | Cursor's agent terminal and `cursor-agent` |
+| `GEMINI_CLI` | Gemini CLI's shell tool |
+| `COPILOT_CLI` | GitHub Copilot CLI |
+| `COPILOT_AGENT` | GitHub Copilot's agent terminals in VS Code |
+| `AI_AGENT` | the shared variable newer agents set |
+| `CAVELON_AGENT=1` | you, for an agent that sets none of the above |
+
+Kiro documents no such variable: set `CAVELON_AGENT=1` in the environment
+its commands run in, if you can. The Claude Code extensions for VS Code and
+JetBrains set `CLAUDECODE` in their integrated terminals too, so `cavelon api`
+typed there is guarded; run it in another terminal. A person in a plain
+terminal is unaffected: `cavelon api` sends at once, takes any path and sends
+any field.
+
+The commands with a `--confirm` flag are held to the same as their MCP tools:
+`limits set`, `models set-limit`, `loop cancel`, `sandbox seed`,
+`trigger identity`, `harness default`, `activate --make-default`,
+`deactivate`, `kb upload --replace`, `variables delete` and `secrets delete`.
+Run under a coding agent, each prints its preview with a confirm token and
+the command that confirms exactly that change (`--confirm <token>`, the same token the MCP
+tool returns). A bare `--confirm` changes nothing: it shows the preview and
+exits 5, and `activate --make-default --confirm` refuses before it activates.
+A token of another change exits 4. In your own terminal the plain flag
+confirms, as before; a token given there is checked too.
+
+These guards keep an agent from doing by mistake what is meant for a person;
+they are not a boundary. An agent that unsets the variable, or calls the API
+some other way, has whatever your shell and the token allow it. Your agent
+client's permission settings decide what it may run, and the instance enforces
+the token's role and ceiling on every request.
 
 ## What is sent where
 

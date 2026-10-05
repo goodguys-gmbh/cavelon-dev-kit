@@ -1,7 +1,8 @@
 import { originText } from "../capacity.js";
-import { boolOption, positional, type CommandSpec, type Context } from "../command.js";
+import { positional, type CommandSpec, type Context } from "../command.js";
 import type { OpenApiDoc } from "../contracts.js";
 import { CavelonError, ExitCode, usageError } from "../errors.js";
+import { confirmation } from "../confirm-token.js";
 import type { ApiClient } from "../http.js";
 import { callOperation, openapiOrWarn, workflowOperation } from "../invoke.js";
 import {
@@ -600,12 +601,13 @@ export const limitsSet: CommandSpec = {
     },
   ],
   options: {
-    confirm: { type: "boolean", description: "Change it; without this nothing is changed." },
+    confirm: { type: "boolean", mcpToken: true, description: "Change it; without this nothing is changed." },
     env: ENV_OPTION,
   },
   examples: [
     "cavelon limits set kb_upload_max_file_size_mb 50",
     "cavelon limits set kb_upload_max_file_size_mb 50 --confirm",
+    "cavelon limits set kb_upload_max_file_size_mb 50 --confirm <token>",
     "cavelon limits set rate_limit_chat_rpm none --confirm",
     "cavelon limits set monthly_inference_token_budget 2000000",
     "cavelon limits set monthly_processing_step_cap none --confirm",
@@ -695,8 +697,9 @@ export const limitsSet: CommandSpec = {
     const allowed = operator
       ? `a personal access token in Platform mode of a ${anyOf(change.requires_role ?? [], "platform role")}`
       : `a credential with ${anyOf(change.permissions)} (a session, a personal access token, or an admin API key of the tenant)`;
-    if (!boolOption(input, "confirm")) {
-      const confirm = `cavelon limits set ${shellWord(key)} ${shellWord(argText(value))}${flags} --confirm`;
+    const gate = await confirmation(ctx, input, "limits_set", { key, value, previous: previous ?? null, operation });
+    if (!gate.confirmed) {
+      const confirm = gate.confirm(`cavelon limits set ${shellWord(key)} ${shellWord(argText(value))}${flags} --confirm`);
       const source = target.limit && target.kind === "limit" ? ` (source now: ${target.limit.source}${target.limit.origin ? `, origin: ${target.limit.origin}` : ""})` : "";
       const what =
         target.scope === "platform" && target.limit?.tenant_change
@@ -705,8 +708,9 @@ export const limitsSet: CommandSpec = {
             ? [`For tenant ${params.tenant_id[0]} only.`]
             : [];
       return {
-        data: { ...base, changed: false, sent: false, confirm },
-        text: [`${key}: ${from} → ${to}${source}.`, ...what, `Sends: ${sends}`, `Allowed: ${allowed}.`, `Nothing was changed. Change it with: ${confirm}`].join("\n"),
+        data: { ...base, changed: false, sent: false, confirm, ...gate.fields },
+        text: [`${key}: ${from} → ${to}${source}.`, ...what, `Sends: ${sends}`, `Allowed: ${allowed}.`, ...(gate.mismatch ? [gate.mismatch] : []), `Nothing was changed. Change it with: ${confirm}`].join("\n"),
+        ...(gate.exitCode ? { exitCode: gate.exitCode } : {}),
       };
     }
 

@@ -47,7 +47,9 @@ Do not work around it; use the other column.
    iteration, activate the parent (cavelon-loop skill, "A Masterloop parent and
    its iteration solution"). `activate` never forces.
 5. **Seed it.** Isolated container: `cavelon sandbox seed <sandbox> <folder>`
-   shows what it would send; add `--confirm` to send it. The archive **replaces
+   shows what it would send and the confirm command that sends it: run that
+   one (from your shell it carries the preview's token, `--confirm <token>`;
+   a bare `--confirm` exits 5 and sends nothing). The archive **replaces
    the workspace**, so confirm only for a test Sandbox or after the person
    agreed. Customer VM: the files go onto the VM, then `cavelon sandbox refresh
    <sandbox>`.
@@ -68,7 +70,9 @@ connection), the run may have started: retry only with the
 starts and spends the budget again. `cavelon trace <operation-id>` reads the
 run's traces. Keep each `watch` or `wait` under your shell's time
 limit and run it again to resume (exit 6 means still running). Over MCP, use the
-`loop_iterations` and `operation_status` tools; they never block.
+`loop_iterations` and `operation_status` tools; `loop_iterations` never
+blocks, and `operation_status` waits only when given a `timeout` (at most 50
+seconds).
 
 - **Pause** at the next safe point: `cavelon loop pause <run>`. Resume with
   `cavelon loop resume <run>`. A paused loop makes `wait` and `loop watch` exit
@@ -77,14 +81,15 @@ limit and run it again to resume (exit 6 means still running). Over MCP, use the
   `invalid_continuation`, …) resumes only with `--reason <the pause reason>`,
   exactly as the loop names it, once the person reviewed the cause; `--reason`
   is never free text. A pause that cannot be resumed is cancelled
-  (`cavelon loop cancel <run> --confirm`) and started again after the fix; the
-  watch prints both commands.
+  (`cavelon loop cancel <run>`, then the confirm command it prints) and started
+  again after the fix; the watch prints both commands.
 - An iteration reads **accepted** (with its outcome: continue, wait, done,
   blocked), **rejected**, or **failed** when its child failed. A run that ended
   without a loop names the stage that recorded an error.
   `cavelon trace <child_run_id>` reads one iteration's run.
-- **Stop** a run and its loops: `cavelon loop cancel <run>` shows what stops;
-  `--confirm` stops it. Stop runs you started, not someone else's.
+- **Stop** a run and its loops: `cavelon loop cancel <run>` shows what stops
+  and the confirm command (`--confirm <token>` from your shell) that stops it.
+  Stop runs you started, not someone else's.
 - A run that waits at an **Approval** node, or a loop paused by a guardrail,
   needs a person: `wait` prints the reason and the Admin link. An approval is
   decided by a person, or by an API key an owner granted the explicit scope
@@ -119,7 +124,8 @@ Two reasons end work for capacity; each has its code in `cavelon explain`:
   `model_endpoint_slot_wait_seconds`. Retry later, or, if the endpoint can serve
   more, propose raising the Model Registry row's `max_concurrent_requests`
   (`cavelon models list` shows it). The person decides; only then run
-  `cavelon models set-limit <model_id> <n> --confirm`.
+  `cavelon models set-limit <model_id> <n>` and the confirm command it prints
+  (`--confirm <token>` from your shell).
 
 `cavelon limits` shows the caps, their source and origin, the slot waits, and
 branch concurrency (how many items of a Map loop run at once, and whether they
@@ -153,9 +159,9 @@ A scheduled or webhook run has no caller, so it acts as an **API key** bound to
 its trigger. `apply` never binds one; it lists unbound triggers in the preview.
 
 ```bash
-cavelon trigger identity <trigger>                   # who it runs as, what the key must reach
-cavelon trigger identity <trigger> <key-name>        # shows the change
-cavelon trigger identity <trigger> <key-name> --confirm
+cavelon trigger identity <trigger>                            # who it runs as, what the key must reach
+cavelon trigger identity <trigger> <key-name>                 # shows the change and its confirm token
+cavelon trigger identity <trigger> <key-name> --confirm <token>   # from your shell; a person's terminal takes a bare --confirm
 ```
 
 Binding gives the trigger standing authority over its Sandboxes: show the person

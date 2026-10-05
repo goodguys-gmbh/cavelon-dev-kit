@@ -127,7 +127,8 @@ the files and `apply` them; `pull` again shows any change made in the Admin as a
 on the instance after your preview, the import is refused (exit 4) and nothing
 is imported; preview again to see the current difference. To bring the Admin's
 changes into your files, run `pull` (it refuses to overwrite uncommitted
-changes, and outside a git repository files changed since the last pull).
+changes, and outside a git repository files changed since the last pull; a file
+as the last pull or confirmed apply left it is not refused).
 
 ### Can `apply` delete things?
 
@@ -145,7 +146,9 @@ with `cavelon secrets set`.
 ### Can I start from a package file someone sent me?
 
 Yes: `cavelon init --from package.json` writes it into the folder layout, and
-`validate` and `apply` take it from there.
+`validate` and `apply` take it from there. When the package holds one solution
+the tenant does not have yet, `init --from` creates it as a draft, named as in
+the package.
 
 ### How do I run this in CI?
 
@@ -177,7 +180,9 @@ never printed or read back, and only a person sets them. See
 Only if you let it. `activate` needs a token created with **May activate**; use
 a token without it for day-to-day work. The skills also tell the agent to show
 you a preview that reaches an active solution or production before confirming
-it.
+it. Taking a solution out again (`cavelon deactivate`) and changing the default
+route (`cavelon harness default`) also preview first and change nothing until
+confirmed; over MCP, only with the token of the preview the agent showed you.
 
 ### Can the agent change my tenant's limits?
 

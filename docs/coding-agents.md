@@ -33,7 +33,8 @@ Codex with the Cavelon plugin; any agent `cavelon setup` or
 - before confirming a preview that reaches an active solution, goes to
   production (`--env prod`), deletes anything (`--mode replace`), or needs
   secrets, grants or identities;
-- before activating a solution;
+- before activating a solution, and before making it the tenant's default
+  route (the solution the tenant's chat and widget answer with);
 - before changing any limit or quota: it shows you the old and the new value
   and its reason, and you decide;
 - before binding a trigger's execution identity, or seeding or cancelling
@@ -52,7 +53,7 @@ by the others:
 | Source | What it enforces |
 |---|---|
 | **The skills** (`cavelon-loop`, `cavelon-authoring`, `cavelon-testing`, `cavelon-long-running`) and the server's instructions when the agent connects | When to stop and show you a preview; propose a limit change and let you decide; never handle a token or secret; never approve. |
-| **The commands and their MCP tools** | `apply` imports only with the id of a preview; `limits set`, `models set-limit`, `loop cancel`, `sandbox seed` and `trigger identity` change nothing without `--confirm`, and neither does the `api` tool for an operation that is not read-only. The `api` tool refuses to change a secret, create or revoke a credential or decide an approval, and the tools read and write files only inside the solution folder. Each tool is annotated read-only or destructive (`readOnlyHint`, `destructiveHint`), so your agent client can ask you before it calls a destructive one. There is no tool for `login`, `secrets set` or deciding an approval, and no command takes a token or secret value as an argument. `activate` goes through the readiness gate and never forces. |
+| **The commands and their MCP tools** | `apply` imports only with the id of a preview; `limits set`, `models set-limit`, `loop cancel`, `sandbox seed`, `trigger identity`, `harness default`, `activate --make-default` and `deactivate` change nothing without `--confirm` (from the agent's shell, `--confirm <token>` from their preview), and neither does the `api` tool for an operation that is not read-only. Over MCP, `confirm` is the token the tool's preview returned, so it confirms exactly the change shown. The `api` tool refuses to change a secret, create or revoke a credential or decide an approval, or to send a body field the instance marks as a secret value, and the tools read and write files only inside the solution folder. `cavelon api` run from the agent's shell applies the same guards, with `--confirm <token>` from its preview ([Security](security.md#when-the-agent-runs-cavelon-in-its-shell)). Each tool is annotated read-only or destructive (`readOnlyHint`, `destructiveHint`), so your agent client can ask you before it calls a destructive one. There is no tool for `login`, `secrets set` or deciding an approval, and no command takes a token or secret value as an argument. `activate` goes through the readiness gate and never forces. |
 | **Your token's permissions on the server** | The token acts as you, within your roles, and within the ceiling you chose when you created it. Without **May activate**, activation is refused, whatever the agent tries. A limit only a Tenant Owner or the operator may change is refused for anyone else. |
 
 The skills shape what a well-behaved agent does; the token decides what any
@@ -80,9 +81,12 @@ agent can do. Choose the token accordingly (next section). See also
    `git init`, then `cavelon init`: in your terminal it asks for the tenant and
    the solution by name. An agent runs it with `--tenant` and `--harness` (a
    name, slug or id each), taken from `cavelon tenant list` and
-   `cavelon harness list`. `cavelon init` writes `cavelon.yaml`, `package/`, `tests/`,
-   `env/` and an `AGENTS.md` block the agent reads first. To work on a solution
-   that already exists, add `cavelon pull`.
+   `cavelon harness list`. For a new solution, `init --harness "<name>"` in a
+   shell creates the draft; as an MCP tool, `init` never creates one and names
+   the `cavelon harness new` command that does. `apply` never creates a
+   solution. `cavelon init` writes `cavelon.yaml`, `package/`, `tests/`, `env/`
+   and an `AGENTS.md` block the agent reads first. To work on a solution that
+   already exists, add `cavelon pull`.
 4. **Put the material in the folder.** Everything the solution must know or
    follow: policies, FAQ pages, product sheets, sample documents, example
    requests and the answers you expect, an API description for a tool. Put
@@ -191,11 +195,14 @@ runs.
      format or a typo can cause.
 5. **Apply.** For a draft solution in test, the agent confirms with
    `cavelon apply --env test --confirm <preview-id>`, which imports exactly
-   what was previewed. If the solution changed in the meantime, the confirm is
-   refused (exit 4) and the agent previews again.
+   what was previewed. If the solution or the package files changed in the
+   meantime, or the preview is more than a day old, the confirm is refused
+   (exit 4) and the agent previews again.
 6. **Upload.** `cavelon kb upload seeds/<folder> --kb "<name>"` sends the
    knowledge documents, after checking them against the tenant's upload
-   limits, and the agent waits for ingestion to finish.
+   limits, and the agent waits for ingestion to finish. A file named like a
+   document already in the knowledge base is listed; to update that document
+   the agent uploads it with `--replace`.
 7. **Test.** `cavelon test run --suite <suite>` runs the suite on the
    instance, where a judge scores each answer. The agent waits for the result.
    In a test result, check the pass count, and for each case that did not pass
@@ -212,7 +219,14 @@ runs.
     `cavelon activate` reads the solution's readiness checks and activates only
     when they pass; it prints each check and every warning. With a token that
     may activate, the agent runs it after you agree; otherwise you activate in
-    the Admin.
+    the Admin. When the solution is not the tenant's default route,
+    `activate` says so, and the agent asks you whether it should become the
+    default; `cavelon activate --make-default` shows the change, and only
+    the confirm command it prints makes it (from the agent's shell it carries
+    the preview's token, `--confirm <token>`). Until then, `cavelon chat
+    "<message>" --harness <solution>` talks to the solution by name, and
+    `cavelon deactivate` (previewed, then confirmed by you) takes it out of
+    service again: its status becomes `inactive`.
 
 To go to production, the agent prepares `env/prod.yaml` and previews with
 `cavelon apply --env prod`, then shows you the preview and waits. You confirm,

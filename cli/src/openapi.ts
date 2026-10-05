@@ -125,9 +125,19 @@ export function findOperation(doc: OpenApiDoc, name: string): Operation {
       hint: `Use the full operationId: ${byAlias.map((o) => o.operationId).join(", ")}`,
     });
   }
+  // A name as people and other tools spell it: createTenant, create-tenant or CREATE_TENANT for create_tenant.
+  const wanted = looseName(name);
+  const loose = all.filter((o) => looseName(o.alias) === wanted || looseName(o.operationId) === wanted);
+  if (loose.length === 1) return loose[0]!;
   const needle = name.toLowerCase();
-  const similar = all
-    .filter((o) => o.alias.toLowerCase().includes(needle) || needle.includes(o.alias.toLowerCase()))
+  const similar = [
+    ...loose,
+    ...all.filter(
+      (o) =>
+        !loose.includes(o) &&
+        (o.alias.toLowerCase().includes(needle) || needle.includes(o.alias.toLowerCase()) || looselyContains(looseName(o.alias), wanted)),
+    ),
+  ]
     .slice(0, 5)
     .map((o) => o.alias);
   throw new CavelonError(ExitCode.usage, {
@@ -135,6 +145,21 @@ export function findOperation(doc: OpenApiDoc, name: string): Operation {
     message: `This instance publishes no operation "${name}".`,
     hint: similar.length ? `Did you mean: ${similar.join(", ")}? (\`cavelon api list --search <text>\`)` : "Find it with `cavelon api list --search <text>`.",
   });
+}
+
+/** A name without case, underscores or dashes, for a loose match. */
+function looseName(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+/** Whether one loose name holds the other, for names long enough to mean something. */
+function looselyContains(a: string, b: string): boolean {
+  return a.length > 3 && b.length > 3 && (a.includes(b) || b.includes(a));
+}
+
+/** Whether an operation was found by a looser spelling than its own names; the caller says which one it took. */
+export function matchedLoosely(op: Operation, name: string): boolean {
+  return name !== op.operationId && name !== op.alias;
 }
 
 /** The operation at a method and path template, for the workflow commands. */
@@ -231,6 +256,80 @@ export function validateBody(doc: OpenApiDoc, op: Operation, body: unknown): voi
   }
 }
 
+/**
+ * The fields a body sets that the instance marks as holding a secret value
+ * (`x-cavelon-secret: true`, published with `writeOnly`), as paths such as
+ * `credentials.api_key` or `headers[0].value`. It follows the body, not the
+ * schema, so only fields that are present count, and one set to null (which
+ * clears it) does not. A secret typed into a free-form map has no marker and
+ * cannot be found. The walk is bounded: a schema may refer to itself.
+ */
+export function secretFields(doc: OpenApiDoc, schema: unknown, body: unknown): string[] {
+  const found = new Set<string>();
+  let budget = 10_000;
+  const list = (value: unknown) => (Array.isArray(value) ? (value as unknown[]) : []);
+  const walk = (raw: unknown, value: unknown, where: string, depth: number): void => {
+    if (value === undefined || value === null || depth > 64 || --budget < 0) return;
+    const node = deref(doc, raw);
+    if (!node || typeof node !== "object") return;
+    const s = node as Record<string, unknown>;
+    if (s["x-cavelon-secret"] === true) {
+      found.add(where || "(body)");
+      return;
+    }
+    for (const key of ["allOf", "anyOf", "oneOf"]) for (const sub of list(s[key])) walk(sub, value, where, depth + 1);
+    if (Array.isArray(value)) {
+      const prefix = list(s.prefixItems);
+      value.forEach((item, i) => walk(prefix[i] ?? s.items, item, `${where}[${i}]`, depth + 1));
+    } else if (typeof value === "object") {
+      const props = (s.properties ?? {}) as Record<string, unknown>;
+      const patterns = Object.entries((s.patternProperties ?? {}) as Record<string, unknown>);
+      for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+        const named = Object.hasOwn(props, key) ? [props[key]] : patterns.filter(([pattern]) => matches(pattern, key)).map(([, sub]) => sub);
+        const subs = named.length ? named : [s.additionalProperties];
+        for (const sub of subs) walk(sub, item, where ? `${where}.${key}` : key, depth + 1);
+      }
+    }
+  };
+  walk(schema, body, "", 0);
+  return [...found];
+}
+
+/**
+ * Every field of a schema the instance marks as a secret value, as paths
+ * (`credentials.api_key`, `headers[].value`, `vault.*` for any key of a map),
+ * for `api describe`. Bounded like `secretFields`: a schema may refer to itself.
+ */
+export function secretPaths(doc: OpenApiDoc, schema: unknown): string[] {
+  const found = new Set<string>();
+  let budget = 2_000;
+  const list = (value: unknown) => (Array.isArray(value) ? (value as unknown[]) : []);
+  const walk = (raw: unknown, where: string, depth: number): void => {
+    if (depth > 6 || --budget < 0) return;
+    const node = deref(doc, raw);
+    if (!node || typeof node !== "object") return;
+    const s = node as Record<string, unknown>;
+    if (s["x-cavelon-secret"] === true) {
+      found.add(where || "(body)");
+      return;
+    }
+    for (const key of ["allOf", "anyOf", "oneOf"]) for (const sub of list(s[key])) walk(sub, where, depth + 1);
+    if (s.items) walk(s.items, `${where}[]`, depth + 1);
+    for (const [key, sub] of Object.entries((s.properties ?? {}) as Record<string, unknown>)) walk(sub, where ? `${where}.${key}` : key, depth + 1);
+    if (s.additionalProperties && typeof s.additionalProperties === "object") walk(s.additionalProperties, where ? `${where}.*` : "*", depth + 1);
+  };
+  walk(schema, "", 0);
+  return [...found];
+}
+
+function matches(pattern: string, key: string): boolean {
+  try {
+    return new RegExp(pattern, "u").test(key);
+  } catch {
+    return false;
+  }
+}
+
 /** Convert a text argument to the parameter's schema type. */
 export function coerceParameter(param: Parameter, raw: string): unknown {
   const types = schemaTypes(param.schema);
@@ -255,31 +354,49 @@ export function isArrayParameter(param: Parameter): boolean {
   return schemaTypes(param.schema).includes("array");
 }
 
-/** A compact description of a schema for `api describe`: top-level fields and types. */
-export function describeSchema(doc: OpenApiDoc, schema: Record<string, unknown> | undefined): unknown {
+/**
+ * The object schema of an array field's items, through `$ref` and a
+ * nullable `anyOf`; undefined when the field is no array of objects.
+ */
+function arrayItemObject(doc: OpenApiDoc, field: Record<string, unknown>): Record<string, unknown> | undefined {
+  const options = [field, ...((field.anyOf ?? field.oneOf ?? []) as Array<Record<string, unknown>>).map((b) => deref(doc, b) as Record<string, unknown>)];
+  const array = options.find((o) => o?.type === "array" && o.items);
+  if (!array) return undefined;
+  const items = deref(doc, array.items) as Record<string, unknown> | undefined;
+  return items && typeof items.properties === "object" ? (array.items as Record<string, unknown>) : undefined;
+}
+
+/**
+ * A compact description of a schema for `api describe`: top-level fields and
+ * types, and for a field that is an array of objects, its items' fields under
+ * `<field>[]` (a few levels deep), so a body such as `updates: [{id, …}]` shows
+ * what each item needs.
+ */
+export function describeSchema(doc: OpenApiDoc, schema: Record<string, unknown> | undefined, depth = 0): unknown {
   if (!schema) return null;
   const resolved = deref(doc, schema) as Record<string, unknown>;
   const props = resolved.properties as Record<string, Record<string, unknown>> | undefined;
   const ref = typeof schema.$ref === "string" ? schema.$ref.split("/").pop() : undefined;
   if (!props) {
-    if (resolved.type === "array" && resolved.items) return { type: "array", items: describeSchema(doc, resolved.items as Record<string, unknown>) };
+    if (resolved.type === "array" && resolved.items) return { type: "array", items: describeSchema(doc, resolved.items as Record<string, unknown>, depth + 1) };
     return { ...(ref ? { name: ref } : {}), type: resolved.type ?? (schemaTypes(resolved).join("|") || "any") };
   }
   const required = new Set((resolved.required as string[] | undefined) ?? []);
-  return {
-    ...(ref ? { name: ref } : {}),
-    type: "object",
-    fields: Object.fromEntries(
-      Object.entries(props).map(([name, p]) => {
-        const sub = deref(doc, p) as Record<string, unknown>;
-        const subRef = typeof p.$ref === "string" ? p.$ref.split("/").pop() : undefined;
-        const type = subRef ?? (schemaTypes(sub).filter((t) => t !== "null").join("|") || "object");
-        const parts = [type];
-        if (required.has(name)) parts.push("required");
-        if (Array.isArray(sub.enum)) parts.push(`one of ${(sub.enum as unknown[]).join(", ")}`);
-        if (sub.default !== undefined) parts.push(`default ${JSON.stringify(sub.default)}`);
-        return [name, parts.join(", ")];
-      }),
-    ),
-  };
+  const fields: Record<string, unknown> = {};
+  for (const [name, p] of Object.entries(props)) {
+    const sub = deref(doc, p) as Record<string, unknown>;
+    const subRef = typeof p.$ref === "string" ? p.$ref.split("/").pop() : undefined;
+    const items = arrayItemObject(doc, sub);
+    const itemName = items && typeof items.$ref === "string" ? items.$ref.split("/").pop() : undefined;
+    const type = subRef ?? (items ? `array of ${itemName ?? "object"}` : schemaTypes(sub).filter((t) => t !== "null").join("|") || "object");
+    const parts = [type];
+    if (required.has(name)) parts.push("required");
+    if (Array.isArray(sub.enum)) parts.push(`one of ${(sub.enum as unknown[]).join(", ")}`);
+    if (sub.default !== undefined) parts.push(`default ${JSON.stringify(sub.default)}`);
+    if (secretPaths(doc, p).includes("(body)")) parts.push("secret value (x-cavelon-secret): a person enters it");
+    fields[name] = parts.join(", ");
+    // Three levels are enough for a body, and stop a schema that refers to itself.
+    if (items && depth < 3) fields[`${name}[]`] = describeSchema(doc, items, depth + 1);
+  }
+  return { ...(ref ? { name: ref } : {}), type: "object", fields };
 }

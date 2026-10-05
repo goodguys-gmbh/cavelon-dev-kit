@@ -1,3 +1,5 @@
+import type { BlockerDetail } from "./preview-report.js";
+
 /**
  * Exit codes and the one error type every command throws.
  *
@@ -31,6 +33,8 @@ export interface ErrorDetails {
   details?: unknown;
   /** What the instance's own check found, one sentence each (an import's `blockers`). */
   blockers?: string[];
+  /** The same blockers with their code, package path and hint, where a recent instance sends them (`blocker_details`). */
+  blockerDetails?: BlockerDetail[];
 }
 
 export class CavelonError extends Error {
@@ -41,6 +45,7 @@ export class CavelonError extends Error {
   readonly status?: number;
   readonly details?: unknown;
   readonly blockers?: string[];
+  readonly blockerDetails?: BlockerDetail[];
 
   constructor(exitCode: ExitCodeValue, details: ErrorDetails) {
     super(details.message);
@@ -52,6 +57,7 @@ export class CavelonError extends Error {
     this.status = details.status;
     this.details = details.details;
     this.blockers = details.blockers;
+    this.blockerDetails = details.blockerDetails;
   }
 
   toJSON(): Record<string, unknown> {
@@ -61,6 +67,7 @@ export class CavelonError extends Error {
     if (this.status !== undefined) out.status = this.status;
     if (this.details !== undefined) out.details = this.details;
     if (this.blockers?.length) out.blockers = this.blockers;
+    if (this.blockerDetails?.length) out.blocker_details = this.blockerDetails;
     return out;
   }
 }

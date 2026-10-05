@@ -1,12 +1,15 @@
 import { CAPACITY_TUTORIAL_PAGE } from "../capacity.js";
-import { boolOption, CURSOR_OPTION, intOption, LIMIT_OPTION, pageOf, positional, stringOption, type CommandSpec, type Context } from "../command.js";
+import { CURSOR_OPTION, intOption, LIMIT_OPTION, pageOf, positional, stringOption, type CommandSpec, type Context } from "../command.js";
 import type { OpenApiDoc } from "../contracts.js";
 import { CavelonError, ExitCode, usageError } from "../errors.js";
+import { confirmation } from "../confirm-token.js";
 import { moreHint, table } from "../format.js";
 import { callStable, workflowOperation } from "../invoke.js";
 import { deref, jsonBodySchema, validateBody, type Operation } from "../openapi.js";
 import { cavelonCommand, shellWord } from "../shell.js";
+import { STATE_DIR } from "../local-state.js";
 import { listedPages } from "./docs.js";
+import { refreshInventory } from "./inventory.js";
 import { ENV_OPTION, targetFlags } from "./values.js";
 
 /**
@@ -137,8 +140,15 @@ export const modelsList: CommandSpec = {
   examples: ["cavelon models list", "cavelon models list --json"],
   async run(ctx, input) {
     const limit = intOption(input, "limit", { min: 1, max: 500, fallback: 50 })!;
-    const flags = targetFlags(await ctx.session());
+    const session = await ctx.session();
+    const flags = targetFlags(session);
     const rows = await readRows(ctx);
+    // In a solution folder, validate warns about an agent's model that is not among these.
+    if (session.project) {
+      await refreshInventory(session.project.root, "models", rows.map((r) => r.model_id), ctx.io.now()).catch((error: unknown) =>
+        ctx.warn(`Could not keep the model list for validate in ${STATE_DIR}/ (${error instanceof Error ? error.message : String(error)}).`),
+      );
+    }
     const page = pageOf(rows, limit, stringOption(input, "cursor"));
     const items = page.items.map((row) => rowView(row, rows));
     if (!items.length) {
@@ -181,10 +191,11 @@ export const modelsSetLimit: CommandSpec = {
     { name: "limit", description: "Requests the endpoint serves at once (a whole number), or none to clear the limit.", required: true },
   ],
   options: {
-    confirm: { type: "boolean", description: "Change it; without this nothing is changed." },
+    confirm: { type: "boolean", mcpToken: true, description: "Change it; without this nothing is changed." },
     env: ENV_OPTION,
   },
-  examples: ["cavelon models set-limit llama-70b 8", "cavelon models set-limit llama-70b 8 --confirm", "cavelon models set-limit llama-70b none --confirm"],
+  examples: ["cavelon models set-limit llama-70b 8", "cavelon models set-limit llama-70b 8 --confirm",
+    "cavelon models set-limit llama-70b 8 --confirm <token>", "cavelon models set-limit llama-70b none --confirm"],
   async run(ctx, input) {
     const ref = positional(input, "model")!;
     const limit = parseLimit(positional(input, "limit")!);
@@ -214,11 +225,13 @@ export const modelsSetLimit: CommandSpec = {
       return { data: { ...base, changed: false, sent: false }, text: `${label} already has max_concurrent_requests ${limitText(limit)}; nothing to change.` };
     }
     const sharing = model.shares_endpoint_with?.length ? ` It shares the count with ${model.shares_endpoint_with.join(", ")} (same endpoint).` : "";
-    if (!boolOption(input, "confirm")) {
-      const confirm = `cavelon models set-limit ${shellWord(row.model_id)} ${limitText(limit)}${flags} --confirm`;
+    const gate = await confirmation(ctx, input, "models_set_limit", { row: row.id, previous, limit });
+    if (!gate.confirmed) {
+      const confirm = gate.confirm(`cavelon models set-limit ${shellWord(row.model_id)} ${limitText(limit)}${flags} --confirm`);
       return {
-        data: { ...base, changed: false, sent: false, confirm },
-        text: `${label}: max_concurrent_requests ${limitText(previous)} → ${limitText(limit)}.${sharing}\nNothing was changed. Change it with: ${confirm}`,
+        data: { ...base, changed: false, sent: false, confirm, ...gate.fields },
+        text: `${label}: max_concurrent_requests ${limitText(previous)} → ${limitText(limit)}.${sharing}\n${gate.mismatch ? `${gate.mismatch}\n` : ""}Nothing was changed. Change it with: ${confirm}`,
+        ...(gate.exitCode ? { exitCode: gate.exitCode } : {}),
       };
     }
     const saved = await callStable<ModelRow>(ctx, "PATCH", ROW_ROUTE, "changing Model Registry rows", {

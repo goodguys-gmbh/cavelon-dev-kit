@@ -29,8 +29,8 @@ the environment over the files. The exit codes are listed in [Troubleshooting](t
 ## Contents
 
 - **Session:** [`setup`](#cavelon-setup), [`login`](#cavelon-login), [`logout`](#cavelon-logout), [`whoami`](#cavelon-whoami), [`use`](#cavelon-use), [`status`](#cavelon-status)
-- **Solution as code:** [`init`](#cavelon-init), [`pull`](#cavelon-pull), [`validate`](#cavelon-validate), [`apply`](#cavelon-apply), [`activate`](#cavelon-activate), [`explain`](#cavelon-explain)
-- **Tenants and solutions:** [`tenant create`](#cavelon-tenant-create), [`tenant list`](#cavelon-tenant-list), [`harness list`](#cavelon-harness-list), [`harness new`](#cavelon-harness-new), [`harness clone`](#cavelon-harness-clone)
+- **Solution as code:** [`init`](#cavelon-init), [`pull`](#cavelon-pull), [`validate`](#cavelon-validate), [`fmt`](#cavelon-fmt), [`schema`](#cavelon-schema), [`apply`](#cavelon-apply), [`activate`](#cavelon-activate), [`explain`](#cavelon-explain)
+- **Tenants and solutions:** [`tenant create`](#cavelon-tenant-create), [`tenant list`](#cavelon-tenant-list), [`harness list`](#cavelon-harness-list), [`harness new`](#cavelon-harness-new), [`harness clone`](#cavelon-harness-clone), [`harness default`](#cavelon-harness-default)
 - **Knowledge, tests and traces:** [`kb upload`](#cavelon-kb-upload), [`test run`](#cavelon-test-run), [`wait`](#cavelon-wait), [`watch`](#cavelon-watch), [`trace`](#cavelon-trace)
 - **Variables and secrets:** [`variables list`](#cavelon-variables-list), [`variables get`](#cavelon-variables-get), [`variables set`](#cavelon-variables-set), [`variables delete`](#cavelon-variables-delete), [`secrets list`](#cavelon-secrets-list), [`secrets set`](#cavelon-secrets-set), [`secrets delete`](#cavelon-secrets-delete)
 - **Limits and capacity:** [`limits`](#cavelon-limits), [`limits set`](#cavelon-limits-set), [`models list`](#cavelon-models-list), [`models set-limit`](#cavelon-models-set-limit)
@@ -38,6 +38,7 @@ the environment over the files. The exit codes are listed in [Troubleshooting](t
 - **Sandboxes:** [`sandbox list`](#cavelon-sandbox-list), [`sandbox validate`](#cavelon-sandbox-validate), [`sandbox files`](#cavelon-sandbox-files), [`sandbox cat`](#cavelon-sandbox-cat), [`sandbox activity`](#cavelon-sandbox-activity), [`sandbox logs`](#cavelon-sandbox-logs), [`sandbox receipt`](#cavelon-sandbox-receipt), [`sandbox seed`](#cavelon-sandbox-seed), [`sandbox refresh`](#cavelon-sandbox-refresh), [`artifacts export`](#cavelon-artifacts-export)
 - **API and docs:** [`api list`](#cavelon-api-list), [`api describe`](#cavelon-api-describe), [`api`](#cavelon-api), [`docs search`](#cavelon-docs-search), [`docs get`](#cavelon-docs-get)
 - **For agents:** [`commands`](#cavelon-commands), [`mcp`](#cavelon-mcp)
+- **Other commands:** [`deactivate`](#cavelon-deactivate), [`chat`](#cavelon-chat)
 
 ## Session
 
@@ -53,13 +54,14 @@ Set up your coding agents for Cavelon and log in, in one guided step.
 cavelon setup [options]
 ```
 
-Finds Claude Code, Codex, Cursor, VS Code with GitHub Copilot, Gemini CLI and Kiro, shows what it will change for each, asks once and does it: Claude Code and Codex get the Cavelon plugin through their own plugin command; the others get the `cavelon` MCP server in their user MCP configuration and the skills in their user skills folder. It touches nothing else in those files and records what it did, so --remove undoes exactly that. Then it logs in if needed, choosing the tenant by name as `login` does. The server starts as `cavelon mcp` when cavelon is installed, otherwise through npx. --check reports what is set up and working: each agent's entry, the MCP server starting, and the login. Without a terminal it changes nothing unless --yes.
+Finds Claude Code, Codex, Cursor, VS Code with GitHub Copilot, Gemini CLI and Kiro, shows what it will change for each, asks once and does it: Claude Code and Codex get the Cavelon plugin through their own plugin command; the others get the `cavelon` MCP server in their user MCP configuration and the skills in their user skills folder. It touches nothing else in those files and records what it did, so --remove undoes exactly that. Then it logs in if needed, choosing the tenant by name as `login` does. The server starts as `cavelon mcp` when cavelon is installed, otherwise through npx. --check reports what is set up and working: each agent's entry, the MCP server starting, and the login. An agent found but never set up for Cavelon is reported and skipped (exit 0 when the rest works); --strict, or naming it with --agents, counts it. Without a terminal it changes nothing unless --yes.
 
 | Option | Description |
 |---|---|
 | `--agents <list>` | Only these agents: claude, codex, cursor, copilot, gemini, kiro, or all (comma-separated). Default: every agent found. Repeatable. |
 | `-y, --yes` | Make the changes without asking. |
 | `--check` | Report what is set up and working; change nothing. |
+| `--strict` | With --check: fail for every agent found that is not set up, not only the ones setup set up. |
 | `--remove` | Undo what setup did (your login stays). |
 
 Examples:
@@ -81,7 +83,7 @@ Store a token for an instance (a person runs this, never the agent).
 cavelon login [options]
 ```
 
-Asks for the token without echoing it, or reads it from standard input with --token-stdin. It is never an argument. Create a personal access token (cvpat_…) on /account/access-tokens; a tenant API key (cbp_…) also works. The token is kept in the operating system's credential store, or in a file only you can read. Without --tenant, login finds the tenants the token reaches: one is used; from several, a person chooses on a terminal by number or name; without a terminal the token is stored and login prints one `cavelon use` line per tenant (exit 2). An operator's token that reaches every tenant asks for part of the tenant's name. --tenant takes the tenant's name, slug or id. An older instance that lists no tenants places the token itself, or needs --tenant &lt;tenant-id&gt;.
+Asks for the token without echoing it, or reads it from standard input with --token-stdin. It is never an argument. Create a personal access token (cvpat_…) on /account/access-tokens; a tenant API key (cbp_…) also works. The token is kept in the operating system's credential store, or in a file only you can read. Without --tenant, login finds the tenants the token reaches: one is used; from several, a person chooses on a terminal by number or name; without a terminal the token is stored and login prints one `cavelon use` line per tenant (exit 2). An operator's token that reaches every tenant asks for part of the tenant's name to start in; Enter leaves the choice for later (`cavelon use`). --tenant takes the tenant's name, slug or id. An older instance that lists no tenants places the token itself, or needs --tenant &lt;tenant-id&gt;.
 
 | Option | Description |
 |---|---|
@@ -179,7 +181,8 @@ Never overwrites a file it did not create. AGENTS.md, .gitignore and an existing
 
 | Option | Description | MCP |
 |---|---|---|
-| `--harness <harness>` | The solution (harness) this folder holds, by name, slug or id; its slug goes into cavelon.yaml. Without it, init asks on a terminal. | yes |
+| `--harness <harness>` | The solution (harness) this folder holds, by name, slug or id; its slug goes into cavelon.yaml. One that is not on the instance yet is created as a draft with that name, unless an existing solution's name is close to it: then init refuses, naming that one, and --new creates the new one. Without it, init asks on a terminal. | yes |
+| `--new` | Create the solution --harness names as a new draft, even when an existing solution has a similar name (refused when one has that very name or slug). | yes |
 | `--agents <list>` | Write the fallback for these agents: claude, codex, cursor, copilot, gemini, kiro, pi, other or all (comma-separated). Repeatable. | yes |
 | `--hook` | Add a git pre-commit hook that runs `cavelon validate`; never in a hooks folder outside the repository. | yes |
 | `--update` | Only bring the marked blocks and fallback files to this version. | yes |
@@ -191,6 +194,7 @@ Examples:
 ```bash
 cavelon init
 cavelon init --instance https://cavelon.example.com --tenant "Acme Support" --harness "Support FAQ"
+cavelon init --tenant acme --harness "Support FAQ v2" --new
 cavelon init --agents codex,cursor --hook
 cavelon init --update
 cavelon init --instance https://cavelon.example.com --tenant acme --from ./blueprint.json
@@ -206,18 +210,19 @@ Write the instance's package into package/ (split along the schema's sections) a
 cavelon pull [options]
 ```
 
-With a solution (--harness, or cavelon.yaml's harness), exports that solution; without one, the tenant's full configuration. A file whose content did not change keeps its bytes, so `git diff` shows what changed on the instance. Files of sections the schema does not know are kept byte for byte. Refuses when package files have uncommitted changes, unless --force; outside a git repository, when a file it would overwrite or remove changed since the last pull.
+With a solution (--harness, or cavelon.yaml's harness), exports that solution; without one, the tenant's full configuration. A file whose content did not change keeps its bytes, so `git diff` shows what changed on the instance; a field the export spells out that the file leaves out (an empty list, a default) is no change. A test suite goes back to the file it was pulled into or applied from, whatever its name. Files of sections the schema does not know are kept byte for byte. A solution's pull leaves the tenant-wide sections (the tenant's settings, its model list) out of the folder, unless --tenant-wide; it says when the export carries none. Refuses when package files have uncommitted changes, unless --force; outside a git repository, when a file it would overwrite or remove changed since the last pull. A file as the last pull or apply left it (digests in .cavelon/) counts as unchanged, committed or not.
 
 | Option | Description | MCP |
 |---|---|---|
 | `--harness <harness>` | The solution to export, by name, slug or id; its slug is recorded in cavelon.yaml when it names none. | yes |
-| `--force` | Overwrite package files that have uncommitted changes (outside git: changes since the last pull). | yes |
+| `--force` | Overwrite package files that have uncommitted changes since the last pull or apply. | yes |
+| `--tenant-wide` | With a solution, also write the tenant-wide sections (tenant_settings, model_registry, …): asked of the export where the instance takes include_tenant_wide. Only `apply --tenant-wide` sends them back, for the whole tenant. | yes |
 
 Examples:
 
 ```bash
 cavelon pull --harness support
-cavelon pull && git diff -- package tests
+cavelon pull && git status --short -- package tests
 ```
 
 ### cavelon validate
@@ -230,15 +235,69 @@ Check the package files against the instance's package schema, offline.
 cavelon validate [options]
 ```
 
-Uses the schema and error catalog cached by init, pull or apply; fetches them only when none is cached or a development build's copy is past its time-to-live, and never with --offline. A development build keeps one version while its schema changes, so its copy is read again after a minute (CAVELON_CONTRACT_TTL_SECONDS), or checked with the ETag the instance sent with it; --verbose says which copy was used. Warns (never fails) when a fan-out or Map loop's max_concurrency is above the instance's branch width, and when the tenant runs fan-outs and Map loops in sequence, from the limits the instance last published. Each finding carries a code: `cavelon explain <code>` says more. The import preview checks everything again on the server.
+Uses the schema and error catalog cached by init, pull or apply; fetches them only when none is cached or a development build's copy is past its time-to-live, and never with --offline. A development build keeps one version while its schema changes, so its copy is read again after a minute (CAVELON_CONTRACT_TTL_SECONDS), or checked with the ETag the instance sent with it; --verbose says which copy was used. Warns (never fails) when a fan-out or Map loop's max_concurrency is above the instance's branch width, and when the tenant runs fan-outs and Map loops in sequence, from the limits the instance last published. References to skills, tools, knowledge bases, solutions and models outside the package are checked against the tenant's lists in .cavelon/inventory.json (pull, models list); a list no command has read yet is read now, unless --offline, and a check that cannot be made is named (`skipped` in --json). A reference that is in neither is a warning, as it may be created on the instance before the import; the import preview blocks it otherwise, so validate does not say "Valid" then, and --strict fails on every warning (exit 3). Each finding carries a code: `cavelon explain <code>` says more. The import preview checks everything again on the server.
 
-With --json, `warnings` is always a list of `{code, message}` objects: the warning findings (at most --limit), then the warnings about the run, such as a stale copy of the schema, with code null. `warning_count` counts them all and `error_count` the errors (`errors` is the same number); `findings` has each finding's file, line and hint.
+With --json, `warnings` is always a list of `{code, message}` objects: the warning findings (at most --limit), then the warnings about the run, such as a stale copy of the schema, with code null. `warning_count` counts them all and `error_count` the errors (`errors` is the same number); `findings` has each finding's file, line and hint; `blocking_count` counts the warnings the import preview blocks on.
 
 | Option | Description | MCP |
 |---|---|---|
 | `--offline` | Never contact the instance, even when nothing is cached. | yes |
 | `--limit <n>` | Print at most n findings (default 50). | yes |
 | `--verbose` | Also say which copy of the package schema was used: cached or read now, when, and its hash. | yes |
+| `--strict` | Fail (exit 3) on warnings too, such as a reference the import preview will block unless it exists by then. | yes |
+
+### cavelon fmt
+
+Bring the package files into the export's form (field order and defaults from the package schema), offline.
+
+**changing** · MCP tool: `fmt`
+
+```text
+cavelon fmt [options]
+```
+
+A file whose value the export would spell differently is rewritten: each field in the schema's order, and each field it leaves out set to what the instance gives it, as the export writes it: the schema's default, an empty list or object for a list or object field without one. The instance applies the same values, so nothing changes in what apply sends but the spelling, with one exception: an entry of a list that leaves out an `..._order` field (sort_order, display_order, step_order) gets its position, so the instance keeps the written order instead of ordering entries that all carry the default its own way (test cases by name). Lists become block lists; the persona file shows every field, the unset ones as comments. Comments in a rewritten file are not kept, as pull does not keep them: fmt names each file whose comments it drops (with --check, would drop), so keep notes you need elsewhere first. A file already in that form keeps its bytes, and so do the files of sections the schema does not know. Run it after writing package files by hand and before `apply`, so the next `pull` shows only what changed on the instance. --check writes nothing and exits 3 when a file would change. Uses the cached package schema (as validate does); --offline never contacts the instance.
+
+| Option | Description | MCP |
+|---|---|---|
+| `--check` | Write nothing; exit 3 when a file would change. | yes |
+| `--offline` | Never contact the instance, even when no schema is cached. | yes |
+
+Examples:
+
+```bash
+cavelon fmt
+cavelon fmt --check
+```
+
+### cavelon schema
+
+Show the package schema the instance publishes: its sections, or the fields of a section or a nested type, with a minimal example.
+
+**read-only** · MCP tool: `package_schema`
+
+```text
+cavelon schema [section] [options]
+```
+
+Without an argument, lists the sections with the file each is kept in. With a section, lists its fields (type, required, allowed values, default) and prints the smallest entry that has every required field, ready to copy into the file, and an example with one entry of each nested list. A field whose entries have fields of their own is reached by its path (`agents.handoffs`, `test_suites.test_cases.steps`) or by its type's name (`PackageAgentHandoff`); the section's output names them. Where entries take one of several shapes (a step's evaluation_criteria: a text, a judge criterion, an assertion by type), each shape is listed with its fields. Placeholders are written &lt;field&gt;. Reads the schema as `validate` does: the cached copy first, the instance otherwise.
+
+| Argument | Description |
+|---|---|
+| `section` | A section of the package (agents), a path to a nested field (agents.handoffs, test_suites.test_cases.steps), or a type name (PackageAgentHandoff). |
+
+| Option | Description | MCP |
+|---|---|---|
+| `--offline` | Use only the cached schema; never contact the instance. | yes |
+
+Examples:
+
+```bash
+cavelon schema
+cavelon schema agents
+cavelon schema agents.handoffs
+cavelon schema test_suites.test_cases.steps.evaluation_criteria --json
+```
 
 ### cavelon apply
 
@@ -250,26 +309,31 @@ Preview the package files against the instance and print a preview id; --confirm
 cavelon apply [options]
 ```
 
-Without --confirm nothing is imported: the preview shows what changes, which active solutions it reaches, what the target still needs (secrets and variables with the command that sets each, grants, runtime bindings, trigger identities), loop budgets and ignored sections, and is stored in .cavelon/. When the env file names a solution that does not exist yet, apply creates it as a draft first. A person sets the secrets (`cavelon secrets set <name>`), never the agent. Show a preview that reaches an active solution or env/prod to a person before confirming. A stale preview exits 4; so does an import its own check refuses when it applies, naming each blocker.
+Without --confirm nothing is imported: the preview shows what changes, which active solutions it reaches, what the target still needs (secrets and variables with the command that sets each, grants, runtime bindings, trigger identities), loop budgets and ignored sections, and is stored in .cavelon/. A preview never creates the solution: one the env file names that is not on the instance yet gets the `cavelon harness new` command that creates it as a draft. A person sets the secrets (`cavelon secrets set <name>`), never the agent. Show a preview that reaches an active solution or env/prod to a person before confirming. A stale preview exits 4 and imports nothing: one whose target changed on the instance since, one whose package files changed since (what they hold, not their formatting; --allow-stale imports what the preview showed anyway), and one older than a day. So does an import its own check refuses when it applies, naming each blocker. --discard &lt;id\|all&gt; forgets stored previews; `cavelon status` lists them with when each expires. A solution's import leaves the package's tenant-wide sections (tenant_settings, model_registry, …) out; --tenant-wide imports them, for every solution of the tenant. An instance that does not publish include_tenant_wide imports them with every solution's package, and apply says so.
 
 | Option | Description | MCP |
 |---|---|---|
 | `--env <name>` | Use env/&lt;name&gt;.yaml: its tenant, solution and runtime bindings. | yes |
 | `--harness <harness>` | The solution (harness): its name, slug or id; default: env file, then cavelon.yaml. | yes |
 | `--confirm <preview-id>` | Import exactly this stored preview. | yes |
+| `--allow-stale` | With --confirm: import what the preview showed although the package files changed since it. | yes |
+| `--discard <preview-id|all>` | Forget this stored preview, or all of them; changes nothing on the instance. | yes |
 | `--mode <mode>` | overwrite (default) or replace (deletes what the package does not hold). | yes |
+| `--tenant-wide` | With a solution, also import the package's tenant-wide sections (tenant_settings, model_registry, …): they change for every solution of the tenant, so a person sees the preview first. | yes |
 
 Examples:
 
 ```bash
 cavelon apply --env test
 cavelon apply --confirm <preview-id>
+cavelon apply --env test --tenant-wide
 cavelon apply --env prod --json
+cavelon apply --discard all
 ```
 
 ### cavelon activate
 
-Activate a solution through the readiness gate (never by force).
+Activate a solution through the readiness gate (never by force); says whether it is the tenant's default route.
 
 **changing** · MCP tool: `activate`
 
@@ -277,12 +341,23 @@ Activate a solution through the readiness gate (never by force).
 cavelon activate [options]
 ```
 
-Only when every readiness check passes, and with a personal access token only when it was created with "may activate". Activating without the evidence stays a person's decision in the Admin.
+Only when every readiness check passes, and with a personal access token only when it was created with "may activate". Activating without the evidence stays a person's decision in the Admin. Afterwards it says whether the solution is the tenant's default route (the one the tenant's chat and widget answer with where no solution is named). --make-default previews making it the default; with --confirm as well, it changes it. That changes live traffic: show the preview to a person and confirm only with their yes. `cavelon harness default` does the same for an active solution.
 
 | Option | Description | MCP |
 |---|---|---|
 | `--harness <harness>` | The solution (harness): its name, slug or id; default: env file, then cavelon.yaml. | yes |
 | `--env <name>` | Use env/&lt;name&gt;.yaml: its tenant, solution and runtime bindings. | yes |
+| `--make-default` | Also make it the tenant's default route: previews the change; with --confirm, makes it. | yes |
+| `--confirm [<token>]` | With --make-default: change the default route (after a person saw the preview). In a person's terminal the flag alone confirms; run by a coding agent, `--confirm <token>` with the token its preview printed (the bare flag only shows the preview there, exit 5). | yes |
+
+Examples:
+
+```bash
+cavelon activate
+cavelon activate --make-default
+cavelon activate --make-default --confirm
+cavelon activate --make-default --confirm <token>
+```
 
 ### cavelon explain
 
@@ -294,11 +369,11 @@ Look a code up in the instance's error catalog: what it means and how to fix it.
 cavelon explain <code>
 ```
 
-Rule codes come from the package and graph checks, API error codes from failed requests. Uses the cached catalog first.
+Rule codes come from the package and graph checks, API error codes from failed requests; cavelon's own codes (validate's findings, and errors the CLI raises itself, such as operation_not_found or uncommitted_changes) are known too. Uses the cached catalog first. Where the instance's fix names an API route, the command that does the same is added. An unknown code gets the closest known ones (a typo away, the same start). Also explains the test-case statuses that are neither pass nor fail: calibration_required, pending_review, not_run, not_evaluated, skip; and the values of a retrieval span's knowledge_outcome (usable_evidence, content_gap, unusable_hits, retrieval_fault, deliberately_unanswerable, no_usable_evidence), from the instance's catalog (area knowledge_outcome) where it lists them.
 
 | Argument | Description |
 |---|---|
-| `code` | The code, e.g. from `cavelon validate` or an error's code. Required. |
+| `code` | The code, e.g. from `cavelon validate` or an error's code, or a test-case status. Required. |
 
 ## Tenants and solutions
 
@@ -314,7 +389,7 @@ Create a tenant (personal access token in Platform mode with tenants.manage).
 cavelon tenant create <slug> [options]
 ```
 
-A tenant API key never can. Inviting people and assigning roles stay in the Admin.
+A tenant API key never can. Before sending, the token is checked: one that may not enter Platform mode, or enters it without tenants.manage, is refused with exit 7 and nothing is sent. With --use, the new tenant is chosen only once the instance confirms the token acts in it. Inviting people and assigning roles stay in the Admin.
 
 | Argument | Description |
 |---|---|
@@ -324,7 +399,7 @@ A tenant API key never can. Inviting people and assigning roles stay in the Admi
 |---|---|---|
 | `--name <name>` | Display name (default: the slug). | yes |
 | `--plan <plan>` | Licence plan, when the instance knows several. | yes |
-| `--use` | Switch to the new tenant afterwards (`cavelon use`). | yes |
+| `--use` | Switch to the new tenant afterwards (`cavelon use`), once the token is known to act in it. | yes |
 | `--idempotency-key <key>` | Send an Idempotency-Key, so a retry does not create a second one. | yes |
 
 ### cavelon tenant list
@@ -347,13 +422,15 @@ A personal access token in Platform mode sees every tenant; any other sees the t
 
 ### cavelon harness list
 
-List the tenant's solutions (harnesses).
+List the tenant's solutions (harnesses), marking the default route.
 
 **read-only** · MCP tool: `harness_list`
 
 ```text
 cavelon harness list [options]
 ```
+
+DEFAULT marks the tenant's default route: the solution that answers where a conversation names none (the tenant's chat and widget). An instance that does not say which one it is leaves the column out; `is_default` in --json is null then.
 
 | Option | Description | MCP |
 |---|---|---|
@@ -405,6 +482,34 @@ cavelon harness clone <source> [options]
 | `--no-triggers` | Do not copy the triggers. | yes |
 | `--idempotency-key <key>` | Send an Idempotency-Key, so a retry does not create a second one. | yes |
 
+### cavelon harness default
+
+Make a solution the tenant's default route; previews first, --confirm changes it.
+
+**changing** · MCP tool: `harness_default`
+
+```text
+cavelon harness default [solution] [options]
+```
+
+The default route is the solution that answers where a conversation names none: the tenant's chat and widget. A new tenant's default is an empty `default` solution, so a solution built beside it answers nobody there until it becomes the default. Without --confirm nothing changes: the preview names the current default and the one that would replace it. This changes live traffic, so show the preview to a person and confirm only with their yes. `is_default` in harnesses.yaml is not applied by `apply`; this is the way to set it.
+
+| Argument | Description |
+|---|---|
+| `solution` | Name, slug or id of the solution; default: cavelon.yaml's harness. |
+
+| Option | Description | MCP |
+|---|---|---|
+| `--confirm [<token>]` | Change the default route (after a person saw the preview). In a person's terminal the flag alone confirms; run by a coding agent, `--confirm <token>` with the token its preview printed (the bare flag only shows the preview there, exit 5). | yes |
+
+Examples:
+
+```bash
+cavelon harness default support
+cavelon harness default support --confirm
+cavelon harness default support --confirm <token>
+```
+
 ## Knowledge, tests and traces
 
 Seed knowledge bases, run test suites, wait for the work and read what happened.
@@ -419,7 +524,7 @@ Upload a folder's documents into a knowledge base; returns operation ids.
 cavelon kb upload <dir> [options]
 ```
 
-Hidden files are skipped. Ingestion runs on the instance; `cavelon wait` follows it. Files are checked against the instance's published upload limits first. A .zip goes only to a tenant that expands archives, and only within its caps on file count, unpacked size and compression ratio.
+Hidden files are skipped. Ingestion runs on the instance; `cavelon wait` follows it. Files are checked against the instance's published upload limits first. A .zip goes only to a tenant that expands archives, and only within its caps on file count, unpacked size and compression ratio. A file named like an active document of the knowledge base is listed, with what happens to that document. An instance that replaces same-named documents on upload does so (--keep-both keeps both); elsewhere the old one stays active. --replace replaces it: through the instance's own replacement where its upload offers one, else the kit deactivates the old document after the upload (after the wait with --wait), and then only with --confirm. --dry-run also names each file identical to an active document, which the upload would not create again, where the instance publishes its documents' file hashes.
 
 | Argument | Description |
 |---|---|
@@ -430,7 +535,10 @@ Hidden files are skipped. Ingestion runs on the instance; `cavelon wait` follows
 | `--kb <kb>` | Knowledge base name or id (required). | yes |
 | `-r, --recursive` | Include subfolders. | yes |
 | `--ext <ext>` | Only these file extensions (pdf, md, …). Repeatable. | yes |
-| `--dry-run` | List what would be uploaded, upload nothing. | yes |
+| `--replace` | Replace active documents with the same file name. | yes |
+| `--keep-both` | Keep active documents with the same file name next to the new ones. | yes |
+| `--confirm [<token>]` | With --replace, deactivate the old documents the instance does not replace itself; without it nothing is sent. In a person's terminal the flag alone confirms; run by a coding agent, `--confirm <token>` with the token its preview printed (the bare flag only shows the preview there, exit 5). | yes |
+| `--dry-run` | List what would be uploaded, replaced and found identical; upload nothing. | yes |
 | `--wait` | Wait for the work to finish (see `cavelon wait`). | CLI only |
 | `--timeout <duration>` | Stop waiting after this long (90s, 5m; default 90s). The work goes on; run wait again to resume. | yes |
 
@@ -438,6 +546,7 @@ Examples:
 
 ```bash
 cavelon kb upload ./docs --kb FAQ
+cavelon kb upload ./docs/bergbahn-faq.md --kb FAQ --replace --dry-run
 cavelon kb upload ./manuals --kb FAQ -r --ext pdf --wait --timeout 5m
 ```
 
@@ -478,7 +587,7 @@ Wait until operations finish, need a person, or the timeout passes.
 cavelon wait <operation...> [options]
 ```
 
-Exit 0 when all succeeded, 1 when one failed or was cancelled, 5 when one needs a person, 6 when the timeout passed first. A test run that finished with failed cases counts as failed, and its cases are named. The state is printed in every case, and a second `wait` resumes.
+Exit 0 when all succeeded, 1 when one failed or was cancelled, 5 when one needs a person, 6 when one still runs at the end (timed_out says whether it waited the whole timeout; --timeout 0 reads the state once). A test run that finished with failed cases counts as failed, and its cases are named. The state is printed in every case with waited_ms, and a second `wait` resumes. As the MCP tool operation_status it returns the state at once unless given a timeout, and waits at most 50 s.
 
 | Argument | Description |
 |---|---|
@@ -486,7 +595,7 @@ Exit 0 when all succeeded, 1 when one failed or was cancelled, 5 when one needs 
 
 | Option | Description | MCP |
 |---|---|---|
-| `--timeout <duration>` | Stop waiting after this long (90s, 5m; default 90s). The work goes on; run wait again to resume. | yes |
+| `--timeout <duration>` | Stop waiting after this long (90s, 5m; default 90s). The work goes on; run wait again to resume. As an MCP tool: none by default (returns at once), at most 50s. | yes |
 
 Examples:
 
@@ -642,7 +751,7 @@ Without --confirm, shows the variable and deletes nothing. A prompt or tool that
 
 | Option | Description |
 |---|---|
-| `--confirm` | Delete it; without this nothing is deleted. |
+| `--confirm [<token>]` | Delete it; without this nothing is deleted. In a person's terminal the flag alone confirms; run by a coding agent, `--confirm <token>` with the token its preview printed (the bare flag only shows the preview there, exit 5). |
 | `--env <name>` | Act in the tenant that env/&lt;name&gt;.yaml names. |
 
 Examples:
@@ -650,6 +759,7 @@ Examples:
 ```bash
 cavelon variables delete old_url
 cavelon variables delete old_url --confirm
+cavelon variables delete old_url --confirm <token>
 ```
 
 ### cavelon secrets list
@@ -723,7 +833,7 @@ Without --confirm, shows the secret's status and deletes nothing. A tool or prom
 
 | Option | Description |
 |---|---|
-| `--confirm` | Delete it; without this nothing is deleted. |
+| `--confirm [<token>]` | Delete it; without this nothing is deleted. In a person's terminal the flag alone confirms; run by a coding agent, `--confirm <token>` with the token its preview printed (the bare flag only shows the preview there, exit 5). |
 | `--env <name>` | Act in the tenant that env/&lt;name&gt;.yaml names. |
 
 Examples:
@@ -731,6 +841,7 @@ Examples:
 ```bash
 cavelon secrets delete old_token
 cavelon secrets delete old_token --confirm
+cavelon secrets delete old_token --confirm <token>
 ```
 
 ## Limits and capacity
@@ -781,7 +892,7 @@ Reads the limit's published change (operation, body field, bounds, permissions, 
 
 | Option | Description | MCP |
 |---|---|---|
-| `--confirm` | Change it; without this nothing is changed. | yes |
+| `--confirm [<token>]` | Change it; without this nothing is changed. In a person's terminal the flag alone confirms; run by a coding agent, `--confirm <token>` with the token its preview printed (the bare flag only shows the preview there, exit 5). | yes |
 | `--env <name>` | Act in the tenant that env/&lt;name&gt;.yaml names. | yes |
 
 Examples:
@@ -789,6 +900,7 @@ Examples:
 ```bash
 cavelon limits set kb_upload_max_file_size_mb 50
 cavelon limits set kb_upload_max_file_size_mb 50 --confirm
+cavelon limits set kb_upload_max_file_size_mb 50 --confirm <token>
 cavelon limits set rate_limit_chat_rpm none --confirm
 cavelon limits set monthly_inference_token_budget 2000000
 cavelon limits set monthly_processing_step_cap none --confirm
@@ -840,7 +952,7 @@ Sets the row's max_concurrent_requests to &lt;n&gt;, or clears it with none. Wit
 
 | Option | Description | MCP |
 |---|---|---|
-| `--confirm` | Change it; without this nothing is changed. | yes |
+| `--confirm [<token>]` | Change it; without this nothing is changed. In a person's terminal the flag alone confirms; run by a coding agent, `--confirm <token>` with the token its preview printed (the bare flag only shows the preview there, exit 5). | yes |
 | `--env <name>` | Act in the tenant that env/&lt;name&gt;.yaml names. | yes |
 
 Examples:
@@ -848,6 +960,7 @@ Examples:
 ```bash
 cavelon models set-limit llama-70b 8
 cavelon models set-limit llama-70b 8 --confirm
+cavelon models set-limit llama-70b 8 --confirm <token>
 cavelon models set-limit llama-70b none --confirm
 ```
 
@@ -1017,13 +1130,14 @@ Without --confirm, shows what would stop and stops nothing. Stopping the run sto
 
 | Option | Description | MCP |
 |---|---|---|
-| `--confirm` | Stop the run; without it nothing is stopped. | yes |
+| `--confirm [<token>]` | Stop the run; without it nothing is stopped. In a person's terminal the flag alone confirms; run by a coding agent, `--confirm <token>` with the token its preview printed (the bare flag only shows the preview there, exit 5). | yes |
 
 Examples:
 
 ```bash
 cavelon loop cancel <run>
 cavelon loop cancel <run> --confirm
+cavelon loop cancel <run> --confirm <token>
 ```
 
 ### cavelon trigger identity
@@ -1046,13 +1160,14 @@ Without &lt;key&gt; or --clear, shows the binding. Binding gives the trigger sta
 | Option | Description | MCP |
 |---|---|---|
 | `--clear` | Remove the binding; scheduled and webhook runs then cannot start. | yes |
-| `--confirm` | Make the change; without it nothing changes. | yes |
+| `--confirm [<token>]` | Make the change; without it nothing changes. In a person's terminal the flag alone confirms; run by a coding agent, `--confirm <token>` with the token its preview printed (the bare flag only shows the preview there, exit 5). | yes |
 
 Examples:
 
 ```bash
 cavelon trigger identity orders
 cavelon trigger identity orders loop-runner --confirm
+cavelon trigger identity orders loop-runner --confirm <token>
 cavelon trigger identity orders --clear --confirm
 ```
 
@@ -1269,7 +1384,7 @@ Isolated container only; on a customer VM, put the files on the VM and run `sand
 |---|---|---|
 | `--harness <harness>` | The solution the Sandbox is read for, by name, slug or id (default: cavelon.yaml's, or the Sandbox's only allowed one). | yes |
 | `--revision <revision>` | The workspace revision the job expects (default: the current one). | yes |
-| `--confirm` | Send it; without it nothing changes. | yes |
+| `--confirm [<token>]` | Send it; without it nothing changes. In a person's terminal the flag alone confirms; run by a coding agent, `--confirm <token>` with the token its preview printed (the bare flag only shows the preview there, exit 5). | yes |
 | `--wait` | Wait for the job to finish (see `cavelon wait`). | CLI only |
 | `--timeout <duration>` | Stop waiting after this long (90s, 5m; default 90s). The work goes on; run wait again to resume. | yes |
 | `--idempotency-key <uuid>` | The Idempotency-Key to send (a UUID), so a retry of the same call does nothing twice. | yes |
@@ -1279,6 +1394,7 @@ Examples:
 ```bash
 cavelon sandbox seed orders-test seeds/orders
 cavelon sandbox seed orders-test seeds/orders --confirm --wait
+cavelon sandbox seed orders-test seeds/orders --confirm <token> --wait
 ```
 
 ### cavelon sandbox refresh
@@ -1361,7 +1477,7 @@ cavelon api list [options]
 | `--search <text>` | Only operations whose name, path or summary contains the text. | yes |
 | `--method <method>` | Only this HTTP method (GET, POST, …). | yes |
 | `--tags` | List the tags with their operation counts instead. | yes |
-| `--limit <n>` | Return at most n items. | yes |
+| `--limit <n>` | Return at most n operations (default 50, 0 for all). | yes |
 | `--cursor <cursor>` | Continue after the previous page (its next_cursor). | yes |
 
 ### cavelon api describe
@@ -1388,7 +1504,7 @@ Call any operation the instance publishes in its OpenAPI.
 cavelon api <operation> [params...] [options]
 ```
 
-The operation is its operationId or the short name before FastAPI's path suffix (list_harnesses). Parameters: -p name=value or name=value. Body: --json '&lt;json&gt;', --json @file.json or --json - (stdin). The body is checked against the operation's schema before it is sent. As an MCP tool, an operation that changes something returns what it would send and sends it only with confirm; one the instance marks for a person only (x-cavelon-person-only) is refused, as are files outside the solution folder. On an instance that marks none, one that changes a secret, creates or revokes a credential or decides an approval is refused.
+The operation is its operationId or the short name before FastAPI's path suffix (list_harnesses). Parameters: -p name=value or name=value (not --name). Body: --body '&lt;json&gt;', --body @file.json or --body - (stdin); --json &lt;body&gt; still works for now but is deprecated: --json alone prints JSON, as on every command. The body is checked against the operation's schema before it is sent. As an MCP tool, or run by a coding agent (CLAUDECODE, CODEX_THREAD_ID, CODEX_SANDBOX, CURSOR_AGENT, GEMINI_CLI, COPILOT_CLI, COPILOT_AGENT, AI_AGENT or CAVELON_AGENT=1 is set), an operation that changes something returns what it would send and a confirm token, and sends it only with that token: --confirm &lt;token&gt;, or confirm: "&lt;token&gt;" as an MCP tool. A changed request needs a new preview; confirm: true is refused. Run by an agent, one the instance marks for a person only (x-cavelon-person-only) is refused, as is a body that sets a field the instance marks as a secret value (x-cavelon-secret) and a file outside the solution folder. On an instance that marks no operation, one that changes a secret, creates or revokes a credential or decides an approval is refused. A person's own terminal sends at once. In a solution folder, the persona operations (get_bot_persona, upsert_bot_persona, …) get the folder's solution as harness_id when none is passed, since without it they reach the tenant's default route.
 
 | Argument | Description |
 |---|---|
@@ -1398,10 +1514,10 @@ The operation is its operationId or the short name before FastAPI's path suffix 
 | Option | Description | MCP |
 |---|---|---|
 | `-p, --param <name=value>` | A path, query or header parameter. Repeatable. | yes |
-| `--body <json|@file|->` | The request body (also accepted as --json &lt;body&gt;). | yes |
+| `--body <json|@file|->` | The request body: JSON, @file.json or - for stdin (--json &lt;body&gt; is a deprecated alias). | yes |
 | `--file <field=path>` | Attach a file to a multipart body. Repeatable. | yes |
 | `--output <file>` | Write the response body to a file instead of printing it. | CLI only |
-| `--confirm` | As an MCP tool: send an operation that changes something; without it, nothing is sent. The CLI sends at once. | yes |
+| `--confirm <token>` | Send an operation that changes something: run by a coding agent or as an MCP tool, the token its preview returned. Without it, nothing is sent. A person's terminal sends at once. | yes |
 | `--limit <n>` | Show at most n items of a list response (default 50, 0 for all). | yes |
 
 Examples:
@@ -1409,7 +1525,7 @@ Examples:
 ```bash
 cavelon api list_harnesses
 cavelon api get_harness_by_slug slug=support
-cavelon api create_knowledge_base --json '{"name": "FAQ"}'
+cavelon api create_knowledge_base --body '{"name": "FAQ"}'
 ```
 
 ### cavelon docs search
@@ -1421,6 +1537,8 @@ Search this instance's docs (titles and summaries).
 ```text
 cavelon docs search <query...> [options]
 ```
+
+Ranks the pages of the instance's docs index by the words of the question in their titles, addresses and summaries, rare words counting more than common ones. Stop words (English and German) are ignored, words match whole ("test" finds "testing", not "latest"), and German words for the core concepts are looked up in English (Wissensbasis: knowledge base). Only pages that match well are listed.
 
 | Argument | Description |
 |---|---|
@@ -1442,7 +1560,7 @@ cavelon docs get <page> [options]
 
 | Argument | Description |
 |---|---|
-| `page` | section/slug from `docs search`, a title, or the page URL. Required. |
+| `page` | section/slug from `docs search`, a title, the page URL, or `index` for the list of all pages. Required. |
 
 | Option | Description | MCP |
 |---|---|---|
@@ -1474,3 +1592,62 @@ cavelon mcp
 ```
 
 Started by the agent's plugin (`cavelon mcp`); it does not return until the agent disconnects.
+
+## Other commands
+
+### cavelon deactivate
+
+Take an active solution out of service (status inactive); previews first, --confirm deactivates.
+
+**changing (destructive)** · MCP tool: `deactivate`
+
+```text
+cavelon deactivate [options]
+```
+
+An active solution answers live traffic: the conversations, channels and API keys that name it. Deactivating sets its status to inactive, not back to draft (a draft has not been activated yet; an inactive solution was taken out of service). It keeps its configuration and answers no live traffic until it is activated again (`cavelon activate`, through its readiness gate). Without --confirm nothing changes: the preview says what would stop. Show it to a person and confirm only with their yes. The tenant's default route is refused before anything is sent: make another solution the default first (`cavelon harness default <solution>`). An instance that publishes no deactivate route is said so; a person deactivates in the Admin there.
+
+| Option | Description | MCP |
+|---|---|---|
+| `--harness <harness>` | The solution (harness): its name, slug or id; default: env file, then cavelon.yaml. | yes |
+| `--env <name>` | Use env/&lt;name&gt;.yaml: its tenant and solution. | yes |
+| `--confirm [<token>]` | Deactivate it (after a person saw the preview). In a person's terminal the flag alone confirms; run by a coding agent, `--confirm <token>` with the token its preview printed (the bare flag only shows the preview there, exit 5). | yes |
+
+Examples:
+
+```bash
+cavelon deactivate --harness support-faq
+cavelon deactivate --harness support-faq --confirm
+cavelon deactivate --harness support-faq --confirm <token>
+```
+
+### cavelon chat
+
+Send one message to a solution and print its answer, with the session to continue and the conversation to trace.
+
+**changing** · MCP tool: `chat`
+
+```text
+cavelon chat <message> [options]
+```
+
+The tenant's chat and widget answer only with the default route; this names the solution, so an active solution that is not the default, or a draft, can be tried before it answers anyone. A draft answers a person's token as a Playground run (counted as testing), never a tenant API key. Without --harness: the env file's or cavelon.yaml's solution, else the tenant's default route. Each call is one turn; --session continues a conversation. Not streamed: waits for the whole answer, at most --timeout (default 2m; 50 s as an MCP tool).
+
+| Argument | Description |
+|---|---|
+| `message` | What the user says. Required. |
+
+| Option | Description | MCP |
+|---|---|---|
+| `--harness <harness>` | The solution (harness): its name, slug or id; default: env file, then cavelon.yaml. | yes |
+| `--env <name>` | Use env/&lt;name&gt;.yaml: its tenant and solution. | yes |
+| `--session <session_id>` | Continue this conversation (the session_id a previous chat printed). | yes |
+| `--timeout <duration>` | Wait at most this long for the answer (90s, 5m; default 2m). | yes |
+
+Examples:
+
+```bash
+cavelon chat "When are you open?" --harness support-faq
+cavelon chat "And on Saturdays?" --session <session_id>
+cavelon chat "Hello" --json
+```

@@ -1,6 +1,6 @@
 ---
 name: cavelon-authoring
-description: Writing and changing a Cavelon solution package in a repository - the package/ files split by schema section, the package schema, environments in env/, declaring the variables and secrets a solution needs, and fixing validation codes with cavelon explain. Use when editing files under package/, tests/ or env/ of a folder with cavelon.yaml, when cavelon validate or apply reports an error code, when the user asks to add or change agents, tools, skills, knowledge bases or triggers of a Cavelon solution, or when a limit of the tenant needs changing (cavelon limits set) or they set up a self-hosted model endpoint or its concurrency limit (max_concurrent_requests).
+description: Writing and changing a Cavelon solution package in a repository - the package/ files split by schema section, the package schema, the persona (who the assistant is, its greeting and fallback), environments in env/, declaring the variables and secrets a solution needs, and fixing validation codes with cavelon explain. Use when editing files under package/, tests/ or env/ of a folder with cavelon.yaml, when cavelon validate or apply reports an error code, when the user asks to add or change agents, tools, skills, knowledge bases or triggers of a Cavelon solution, or when a limit of the tenant needs changing (cavelon limits set) or they set up a self-hosted model endpoint or its concurrency limit (max_concurrent_requests).
 license: Apache-2.0
 ---
 
@@ -53,7 +53,9 @@ for a public widget), **propose the change; the person decides.**
   person with your reason (what fails or waits now), and wait for their answer.
 - Only after they agreed, run the confirm command it printed (the `confirm`
   field in `--json`) as it stands: it keeps the `--env` and `--tenant` of the
-  preview, so it changes the limit the preview showed. Never raise a limit on
+  preview, so it changes the limit the preview showed. Over MCP, call
+  `limits_set` again with the same arguments and `confirm` set to the
+  preview's `confirm_token`. Never raise a limit on
   your own, never pick a value higher than the need you named, and never change
   one without telling them.
 - The same goes for the tenant's monthly inference budget
@@ -106,13 +108,14 @@ endpoint.
 - On rows that already exist, `cavelon models list` shows each row's endpoint
   and `max_concurrent_requests` (never a key). `cavelon models set-limit
   <model_id> <n|none>` shows the old and the new value and changes nothing;
-  with `--confirm` it changes the row. It refuses a row without a `base_url`.
+  the confirm command it prints changes the row (from your shell it carries the
+  preview's token, `--confirm <token>`). It refuses a row without a `base_url`.
   Where this instance's package format does not carry the field, `validate`
   warns that the import ignores it; set it this way instead.
 
 **Propose a limit; the person decides.** Say which value you would set and
 why (what the endpoint serves, which rows share it, what waits or fails now),
-then wait for the person's answer. Run `models set-limit --confirm` only after
+then wait for the person's answer. Run the confirm command of `models set-limit` only after
 they agreed, and never raise or lower a limit without telling them. A limit
 `cavelon limits` names as the operator's (the run caps, the slot waits, the
 licence) is not yours or the tenant's to change: tell the person who changes
@@ -131,7 +134,10 @@ it and where, as the output says.
 
 A file of a section the instance does not know is kept as it is; the preview
 lists it under "ignored". `package/manifest.yaml` names the package format
-version; leave it as `pull` wrote it.
+version; leave it as `pull` wrote it. Some fields are not applied by an
+import: the preview lists them under "not applied", each with the command
+that sets it (a solution's `status` with `cavelon activate`, its `is_default`
+with `cavelon harness default`).
 
 ## Finding out what a section takes
 
@@ -141,13 +147,71 @@ version; leave it as `pull` wrote it.
    (JSON or YAML): it writes the same files as `pull`, refuses to change files
    that hold something else unless `--force`, and names the sections this
    instance ignores.
-2. The schema: `cavelon validate` checks the files against the instance's
-   package schema, and each error names the file, line and field.
+2. The schema: `cavelon schema` lists the sections and the file each is kept
+   in; `cavelon schema <section>` (the `package_schema` tool) lists a section's
+   fields with type, required, allowed values and default, and prints the
+   smallest entry with every required field, to copy into the file, and one
+   with an entry of each nested list. A nested entry has its own fields: reach
+   them by path or type name, as the section's output lists them
+   (`cavelon schema agents.handoffs`, `cavelon schema test_suites.test_cases.steps`,
+   `cavelon schema PackageAgentHandoff`); where entries take several shapes
+   (`test_suites.test_cases.steps.evaluation_criteria`), each shape is listed.
+   A pulled file that is `[]` shows no shape; this does. `cavelon validate`
+   checks the files against the same schema, and each error names the file,
+   line and field. It also checks the references: a duplicate slug, and a
+   handoff or a test assertion (`answered_by`, `handoff_to`) naming an agent
+   the package lacks, are errors; a skill, tool, knowledge base or solution
+   that is neither in the package nor in the tenant's list, a field the schema
+   does not have (`package_field_unknown`, "did you mean temperature?"), an
+   `llm_model` outside the tenant's model list, and a package naming another
+   solution than `cavelon.yaml` (`solution_slug_mismatch`) are warnings. A
+   finding's `suggestion` (with `--json`) is the closest name. The import
+   preview blocks a name the instance does not have: then `validate` does not
+   say "Valid", and `cavelon validate --strict` fails on every warning.
 3. Concepts and fields: `cavelon docs search <topic>` (for example "agent
    graph", "tools", "knowledge base", "triggers"), then `cavelon docs get
    <page>`.
-4. A code from `validate`, `apply` or a failed request: `cavelon explain
-   <code>`. It gives the meaning, the fix and a docs link.
+4. A code from `validate`, `apply`, a failed request or `cavelon` itself:
+   `cavelon explain <code>`. It gives the meaning, the fix (with the command
+   that does it, where the instance's fix names an API route) and a docs link;
+   for a code it does not know, the closest known ones. `cavelon api describe
+   <operation>` shows a body's fields, and the item fields of a list
+   (`updates[]`).
+
+## The persona: who the assistant is
+
+Every solution has a persona in `package/persona.yaml`. It is not an agent's
+instructions:
+
+- **The persona says who** the assistant is, for every agent of the solution:
+  its name (`bot_name`), its voice and its boundaries (`persona_prompt`), the
+  greeting a conversation opens with and the fallback it gives when it has no
+  answer, its language (`language_hint`), response style, disclaimer and the
+  widget's copy.
+- **An agent's `system_prompt` says what** that one agent does: its task, its
+  tools, when it hands off. Put a rule about tone or identity into the
+  persona, and a rule about a task into the agent; `cavelon docs get
+  concepts/personas` explains the split.
+
+`pull` and `init` write every field the instance's schema lists; a field that
+is not set is a comment with its default (`# bot_name: null`). Remove the `#`
+and fill the field in to set it. A file of comments only sets nothing.
+
+- Set at least `bot_name` and `persona_prompt` for a solution people talk to.
+- Write `greeting_message` and `fallback_message` in the content language,
+  the language the assistant answers in (the knowledge base's, the
+  customer's), not the language of this conversation. `language_hint` names
+  it.
+- A greeting or fallback that is on (`greeting_enabled`,
+  `fallback_message_enabled`, both on by default) with an empty text shows
+  nothing of the solution's own; `cavelon validate` warns
+  (`persona_message_empty`). Write the text, or turn it off.
+- Leave the persona out (all fields commented) only for a solution nobody
+  talks to directly: a pipeline, a loop, a solution another solution calls.
+- Without `harness_id`, the persona operations of `cavelon api`
+  (`get_bot_persona`, `upsert_bot_persona`) reach the tenant's default route;
+  in a solution folder, `cavelon api` sends the folder's solution, and says
+  so. Prefer the package file and `apply` over those operations.
 
 ## Rules that keep a package portable
 
@@ -155,7 +219,10 @@ version; leave it as `pull` wrote it.
   a slug creates a new entry and, with `--mode replace`, deletes the old one.
 - **Secrets and variables are references only:** write `{{secret:<name>}}` or
   `{{var:<name>}}` where a value is needed, and declare the name (below). Never
-  write a secret value into any file, an argument or a message.
+  write a secret value into any file, an argument or a message. `cavelon api`
+  refuses a body that sets a field the instance marks as a secret value
+  (`x-cavelon-secret`: provider keys, passwords and the like): leave the field
+  out and let the person enter the value in the Admin.
 - **Environment specifics go into `env/`, not `package/`.** Runtime
   requirements (Sandboxes, other solutions) are bound per environment in
   `runtime_bindings`, keyed by the requirement's key, to the target tenant's
@@ -164,12 +231,28 @@ version; leave it as `pull` wrote it.
   The preview names them with the Admin path where a person sets them.
 - **Knowledge-base documents** are not in the repository: the package declares
   the knowledge bases; `cavelon kb upload` brings the documents.
-- **A knowledge base reaches an agent only through a search tool.** Naming it
-  in a skill's `knowledge_base_assignments` only scopes the search; the skill
-  (or the agent) also needs the built-in search tool in its `tool_assignments`
-  (`cavelon docs get reference/builtin-tools` names it). Without one the agent
-  answers from memory; `cavelon validate` warns
+- **A knowledge base reaches an agent only through a tool that reads it.**
+  Naming it in a skill's `knowledge_base_assignments` only scopes the tools;
+  the skill (or the agent) also needs a built-in that reads a knowledge base in
+  its `tool_assignments`: `search_documents` searches it, `list_documents`
+  lists its documents by their metadata, and `read_document` reads one by the
+  id a search or list returned (`cavelon docs get reference/builtin-tools`).
+  A tenant tool whose `builtin_key` is one of them counts too; naming
+  `knowledge_base_names` on any other tool (a webhook, an MCP tool) reaches
+  nothing. Without such a tool the
+  agent answers from memory; `cavelon validate` warns
   (`knowledge_base_without_search_tool`).
+- **The model comes from the tenant.** Set an agent's `llm_model` and
+  `llm_provider` to a row of `cavelon models list` (MODEL_ID, PROVIDER); the
+  models differ per instance and tenant, and the preview blocks one the tenant
+  does not have. On a reasoning model (the GPT-5 family, the o-series) from
+  OpenAI, Azure OpenAI or Anthropic the instance sends no `temperature` (the
+  schema still requires one: keep the default 0.4, and the preview flags any
+  other value); the reasoning level is what tunes such a model. Ask the
+  person to set it in the agent's **Model** tab in the Admin (Node
+  Workbench), then `cavelon pull` brings what the instance stored into
+  `package/agents.yaml`. `cavelon docs get concepts/choosing-models` says which
+  models take a temperature.
 - **Who approves goes on the Approval node, not into the memo.** When the
   brief says who approves, or that nobody approves their own request, set the
   node's `approvers` (tenant roles or access groups, directly or in `tiers`
@@ -217,7 +300,16 @@ schema has them: `cavelon validate` reports an unknown section):
 
 ## After each edit
 
-1. `cavelon validate` until it reports no errors.
+1. `cavelon validate` until it reports no errors (`--strict` before an apply
+   you expect to pass: it fails on the warnings the preview would block on).
+   After writing files by hand, `cavelon fmt` brings them into the form the
+   instance's export gives them (field order, the schema's defaults filled in,
+   test cases and steps numbered in their written order), so the first `pull`
+   after `apply` shows only what changed on the instance; `cavelon fmt
+   --check` changes nothing and exits 3 when a file would change. fmt keeps
+   no comments (pull keeps none either) and names each file whose comments
+   it drops, as the example files' explanations: keep what the person needs
+   elsewhere before running it.
 2. `cavelon apply --env test` to see what the instance makes of it; the
    preview re-checks everything on the server, including rules that only the
    instance can check (graph rules, references between sections).
