@@ -7,6 +7,13 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-10-05
+
+Fixes from a second round of agent tests: hints keep the tenant you named,
+`init --new` creates a solution next to a similarly named one, tenant-wide
+sections are left out unless you ask for them, `kb upload --dry-run` says when
+a file is identical, and docs, help and skills match what the commands do.
+
 ### Added
 
 - `cavelon apply --tenant-wide` imports a solution package's tenant-wide
