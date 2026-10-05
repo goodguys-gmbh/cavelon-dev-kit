@@ -1104,7 +1104,8 @@ function notPassedLines(r: TestResultState, max: number, full: boolean): string[
   const c = failedCase(r, max);
   const lines = [`  ${caseLabel(c)}  ${c.status}`];
   if (c.reason) lines.push(`    ${c.reason}`);
-  if (r.llm_judge_reasoning && r.llm_judge_reasoning !== r.error_message) lines.push(`    Judge: ${clip(r.llm_judge_reasoning, max)}`);
+  // Without an error the reason above is the judge's reasoning already; show it once.
+  if (r.llm_judge_reasoning && r.error_message && r.llm_judge_reasoning !== r.error_message) lines.push(`    Judge: ${clip(r.llm_judge_reasoning, max)}`);
   // A case that failed because the knowledge base lacks the answer shows it here, before its spans are opened.
   const knowledge = caseKnowledgeOutcomes(r);
   if (knowledge) lines.push(`    Knowledge: ${knowledge.join(", ")}`);
