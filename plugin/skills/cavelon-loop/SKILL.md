@@ -113,7 +113,7 @@ use it when you parse the result.
 5. **Confirm** exactly that preview: `cavelon apply --confirm <preview-id>`
    (the line `apply` printed, with the same `--env` and `--tenant`). Exit 4
    means the preview is stale and nothing was imported: the target changed on
-   the instance (`import_preview_stale`), the package files changed since
+   the instance (`import_preview_stale`; a recent instance names what changed), the package files changed since
    (`preview_files_changed`, naming them), the preview is more than a day
    old (`preview_expired`), another preview was imported after it
    (`preview_superseded`), it was imported already (`preview_applied`), or it

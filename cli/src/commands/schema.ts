@@ -331,7 +331,7 @@ function headLines(target: Target, data: TargetData, used: SchemaUsed): string {
     ]);
   }
   const what = data.kind === "list" ? "a list of entries" : "one object";
-  const each = data.entry ? `, each a ${data.entry}` : "";
+  const each = data.entry ? `, each ${withArticle(data.entry)}` : "";
   return keyValues([
     [target.nested ? "field" : "section", `${target.name} (${what}${each})`],
     ["file", data.file ?? "(none)"],
@@ -344,7 +344,7 @@ const FIELD_COLUMNS = ["field", "type", "required", "notes"];
 function shapeLines(data: TargetData): string[] {
   const shapes = data.shapes ?? [];
   const others = data.other_shapes ?? [];
-  const besides = others.length ? ` (${others.map((o) => `a ${o}`).join(", ")}, or an object below)` : "";
+  const besides = others.length ? ` (${others.map(withArticle).join(", ")}, or an object below)` : "";
   const lines = [`Each entry takes one of ${shapes.length + others.length} shapes${besides}:`, ""];
   for (const shape of shapes) {
     const example = data.kind === "list" ? [shape.example] : shape.example;
@@ -369,12 +369,18 @@ function fieldLines(data: TargetData): string[] {
   return lines;
 }
 
+/** A type's name after "a" or "an", as it is spoken: "an object", "a string". */
+function withArticle(type: string): string {
+  return `${/^[aeiou]/i.test(type) ? "an" : "a"} ${type}`;
+}
+
 function targetLines(schema: PackageSchema, target: Target, data: TargetData, used: SchemaUsed): string[] {
   const head = [headLines(target, data, used), ""];
   if (data.shapes) return [...head, ...shapeLines(data)];
   if (data.example !== null) return [...head, ...fieldLines(data)];
-  const others = objectShapes(schema, target.node).others;
-  return [...head, `Each entry is a ${others.join(" or ") || typeOf(schema, entryOf(schema, target.node).entry)}; there are no fields to list.`];
+  const { list, others } = objectShapes(schema, target.node);
+  const type = others.map(withArticle).join(" or ") || withArticle(typeOf(schema, entryOf(schema, target.node).entry));
+  return [...head, `${list ? "Each entry is" : "It is"} ${type}; there are no fields to list.`];
 }
 
 export const schema: CommandSpec = {

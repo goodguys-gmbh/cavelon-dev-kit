@@ -129,6 +129,36 @@ describe("schema", () => {
     }
   });
 
+  it("lists the fields of an object-or-null field, and words a field without any with the right article", async () => {
+    const plain = await cli(sb, ["schema", "agents.model_settings_extra"]);
+    expect(plain.code, plain.stderr).toBe(0);
+    expect(plain.stdout).toContain("It is an object; there are no fields to list.");
+    expect(plain.stdout).not.toMatch(/\ba object\b/);
+    const box = sandbox();
+    try {
+      await login(box, server.url, server.addToken({ kind: "pat", tenantIds: [tenant], defaultTenant: tenant }));
+      server.state.packageSchemaEdit = (schema) => {
+        const defs = (schema as unknown as { $defs: Record<string, Record<string, any>> }).$defs;
+        defs.PackageAgent!.properties.model_settings_extra = {
+          anyOf: [
+            { type: "object", properties: { reasoning_effort: { type: "string", examples: ["low", "medium", "high"] } }, additionalProperties: true },
+            { type: "null" },
+          ],
+          default: null,
+          title: "Model Settings Extra",
+        };
+      };
+      const result = await cli(box, ["schema", "agents.model_settings_extra", "--json"]);
+      expect(result.code, result.stderr).toBe(0);
+      expect(result.json<{ fields: Array<{ name: string; type: string }> }>().fields).toEqual([expect.objectContaining({ name: "reasoning_effort", type: "string" })]);
+      expect((await cli(box, ["schema", "agents.model_settings_extra"])).stdout).toMatch(/^reasoning_effort\s+string/m);
+      expect((await cli(box, ["schema", "agents"])).stdout).toMatch(/cavelon schema agents\.model_settings_extra/);
+    } finally {
+      server.state.packageSchemaEdit = null;
+      box.cleanup();
+    }
+  });
+
   it("lists each shape an entry may take, as a step's criteria", async () => {
     const result = await cli(sb, ["schema", "test_suites.test_cases.steps.evaluation_criteria", "--json"]);
     expect(result.code, result.stderr).toBe(0);

@@ -967,12 +967,16 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
     if (error instanceof CavelonError && error.blockerDetails?.length) throw withBlockersLocated(error, disk, stored, session);
     if (error instanceof CavelonError && (error.code === "import_preview_stale" || (error.status === 409 && /preview/i.test(error.message)))) {
       await retire("stale");
+      // What changed, where the instance still knows what the preview was made over; an older one says nothing more.
+      const said = (error.details as { changed?: unknown } | undefined)?.changed;
+      const changed = Array.isArray(said) ? said.filter((c): c is string => typeof c === "string") : [];
       throw new CavelonError(ExitCode.conflict, {
         code: error.code === "conflict" ? "import_preview_stale" : error.code,
         status: 409,
-        message: `The target changed since preview ${stored.preview_id}; nothing was imported.`,
+        message: `The target changed since preview ${stored.preview_id}${changed.length ? `: ${changed.join("; ")}` : ""}; nothing was imported.`,
         hint: `Run \`${previewAgain(stored, session)}\` again, show the new preview, and confirm its id.`,
         docs: error.docs,
+        ...(changed.length ? { details: { preview_id: stored.preview_id, changed } } : {}),
       });
     }
     throw error;

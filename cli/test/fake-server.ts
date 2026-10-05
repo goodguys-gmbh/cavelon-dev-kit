@@ -206,6 +206,12 @@ export interface FakeState {
    * and import carry them always.
    */
   tenantWideFlag: boolean;
+  /**
+   * How a stale confirm is refused: null as an older instance (the code in
+   * `detail`); a list as a recent one (`code` at the top), with `changed`
+   * naming what changed when the list is not empty.
+   */
+  staleChanged: string[] | null;
   suites: Array<{ id: string; tenant_id: string; name: string; harness_id: string | null; archived_at: string | null }>;
   runs: Array<{ id: string; tenant_id: string; suite_id: string; summary: Record<string, unknown>; harness_id?: string | null }>;
   operations: Map<string, FakeOperation>;
@@ -520,6 +526,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     documents: [],
     uploadReplace: "name",
     tenantWideFlag: true,
+    staleChanged: null,
     suites: [],
     runs: [],
     operations: new Map(),
@@ -1120,6 +1127,16 @@ export async function startFakeServer(): Promise<FakeServer> {
       if (info.kind === "key") return send(res, 403, { detail: "Agent graph import requires admin authentication (JWT), not API key" });
       if (state.previewBlockers.length) return send(res, 422, { detail: preview });
       if (b.preview_id && b.preview_id !== previewId) {
+        // A recent instance answers at the top level and names what changed where it still knows.
+        if (state.staleChanged) {
+          const what = state.staleChanged;
+          return send(res, 409, {
+            code: "import_preview_stale",
+            message: `The target changed since this preview${what.length ? `: ${what.join("; ")}` : ""}; nothing was imported.`,
+            hint: "Preview again, show the new result, and import with the new preview_id.",
+            ...(what.length ? { changed: what } : {}),
+          });
+        }
         return send(res, 409, {
           detail: {
             error: "import_preview_stale",

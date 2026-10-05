@@ -86,6 +86,15 @@ CLI, the skills and the plugin.
 - `pull`, `apply` and the docs no longer say that `apply` sends a tenant-wide
   file for the whole tenant: a solution's import leaves it out unless
   `--tenant-wide`.
+- A confirm refused as a stale preview names what changed since, where the
+  instance says it (`changed` in its 409): "The target changed since preview
+  `<id>`: agents of solution 'support'; nothing was imported.", and
+  `details.changed` in `--json`. Without it the message stays as before.
+- `cavelon schema` words a field without listed fields with the right article
+  ("It is an object", "Each entry is an object", not "a object"), and a test
+  covers that an object-or-null field lists its properties
+  (`agents.model_settings_extra` shows `reasoning_effort` where the instance
+  declares it).
 
 ## [0.1.6] - 2026-10-05
 

@@ -1473,6 +1473,32 @@ describe("apply", () => {
     expect(existsSync(path.join(dir, ".cavelon", "previews", `${preview.preview_id}.json`))).toBe(false);
   });
 
+  it("names what changed since a stale preview where the instance says it", async () => {
+    try {
+      for (const changed of [["agents of solution 'support'", "tools"], []]) {
+        server.state.staleChanged = changed;
+        const dir = await pulled();
+        const preview = (await cli(sb, ["apply", "--json"], { cwd: dir })).json<{ preview_id: string }>();
+        server.editConfig(tenant, (pkg) => {
+          (pkg.knowledge_bases as Array<Record<string, unknown>>)[0]!.description = `Edited ${changed.length}`;
+        });
+        const result = await cli(sb, ["apply", "--confirm", preview.preview_id, "--json"], { cwd: dir });
+        expect(result.code).toBe(4);
+        const error = result.json<{ error: { code: string; message: string; details?: { changed: string[] } } }>().error;
+        expect(error.code).toBe("import_preview_stale");
+        if (changed.length) {
+          expect(error.message).toBe(`The target changed since preview ${preview.preview_id}: agents of solution 'support'; tools; nothing was imported.`);
+          expect(error.details).toEqual({ preview_id: preview.preview_id, changed });
+        } else {
+          expect(error.message).toBe(`The target changed since preview ${preview.preview_id}; nothing was imported.`);
+          expect(error.details).toBeUndefined();
+        }
+      }
+    } finally {
+      server.state.staleChanged = null;
+    }
+  });
+
   it("says a confirmed preview was imported, and one made before it superseded (exit 4), instead of not knowing them", async () => {
     const dir = await pulled();
     const first = (await cli(sb, ["apply", "--json"], { cwd: dir })).json<{ preview_id: string }>();
