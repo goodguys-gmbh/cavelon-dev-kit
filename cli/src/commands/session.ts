@@ -728,22 +728,47 @@ export const status: CommandSpec = {
 
 /**
  * Which solution each running operation belongs to, where the kit can tell:
- * a test run names its solution (`harness_id`). Other kinds (an upload into a
- * knowledge base, which solutions share) stay unattributed. Bounded: the list
- * is one page of at most ten.
+ * a test run names its solution (`harness_id`); a trigger run (a loop) names
+ * its trigger, and the trigger its solution, unless the run names the
+ * solution itself. Other kinds (an upload into a knowledge base, which
+ * solutions share) stay unattributed, as does one whose record cannot be
+ * read. Bounded: the list is one page of at most ten, and each trigger is
+ * read once.
  */
 async function operationSolutions(ctx: Context, operations: OperationPage["items"]): Promise<Map<string, string>> {
   const owners = new Map<string, string>();
+  const triggers = new Map<string, Promise<string | undefined>>();
+  const triggerSolution = (id: string) => {
+    if (!triggers.has(id)) {
+      triggers.set(
+        id,
+        callStable<{ harness_id?: string | null }>(ctx, "GET", "/api/v1/triggers/{trigger_id}", "reading triggers", { params: { trigger_id: [id] } }).then(
+          (t) => t.harness_id ?? undefined,
+          () => undefined,
+        ),
+      );
+    }
+    return triggers.get(id)!;
+  };
   for (const op of operations) {
     const harnessId = (op as { harness_id?: unknown }).harness_id;
     if (typeof harnessId === "string" && harnessId) {
       owners.set(op.id, harnessId);
       continue;
     }
-    if (op.result_ref?.type !== "test_run" || !op.result_ref.id) continue;
+    const ref = op.result_ref;
+    if (!ref?.id) continue;
     try {
-      const run = await callStable<{ harness_id?: string | null }>(ctx, "GET", "/api/v1/test-runs/{run_id}", "test runs", { params: { run_id: [op.result_ref.id] } });
-      if (run.harness_id) owners.set(op.id, run.harness_id);
+      if (ref.type === "test_run") {
+        const run = await callStable<{ harness_id?: string | null }>(ctx, "GET", "/api/v1/test-runs/{run_id}", "test runs", { params: { run_id: [ref.id] } });
+        if (run.harness_id) owners.set(op.id, run.harness_id);
+      } else if (ref.type === "agent_run") {
+        const run = await callStable<{ harness_id?: string | null; trigger_definition_id?: string | null }>(ctx, "GET", "/api/v1/triggers/runs/{run_id}", "reading runs", {
+          params: { run_id: [ref.id] },
+        });
+        const owner = run.harness_id ?? (run.trigger_definition_id ? await triggerSolution(run.trigger_definition_id) : undefined);
+        if (owner) owners.set(op.id, owner);
+      }
     } catch {
       // Unattributed: it stays in the list.
     }

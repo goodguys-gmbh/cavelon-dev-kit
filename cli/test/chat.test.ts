@@ -141,6 +141,19 @@ describe("deactivate", () => {
     expect(again.json()).toMatchObject({ changed: false, harness: { status: "draft" } });
   });
 
+  it("in a coding agent's shell, deactivates only with the preview's token", async () => {
+    solution("support").status = "active";
+    const agent = { env: { CLAUDECODE: "1" } };
+    const bare = await cli(sb, ["deactivate", "--harness", "support", "--confirm", "--json"], agent);
+    expect(bare.code).toBe(5);
+    const shown = bare.json<{ changed: boolean; confirm_token: string; confirm: string }>();
+    expect(shown).toMatchObject({ changed: false, confirm: `cavelon deactivate --harness support --confirm ${shown.confirm_token}` });
+    expect(solution("support").status).toBe("active");
+    const done = await cli(sb, ["deactivate", "--harness", "support", "--confirm", shown.confirm_token, "--json"], agent);
+    expect(done.code, done.stdout).toBe(0);
+    expect(solution("support").status).toBe("draft");
+  });
+
   it("refuses the tenant's default route before sending anything", async () => {
     server.state.requests.length = 0;
     const refused = await cli(sb, ["deactivate", "--harness", "default", "--confirm", "--json"]);
@@ -185,7 +198,7 @@ describe("init creates the solution it is given", () => {
     mkdirSync(dir, { recursive: true });
     const mcp = mcpClient(dir);
     try {
-      const result = await mcp.call("init", { instance: server.url, tenant, harness: "Order Status" });
+      const result = await mcp.call("init", { tenant, harness: "Order Status" });
       expect(result.isError, JSON.stringify(result.body)).toBe(false);
       expect(result.body.next).toEqual(
         expect.arrayContaining([

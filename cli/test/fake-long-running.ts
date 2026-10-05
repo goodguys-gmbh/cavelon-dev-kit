@@ -84,6 +84,8 @@ export interface FakeRun {
   idempotency_key?: string | null;
   /** As an older instance answers: the run has no waiting_for_capacity. */
   olderInstance?: boolean;
+  /** As an instance that names a run's solution on the run answers: with its harness_id. */
+  namesSolution?: boolean;
 }
 
 export interface FakeIteration {
@@ -248,6 +250,7 @@ function runView(run: FakeRun) {
     id: run.id,
     tenant_id: run.tenant_id,
     trigger_definition_id: run.trigger.id,
+    ...(run.namesSolution ? { harness_id: run.trigger.harness_id } : {}),
     conversation_id: null,
     message_id: null,
     parent_run_id: run.parent?.id ?? null,

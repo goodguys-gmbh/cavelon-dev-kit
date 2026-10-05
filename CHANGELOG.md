@@ -151,7 +151,9 @@ CLI, the skills and the plugin.
 - `cavelon setup --check` lists an agent found on the computer but never set
   up for Cavelon as `skip`, and no longer exits 1 because of it.
 - `cavelon status` in a solution folder leaves out the running operations of
-  another solution (a test run names its solution) and says how many; an
+  another solution (a test run names its solution, a running loop's trigger
+  run its trigger, which names it; an instance that names the solution on the
+  run is read directly) and says how many; an
   active solution no longer reads "active, ready to activate".
 - `whoami`, `status` and the MCP `whoami` name a tenant given by id
   (`cavelon.yaml`, `--tenant`) that is none of the token's memberships, as an
