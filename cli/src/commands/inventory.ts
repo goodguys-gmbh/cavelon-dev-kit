@@ -62,6 +62,32 @@ export async function refreshInventory(root: string, kind: InventoryKind, names:
   await writeState(root, INVENTORY_JSON, `${JSON.stringify(inventory, null, 2)}\n`);
 }
 
+/**
+ * Read the tenant's lists of these kinds now and record them, as `models
+ * list` records its own: for `validate` in a folder no pull has filled yet.
+ * Returns the kinds it could not read.
+ */
+export async function readInventoryKinds(ctx: Context, root: string, kinds: InventoryKind[], now: Date): Promise<InventoryKind[]> {
+  const failed: InventoryKind[] = [];
+  for (const kind of kinds) {
+    const listing = LISTINGS.find((l) => l.kind === kind);
+    if (!listing) {
+      failed.push(kind);
+      continue;
+    }
+    try {
+      const data = await callStable<unknown>(ctx, "GET", listing.path, `listing ${listing.label}`, { query: listing.query });
+      const names = itemsOf(data)
+        .map((i) => i[listing.field!])
+        .filter((v): v is string => typeof v === "string");
+      await refreshInventory(root, kind, names, now);
+    } catch {
+      failed.push(kind);
+    }
+  }
+  return failed;
+}
+
 /** Rows per section; the inventory says how many more there are. */
 const MAX_ROWS = 100;
 const COLUMNS = ["slug", "name", "status", "id"];

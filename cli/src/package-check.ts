@@ -7,9 +7,11 @@ import { locate, schemaSections, type Finding, type PackageOnDisk } from "./pack
 import { PERSONA_SECTION, sectionFields } from "./package-format.js";
 import { kitErrorEntry } from "./kit-codes.js";
 import {
+  branches,
   checkModels,
   checkReferences,
   checkUnknownFields,
+  closest,
   DUPLICATE_CODE,
   FIELD_UNKNOWN_CODE,
   MODEL_UNKNOWN_CODE,
@@ -54,6 +56,9 @@ const PERSONA_MESSAGES = [
   { switch: "greeting_enabled", text: "greeting_message", what: "greeting", when: "when a conversation starts" },
   { switch: "fallback_message_enabled", text: "fallback_message", what: "fallback message", when: "when the assistant has no answer" },
 ];
+
+/** cavelon.yaml's solution and the one the package's harnesses (or an entry's harness_slug) name differ. */
+const SOLUTION_MISMATCH_CODE = "solution_slug_mismatch";
 
 /** A test step's criterion with a `type`, on an instance whose schema does not describe a step's criteria. */
 const ASSERTION_UNCHECKED_CODE = "test_assertion_unchecked";
@@ -148,15 +153,17 @@ export const KIT_CODES: CatalogEntry[] = [
   {
     code: REFERENCE_MISSING_CODE,
     area: "package",
-    message: "An agent hands off to an agent that is not in the package.",
-    hint: "Fix the to_agent_slug (the finding suggests the closest slug), or add the agent to package/agents.yaml.",
+    message: "An agent hands off to an agent that is not in the package, or a test step's assertion (answered_by, handoff_to) names one.",
+    hint: "Fix the to_agent_slug or the assertion's value (the finding suggests the closest slug), or add the agent to package/agents.yaml.",
     docs: PACKAGE_DOCS,
   },
   {
     code: REFERENCE_UNKNOWN_CODE,
     area: "package",
-    message: "A skill, tool, knowledge base or solution is named that is neither in the package nor among what the tenant held at the last pull.",
-    hint: "Fix the name (the finding suggests the closest one), or add the entry to the package. If it was created on the instance since, `cavelon pull` refreshes the list in .cavelon/inventory.json.",
+    message: "A skill, tool, knowledge base or solution is named (by an agent, a skill or a test step's assertion) that is neither in the package nor among what the tenant held at the last pull.",
+    hint:
+      "Fix the name (the finding suggests the closest one), or add the entry to the package. The import preview blocks a reference it cannot resolve, " +
+      "so validate --strict fails on it. If it was created on the instance since, `cavelon pull` refreshes the list in .cavelon/inventory.json.",
     docs: PACKAGE_DOCS,
   },
   {
@@ -170,7 +177,18 @@ export const KIT_CODES: CatalogEntry[] = [
     code: MODEL_UNKNOWN_CODE,
     area: "package",
     message: "An agent's llm_model is not in the tenant's model list as the kit last read it.",
-    hint: "Fix the model id (the finding suggests the closest one), or register the model. `cavelon models list` shows the tenant's models and refreshes the list validate checks against.",
+    hint:
+      "Fix the model id (the finding suggests the closest one), or register the model: the import preview blocks a model the tenant does not have. " +
+      "`cavelon models list` shows the tenant's models and refreshes the list validate checks against.",
+    docs: PACKAGE_DOCS,
+  },
+  {
+    code: SOLUTION_MISMATCH_CODE,
+    area: "package",
+    message: "The package names another solution than cavelon.yaml: harnesses.yaml's slug, or an entry's harness_slug.",
+    hint:
+      "After copying a solution under another name, change the slug in package/harnesses.yaml and every harness_slug to the one cavelon.yaml names " +
+      "(or set harness in cavelon.yaml to the package's); the import otherwise works on the solution the package names.",
     docs: PACKAGE_DOCS,
   },
   {
@@ -181,6 +199,16 @@ export const KIT_CODES: CatalogEntry[] = [
     docs: PACKAGE_DOCS,
   },
 ];
+
+/**
+ * The entry that explains a finding of `validate`: the instance's rule codes
+ * first, then the kit's own, then its API error codes. An API error's hint
+ * speaks of the response (`detail.errors`); validate's finding names a file
+ * and a line, which the kit's hint is written for.
+ */
+function findingEntry(catalog: ErrorCatalog | null | undefined, code: string): CatalogEntry | undefined {
+  return catalog?.rule_codes?.find((e) => e.code === code) ?? KIT_CODES.find((e) => e.code === code) ?? catalog?.api_error_codes?.find((e) => e.code === code);
+}
 
 /**
  * One catalog entry by code: the instance's rule codes, its API error codes,
@@ -288,6 +316,8 @@ export interface CheckOptions {
   limits?: PublishedLimits;
   /** What the tenant held at the last pull, for references to it and agents' models; none checks only the package. */
   inventory?: TenantInventory;
+  /** The solution cavelon.yaml names (slug or id), to check the package names the same. */
+  solution?: string;
 }
 
 export function checkPackage(disk: PackageOnDisk, options: CheckOptions): Finding[] {
@@ -319,14 +349,32 @@ export function checkPackage(disk: PackageOnDisk, options: CheckOptions): Findin
   const validate = compile(options.schema);
   if (!validate(disk.package)) {
     const seen = new Set<string>();
-    for (const error of closestBranchErrors(validate.errors ?? [])) {
+    const errors = validate.errors ?? [];
+    // A value of a union whose `type` names none of its shapes: one finding with the type it comes closest to, not one per shape.
+    const misnamed = misnamedVariants(options.schema, disk.package).filter((m) => errors.some((e) => within(e.instancePath, m.pointer)));
+    for (const m of misnamed) {
+      findings.push({
+        code: SCHEMA_CODE,
+        severity: "error",
+        ...locate(disk, `${m.pointer}/${m.field}`),
+        message:
+          `${m.field} "${m.value}" is none of the types this field takes (${m.allowed.join(", ")}).` + (m.suggestion ? ` Did you mean "${m.suggestion}"?` : ""),
+        ...(m.suggestion ? { suggestion: m.suggestion } : {}),
+        hint: schemaHint(disk.package, m.pointer),
+      });
+    }
+    const unreadable = new Set(disk.unreadable ?? []);
+    for (const error of closestBranchErrors(errors)) {
       // anyOf reports each branch and then itself; the branches say more.
       if (error.keyword === "anyOf" || error.keyword === "oneOf") continue;
+      if (misnamed.some((m) => within(error.instancePath, m.pointer))) continue;
+      // A section whose file could not be read is missing here; its file's finding says why.
+      if (error.keyword === "required" && error.instancePath === "" && unreadable.has(String((error.params as Record<string, unknown>).missingProperty))) continue;
       const { pointer, message } = describe(error);
       const key = `${pointer} ${message}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      findings.push({ code: SCHEMA_CODE, severity: "error", ...locate(disk, pointer), message });
+      findings.push({ code: SCHEMA_CODE, severity: "error", ...locate(disk, pointer), message, hint: schemaHint(disk.package, pointer) });
     }
   }
 
@@ -338,9 +386,10 @@ export function checkPackage(disk: PackageOnDisk, options: CheckOptions): Findin
   findings.push(...checkModels(disk, options.inventory));
   findings.push(...checkPersonaMessages(disk, options.schema));
   findings.push(...checkUncheckedAssertions(disk, options.schema));
+  findings.push(...checkSolutionSlug(disk, options.solution));
 
   for (const finding of findings) {
-    const entry = catalogEntry(options.catalog, finding.code);
+    const entry = findingEntry(options.catalog, finding.code);
     if (!entry) continue;
     finding.hint ??= entry.hint ?? undefined;
     finding.docs ??= entry.docs;
@@ -632,6 +681,154 @@ function checkPersonaMessages(disk: PackageOnDisk, schema: PackageSchema): Findi
       message:
         `${pair.switch} is ${pair.switch in persona ? "true" : "true by default"}, but ${pair.text} is empty: ` +
         `the solution shows no ${pair.what} of its own ${pair.when}. Write ${pair.text}, or set ${pair.switch} to false.`,
+    });
+  }
+  return findings;
+}
+
+/** Whether a JSON pointer is the other or inside it. */
+const within = (pointer: string, outer: string) => pointer === outer || pointer.startsWith(`${outer}/`);
+
+/**
+ * The `cavelon schema` path of a place in the package: its keys without the
+ * list indexes, ending at the object or list that holds the field
+ * (`agents.handoffs` for /agents/0/handoffs/1/edge_type).
+ */
+export function schemaPathOf(pkg: Record<string, unknown>, pointer: string): string {
+  const keys = pointer.split("/").slice(1).map((k) => k.replace(/~1/g, "/").replace(/~0/g, "~"));
+  let value: unknown = pkg;
+  const names: string[] = [];
+  for (const key of keys) {
+    const inner: unknown = Array.isArray(value) ? value[Number(key)] : asObject(value)?.[key];
+    // A scalar is a field of the object around it, which is what `cavelon schema` shows.
+    if (inner === undefined || inner === null || typeof inner !== "object") break;
+    if (!Array.isArray(value)) names.push(key);
+    value = inner;
+  }
+  return names.join(".");
+}
+
+/** The kit's hint for a schema finding: the command that shows the fields where it is. */
+function schemaHint(pkg: Record<string, unknown>, pointer: string): string {
+  const at = schemaPathOf(pkg, pointer);
+  return at
+    ? `Fix the field the finding names; \`cavelon schema ${at}\` lists the fields there (type, required, allowed values) with a minimal entry.`
+    : "Fix the field the finding names; `cavelon schema` lists the sections, and `cavelon schema <section>` their fields.";
+}
+
+interface MisnamedVariant {
+  pointer: string;
+  field: string;
+  value: string;
+  allowed: string[];
+  suggestion?: string;
+}
+
+const propertiesIn = (node: Record<string, unknown>) => asObject(node.properties);
+
+/** The values a field may hold, where its schema lists them (`const`, `enum`); undefined where it takes any. */
+function listedValues(schema: PackageSchema, node: unknown): unknown[] | undefined {
+  const values: unknown[] = [];
+  for (const branch of branches(schema, node)) {
+    if ("const" in branch) values.push(branch.const);
+    else if (Array.isArray(branch.enum)) values.push(...branch.enum);
+    else if (branch.type !== "null") return undefined;
+  }
+  return values.length ? values : undefined;
+}
+
+/**
+ * Objects of a union of several shapes told apart by one field (a step's
+ * criteria by `type`) whose field names none of them: the schema check would
+ * report every shape's complaint. Read from the published schema: the field
+ * that each shape defining it restricts to listed values.
+ */
+function misnamedVariants(schema: PackageSchema, pkg: Record<string, unknown>): MisnamedVariant[] {
+  const found: MisnamedVariant[] = [];
+  const walk = (value: unknown, node: unknown, pointer: string, depth: number) => {
+    if (depth > 40) return;
+    if (Array.isArray(value)) {
+      const items = branches(schema, node).map((b) => b.items).find((i) => i !== undefined);
+      if (items !== undefined) value.forEach((item, i) => walk(item, items, `${pointer}/${i}`, depth + 1));
+      return;
+    }
+    const object = asObject(value);
+    if (!object) return;
+    const shapes = branches(schema, node).filter((b) => propertiesIn(b));
+    if (shapes.length > 1) {
+      for (const [field, given] of Object.entries(object)) {
+        if (typeof given !== "string") continue;
+        const defining = shapes.filter((shape) => propertiesIn(shape)![field] !== undefined);
+        if (defining.length < 2) continue;
+        const lists = defining.map((shape) => listedValues(schema, propertiesIn(shape)![field]));
+        if (lists.some((l) => l === undefined)) continue;
+        const allowed = [...new Set(lists.flat().filter((v): v is string => typeof v === "string"))];
+        if (allowed.includes(given)) {
+          const shape = defining.find((_, i) => lists[i]!.includes(given))!;
+          for (const [key, inner] of Object.entries(object)) {
+            const sub = propertiesIn(shape)![key];
+            if (sub !== undefined) walk(inner, sub, `${pointer}/${key}`, depth + 1);
+          }
+          return;
+        }
+        found.push({ pointer, field, value: given, allowed: allowed.sort(), suggestion: closest(given, allowed) });
+        return;
+      }
+    }
+    const shape = shapes.length === 1 ? shapes[0]! : undefined;
+    if (!shape) return;
+    for (const [key, inner] of Object.entries(object)) {
+      const sub = propertiesIn(shape)![key];
+      if (sub !== undefined) walk(inner, sub, `${pointer}/${key}`, depth + 1);
+    }
+  };
+  const sections = asObject(schema.properties) ?? {};
+  for (const [section, value] of Object.entries(pkg)) if (section in sections) walk(value, sections[section], `/${section}`, 0);
+  return found;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The package names another solution than cavelon.yaml, as after copying an
+ * example under another name: harnesses.yaml holds no entry of that slug (or
+ * name), or, in a package without harnesses, an agent's or suite's
+ * harness_slug names another. One warning per section. Where the package has
+ * harnesses, a harness_slug naming none of them is a reference the reference
+ * check reports. A solution named by its id is not checked: the package
+ * cannot say it.
+ */
+function checkSolutionSlug(disk: PackageOnDisk, solution: string | undefined): Finding[] {
+  if (!solution || UUID.test(solution)) return [];
+  const pkg = disk.package;
+  const harnesses = asList(pkg.harnesses);
+  const own = harnesses.find((h) => h.slug === solution || h.name === solution);
+  const slug = typeof own?.slug === "string" ? own.slug : solution;
+  const findings: Finding[] = [];
+  if (harnesses.length && !own) {
+    const named = harnesses.map((h) => h.slug).filter((v): v is string => typeof v === "string");
+    findings.push({
+      code: SOLUTION_MISMATCH_CODE,
+      severity: "warning",
+      ...locate(disk, "/harnesses/0/slug"),
+      message:
+        `cavelon.yaml names the solution "${solution}", and the package's harnesses name ${quoted(named)}: ` +
+        `rename the slug (and every harness_slug) to "${solution}", or set harness in cavelon.yaml to the package's.`,
+    });
+  }
+  if (harnesses.length) return findings;
+  for (const section of ["agents", "test_suites"]) {
+    const entries = asList(pkg[section]);
+    const off = entries.flatMap((entry, i) => (typeof entry.harness_slug === "string" && entry.harness_slug !== slug ? [{ i, name: entry.harness_slug }] : []));
+    if (!off.length) continue;
+    const names = [...new Set(off.map((o) => o.name))];
+    findings.push({
+      code: SOLUTION_MISMATCH_CODE,
+      severity: "warning",
+      ...locate(disk, `/${section}/${off[0]!.i}/harness_slug`),
+      message:
+        `${off.length} of the ${section} name${off.length === 1 ? "s" : ""} the solution ${quoted(names)} in harness_slug, and cavelon.yaml names "${slug}": ` +
+        `set harness_slug to "${slug}".`,
     });
   }
   return findings;

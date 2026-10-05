@@ -44,7 +44,9 @@ function distance(a: string, b: string): number {
 /**
  * The closest of the candidates, when it is close enough to be a typo. The
  * `preferred` ones, the required fields an entry lacks, may be further off
- * ("target_agent_slug" for "to_agent_slug") and win a tie.
+ * ("target_agent_slug" for "to_agent_slug") and win a tie. Without a typo,
+ * the shortest candidate that starts with the word, or holds it, or that the
+ * word starts with: "description" for "description_override".
  */
 export function closest(word: string, candidates: Iterable<string>, preferred: Iterable<string> = []): string | undefined {
   let best: { name: string; d: number } | undefined;
@@ -52,9 +54,19 @@ export function closest(word: string, candidates: Iterable<string>, preferred: I
     const d = distance(word.toLowerCase(), name.toLowerCase());
     if (d <= allowance && (!best || d < best.d)) best = { name, d };
   };
-  for (const name of preferred) consider(name, Math.ceil(Math.max(word.length, name.length) / 2));
-  for (const name of candidates) consider(name, typoAllowance(word));
-  return best?.name;
+  const names = [...candidates];
+  const wanted = [...preferred];
+  for (const name of wanted) consider(name, Math.ceil(Math.max(word.length, name.length) / 2));
+  for (const name of names) consider(name, typoAllowance(word));
+  if (best) return best.name;
+  const lower = word.toLowerCase();
+  // Short words are parts of too many names to say which one was meant.
+  if (lower.length < 4) return undefined;
+  const related = [...wanted, ...names].filter((name) => {
+    const other = name.toLowerCase();
+    return other !== lower && (other.startsWith(lower) || lower.startsWith(other) || other.includes(lower)) && Math.min(other.length, lower.length) >= 4;
+  });
+  return related.sort((a, b) => Math.abs(a.length - word.length) - Math.abs(b.length - word.length))[0];
 }
 
 const typoAllowance = (word: string) => Math.max(2, Math.floor(word.length / 3));
@@ -98,14 +110,30 @@ interface Reference {
   from: string;
   name: string;
   target: Target;
+  /** How the entry names it, for the message: "hands off to", "checks answered_by". */
+  how?: string;
 }
 
-/** Every reference the package makes, from agents and skills, as the package schema names the fields. */
+/**
+ * The assertions of a test step that name an entry of the package, by
+ * `type`, and the field that names it: an agent for the routing checks, a
+ * tool for the tool checks. The regression-testing page of the instance's
+ * docs lists them; the package schema gives the field a plain text.
+ */
+const ASSERTION_TARGETS: Record<string, { target: Target; field: string }> = {
+  answered_by: { target: AGENT, field: "value" },
+  handoff_to: { target: AGENT, field: "value" },
+  tool_called: { target: TOOL, field: "value" },
+  tool_not_called: { target: TOOL, field: "value" },
+  min_results: { target: TOOL, field: "tool" },
+};
+
+/** Every reference the package makes, from agents, skills and test steps' assertions, as the package schema names the fields. */
 function references(pkg: Record<string, unknown>): Reference[] {
   const found: Reference[] = [];
-  const add = (pointer: string, from: string, value: unknown, target: Target) => {
+  const add = (pointer: string, from: string, value: unknown, target: Target, how?: string) => {
     const name = text(value);
-    if (name) found.push({ pointer, from, name, target });
+    if (name) found.push({ pointer, from, name, target, ...(how ? { how } : {}) });
   };
   list(pkg.agents).forEach((agent, i) => {
     if (!agent) return;
@@ -122,6 +150,20 @@ function references(pkg: Record<string, unknown>): Reference[] {
       add(`/skills/${i}/knowledge_base_assignments/${j}/knowledge_base_name`, from, a?.knowledge_base_name, KNOWLEDGE_BASE),
     );
     list(skill.tool_assignments).forEach((a, j) => add(`/skills/${i}/tool_assignments/${j}/tool_slug`, from, a?.tool_slug, TOOL));
+  });
+  list(pkg.test_suites).forEach((suite, s) => {
+    list(suite?.test_cases).forEach((testCase, c) => {
+      const from = `The test case "${text(testCase?.name) ?? c}"${text(suite?.name) ? ` of the suite "${suite!.name as string}"` : ""}`;
+      list(testCase?.steps).forEach((step, t) => {
+        list(step?.evaluation_criteria).forEach((criterion, k) => {
+          const type = text(criterion?.type);
+          const named = type !== undefined && Object.hasOwn(ASSERTION_TARGETS, type) ? ASSERTION_TARGETS[type]! : undefined;
+          if (!named) return;
+          const pointer = `/test_suites/${s}/test_cases/${c}/steps/${t}/evaluation_criteria/${k}/${named.field}`;
+          add(pointer, from, criterion![named.field], named.target, `checks ${type}`);
+        });
+      });
+    });
   });
   return found;
 }
@@ -145,6 +187,8 @@ function pulledAt(inventory: TenantInventory, kind: InventoryKind): string {
 export function checkReferences(disk: PackageOnDisk, inventory: TenantInventory | undefined): Finding[] {
   const pkg = disk.package;
   const findings: Finding[] = [];
+  // A section whose file could not be read says nothing yet: what names its entries is not checked.
+  const unreadable = new Set(disk.unreadable ?? []);
   for (const target of KEYED) {
     const seen = new Map<string, number>();
     list(pkg[target.section]).forEach((entry, i) => {
@@ -167,15 +211,18 @@ export function checkReferences(disk: PackageOnDisk, inventory: TenantInventory 
 
   for (const ref of references(pkg)) {
     const { target } = ref;
+    if (unreadable.has(target.section)) continue;
     const inPackage = keysIn(pkg, target);
     if (inPackage.includes(ref.name) || target.builtin?.has(ref.name)) continue;
     const tenant = target.inventory ? inventory?.names[target.inventory] : undefined;
     if (target === AGENT) {
+      // A package without agents (tests kept apart from the solution) cannot say which agents there are.
+      if (ref.how && !Array.isArray(pkg.agents)) continue;
       findings.push({
         code: REFERENCE_MISSING_CODE,
         severity: "error",
         ...locate(disk, ref.pointer),
-        ...suggested(`${ref.from} hands off to the agent "${ref.name}", which is not in the package.`, closest(ref.name, inPackage)),
+        ...suggested(`${ref.from} ${ref.how ?? "hands off to"} the agent "${ref.name}", which is not in the package.`, closest(ref.name, inPackage)),
       });
       continue;
     }
@@ -186,9 +233,9 @@ export function checkReferences(disk: PackageOnDisk, inventory: TenantInventory 
       severity: "warning",
       ...locate(disk, ref.pointer),
       ...suggested(
-        `${ref.from} names the ${target.label} "${ref.name}", which is neither in the package nor among the tenant's ${kind} ` +
+        `${ref.from} ${ref.how ?? "names"} the ${target.label} "${ref.name}", which is neither in the package nor among the tenant's ${kind} ` +
           `at the last pull (${pulledAt(inventory!, target.inventory!)}).`,
-        closest(ref.name, [...inPackage, ...tenant]),
+        closest(ref.name, [...inPackage, ...tenant, ...(target.builtin ?? [])]),
       ),
     });
   }
@@ -212,7 +259,7 @@ function resolve(schema: PackageSchema, node: unknown): SchemaNode | undefined {
 }
 
 /** The schemas a value may match: a union's branches, each resolved. */
-function branches(schema: PackageSchema, node: unknown): SchemaNode[] {
+export function branches(schema: PackageSchema, node: unknown): SchemaNode[] {
   const resolved = resolve(schema, node);
   if (!resolved) return [];
   const union = [resolved.anyOf, resolved.oneOf, resolved.allOf].find(Array.isArray) as unknown[] | undefined;
@@ -261,6 +308,9 @@ export function checkUnknownFields(disk: PackageOnDisk, schema: PackageSchema, s
       if (required) {
         required.message += ` ("${key}" is set, which the package schema does not have; did you mean "${suggestion}"?)`;
         required.suggestion = suggestion;
+        // The line of the misspelt field, which is what to fix, rather than the entry's first line.
+        const misspelt = locate(disk, at);
+        if (misspelt.line !== undefined && misspelt.file === required.file) required.line = misspelt.line;
         continue;
       }
       const where = locate(disk, at);
@@ -293,6 +343,8 @@ export function checkUnknownFields(disk: PackageOnDisk, schema: PackageSchema, s
 export function checkModels(disk: PackageOnDisk, inventory: TenantInventory | undefined): Finding[] {
   const tenant = inventory?.names.models;
   if (!Array.isArray(tenant) || !tenant.length) return [];
+  // The package's own rows may hold the model; a file of them that cannot be read says nothing yet.
+  if (disk.unreadable?.includes("model_registry")) return [];
   const known = new Set([...tenant, ...list(disk.package.model_registry).flatMap((row) => (text(row?.model_id) ? [row!.model_id as string] : []))]);
   const findings: Finding[] = [];
   list(disk.package.agents).forEach((agent, i) => {
@@ -310,4 +362,38 @@ export function checkModels(disk: PackageOnDisk, inventory: TenantInventory | un
     });
   });
   return findings;
+}
+
+// ---------------------------------------------------------------------------
+// What could not be checked
+// ---------------------------------------------------------------------------
+
+/** What each list of the tenant checks, for the line that says it was not checked. */
+const CHECKED_BY: Record<InventoryKind, string> = {
+  solutions: "the solutions the package names",
+  knowledge_bases: "the knowledge bases the package names",
+  tools: "the tools the package names",
+  skills: "the skills the package names",
+  models: "the agents' models",
+};
+
+export const checkedBy = (kind: InventoryKind) => CHECKED_BY[kind];
+
+/**
+ * The tenant's lists the package needs and the kit has not read: a reference
+ * to an entry the package does not carry, or an agent's model, with no list
+ * of that kind in .cavelon/inventory.json. Those references are not checked
+ * until the list is read (`pull`, `models list`, or validate when online).
+ */
+export function missingInventory(disk: PackageOnDisk, inventory: TenantInventory | undefined): InventoryKind[] {
+  const needed = new Set<InventoryKind>();
+  const pkg = disk.package;
+  for (const ref of references(pkg)) {
+    const kind = ref.target.inventory;
+    if (!kind || keysIn(pkg, ref.target).includes(ref.name) || ref.target.builtin?.has(ref.name)) continue;
+    needed.add(kind);
+  }
+  const own = new Set(list(pkg.model_registry).flatMap((row) => (text(row?.model_id) ? [row!.model_id as string] : [])));
+  if (list(pkg.agents).some((agent) => text(agent?.llm_model) && !own.has(agent!.llm_model as string))) needed.add("models");
+  return [...needed].filter((kind) => !Array.isArray(inventory?.names[kind]));
 }

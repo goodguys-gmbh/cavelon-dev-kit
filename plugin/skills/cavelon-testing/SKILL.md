@@ -72,7 +72,14 @@ consult tool's name, not with `handoff_to`. Use the slugs from
 `package/agents.yaml`.
 
 `cavelon validate` checks the assertions against the instance's package
-schema where the schema describes a step's criteria. Where it does not, it
+schema where the schema describes a step's criteria (`cavelon schema
+test_suites.test_cases.steps.evaluation_criteria` lists each shape): a
+misspelt `type` is one error with the closest type, an `answered_by` or
+`handoff_to` naming an agent the package lacks is an error, and a
+`tool_called` or `tool_not_called` naming a tool that is nowhere is a warning,
+each with "did you mean". Cases and steps run in their written order once
+`cavelon fmt` has numbered them (`sort_order`, `step_order`); left out, the
+instance orders cases by name. Where the schema does not describe a step's criteria, it
 warns `test_assertion_unchecked`: an instance that does not know a type grades
 it as a judge criterion instead of checking it, so read `cavelon docs get
 concepts/regression-testing` for the types the instance knows before relying on

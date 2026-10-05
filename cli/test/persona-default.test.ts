@@ -391,7 +391,7 @@ describe("fmt", () => {
       expect(pull.json<{ files: { written: string[] } }>().files.written).toEqual([]);
     });
 
-    it("without fmt, the first pull writes the files the export fills defaults into", async () => {
+    it("without fmt, the first pull keeps a file whose fields the export only spells out, and writes a real change", async () => {
       server.state.exportFillsDefaults = true;
       const dir = await pulled();
       const agents = path.join(dir, "package", "agents.yaml");
@@ -399,10 +399,18 @@ describe("fmt", () => {
       await applied(dir);
       const pull = await cli(sb, ["pull", "--json"], { cwd: dir });
       expect(pull.code, pull.stderr).toBe(0);
-      // The manifest follows with its export time, as it does whenever another file changes.
-      expect(pull.json<{ files: { written: string[] } }>().files.written).toEqual(["package/agents.yaml", "package/manifest.yaml"]);
-      expect((parse(read(agents)) as Array<Record<string, unknown>>)[0]).toMatchObject({ slug: "helper", is_active: true, display_order: 0 });
-      expect(read(agents)).toMatch(/^- slug: helper\n {2}name: Helper\n/);
+      expect(pull.json<{ files: { written: string[] } }>().files.written).toEqual([]);
+      expect(read(agents)).toBe(byHand);
+
+      // A change on the instance is written, in the export's form; the manifest follows with its export time.
+      const pkg = server.state.configs.get(tenant)!.pkg;
+      (pkg.agents as Array<Record<string, unknown>>)[0]!.temperature = 0.7;
+      const again = await cli(sb, ["pull", "--json"], { cwd: dir });
+      expect(again.json<{ files: { written: string[] } }>().files.written).toEqual(["package/agents.yaml", "package/manifest.yaml"]);
+      expect((parse(read(agents)) as Array<Record<string, unknown>>)[0]).toMatchObject({ slug: "helper", temperature: 0.7, is_active: true, memory_config: {}, handoffs: [] });
+      expect(read(agents)).toMatch(/^- slug: helper\n {2}harness_slug: null\n {2}name: Helper\n/);
+      // fmt and pull agree: the pulled file is in the export's form.
+      expect((await cli(sb, ["fmt", "--check"], { cwd: dir })).code).toBe(0);
     });
   });
 

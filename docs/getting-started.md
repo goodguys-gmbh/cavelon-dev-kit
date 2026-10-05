@@ -247,19 +247,24 @@ error package_schema_invalid  package/agents.yaml:4 agents[0].temperature: must 
 ```
 
 `validate` also checks what the schema cannot: two entries with one slug, a
-handoff to an agent the package lacks (errors), and, as warnings, a field the
-schema does not have ("did you mean temperature?"), a skill, tool, knowledge
-base or solution that is neither in the package nor among what the tenant held
-at the last pull, and a model outside the tenant's model list.
+handoff or a test assertion (`answered_by`, `handoff_to`) naming an agent the
+package lacks (errors), and, as warnings, a field the schema does not have
+("did you mean temperature?"), a skill, tool, knowledge base or solution that
+is neither in the package nor among what the tenant holds, a model outside the
+tenant's model list, and a package that names another solution than
+`cavelon.yaml`. The import preview blocks a name the instance does not have,
+so for those `validate` does not say "Valid"; `cavelon validate --strict` fails
+on any warning. `cavelon schema agents.handoffs` (or any section and field
+path) shows the fields a nested entry takes.
 
 `cavelon explain <code>` looks any code up in the instance's error catalog, and
 knows `cavelon`'s own codes too; for a code it does not know, it names the
 closest ones.
 
 When you write package files by hand, `cavelon fmt` brings them into the form
-the instance's export gives them (field order, the defaults it fills in), so
-the first `cavelon pull` after an apply shows only what changed on the
-instance.
+the instance's export gives them (field order, the defaults it fills in, and
+the written order of test cases), so the first `cavelon pull` after an apply
+shows only what changed on the instance.
 
 ## 6. Preview, then apply
 

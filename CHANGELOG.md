@@ -16,6 +16,26 @@ CLI, the skills and the plugin.
   removes the expired ones.
 - `cavelon apply --confirm <id> --allow-stale` imports what a preview showed
   although the package files changed since.
+- `cavelon schema` reaches nested types: by path (`cavelon schema
+  agents.handoffs`, `cavelon schema test_suites.test_cases.steps`) or by type
+  name (`cavelon schema PackageAgentHandoff`, which also says where it is
+  used), with required fields, allowed values and a minimal entry. A section
+  names the fields that have fields of their own, and adds an example with one
+  entry of each nested list (a handoff; a test case with a step and its
+  criteria). Where entries take several shapes, as a step's
+  `evaluation_criteria`, each shape is listed with its fields; `--json` carries
+  `nested`, `nested_example`, `shapes` and `used_in`.
+- `cavelon validate --strict` fails (exit 3) on warnings too.
+- `cavelon pull --tenant-wide` writes the tenant-wide sections of a solution's
+  export, which `pull` now leaves out (see below).
+- `cavelon validate` checks the names a test step's assertions point at:
+  `answered_by` and `handoff_to` naming an agent the package lacks is an error,
+  `tool_called`, `tool_not_called` and `min_results`' `tool` naming a tool that
+  is neither in the package nor the tenant's a warning, each with "did you
+  mean".
+- `cavelon validate` warns when the package names another solution than
+  `cavelon.yaml` (`solution_slug_mismatch`), as after copying an example under
+  another name.
 
 ### Changed
 
@@ -40,6 +60,40 @@ CLI, the skills and the plugin.
   instance's only when the instance's export holds the same content, so a
   comment or formatting change after the preview no longer makes the next
   `pull` refuse, and an edit the instance lacks is still protected.
+- `fmt` and `pull` agree on the export's form. `fmt` also fills `[]` and `{}`
+  for a list or object field that has a default the schema cannot show, and
+  numbers the entries of a list that leave out an `…_order` field
+  (`sort_order`, `display_order`, `step_order`) by their position, so test
+  cases keep their written order instead of the instance's (by name). `pull`
+  compares a file with the export as the instance reads both: a field the
+  export spells out (`memory_config: {}`, `tags: []`, `max_output_tokens:
+  null`, a default) and the file leaves out is no change, so the first pull
+  after an apply rewrites only what changed on the instance.
+- `pull` writes a test suite back to the file it was pulled into or applied
+  from, whatever its name, instead of a file named after the suite; the
+  mapping is kept in `.cavelon/pulled-files.json`.
+- `pull` of a solution leaves the tenant-wide sections out of the solution's
+  folder: those the package schema marks `x-cavelon-scope: tenant`, or on an
+  instance that marks none, `tenant_settings` and `model_registry`. A file of
+  one already there is kept, with a warning that `apply` sends it for the whole
+  tenant. The tenant's full configuration (`pull` without a solution) keeps
+  them.
+- `cavelon validate` does not print "Valid" while a reference the import
+  preview will block is left (`package_reference_unknown`,
+  `package_model_unknown`): it says the preview will block it unless it exists
+  on the instance by then (`blocking_count` in `--json`).
+- `cavelon validate` reads a tenant's list the package needs (models, skills,
+  tools, knowledge bases, solutions) when no pull or `models list` has read it
+  yet, instead of skipping the check; with `--offline` it names each check it
+  skipped (`Not checked: …`, `skipped` in `--json`).
+- `cavelon validate` findings: a misspelt assertion `type` (`answerd_by`) is
+  one finding with the closest type instead of one per criterion shape; an
+  unknown field gets a suggestion that starts with it (`description` →
+  `description_override`); a required field under another name points at the
+  misspelt field's line; invalid YAML names the parser's line, and what names
+  the entries of a file that cannot be read is not reported; a schema
+  finding's hint is the CLI's (`cavelon schema agents.handoffs`), also where
+  the instance's catalog has an API hint for the code.
 
 - The contract snapshot is refreshed from an instance that publishes a test
   step's criterion shapes in its package schema (judge criteria as text or

@@ -131,15 +131,16 @@ who may decide before you test, read the node's `approvers` in
 
 | Code | Exit | Cause and fix |
 |---|---|---|
-| `package_schema_invalid` | 3 | A package file does not match the instance's package schema. Each finding names the file, line and path. Where a value can take several shapes (a test step's criterion is a text, a judge criterion or an assertion by `type`), only what the closest shape says is reported. |
+| `package_schema_invalid` | 3 | A package file does not match the instance's package schema. Each finding names the file, line and path, and its hint the `cavelon schema <path>` that shows the fields there (`cavelon schema agents.handoffs`). Where a value can take several shapes (a test step's criterion is a text, a judge criterion or an assertion by `type`), only what the closest shape says is reported; a `type` that names no shape (`answerd_by`) is one finding with the closest type (`did you mean "answered_by"?`). A required field under another name points at the line of the misspelt field. |
 | `package_version_unsupported` | 3 | The instance does not accept the package version in `cavelon.yaml` and `package/manifest.yaml`. `cavelon status --json` lists the accepted versions; `cavelon pull` writes a current package. |
 | `knowledge_base_without_search_tool` | 0 (a warning) | An agent is given a knowledge base, by a skill or on a tool assignment, but no search tool reaches it, so it answers without it. Add `- tool_slug: search_documents` to the `tool_assignments` of that skill or of the agent. |
 | `package_duplicate_key` | 3 | Two entries of one section have the same slug (or name, for a knowledge base); the import would keep one. The finding names both places. |
-| `package_reference_missing` | 3 | An agent hands off to an agent that is not in the package. The finding suggests the closest slug. |
-| `package_reference_unknown` | 0 (a warning) | A skill, tool, knowledge base or solution is named that is neither in the package nor among what the tenant held at the last pull (`.cavelon/inventory.json`). Fix the name (the finding suggests the closest one), or run `cavelon pull` if it was created since. Without that list, only the package is checked. |
+| `package_reference_missing` | 3 | An agent hands off to an agent that is not in the package, or a test step's `answered_by` or `handoff_to` assertion names one. The finding suggests the closest slug. |
+| `package_reference_unknown` | 0 (a warning) | A skill, tool, knowledge base or solution is named (by an agent, a skill, or a test step's `tool_called`, `tool_not_called` or `min_results` assertion) that is neither in the package nor among what the tenant held at the last pull (`.cavelon/inventory.json`). Fix the name (the finding suggests the closest one), or run `cavelon pull` if it was created since. The import preview blocks such a reference unless it exists by then, so `validate` does not say "Valid", and `--strict` fails. Where no command has read the tenant's list yet, `validate` reads it, unless `--offline`; then it says which check it skipped (`Not checked: …`, `skipped` in `--json`). |
 | `package_field_unknown` | 0 (a warning) | A field the package schema does not have; the import ignores it. The finding suggests the field you probably meant. A required field under another name is reported once, as the missing field, with the suggestion. |
-| `package_model_unknown` | 0 (a warning) | An agent's `llm_model` is not in the tenant's model list as `pull` or `models list` last read it. An empty Model Registry is not checked: the instance's defaults serve the agents. |
-| `package_file_invalid` | 3 | A package file is not valid YAML or JSON (the finding names the line), or it is a symlink to a file outside the solution folder or to no file. A link inside the solution folder is read as the file it leads to. |
+| `package_model_unknown` | 0 (a warning) | An agent's `llm_model` is not in the tenant's model list as `pull`, `models list` or `validate` last read it. The import preview blocks it, so `validate` does not say "Valid", and `--strict` fails. An empty Model Registry is not checked: the instance's defaults serve the agents. |
+| `solution_slug_mismatch` | 0 (a warning) | The package names another solution than `cavelon.yaml`: `package/harnesses.yaml` holds no entry of its slug, or (in a package without harnesses) an agent's or suite's `harness_slug` names another. Typical after copying an example under another name: change the slug and every `harness_slug`, or `harness` in `cavelon.yaml`. |
+| `package_file_invalid` | 3 | A package file is not valid YAML or JSON (the finding names the parser's line), or it is a symlink to a file outside the solution folder or to no file. A link inside the solution folder is read as the file it leads to. What names the entries of a file that cannot be read is not checked until it can be. |
 | `project_file_invalid`, `env_file_invalid` | 3 | `cavelon.yaml` or `env/<name>.yaml` is not valid YAML or has a wrong value. |
 | `project_file_has_secret` | 3 | `cavelon.yaml` contains something that looks like a token. Remove it, revoke the token, and use `cavelon login` or `CAVELON_TOKEN`. |
 | `no_solution` | 2 | The command needs a solution folder: run it in a folder with `cavelon.yaml`, or `cavelon init` first. |
@@ -150,14 +151,29 @@ who may decide before you test, read the node's `approvers` in
 A finding with a code of the instance's rules (such as a graph rule) is
 explained by `cavelon explain <code>`, as are `cavelon`'s own codes (the ones on
 this page). For a code it does not know, `explain` names the closest known
-ones: a typo away, or with the same start. Warnings never fail `validate`;
-errors exit 3.
+ones: a typo away, or with the same start. Warnings fail `validate` only with
+`--strict`; errors exit 3.
 
-The first `pull` after you applied hand-written files rewrites them when the
-instance's export spells them differently (defaults filled in, fields in
-another order); the values are the same. `cavelon fmt` brings the files into
-that form before you apply, and `cavelon fmt --check` exits 3 while one is
-not.
+The first `pull` after you applied hand-written files keeps them where the
+export only spells out what the file leaves out (an empty list or object,
+`null`, a default): the values are the same. It rewrites a file whose value
+changed on the instance, in the export's form (every field, in the schema's
+order). `cavelon fmt` brings the files into that form before you apply, and
+`cavelon fmt --check` exits 3 while one is not. A test suite goes back to the
+file it came from, whatever its name.
+
+Test cases or steps written without `sort_order` or `step_order` all import
+with the default, and the instance orders them its own way (test cases by
+name). `cavelon fmt` sets each one that is missing from its position in the
+list, so they keep the written order. A file that `cavelon` 0.1.5's `fmt` gave
+`sort_order: 0` on every case keeps that value: remove those lines and run
+`cavelon fmt` again.
+
+`pull` of a solution leaves the tenant-wide sections (`tenant_settings`,
+`model_registry`, or the sections the instance marks `x-cavelon-scope: tenant`)
+out of the solution's folder; `apply` would send them for the whole tenant.
+`cavelon pull --tenant-wide` writes them; a file of one already there is kept,
+with a warning.
 
 On a development build of the instance, `validate` may report a field or
 section the instance has just gained as unknown: the build keeps its version

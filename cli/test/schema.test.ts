@@ -52,7 +52,7 @@ describe("schema", () => {
     expect(text.stdout).toMatch(/^FIELD\s+TYPE\s+REQUIRED\s+NOTES$/m);
     expect(text.stdout).toContain("Minimal example (required fields only):");
     // The example is YAML a file can take as it is.
-    const yaml = text.stdout.slice(text.stdout.indexOf("Minimal example"));
+    const yaml = text.stdout.slice(text.stdout.indexOf("Minimal example"), text.stdout.indexOf("\n\nWith one entry of each nested list:"));
     const parsed = parse(yaml.slice(yaml.indexOf("\n") + 1)) as Array<Record<string, unknown>>;
     expect(parsed[0]).toMatchObject({ slug: "<slug>", name: "<name>" });
 
@@ -77,5 +77,55 @@ describe("schema", () => {
     expect(result.code, result.stderr).toBe(0);
     expect(result.json()).toMatchObject({ file: "tests/<one file per entry>.yaml", schema: { source: "cache" } });
     expect(server.state.requests).toHaveLength(0);
+  });
+
+  it("reaches a nested type by its path or its name, with its required fields, allowed values and a minimal entry", async () => {
+    type Field = { name: string; required: boolean; default?: unknown };
+    const agents = (await cli(sb, ["schema", "agents", "--json"])).json<{ nested: Array<{ field: string; path: string; type: string }>; nested_example: Array<Record<string, unknown>> }>();
+    expect(agents.nested).toEqual(expect.arrayContaining([{ field: "handoffs", path: "agents.handoffs", type: "list of PackageAgentHandoff" }]));
+    // The example with one entry of each nested list: a handoff among them.
+    expect(agents.nested_example[0]!.handoffs).toEqual([{ to_agent_slug: "<to_agent_slug>" }]);
+    expect((await cli(sb, ["schema", "agents"])).stdout).toMatch(/^cavelon schema agents\.handoffs\s+list of PackageAgentHandoff$/m);
+
+    const byPath = await cli(sb, ["schema", "agents.handoffs", "--json"]);
+    expect(byPath.code, byPath.stderr).toBe(0);
+    const handoffs = byPath.json<{ path: string; section: string; kind: string; entry: string; file: string; fields: Field[]; example: unknown[] }>();
+    expect(handoffs).toMatchObject({ path: "agents.handoffs", section: "agents", kind: "list", entry: "PackageAgentHandoff", file: "package/agents.yaml" });
+    expect(handoffs.fields.find((f) => f.name === "to_agent_slug")).toMatchObject({ required: true });
+    expect(handoffs.fields.find((f) => f.name === "edge_type")).toMatchObject({ required: false, default: "handoff" });
+    expect(handoffs.fields.map((f) => f.name)).toContain("description_override");
+    expect(handoffs.example).toEqual([{ to_agent_slug: "<to_agent_slug>" }]);
+
+    const byName = (await cli(sb, ["schema", "PackageAgentHandoff", "--json"])).json<{ used_in: string[]; fields: Field[] }>();
+    expect(byName.used_in).toEqual(["agents.handoffs"]);
+    expect(byName.fields).toEqual(handoffs.fields);
+    expect((await cli(sb, ["schema", "PackageTestCase", "--json"])).json()).toMatchObject({ used_in: ["test_suites.test_cases"], file: "package/test_suites.yaml" });
+  });
+
+  it("lists each shape an entry may take, as a step's criteria", async () => {
+    const result = await cli(sb, ["schema", "test_suites.test_cases.steps.evaluation_criteria", "--json"]);
+    expect(result.code, result.stderr).toBe(0);
+    type Shape = { type: string; fields: Array<{ name: string; enum?: string[] }>; example: Record<string, unknown> };
+    const data = result.json<{ shapes: Shape[]; other_shapes: string[]; fields: unknown[] }>();
+    expect(data.other_shapes).toEqual(["string"]);
+    const routing = data.shapes.find((s) => s.type === "RoutingCriterion")!;
+    expect(routing.fields.find((f) => f.name === "type")!.enum).toEqual(["answered_by", "handoff_to"]);
+    expect(routing.example).toEqual({ type: "answered_by", value: "<value>" });
+    expect(data.shapes.map((s) => s.type)).toEqual(expect.arrayContaining(["CriterionSpec", "ToolCriterion", "TextMatchCriterion"]));
+
+    // A suite's example carries a case with a step and its criteria.
+    const suites = (await cli(sb, ["schema", "test_suites", "--json"])).json<{ nested_example: Array<{ test_cases: Array<{ steps: Array<{ evaluation_criteria: unknown[] }> }> }> }>();
+    const step = suites.nested_example[0]!.test_cases[0]!.steps[0]!;
+    expect(step).toMatchObject({ user_message: "<user_message>" });
+    expect(step.evaluation_criteria).toEqual(expect.arrayContaining(["<evaluation_criteria>", { text: "<text>" }]));
+  });
+
+  it("names the nested fields there are for a path it does not know (exit 2)", async () => {
+    const result = await cli(sb, ["schema", "agents.handof", "--json"]);
+    expect(result.code).toBe(2);
+    const error = result.json<{ error: { message: string; hint: string } }>().error;
+    expect(error.message).toBe('The package schema has no nested field "handof" under agents.');
+    expect(error.hint).toMatch(/^Did you mean: agents\.handoffs\? Nested under agents: .*handoffs/);
+    expect((await cli(sb, ["schema", "PackageNothing"])).code).toBe(2);
   });
 });

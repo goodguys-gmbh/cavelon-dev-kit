@@ -85,13 +85,29 @@ export async function fileDigests(root: string, files: string[]): Promise<Record
   return digests;
 }
 
+interface PulledFiles {
+  digests?: Record<string, string>;
+  /** Which file the last pull put each entry of a one-file-per-entry section in, by section and the entry's slug or name. */
+  items?: Record<string, Record<string, string>>;
+}
+
+const readPulled = async (root: string) => (await readJsonFile<PulledFiles>(path.join(stateDir(root), PULLED_FILES))) ?? {};
+
 /**
  * The package files as the last pull left them, by digest. Outside git, and
  * for files not committed yet, it is the only way to tell a local edit from
- * what the instance holds.
+ * what the instance holds. `items` says which file holds which entry of a
+ * section kept one file per entry, so the next pull writes it back there.
  */
-export async function writePulledFiles(root: string, files: string[]): Promise<void> {
-  await writeState(root, PULLED_FILES, JSON.stringify({ digests: await fileDigests(root, files) }, null, 2));
+export async function writePulledFiles(root: string, files: string[], items?: Record<string, Record<string, string>>): Promise<void> {
+  const kept = items ?? (await readPulled(root)).items;
+  await writeState(root, PULLED_FILES, JSON.stringify({ digests: await fileDigests(root, files), ...(kept ? { items: kept } : {}) }, null, 2));
+}
+
+/** Which file the last pull put each entry of a one-file-per-entry section in; empty before the first pull. */
+export async function readItemFiles(root: string): Promise<Record<string, Record<string, string>>> {
+  const items = (await readPulled(root)).items;
+  return items && typeof items === "object" && !Array.isArray(items) ? items : {};
 }
 
 /**
@@ -102,13 +118,14 @@ export async function writePulledFiles(root: string, files: string[]): Promise<v
 export async function rememberAppliedFiles(root: string, known: Record<string, string>, unknown: string[] = []): Promise<void> {
   const digests = { ...(await readPulledFiles(root)), ...known };
   for (const file of unknown) delete digests[file];
-  await writeState(root, PULLED_FILES, JSON.stringify({ digests }, null, 2));
+  const items = (await readPulled(root)).items;
+  await writeState(root, PULLED_FILES, JSON.stringify({ digests, ...(items ? { items } : {}) }, null, 2));
 }
 
 /** The package files' digests as the last pull or apply left them. */
 export async function readPulledFiles(root: string): Promise<Record<string, string>> {
-  const stored = await readJsonFile<{ digests?: Record<string, string> }>(path.join(stateDir(root), PULLED_FILES));
-  return stored?.digests && typeof stored.digests === "object" ? stored.digests : {};
+  const stored = await readPulled(root);
+  return stored.digests && typeof stored.digests === "object" ? stored.digests : {};
 }
 
 export function digest(value: unknown): string {

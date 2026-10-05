@@ -22,8 +22,11 @@ export const fmt: CommandSpec = {
   summary: "Bring the package files into the export's form (field order and defaults from the package schema), offline.",
   description:
     "A file whose value the export would spell differently is rewritten: each field in the schema's order, and each field it\n" +
-    "leaves out set to the schema's default, as the export writes it (the instance applies the same defaults, so nothing\n" +
-    "changes in what apply sends but the spelling). Lists become block lists; the persona file shows every field, the unset\n" +
+    "leaves out set to what the instance gives it, as the export writes it: the schema's default, an empty list or object for\n" +
+    "a list or object field without one. The instance applies the same values, so nothing changes in what apply sends but the\n" +
+    "spelling, with one exception: an entry of a list that leaves out an `..._order` field (sort_order, display_order,\n" +
+    "step_order) gets its position, so the instance keeps the written order instead of ordering entries that all carry the\n" +
+    "default its own way (test cases by name). Lists become block lists; the persona file shows every field, the unset\n" +
     "ones as comments. Comments in a rewritten file are not kept, as pull does not keep them. A file already in that form\n" +
     "keeps its bytes, and so do the files of sections the schema does not know. Run it after writing package files by hand\n" +
     "and before `apply`, so the next `pull` shows only what changed on the instance. --check writes nothing and exits 3 when a\n" +

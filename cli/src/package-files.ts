@@ -4,9 +4,9 @@ import { LineCounter, parseDocument, type Document } from "yaml";
 import type { PackageSchema } from "./contracts.js";
 import { CavelonError, ExitCode } from "./errors.js";
 import { readTextFile, withoutBom, writeFileAtomic } from "./fsutil.js";
-import { PERSONA_SECTION, sameSectionValue, sectionContent, sectionFields, toYaml, withoutNulls } from "./package-format.js";
+import { canonical, PERSONA_SECTION, sameEntry, sameSectionValue, sectionContent, sectionFields, toYaml } from "./package-format.js";
 
-export { toYaml };
+export { canonical, toYaml };
 
 /**
  * A solution package as files in the repository, split along the top-level
@@ -62,6 +62,27 @@ export function schemaSections(schema: PackageSchema | null): string[] {
   return Object.keys(schema?.properties ?? {});
 }
 
+/** How an instance marks a section of its package schema that holds the tenant's settings rather than one solution's. */
+const SCOPE_KEY = "x-cavelon-scope";
+/**
+ * The tenant-wide sections of an instance that marks none: the tenant's
+ * settings and its model list, which an older instance's solution export
+ * carries along although they are the whole tenant's.
+ */
+const TENANT_WIDE_UNMARKED = ["tenant_settings", "model_registry"];
+
+/**
+ * The sections that hold the whole tenant's settings: those the schema marks
+ * `x-cavelon-scope: tenant`, or on an instance that marks no section, the
+ * ones older instances export with every solution.
+ */
+export function tenantWideSections(schema: PackageSchema | null): Set<string> {
+  const properties = (schema?.properties ?? {}) as Record<string, Record<string, unknown> | undefined>;
+  const marked = Object.entries(properties).filter(([, node]) => node && typeof node[SCOPE_KEY] === "string");
+  if (marked.length) return new Set(marked.filter(([, node]) => node![SCOPE_KEY] === "tenant").map(([section]) => section));
+  return new Set(TENANT_WIDE_UNMARKED.filter((section) => section in properties));
+}
+
 // ---------------------------------------------------------------------------
 // Reading
 // ---------------------------------------------------------------------------
@@ -95,6 +116,8 @@ export interface PackageOnDisk {
   findings: Finding[];
   /** True when the solution has no package files yet (before the first pull). */
   empty: boolean;
+  /** Sections with a file that could not be read: what refers to them is not checked, as the file says nothing yet. */
+  unreadable?: string[];
 }
 
 function rel(root: string, file: string): string {
@@ -184,7 +207,8 @@ function parseFile(root: string, file: string, text: string): { value?: unknown;
         code: "package_file_invalid",
         severity: "error",
         file: relative,
-        line: first.linePos?.[0]?.line,
+        // The parser's position: `linePos` is only filled in with prettyErrors, which also rewrites the message.
+        line: first.linePos?.[0]?.line ?? (typeof first.pos?.[0] === "number" ? lines.linePos(first.pos[0]).line : undefined),
         message: `Not valid YAML: ${first.message.split("\n")[0]}`,
       },
     };
@@ -197,6 +221,7 @@ export async function readPackage(root: string, layout: Layout): Promise<Package
   const pkg: Record<string, unknown> = {};
   const sources: PackageOnDisk["sources"] = {};
   const findings: Finding[] = [];
+  const unreadable = new Set<string>();
   const dir = path.join(root, layout.package);
   let empty = true;
   for (const name of await listFiles(dir)) {
@@ -215,6 +240,7 @@ export async function readPackage(root: string, layout: Layout): Promise<Package
     if ("finding" in read) {
       sources[section] = { file: rel(root, file) };
       findings.push(read.finding);
+      unreadable.add(section);
       empty = false;
       continue;
     }
@@ -223,8 +249,10 @@ export async function readPackage(root: string, layout: Layout): Promise<Package
     // The persona file of placeholders only (as init writes it) sets nothing, so it sends nothing and is no package yet.
     if (!parsed.finding && section === PERSONA_SECTION && (parsed.value === null || parsed.value === undefined)) continue;
     empty = false;
-    if (parsed.finding) findings.push(parsed.finding);
-    else pkg[section] = parsed.value;
+    if (parsed.finding) {
+      findings.push(parsed.finding);
+      unreadable.add(section);
+    } else pkg[section] = parsed.value;
   }
   for (const [section, folder] of Object.entries(layout.items)) {
     const itemDir = path.join(root, folder);
@@ -247,20 +275,25 @@ export async function readPackage(root: string, layout: Layout): Promise<Package
     for (const name of names) {
       const file = path.join(itemDir, name);
       const read = await readSource(root, file);
+      // A file that cannot be read has no entry, nor a source: the sources stay at their entries' indexes.
       if ("finding" in read) {
-        itemSources.push({ file: rel(root, file) });
         findings.push(read.finding);
+        unreadable.add(section);
         continue;
       }
       const parsed = parseFile(root, file, read.text);
+      if (parsed.finding) {
+        findings.push(parsed.finding);
+        unreadable.add(section);
+        continue;
+      }
       itemSources.push(parsed.source);
-      if (parsed.finding) findings.push(parsed.finding);
-      else items.push(parsed.value);
+      items.push(parsed.value);
     }
     sources[section] = itemSources;
     pkg[section] = items;
   }
-  return { package: pkg, sources, findings, empty };
+  return { package: pkg, sources, findings, empty, unreadable: [...unreadable] };
 }
 
 /** The file and line a location in the package (`/agents/0/name`) comes from. */
@@ -312,21 +345,16 @@ export interface WriteReport {
   kept: string[];
   /** Sections whose name cannot be a file name here; never written. */
   refused: string[];
+  /** Tenant-wide sections left out of a solution's folder (written only when asked); a file of one already there is kept. */
+  tenant_wide: string[];
 }
+
+/** Which file holds which entry of a section kept one file per entry, by the entry's label (`entryLabel`). */
+export type ItemFiles = Record<string, Record<string, string>>;
 
 /** A section name that is a plain file name: no path, no leading dot. */
 export function safeSectionName(section: string): boolean {
   return /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(section) && !section.includes("..");
-}
-
-/** JSON with sorted keys: two values are the same when this is. */
-export function canonical(value: unknown): string {
-  return JSON.stringify(value, (_key, v: unknown) => {
-    if (v && typeof v === "object" && !Array.isArray(v)) {
-      return Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
-    }
-    return v;
-  });
 }
 
 async function readValue(root: string, file: string): Promise<{ value?: unknown; ok: boolean }> {
@@ -349,10 +377,15 @@ export async function placeholdersOnly(root: string, relative: string): Promise<
   return old.ok && (old.value === null || old.value === undefined);
 }
 
+/** What names an entry of a list section: its slug, name or key, as the export keeps it from one pull to the next. */
+export function entryLabel(item: unknown): string | undefined {
+  const record = item && typeof item === "object" && !Array.isArray(item) ? (item as Record<string, unknown>) : {};
+  return [record.slug, record.name, record.key].find((v): v is string => typeof v === "string" && v.trim() !== "");
+}
+
 /** A file name for one item: its slug or name, made safe, unique in the folder. */
 function itemFileName(item: unknown, index: number, taken: Set<string>): string {
-  const record = item && typeof item === "object" && !Array.isArray(item) ? (item as Record<string, unknown>) : {};
-  const label = [record.slug, record.name, record.key].find((v): v is string => typeof v === "string" && v.trim() !== "");
+  const label = entryLabel(item);
   const base =
     trimDashesAndDots(
       (label ?? `item-${index + 1}`)
@@ -367,22 +400,36 @@ function itemFileName(item: unknown, index: number, taken: Set<string>): string 
   return name;
 }
 
+export interface WriteOptions {
+  dryRun?: boolean;
+  /** Sections not to write (tenant-wide ones in a solution's folder); a file of one already there is kept as it is. */
+  skip?: Set<string>;
+  /** Where the last pull put each entry of a one-file-per-entry section, for an entry its file no longer names. */
+  itemFiles?: ItemFiles;
+  /** Filled with where this write put each entry, to remember for the next pull. */
+  placed?: ItemFiles;
+}
+
 /**
  * Write an exported package into the solution. A file whose content is
  * already the same value keeps its bytes, so `git diff` shows only what
- * changed on the instance. Files of known sections the export no longer has
- * are removed; files of sections the schema does not know are kept.
- * `dryRun` reports what a write would do and touches nothing.
+ * changed on the instance: the same value, as `settledForm` compares it, also
+ * when the export spells out fields the file leaves out. Files of known
+ * sections the export no longer has are removed; files of sections the schema
+ * does not know are kept. An entry of a one-file-per-entry section is written
+ * back to the file that holds it (by its slug or name), wherever that file is
+ * named. `dryRun` reports what a write would do and touches nothing.
  */
 export async function writePackage(
   root: string,
   layout: Layout,
   pkg: Record<string, unknown>,
   schema: PackageSchema | null,
-  options: { dryRun?: boolean } = {},
+  options: WriteOptions = {},
 ): Promise<WriteReport> {
   const dryRun = options.dryRun === true;
-  const report: WriteReport = { written: [], unchanged: [], removed: [], kept: [], refused: [] };
+  const skip = options.skip ?? new Set<string>();
+  const report: WriteReport = { written: [], unchanged: [], removed: [], kept: [], refused: [], tenant_wide: [] };
   const known = new Set(schemaSections(schema));
   const required = new Set(schema?.required ?? []);
   const dir = path.join(root, layout.package);
@@ -399,6 +446,10 @@ export async function writePackage(
   // The persona file stays, its fields as placeholders, when the solution has no persona yet.
   if (!(PERSONA_SECTION in pkg) && sectionFields(schema, PERSONA_SECTION)) sections.push([PERSONA_SECTION, null]);
   for (const [section, value] of sections) {
+    if (skip.has(section)) {
+      report.tenant_wide.push(section);
+      continue;
+    }
     if (section in layout.items && Array.isArray(value)) continue;
     // The export's keys come from the instance; none of them may name a path.
     if (!safeSectionName(section)) {
@@ -408,45 +459,60 @@ export async function writePackage(
     const current = existing.get(section);
     const file = path.join(dir, current ?? `${section}.yaml`);
     const old = await readValue(root, file);
-    if (old.ok && sameSectionValue(section, old.value, value, canonical)) same.push({ file, section });
+    if (old.ok && sameSectionValue(section, old.value, value, schema)) same.push({ file, section });
     else plans.push({ file, section, content: sectionContent(section, value, schema, /\.json$/i.test(file)) });
   }
 
   for (const [section, folder] of Object.entries(layout.items)) {
     const value = pkg[section];
-    if (!Array.isArray(value)) continue;
+    if (!Array.isArray(value) || skip.has(section)) continue;
     const itemDir = path.join(root, folder);
+    const names = await listFiles(itemDir);
     const before = new Map<string, unknown>();
-    for (const name of await listFiles(itemDir)) {
+    for (const name of names) {
       const old = await readValue(root, path.join(itemDir, name));
       if (old.ok) before.set(name, old.value);
     }
     const taken = new Set<string>();
-    const unclaimed = new Map(before);
+    const claim = (name: string) => {
+      taken.add(name);
+      return name;
+    };
     // An item whose file already holds it keeps that file, whatever its name.
-    const placed = value.map((item) => {
-      for (const [name, old] of unclaimed) {
-        if (canonical(withoutNulls(old)) === canonical(withoutNulls(item))) {
-          unclaimed.delete(name);
-          taken.add(name);
-          return name;
-        }
-      }
-      return undefined;
+    const holding = value.map((item) => {
+      const name = [...before].find(([name, old]) => !taken.has(name) && sameEntry(section, old, item, schema))?.[0];
+      return name && claim(name);
     });
+    // A changed item goes back to the file that holds the entry of its name, or that the last pull put it in.
+    const recorded = options.itemFiles?.[section] ?? {};
+    const home = value.map((item, index) => {
+      if (holding[index]) return holding[index];
+      const label = entryLabel(item);
+      if (label === undefined) return undefined;
+      const byName = [...before].find(([name, old]) => !taken.has(name) && entryLabel(old) === label)?.[0];
+      if (byName) return claim(byName);
+      const last = recorded[label];
+      // Only a plain file name in this folder that still exists: the record is local state, never a path to follow.
+      return last && !taken.has(last) && names.includes(last) && !before.has(last) ? claim(last) : undefined;
+    });
+    const placedHere: Record<string, string> = {};
     value.forEach((item, index) => {
-      const name = placed[index];
-      if (name) {
-        same.push({ file: path.join(itemDir, name), section });
-        return;
-      }
-      plans.push({ file: path.join(itemDir, itemFileName(item, index, taken)), section, content: toYaml(item) });
+      const name = home[index] ?? itemFileName(item, index, taken);
+      const label = entryLabel(item);
+      if (label !== undefined) placedHere[label] = name;
+      if (holding[index]) same.push({ file: path.join(itemDir, name), section });
+      else plans.push({ file: path.join(itemDir, name), section, content: toYaml(item) });
     });
+    if (options.placed) options.placed[section] = placedHere;
     for (const name of before.keys()) if (!taken.has(name)) removals.push(path.join(itemDir, name));
     if (!dryRun) await fs.mkdir(itemDir, { recursive: true });
   }
 
   for (const [section, name] of existing) {
+    if (skip.has(section)) {
+      if (!report.tenant_wide.includes(section)) report.tenant_wide.push(section);
+      continue;
+    }
     if (section in pkg || section === PERSONA_SECTION) continue;
     const file = path.join(dir, name);
     if (known.has(section)) removals.push(file);
