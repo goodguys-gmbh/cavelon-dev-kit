@@ -5,6 +5,7 @@ import { CavelonError, ExitCode, usageError } from "../errors.js";
 import { clip, keyValues, table } from "../format.js";
 import { deref, schemaTypes } from "../openapi.js";
 import { DEFAULT_LAYOUT, type Layout } from "../package-files.js";
+import { cavelonCommand, fill } from "../printed.js";
 import { requireInstance } from "../session.js";
 import { schemaFor, type SchemaUsed } from "./solution.js";
 
@@ -263,7 +264,7 @@ function unknownField(found: { at: string; key: string; options: string[] }): Ca
     `The package schema has no nested field "${found.key}" under ${found.at}.`,
     found.options.length
       ? `${guess}Nested under ${found.at}: ${found.options.join(", ")}.`
-      : `Nothing under ${found.at} has fields of its own; \`cavelon schema ${found.at}\` shows its fields.`,
+      : `Nothing under ${found.at} has fields of its own; \`${cavelonCommand("schema", found.at)}\` shows its fields.`,
   );
 }
 
@@ -283,7 +284,7 @@ function findTarget(schema: PackageSchema, name: string): Target {
   const near = [...Object.keys(schema.properties!), ...Object.keys(defs)].filter((s) => s.toLowerCase().includes(lower) || lower.includes(s.toLowerCase())).slice(0, 5);
   throw usageError(
     `The package schema has no section or type "${name}".`,
-    near.length ? `Did you mean: ${near.join(", ")}? (\`cavelon schema\` lists them)` : "`cavelon schema` lists the sections.",
+    near.length ? `Did you mean: ${near.join(", ")}? (\`${cavelonCommand("schema")}\` lists them)` : `\`${cavelonCommand("schema")}\` lists the sections.`,
   );
 }
 
@@ -363,7 +364,7 @@ function fieldLines(data: TargetData): string[] {
   ];
   if (data.nested_example) lines.push("", "With one entry of each nested list:", yamlOf(data.nested_example));
   if (data.nested.length) {
-    const rows = data.nested.map((n) => ({ command: `cavelon schema ${n.path}`, type: n.type }));
+    const rows = data.nested.map((n) => ({ command: cavelonCommand("schema", n.path), type: n.type }));
     lines.push("", "Fields with fields of their own:", table(rows, ["command", "type"], 60, ["command"]));
   }
   return lines;
@@ -415,7 +416,7 @@ export const schema: CommandSpec = {
         code: "package_schema_unavailable",
         message: "No package schema is cached for this instance, and it was not read.",
         hint: offline
-          ? "Run `cavelon schema` once without --offline while the instance is reachable."
+          ? `Run \`${cavelonCommand("schema")}\` once without --offline while the instance is reachable.`
           : "The instance does not publish its package schema (/api/v1/meta/package-schema).",
       });
     }
@@ -437,7 +438,7 @@ export const schema: CommandSpec = {
           "",
           table(items, ["section", "kind", "required", "file"]),
           "",
-          "One section's fields and a minimal example: cavelon schema <section>; a nested field's: cavelon schema <section>.<field>",
+          `One section's fields and a minimal example: ${cavelonCommand("schema", fill("section"))}; a nested field's: ${cavelonCommand("schema", fill("section.field"))}`,
         ].join("\n"),
       };
     }

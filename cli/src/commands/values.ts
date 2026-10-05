@@ -17,8 +17,8 @@ import { readAll } from "../io.js";
 import { schemaErrors } from "../openapi.js";
 import { readPrincipal } from "../principal.js";
 import { readHidden } from "../prompt.js";
-import { requireToken, type Session } from "../session.js";
-import { shellWord } from "../shell.js";
+import { requireToken } from "../session.js";
+import { cavelonCommand, fill, printedCommand } from "../printed.js";
 
 /**
  * Tenant variables (`{{var:…}}`) and secrets (`{{secret:…}}`), one name at a
@@ -56,27 +56,16 @@ interface SecretStatus {
 
 
 /**
- * The options that make a printed command act where this one did. An option
- * beats the env file, so a printed command keeps both: after `--env prod
- * --tenant beta`, `--env prod` alone would act in prod's tenant, and without
- * `--instance` it would go to another instance. `env` replaces the session's
- * env file (null: none), for a command that acts where a stored preview did.
+ * The command a person runs to set a secret; the value is typed or piped,
+ * never part of it. `env` names the env a stored preview acted in (null: none)
+ * rather than this command's.
  */
-export function targetFlags(session: Session, env: string | null | undefined = session.envFile?.name): string {
-  let flags = "";
-  if (session.urlSource === "option" && session.url) flags += ` --instance ${shellWord(session.url)}`;
-  if (env) flags += ` --env ${shellWord(env)}`;
-  if (session.tenantSource === "option" && session.tenant) flags += ` --tenant ${shellWord(session.tenant)}`;
-  return flags;
+export function secretSetCommand(name: string, env?: string | null): string {
+  return printedCommand(["secrets", "set", name], { env });
 }
 
-/** The command a person runs to set a secret; the value is typed or piped, never part of it. */
-export function secretSetCommand(name: string, flags = ""): string {
-  return `cavelon secrets set ${shellWord(name)}${flags}`;
-}
-
-export function variableSetCommand(name: string, flags = ""): string {
-  return `cavelon variables set ${shellWord(name)} <value>${flags}`;
+export function variableSetCommand(name: string, env?: string | null): string {
+  return printedCommand(["variables", "set", name, fill("value")], { env });
 }
 
 /** Check a name against the schema the instance publishes for the route's `name`, before anything is sent or asked. */
@@ -111,12 +100,12 @@ async function readVariable(ctx: Context, name: string): Promise<Variable | unde
   }
 }
 
-function variableNotSet(name: string, flags: string): CavelonError {
+function variableNotSet(name: string): CavelonError {
   return new CavelonError(ExitCode.failure, {
     code: "variable_not_set",
     status: 404,
     message: `This tenant has no variable "${name}".`,
-    hint: `\`cavelon variables list\` shows them; \`${variableSetCommand(name, flags)}\` sets it.`,
+    hint: `\`${cavelonCommand("variables", "list")}\` shows them; \`${variableSetCommand(name)}\` sets it.`,
   });
 }
 
@@ -141,10 +130,9 @@ export const variablesList: CommandSpec = {
       ...(v.value.length > LIST_VALUE_CHARS ? { value_truncated: true } : {}),
       source: v.source ?? null,
     }));
-    const flags = targetFlags(await ctx.session());
     const text = items.length
-      ? table(items.map((v) => ({ ...v, source: v.source ?? "" })), ["name", "value", "source"], 60) + moreHint(page.next_cursor, `cavelon variables list${flags}`)
-      : `No variables in this tenant. Set one with: cavelon variables set <name> <value>${flags}`;
+      ? table(items.map((v) => ({ ...v, source: v.source ?? "" })), ["name", "value", "source"], 60) + moreHint(page.next_cursor, cavelonCommand("variables", "list"))
+      : `No variables in this tenant. Set one with: ${cavelonCommand("variables", "set", fill("name"), fill("value"))}`;
     return { data: { items, next_cursor: page.next_cursor, total: page.total }, text };
   },
 };
@@ -160,7 +148,7 @@ export const variablesGet: CommandSpec = {
   async run(ctx, input) {
     const name = positional(input, "name")!;
     const variable = await readVariable(ctx, name);
-    if (!variable) throw variableNotSet(name, targetFlags(await ctx.session()));
+    if (!variable) throw variableNotSet(name);
     const data = { name: variable.name, value: variable.value, source: variable.source ?? null };
     return {
       data,
@@ -231,12 +219,11 @@ export const variablesDelete: CommandSpec = {
   examples: ["cavelon variables delete old_url", "cavelon variables delete old_url --confirm", "cavelon variables delete old_url --confirm <token>"],
   async run(ctx, input) {
     const name = positional(input, "name")!;
-    const flags = targetFlags(await ctx.session());
     const current = await readVariable(ctx, name);
     if (!current) return { data: { name, deleted: false, existed: false }, text: `This tenant has no variable "${name}"; nothing to delete.` };
     const gate = await confirmation(ctx, input, "variables_delete", { name, value: current.value });
     if (!gate.confirmed) {
-      const confirm = gate.confirm(`cavelon variables delete ${shellWord(name)}${flags} --confirm`);
+      const confirm = gate.confirm(cavelonCommand("variables", "delete", name, "--confirm"));
       return {
         data: { name, deleted: false, existed: true, value: current.value, confirm, ...gate.fields },
         text: `Variable ${name} = ${JSON.stringify(clip(current.value, LIST_VALUE_CHARS))}.\n${gate.mismatch ? `${gate.mismatch}\n` : ""}Nothing was deleted. Delete it with: ${confirm}`,
@@ -272,7 +259,7 @@ async function requirePerson(ctx: Context, verb: "set" | "delete", name: string)
   throw new CavelonError(ExitCode.unauthorized, {
     code: "secret_needs_a_person",
     message: `A tenant API key cannot ${verb} a secret, so nothing was sent: ${verb === "set" ? "setting" : "deleting"} a secret needs a person (a dashboard session or a personal access token).`,
-    hint: `${fromEnv}A person logs in with a personal access token (\`cavelon login\`) and runs \`cavelon secrets ${verb} ${shellWord(name)}\`, or does it in the Admin.`,
+    hint: `${fromEnv}A person logs in with a personal access token (\`${cavelonCommand("login")}\`) and runs \`${cavelonCommand("secrets", verb, name)}\`, or does it in the Admin.`,
     details: { sent: false, credential: "api_key" },
   });
 }
@@ -380,18 +367,17 @@ export const secretsList: CommandSpec = {
   examples: ["cavelon secrets list", "cavelon secrets list --missing --json"],
   async run(ctx, input) {
     const limit = intOption(input, "limit", { min: 1, max: 500, fallback: 50 })!;
-    const flags = targetFlags(await ctx.session());
     const all = ((await callStable<{ items: SecretStatus[] }>(ctx, "GET", "/api/v1/secrets", "tenant secrets")).items ?? []).map(secretView);
     const wanted = boolOption(input, "missing") ? all.filter((s) => s.status !== "set") : all;
     const page = pageOf(wanted, limit, stringOption(input, "cursor"));
-    const items = page.items.map((s) => (s.status === "set" ? s : { ...s, set_by_person: secretSetCommand(s.name, flags) }));
+    const items = page.items.map((s) => (s.status === "set" ? s : { ...s, set_by_person: secretSetCommand(s.name) }));
     const missing = all.filter((s) => s.status !== "set").length;
     const onlyMissing = boolOption(input, "missing");
     let text = onlyMissing ? "Every secret this tenant knows is set." : "This tenant has no secrets and no package declared one.";
     if (items.length) {
       const rows = items.map((s) => ({ ...s, declared: s.declared ? "yes" : "", changed_at: s.changed_at ?? "", description: s.description ?? "" }));
-      const next = moreHint(page.next_cursor, `cavelon secrets list${onlyMissing ? " --missing" : ""}${flags}`);
-      const howTo = missing ? `\n\n${missing} not set. A person sets each with: cavelon secrets set <name>${flags}` : "";
+      const next = moreHint(page.next_cursor, cavelonCommand("secrets", "list", ...(onlyMissing ? ["--missing"] : [])));
+      const howTo = missing ? `\n\n${missing} not set. A person sets each with: ${cavelonCommand("secrets", "set", fill("name"))}` : "";
       text = table(rows, ["name", "status", "declared", "changed_at", "description"], 50) + next + howTo;
     }
     return { data: { items, next_cursor: page.next_cursor, total: page.total, not_set: missing }, text };
@@ -443,7 +429,6 @@ export const secretsDelete: CommandSpec = {
   async run(ctx, input) {
     const name = positional(input, "name")!;
     await requirePerson(ctx, "delete", name);
-    const flags = targetFlags(await ctx.session());
     const current = secretView(
       await callStable<SecretStatus>(ctx, "GET", "/api/v1/secrets/{name}", "tenant secrets", { params: { name: [name] } }),
     );
@@ -451,7 +436,7 @@ export const secretsDelete: CommandSpec = {
     if (current.status !== "set") return nothing;
     const gate = await confirmation(ctx, input, "secrets_delete", { name, changed_at: current.changed_at ?? null });
     if (!gate.confirmed) {
-      const confirm = gate.confirm(`cavelon secrets delete ${shellWord(name)}${flags} --confirm`);
+      const confirm = gate.confirm(cavelonCommand("secrets", "delete", name, "--confirm"));
       return {
         data: { ...current, deleted: false, confirm, ...gate.fields },
         text: `Secret ${name} is set${changedNote(current.changed_at)}.\n${gate.mismatch ? `${gate.mismatch}\n` : ""}Nothing was deleted. Delete it with: ${confirm}`,
@@ -466,7 +451,7 @@ export const secretsDelete: CommandSpec = {
     }
     return {
       data: { ...current, status: "not_set", deleted: true },
-      text: `Deleted the value of secret ${name}. A person sets it again with: ${secretSetCommand(name, flags)}`,
+      text: `Deleted the value of secret ${name}. A person sets it again with: ${secretSetCommand(name)}`,
     };
   },
 };

@@ -2,6 +2,7 @@ import { Ajv2020, type ValidateFunction } from "ajv/dist/2020.js";
 import addFormatsModule from "ajv-formats";
 import type { OpenApiDoc } from "./contracts.js";
 import { CavelonError, ExitCode, validationError } from "./errors.js";
+import { cavelonCommand, fill } from "./printed.js";
 
 /**
  * The instance's OpenAPI as a list of operations `cavelon api` can call, and
@@ -143,7 +144,9 @@ export function findOperation(doc: OpenApiDoc, name: string): Operation {
   throw new CavelonError(ExitCode.usage, {
     code: "operation_not_found",
     message: `This instance publishes no operation "${name}".`,
-    hint: similar.length ? `Did you mean: ${similar.join(", ")}? (\`cavelon api list --search <text>\`)` : "Find it with `cavelon api list --search <text>`.",
+    hint: similar.length
+      ? `Did you mean: ${similar.join(", ")}? (\`${cavelonCommand("api", "list", "--search", fill("text"))}\`)`
+      : `Find it with \`${cavelonCommand("api", "list", "--search", fill("text"))}\`.`,
   });
 }
 
@@ -252,7 +255,7 @@ export function validateBody(doc: OpenApiDoc, op: Operation, body: unknown): voi
   if (!schema) return;
   const errors = schemaErrors(doc, schema, body);
   if (errors.length) {
-    throw validationError(`The body does not match ${op.alias}'s schema: ${errors.join("; ")}`, errors, `See \`cavelon api describe ${op.alias}\`.`);
+    throw validationError(`The body does not match ${op.alias}'s schema: ${errors.join("; ")}`, errors, `See \`${cavelonCommand("api", "describe", op.alias)}\`.`);
   }
 }
 

@@ -2,7 +2,7 @@ import type { Context } from "./command.js";
 import { CavelonError, ExitCode, type ExitCodeValue } from "./errors.js";
 import type { ApiResponse } from "./http.js";
 import { readPrincipal } from "./principal.js";
-import { cavelonCommand } from "./shell.js";
+import { cavelonCommand } from "./printed.js";
 
 /**
  * The limits an instance publishes in `/api/v1/meta/capabilities` (`limits`)

@@ -2,7 +2,7 @@ import { intOption, positional, type CommandSpec, type Context } from "../comman
 import { CavelonError, ExitCode } from "../errors.js";
 import { table } from "../format.js";
 import { NOT_HERE, type ApiClient } from "../http.js";
-import { cavelonCommand } from "../shell.js";
+import { cavelonCommand, fill } from "../printed.js";
 
 /**
  * The instance's own docs, at its own version: `GET /llms.txt` lists the
@@ -376,6 +376,7 @@ const INDEX_REF = "index";
 
 export const docsSearch: CommandSpec = {
   name: "docs search",
+  tenantless: true,
   summary: "Search this instance's docs (titles and summaries).",
   description:
     "Ranks the pages of the instance's docs index by the words of the question in their titles, addresses and\n" +
@@ -402,13 +403,14 @@ export const docsSearch: CommandSpec = {
       `or read the list of all ${entries.length} pages with: ${cavelonCommand("docs", "get", INDEX_REF)}`;
     return {
       data: { query, terms, items, total: hits.length, ...(items.length ? {} : { hint: none }) },
-      text: items.length ? `${table(items, ["page", "title", "description"], 70)}\n\nRead one: cavelon docs get <page>` : none,
+      text: items.length ? `${table(items, ["page", "title", "description"], 70)}\n\nRead one: ${cavelonCommand("docs", "get", fill("page"))}` : none,
     };
   },
 };
 
 export const docsGet: CommandSpec = {
   name: "docs get",
+  tenantless: true,
   summary: "Print one docs page as markdown.",
   readOnly: true,
   idempotent: true,
@@ -441,7 +443,7 @@ export const docsGet: CommandSpec = {
       throw new CavelonError(ExitCode.failure, {
         code: "doc_not_found",
         message: `No docs page "${ref}" on this instance.`,
-        hint: near.length ? `Did you mean: ${near.join(", ")}?` : "Find it with `cavelon docs search <words>`.",
+        hint: near.length ? `Did you mean: ${near.join(", ")}?` : `Find it with \`${cavelonCommand("docs", "search", fill("words"))}\`.`,
       });
     }
     const response = await client.get<string>(entry.url, { accept: "text/markdown, text/plain" });

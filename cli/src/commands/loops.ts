@@ -18,7 +18,7 @@ import { callStable } from "../invoke.js";
 import { catalogEntry } from "../package-check.js";
 import { readPrincipal } from "../principal.js";
 import { isUuid } from "../session.js";
-import { cavelonCommand } from "../shell.js";
+import { cavelonCommand, fill, type Word } from "../printed.js";
 import { readBody } from "./api.js";
 import { TIMEOUT_OPTION, timeoutMs, waitAndReport } from "./async.js";
 import { catalogFor } from "./solution.js";
@@ -140,12 +140,12 @@ export async function resolveTrigger(ctx: Context, ref: string): Promise<Trigger
   throw new CavelonError(ExitCode.failure, {
     code: hits.length ? "trigger_ambiguous" : "trigger_not_found",
     message: hits.length ? `${hits.length} triggers are named "${ref}"; pass its id.` : `No trigger "${ref}" in this tenant.`,
-    hint: "`cavelon api list_triggers` lists them with their ids and slugs.",
+    hint: `\`${cavelonCommand("api", "list_triggers")}\` lists them with their ids and slugs.`,
   });
 }
 
 async function getRun(ctx: Context, runId: string): Promise<AgentRun> {
-  if (!isUuid(runId)) throw usageError(`"${runId}" is not a run id.`, "`cavelon loop start` prints the run id.");
+  if (!isUuid(runId)) throw usageError(`"${runId}" is not a run id.`, `\`${cavelonCommand("loop", "start")}\` prints the run id.`);
   return callStable<AgentRun>(ctx, "GET", "/api/v1/triggers/runs/{run_id}", "trigger runs", { params: { run_id: [runId] } });
 }
 
@@ -185,7 +185,7 @@ async function pickLoop(ctx: Context, runId: string, loopId: string | undefined,
     throw new CavelonError(ExitCode.failure, {
       code: "loop_not_found",
       message: `Run ${runId} has no loop (yet).`,
-      hint: `A loop starts when the run reaches its Masterloop node; \`cavelon loop watch ${runId}\` waits for it.`,
+      hint: `A loop starts when the run reaches its Masterloop node; \`${cavelonCommand("loop", "watch", runId)}\` waits for it.`,
     });
   }
   const candidates = loops.filter(fits);
@@ -355,9 +355,9 @@ export const loopStart: CommandSpec = {
       data: started,
       text:
         `Started run ${run.id} of ${trigger.slug} (${run.status}).\n` +
-        `Follow:  cavelon loop watch ${run.id}\n` +
-        (run.operation_id ? `Wait:    cavelon wait ${run.operation_id}\n` : "") +
-        `Stop:    cavelon loop cancel ${run.id} --confirm`,
+        `Follow:  ${cavelonCommand("loop", "watch", run.id)}\n` +
+        (run.operation_id ? `Wait:    ${cavelonCommand("wait", run.operation_id)}\n` : "") +
+        `Stop:    ${cavelonCommand("loop", "cancel", run.id, "--confirm")}`,
     };
   },
 };
@@ -385,7 +385,7 @@ export const loopCancel: CommandSpec = {
     const loops = (await loopsOf(ctx, run.id)).map(loopSummary);
     const gate = await confirmation(ctx, input, "loop_cancel", { run: run.id });
     if (!gate.confirmed) {
-      const confirm = gate.confirm(`cavelon loop cancel ${run.id} --confirm`);
+      const confirm = gate.confirm(cavelonCommand("loop", "cancel", run.id, "--confirm"));
       return {
         data: { cancelled: false, run: runSummary(run, note), loops, confirm, ...gate.fields },
         text:
@@ -400,7 +400,7 @@ export const loopCancel: CommandSpec = {
     const cancelled = await callStable<AgentRun>(ctx, "POST", "/api/v1/triggers/runs/{run_id}/cancel", "cancelling runs", { params: { run_id: [run.id] } });
     return {
       data: { cancelled: true, run: runSummary(cancelled), loops },
-      text: `Run ${cancelled.id} is ${cancelled.status}; its loops stop at their next safe point.` + (cancelled.operation_id ? `\nWait: cavelon wait ${cancelled.operation_id}` : ""),
+      text: `Run ${cancelled.id} is ${cancelled.status}; its loops stop at their next safe point.` + (cancelled.operation_id ? `\nWait: ${cavelonCommand("wait", cancelled.operation_id)}` : ""),
     };
   },
 };
@@ -444,7 +444,7 @@ export const loopIterations: CommandSpec = {
         (table(items, ["iteration", "child_status", "verdict", "outcome", "duration_ms", "child_run_id"]) || "No iterations yet.") +
         moreHint(next, cavelonCommand("loop", "iterations", loop.owner_run_id, "--loop", loop.id)) +
         (page.content_visible ? "" : "\nIteration results are hidden from this credential.") +
-        (items.length ? `\nOne iteration's run: ${cavelonCommand("trace")} <child_run_id>` : ""),
+        (items.length ? `\nOne iteration's run: ${cavelonCommand("trace", fill("child_run_id"))}` : ""),
     };
   },
 };
@@ -469,6 +469,7 @@ function envelopeIn(it: Iteration, loop: Loop, newest: number): IterationEnvelop
 
 export const loopWatch: CommandSpec = {
   name: "loop watch",
+  mcpInstead: "loop iterations",
   summary: "Follow a loop: one line per decided iteration and per state change, then the loop's outcome.",
   description:
     "Prints each iteration once the loop accepted it, rejected it or its child failed, with its outcome and usage\n" +
@@ -746,13 +747,13 @@ function resumeBlocker(loop: Loop, now: number): { why: string; final: boolean }
   return undefined;
 }
 
-function resumeCommand(loop: Loop, reason?: string): string {
+function resumeCommand(loop: Loop, reason?: Word): string {
   return cavelonCommand("loop", "resume", loop.owner_run_id, "--loop", loop.id, ...(reason ? ["--reason", reason] : []));
 }
 
 /** Stop the run and start a new one of its trigger. */
 async function startAgain(ctx: Context, loop: Loop): Promise<string[]> {
-  let start = "cavelon loop start <trigger>";
+  let start = cavelonCommand("loop", "start", fill("trigger"));
   try {
     const run = await getRun(ctx, loop.owner_run_id);
     if (run.trigger_definition_id) start = cavelonCommand("loop", "start", (await resolveTrigger(ctx, run.trigger_definition_id)).slug);
@@ -864,7 +865,7 @@ function controlCommand(action: "pause" | "resume"): CommandSpec {
       const text = pausing
         ? `Pause requested for loop ${receipt.loop_id} (${receipt.state}); it pauses after the current iteration.`
         : `Loop ${receipt.loop_id} resumes (${receipt.state}).`;
-      return { data: { ...receipt, run_id: loop.owner_run_id, operation_id: loop.operation_id }, text: `${text}\nFollow: cavelon loop watch ${loop.owner_run_id}` };
+      return { data: { ...receipt, run_id: loop.owner_run_id, operation_id: loop.operation_id }, text: `${text}\nFollow: ${cavelonCommand("loop", "watch", loop.owner_run_id)}` };
     },
   };
 }
@@ -877,11 +878,11 @@ const REVIEWED_REASON_OPTION = {
 
 /** A pause that is a verdict on the task, resumed without a review: exit 5, a person reviews it first. */
 function reviewRequired(loop: Loop, message: string, hint?: string): CavelonError {
-  const check = `${cavelonCommand("loop", "iterations", loop.owner_run_id, "--loop", loop.id)} and ${cavelonCommand("trace")} <child_run_id>`;
+  const check = `${cavelonCommand("loop", "iterations", loop.owner_run_id, "--loop", loop.id)} and ${cavelonCommand("trace", fill("child_run_id"))}`;
   return new CavelonError(ExitCode.needsAction, {
     code: "loop_resume_review_required",
     message,
-    hint: [hint, `A person checks the cause (${check}) and fixes it, then: ${resumeCommand(loop, loop.reason ?? "<pause_reason>")}`].filter(Boolean).join(" "),
+    hint: [hint, `A person checks the cause (${check}) and fixes it, then: ${resumeCommand(loop, loop.reason ?? fill("pause_reason"))}`].filter(Boolean).join(" "),
   });
 }
 

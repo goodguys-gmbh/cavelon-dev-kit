@@ -18,6 +18,7 @@ import {
   type Quota,
   type QuotaValue,
 } from "../limits.js";
+import { cavelonCommand, fill } from "../printed.js";
 
 /**
  * `cavelon limits`: what this instance lets the tenant's solution do, from
@@ -87,7 +88,7 @@ export const limits: CommandSpec = {
       throw new CavelonError(ExitCode.usage, {
         code: "tenant_required",
         message: "Limits belong to a tenant, and none is chosen.",
-        hint: "Choose one with `cavelon use` (it lists your tenants) or pass --tenant <name or slug>.",
+        hint: `Choose one with \`${cavelonCommand("use")}\` (it lists your tenants) or pass --tenant <name or slug>.`,
       });
     }
     if (!published.published) {
@@ -156,14 +157,14 @@ export const limits: CommandSpec = {
     const operatorChangeable = values.filter((v) => [v.change, v.tenant_change].some((c) => c && isOperatorChange(c))).map((v) => v.key);
     if (tenantChangeable.length) {
       const owner = quotaValues.filter((q) => q.changeable_by === "tenant_owner" && tenantChangeable.includes(q.key)).map((q) => q.key);
-      text += `\n\nA tenant admin changes ${tenantChangeable.length === 1 ? "it" : "these"} with: cavelon limits set <key> <value> (shows the change; --confirm sends it)`;
+      text += `\n\nA tenant admin changes ${tenantChangeable.length === 1 ? "it" : "these"} with: ${cavelonCommand("limits", "set", fill("key"), fill("value"))} (shows the change; --confirm sends it)`;
       if (owner.length) text += `; ${owner.join(", ")} only a Tenant Owner (settings.manage)`;
     }
     if (operatorChangeable.length) {
       text += `\n\nAn operator changes ${operatorChangeable.join(", ")} with the same command and a personal access token in Platform mode of the role the change names; --tenant <id|slug> sets the tenant (one tenant's own run cap, its flag).`;
     }
     const pages = [...new Set(values.map((v) => docsPage(v.docs)).filter(Boolean))];
-    if (pages.length) text += `\n\nHow to change one: cavelon docs get <page> (${pages.join(", ")})`;
+    if (pages.length) text += `\n\nHow to change one: ${cavelonCommand("docs", "get", fill("page"))} (${pages.join(", ")})`;
 
     return {
       data: {

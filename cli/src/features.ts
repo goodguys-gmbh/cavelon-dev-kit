@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { stringOption, type Context, type Input, type OptionSpec } from "./command.js";
 import { CavelonError, ExitCode, usageError } from "./errors.js";
+import { cavelonCommand } from "./printed.js";
 import { isUuid } from "./session.js";
 
 /**
@@ -19,7 +20,7 @@ export async function requireFeature(ctx: Context, feature: string, code: string
     throw new CavelonError(ExitCode.failure, {
       code,
       message: `This instance has ${what} switched off.`,
-      hint: `Its operator switches it on (${feature.toUpperCase()}); \`cavelon status\` shows the instance.`,
+      hint: `Its operator switches it on (${feature.toUpperCase()}); \`${cavelonCommand("status")}\` shows the instance.`,
     });
   }
 }

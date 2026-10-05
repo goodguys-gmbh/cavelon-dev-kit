@@ -1,6 +1,7 @@
 import type { Context } from "./command.js";
 import type { ApiClient } from "./http.js";
 import { changedBy, formatValue, readLimits, type Limit, type PublishedLimits } from "./limits.js";
+import { cavelonCommand, fill } from "./printed.js";
 import type { Operation, OperationNote } from "./operations.js";
 
 /**
@@ -164,7 +165,7 @@ export function capacityHint(code: CapacityCode, limits?: PublishedLimits): stri
     const now = caps.length ? ` Now: ${caps.map(capText).join("; ")}.` : "";
     // An instance that publishes the operator's change lets the operator do it from the kit.
     const kit = caps.some((c) => c.change?.requires_role?.length)
-      ? ` With a Platform-mode personal access token, the operator runs cavelon limits set max_concurrent_agent_runs_per_tenant <n> --tenant <tenant> --confirm.`
+      ? ` With a Platform-mode personal access token, the operator runs ${cavelonCommand("limits", "set", "max_concurrent_agent_runs_per_tenant", fill("n"), "--tenant", fill("tenant"), "--confirm")}.`
       : "";
     return (
       "Retrying later is fine; a trigger or channel run waits for a free slot on its own. " +
@@ -178,7 +179,7 @@ export function capacityHint(code: CapacityCode, limits?: PublishedLimits): stri
   return (
     `Retrying later is fine. The model endpoint was serving its max_concurrent_requests and no slot freed in time${waited}. ` +
     "If the endpoint can serve more at once, a tenant admin raises max_concurrent_requests on its Model Registry row " +
-    "(cavelon models set-limit <model_id> <n>, the Admin's model form, or PATCH /api/v1/model-registry/{model_registry_id}); " +
+    `(${cavelonCommand("models", "set-limit", fill("model_id"), fill("n"))}, the Admin's model form, or PATCH /api/v1/model-registry/{model_registry_id}); ` +
     "every row with the same base_url shares that count."
   );
 }

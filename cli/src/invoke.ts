@@ -5,6 +5,7 @@ import type { OpenApiDoc } from "./contracts.js";
 import { CavelonError, ExitCode, validationError } from "./errors.js";
 import { bodyBytes, isPlatformRoute, type ApiClient, type QueryValue } from "./http.js";
 import { coerceParameter, isArrayParameter, operationAt, validateBody, type Operation } from "./openapi.js";
+import { cavelonCommand } from "./printed.js";
 
 /**
  * Call one operation the instance publishes. `cavelon api` comes here with
@@ -160,7 +161,7 @@ export async function workflowOperation(ctx: Context, method: string, pathTempla
       throw new CavelonError(ExitCode.failure, {
         code: "operation_unavailable",
         message: `This instance does not offer ${what} (${method} ${pathTemplate} is not in its OpenAPI).`,
-        hint: "The instance may be older than this feature; `cavelon status` shows its version.",
+        hint: `The instance may be older than this feature; \`${cavelonCommand("status")}\` shows its version.`,
       });
     }
     return { doc, op };
@@ -203,7 +204,7 @@ export async function callStable<T>(
       throw new CavelonError(ExitCode.failure, {
         code: "operation_unavailable",
         message: `This instance's ${method} ${pathTemplate} does not take ${unknown.join(", ")}, so it cannot do this (${what}).`,
-        hint: "The instance may be older than this feature; `cavelon status` shows its version.",
+        hint: `The instance may be older than this feature; \`${cavelonCommand("status")}\` shows its version.`,
       });
     }
   } else {

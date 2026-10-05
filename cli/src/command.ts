@@ -20,6 +20,8 @@ export interface OptionSpec {
   value?: string;
   /** Hidden from the MCP tool (for example --wait, which would block). */
   cliOnly?: boolean;
+  /** What the MCP tool says of it, where the tool does something else than the command (init's harness). */
+  mcpDescription?: string;
   /**
    * A confirm option: a string in the MCP tool, the `confirm_token` the
    * tool's preview returned. A boolean one is a flag in a terminal that also
@@ -129,10 +131,34 @@ export interface CommandSpec {
   options?: Record<string, OptionSpec>;
   /** The MCP tool name, or false for commands only a person runs (login, logout). */
   mcpTool: string | false;
+  /**
+   * For a command without a tool: the command whose tool does its job over
+   * MCP (`wait` for `watch`), so a line the kit prints for it there names that
+   * tool. It must take the same arguments.
+   */
+  mcpInstead?: string;
+  /** Acts in no tenant (docs, explain, login): a command line the kit prints for it carries no `--tenant`. */
+  tenantless?: boolean;
+  /** Stores the instance and tenant it is given (login), so the commands it prints act there without them. */
+  storesTarget?: boolean;
   examples?: string[];
   /** Rewrite raw arguments before parsing (`api --json <body>`); `warn` reaches the command's warnings. */
   preprocess?(args: string[], warn: (message: string) => void): string[];
   run(ctx: Context, input: Input): Promise<CommandResult>;
+}
+
+/**
+ * A tool's property for a command's option or positional: the CLI's name in
+ * snake_case (`make_default` for `--make-default`), as the instructions and
+ * docs spell it and as tool arguments are usually written.
+ */
+export function propertyName(name: string): string {
+  return name.replaceAll("-", "_");
+}
+
+/** A command with its own `tenant` argument (use_tenant) takes no tenant override. */
+export function ownsTenant(spec: CommandSpec): boolean {
+  return Boolean(spec.positionals?.some((p) => p.name === "tenant") || spec.options?.tenant);
 }
 
 export const GLOBAL_OPTIONS: Record<string, OptionSpec> = {

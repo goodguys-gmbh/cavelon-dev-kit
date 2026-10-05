@@ -14,7 +14,7 @@ import { solutionState, solutionStateLines, type SolutionState } from "./solutio
 import { expiryOf, readPrincipal, readTenantless, type Tenantless } from "../principal.js";
 import { readHidden } from "../prompt.js";
 import { isUuid, lookupTenantId, requireInstance, requireToken, tenantRequiredError, type FoundTenant, type Session } from "../session.js";
-import { cavelonCommand } from "../shell.js";
+import { cavelonCommand, fill } from "../printed.js";
 import { choicesOf, chooseTenant, commandLines, describeTenant, listsTenants, type Reach, noTenantError, tenantOpenError, tenantRef, tenantTitle } from "../tenant-choice.js";
 import { loadUserConfig, saveUserConfig, tokenKind, updateInstance } from "../user-config.js";
 
@@ -84,6 +84,8 @@ async function readToken(ctx: Context, fromStdin: boolean): Promise<string> {
 
 export const login: CommandSpec = {
   name: "login",
+  storesTarget: true,
+  tenantless: true,
   summary: "Store a token for an instance (a person runs this, never the agent).",
   description:
     "Asks for the token without echoing it, or reads it from standard input with --token-stdin. It is never an argument.\n" +
@@ -202,18 +204,19 @@ export const login: CommandSpec = {
         data: { instance: url, credential: { kind, store: store.kind }, owner: null, tenant: null, instance_version: null, contracts: null },
         text:
           `Logged in to ${url}. Token stored in the ${store.kind === "keyring" ? "credential store" : "user-only file"}. ` +
-          "No tenant is chosen yet: `cavelon use <name or slug>` chooses one; `cavelon tenant list --search <part of the name>` finds its slug.",
+          `No tenant is chosen yet: \`${cavelonCommand("use", fill("name or slug"))}\` chooses one; ` +
+          `\`${cavelonCommand("tenant", "list", "--search", fill("part of the name"))}\` finds its slug.`,
       };
     }
 
     if (needsTenant) {
-      ctx.warn("This token works in Platform mode; choose a tenant with `cavelon use <tenant>` before tenant commands.");
+      ctx.warn(`This token works in Platform mode; choose a tenant with \`${cavelonCommand("use", fill("tenant"))}\` before tenant commands.`);
     } else {
       if (acting && reach) {
         const others = reach.tenants.filter((t) => t.id !== acting.id);
         if (others.length) ctx.warn(`Without a tenant this token acts in ${acting.name ?? acting.id}. To work in another tenant, run:\n${commandLines(others, (r) => cavelonCommand("use", r))}`);
       } else if (acting && acting.others.length) {
-        ctx.warn(`Without a tenant this token acts in ${acting.name ?? acting.id}. Your other tenants: ${acting.others.join(", ")}; \`cavelon use <tenant>\` chooses one this token reaches.`);
+        ctx.warn(`Without a tenant this token acts in ${acting.name ?? acting.id}. Your other tenants: ${acting.others.join(", ")}; \`${cavelonCommand("use", fill("tenant"))}\` chooses one this token reaches.`);
       }
       for (const warning of compareContracts(caps)) ctx.warn(warning);
       // Fill the contract cache now, so `api` and `docs` work offline-first.
@@ -249,7 +252,7 @@ export const login: CommandSpec = {
     const who = me?.email ? ` as ${me.email}` : kind === "api_key" ? " with a tenant API key" : "";
     let where = "";
     if (tenant && chosen === "only") where = ` Using tenant ${tenantTitle(tenant)}, the only one this token reaches.`;
-    else if (tenant && chosen === "picked") where = ` Using tenant ${tenantTitle(tenant)}; \`cavelon use\` chooses another.`;
+    else if (tenant && chosen === "picked") where = ` Using tenant ${tenantTitle(tenant)}; \`${cavelonCommand("use")}\` chooses another.`;
     else if (acting) {
       const named = { id: acting.id, name: acting.name ?? actingNamed?.name, slug: actingNamed?.slug };
       where = ` Acting in tenant ${tenantTitle(named)}, the one the instance chooses for this token.`;
@@ -263,6 +266,7 @@ export const login: CommandSpec = {
 
 export const logout: CommandSpec = {
   name: "logout",
+  tenantless: true,
   summary: "Delete the stored token for an instance.",
   readOnly: false,
   destructive: true,
@@ -330,7 +334,7 @@ function reachText(reach: Reach): string {
     const own = reach.tenants.length;
     return `every tenant (as operator; ${own ? `${own} membership${own === 1 ? "" : "s"} of your own` : "no memberships of your own"})`;
   }
-  return `${reach.tenants.length} tenant${reach.tenants.length === 1 ? "" : "s"} (\`cavelon tenant list\`)`;
+  return `${reach.tenants.length} tenant${reach.tenants.length === 1 ? "" : "s"} (\`${cavelonCommand("tenant", "list")}\`)`;
 }
 
 export const whoami: CommandSpec = {
@@ -383,8 +387,8 @@ export const whoami: CommandSpec = {
     if (nowhere && reach) {
       ctx.warn(
         reach.tenants.length
-          ? `No tenant is chosen. Choose one with \`cavelon use\`, or run the line for the tenant you want:\n${commandLines(reach.tenants, (r) => cavelonCommand("use", r))}`
-          : "No tenant is chosen. This token reaches every tenant: `cavelon use <name or slug>` chooses one.",
+          ? `No tenant is chosen. Choose one with \`${cavelonCommand("use")}\`, or run the line for the tenant you want:\n${commandLines(reach.tenants, (r) => cavelonCommand("use", r))}`
+          : `No tenant is chosen. This token reaches every tenant: \`${cavelonCommand("use", fill("name or slug"))}\` chooses one.`,
       );
     }
     const expiry = expiryOf(principal, ctx.io.now());
@@ -428,7 +432,7 @@ export const whoami: CommandSpec = {
       ...(reach ? { reaches: { tenants: reach.tenants.length, every_tenant: reach.reachesAll } } : {}),
       role: me?.context?.effective_role ?? me?.role ?? null,
     };
-    if (needsTenant) ctx.warn("No tenant selected; this token is in Platform mode. Choose one with `cavelon use <tenant>`.");
+    if (needsTenant) ctx.warn(`No tenant selected; this token is in Platform mode. Choose one with \`${cavelonCommand("use", fill("tenant"))}\`.`);
     const owner =
       session.tokenKind === "api_key"
         ? principal?.api_key
@@ -497,7 +501,7 @@ export const use: CommandSpec = {
       if (!listsTenants(tenantless)) {
         throw usageError(
           "Which tenant? This instance does not list the tenants a token reaches.",
-          "Run `cavelon use <name, slug or id>`; `cavelon tenant list` shows the tenants this token can see.",
+          `Run \`${cavelonCommand("use", fill("name, slug or id"))}\`; \`${cavelonCommand("tenant", "list")}\` shows the tenants this token can see.`,
         );
       }
       const command = (r: string) => cavelonCommand("use", r);
@@ -582,7 +586,7 @@ function limitsLine(state: LimitsState, near: Quota[]): string {
   if (state.published === null) return `not readable: ${state.unavailable}`;
   if (!state.published) return "not published by this instance";
   const quotas = state.quotas_unavailable ? `\n  quotas not readable: ${state.quotas_unavailable}` : "";
-  if (!near.length) return `${state.quotas_unavailable ? "quotas unknown" : "none close to a quota"} (\`cavelon limits\` lists them)${quotas}`;
+  if (!near.length) return `${state.quotas_unavailable ? "quotas unknown" : "none close to a quota"} (\`${cavelonCommand("limits")}\` lists them)${quotas}`;
   return `close to a quota: ${near.map((q) => `${q.key} ${formatQuota(q)}`).join("; ")}${quotas}`;
 }
 
@@ -692,9 +696,9 @@ export const status: CommandSpec = {
       ? `${shownTenant?.id && (shownTenant.name || shownTenant.slug) ? tenantTitle({ id: shownTenant.id, name: shownTenant.name, slug: shownTenant.slug }) : session.tenant}, from ${tenantSourceText(session)}`
       : session.tokenKind === "api_key"
         ? "the API key's tenant"
-        : "not chosen (`cavelon use` lists your tenants to choose from)";
+        : `not chosen (\`${cavelonCommand("use")}\` lists your tenants to choose from)`;
     const lines: Array<[string, unknown]> = [
-      ["instance", session.url ? `${session.url} (${session.urlSource})` : "none (`cavelon login --instance <url>`)"],
+      ["instance", session.url ? `${session.url} (${session.urlSource})` : `none (\`${cavelonCommand("login", "--instance", fill("url"))}\`)`],
       ["credential", session.token ? `${session.tokenKind} from ${credentialSource(session)}` : "none"],
       ["tenant", tenantText],
       ["solution", session.project ? session.project.file : "none (no cavelon.yaml here or above)"],
@@ -712,7 +716,7 @@ export const status: CommandSpec = {
         "open previews",
         solution.open_previews.length
           ? solution.open_previews
-              .map((p) => `\n  ${p.preview_id}${p.env ? `  env ${p.env}` : ""}  ${p.created_at}  ${p.expired ? "expired (`cavelon apply --discard all` removes it)" : `expires ${p.expires_at}`}`)
+              .map((p) => `\n  ${p.preview_id}${p.env ? `  env ${p.env}` : ""}  ${p.created_at}  ${p.expired ? `expired (\`${cavelonCommand("apply", "--discard", "all")}\` removes it)` : `expires ${p.expires_at}`}`)
               .join("")
           : "none",
       ]);
@@ -734,7 +738,7 @@ export const status: CommandSpec = {
       if (waiting.length) data.capacity_waits = waiting;
       const ops = data.operations as { scope?: string; harness?: string; other_solutions?: number };
       const others = ops.other_solutions
-        ? ` (${ops.other_solutions} operation${ops.other_solutions === 1 ? "" : "s"} of other solutions not shown; \`cavelon api list_operations_route\` lists all)`
+        ? ` (${ops.other_solutions} operation${ops.other_solutions === 1 ? "" : "s"} of other solutions not shown; \`${cavelonCommand("api", "list_operations_route")}\` lists all)`
         : "";
       const heading = ops.scope === "solution" ? `Running operations of ${ops.harness} and the tenant's shared work${others}` : "Running operations in the tenant";
       text += operations.length

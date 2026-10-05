@@ -21,7 +21,7 @@ import { confinedPath } from "../paths.js";
 import { describeSchema, findOperation, jsonBodySchema, matchedLoosely, operations, schemaTypes, secretFields, secretPaths, type Operation } from "../openapi.js";
 import { harnessNotFoundError, lookupHarness } from "../harness-ref.js";
 import { CONFIRM_TOKEN, confirmToken, confirmTokenRequired, confirmWith } from "../confirm-token.js";
-import { cavelonCommand } from "../shell.js";
+import { cavelonCommand, fill } from "../printed.js";
 
 /** Said once when `--json` carried the body: the alias goes away in a later release. */
 export const JSON_BODY_DEPRECATED =
@@ -212,7 +212,7 @@ function secretRefusal(op: Operation, fields: string[], driven: DrivenBy): Cavel
       `The request to ${op.alias} sets ${named}, which the instance marks as a secret value (x-cavelon-secret); ` +
       `a person enters secret values, so ${notSentBy(driven)}`,
     hint: personHint(
-      "A person sets a secret value in their terminal with `cavelon secrets set <name>`, or enters it in the Admin. Leave the field out to send the rest.",
+      `A person sets a secret value in their terminal with \`${cavelonCommand("secrets", "set", fill("name"))}\`, or enters it in the Admin. Leave the field out to send the rest.`,
       driven,
     ),
     details: { fields },
@@ -431,7 +431,7 @@ export const apiList: CommandSpec = {
     const tag = stringOption(input, "tag");
     if (tag) {
       ops = ops.filter((o) => o.tags.includes(tag));
-      if (ops.length === 0) throw usageError(`No operations tagged "${tag}".`, "`cavelon api list --tags` shows the tags.");
+      if (ops.length === 0) throw usageError(`No operations tagged "${tag}".`, `\`${cavelonCommand("api", "list", "--tags")}\` shows the tags.`);
     }
     const method = stringOption(input, "method")?.toUpperCase();
     if (method) ops = ops.filter((o) => o.method === method);

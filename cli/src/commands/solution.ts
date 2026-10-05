@@ -45,12 +45,12 @@ import { readPrincipal } from "../principal.js";
 import type { ProjectConfig } from "../project.js";
 import { CASE_STATUSES, caseStatus, TESTING_PAGE, type CaseStatus } from "../results.js";
 import { KNOWLEDGE_OUTCOME_AREA, KNOWLEDGE_OUTCOME_PAGE, KNOWLEDGE_OUTCOMES, knowledgeOutcome, type KnowledgeOutcome } from "../trace-view.js";
-import { contextFlags, isUuid, requireInstance, type Session } from "../session.js";
+import { isUuid, requireInstance, type Session } from "../session.js";
 import { listedPages } from "./docs.js";
 import { readInventory, readInventoryKinds, writeInventory, type InventoryKind } from "./inventory.js";
 import { checkedBy, MODEL_UNKNOWN_CODE, missingInventory, REFERENCE_UNKNOWN_CODE } from "../package-references.js";
-import { cavelonCommand, shellWord } from "../shell.js";
-import { secretSetCommand, targetFlags, variableSetCommand } from "./values.js";
+import { cavelonCommand, printedCommand } from "../printed.js";
+import { secretSetCommand, variableSetCommand } from "./values.js";
 
 /**
  * The repository loop (plan 04, "Working with a coding agent"): `pull` brings
@@ -73,13 +73,12 @@ interface Harness {
 /** The solution folder a command needs; without one, the `init` that makes it, in the tenant this command was given. */
 export function requireSolution(session: Session, harness?: string): ProjectConfig {
   if (!session.project) {
-    const flags = contextFlags(session);
     throw new CavelonError(ExitCode.usage, {
       code: "no_solution",
       message: "This folder is not a Cavelon solution (no cavelon.yaml here or above).",
       hint: harness
-        ? `Make it the folder of that solution first: ${cavelonCommand("init", "--harness", harness)}${flags}, then run this command again.`
-        : `Run \`cavelon init${flags}\`: it asks which solution, or a new one, on a terminal. \`cavelon harness list${flags}\` shows the solutions.`,
+        ? `Make it the folder of that solution first: ${cavelonCommand("init", "--harness", harness)}, then run this command again.`
+        : `Run \`${cavelonCommand("init")}\`: it asks which solution, or a new one, on a terminal. \`${cavelonCommand("harness", "list")}\` shows the solutions.`,
     });
   }
   return session.project;
@@ -96,7 +95,7 @@ function harnessRef(session: Session, input: Parameters<CommandSpec["run"]>[1]):
 
 async function findHarness(ctx: Context, ref: string, source?: string): Promise<Harness> {
   const { harness, candidates } = await lookupHarness<Harness>(ctx, ref);
-  if (!harness) throw harnessNotFoundError(ref, candidates, source, undefined, contextFlags(await ctx.session()));
+  if (!harness) throw harnessNotFoundError(ref, candidates, source);
   return harness;
 }
 
@@ -633,11 +632,11 @@ function valueNeeds(list: Array<ValueNeed | string> | undefined): ValueNeed[] {
 }
 
 /** The commands that set what the target still lacks: a person runs the secret ones, never the agent. */
-function setCommands(preview: Preview, flags: string): { secrets: string[]; variables: string[] } {
+function setCommands(preview: Preview, env?: string | null): { secrets: string[]; variables: string[] } {
   const needs = preview.target_needs ?? {};
   return {
-    secrets: valueNeeds(needs.secrets).map((n) => secretSetCommand(n.name!, flags)),
-    variables: valueNeeds(needs.variables).map((n) => variableSetCommand(n.name!, flags)),
+    secrets: valueNeeds(needs.secrets).map((n) => secretSetCommand(n.name!, env)),
+    variables: valueNeeds(needs.variables).map((n) => variableSetCommand(n.name!, env)),
   };
 }
 
@@ -664,15 +663,15 @@ function list(items: string[], max = 10): string {
 }
 
 /** What the target still needs, one line per kind, with the command or the Admin path that provides it. */
-function needsLines(needs: NonNullable<Preview["target_needs"]>, flags: string): Array<[string, unknown]> {
+function needsLines(needs: NonNullable<Preview["target_needs"]>): Array<[string, unknown]> {
   const lines: Array<[string, unknown]> = [];
   const secrets = valueNeeds(needs.secrets);
   if (secrets.length) {
-    const each = needLines(secrets, (name) => secretSetCommand(name, flags), "cavelon secrets list --missing" + flags);
+    const each = needLines(secrets, (name) => secretSetCommand(name), cavelonCommand("secrets", "list", "--missing"));
     lines.push(["needs secrets", `${each}\n  (a person runs these in a terminal, or sets them in the Admin; never the agent)`]);
   }
   const variables = valueNeeds(needs.variables);
-  if (variables.length) lines.push(["needs variables", needLines(variables, (name) => variableSetCommand(name, flags), "cavelon variables list" + flags)]);
+  if (variables.length) lines.push(["needs variables", needLines(variables, (name) => variableSetCommand(name), cavelonCommand("variables", "list"))]);
   const grants = (needs.oauth_grants ?? []).map((g) => [g.kind, g.tool_slug, g.capability].filter(Boolean).join(" "));
   if (grants.length) lines.push(["needs grants", `${list(grants)} (a person connects them in the Admin)`]);
   const bindings = (needs.runtime_bindings ?? []).map((b) => `${b.key}${b.kind ? ` (${b.kind})` : ""}`);
@@ -699,7 +698,7 @@ function changesNothing(p: Preview): boolean {
   return !counts(s.creates) && !counts(s.updates) && !counts(s.deletes) && fieldChanges(p.changes).length === 0;
 }
 
-export function previewText(p: Preview, flags = "", context: PreviewContext = {}): string {
+export function previewText(p: Preview, context: PreviewContext = {}): string {
   const lines: Array<[string, unknown]> = [["ready", p.ready ? "yes" : "no"]];
   const s = p.summary ?? {};
   for (const [label, map] of [["creates", s.creates], ["updates", s.updates], ["deletes", s.deletes]] as const) {
@@ -728,7 +727,7 @@ export function previewText(p: Preview, flags = "", context: PreviewContext = {}
     const limits = Object.entries(budget.limits ?? {}).map(([k, v]) => `${k} ${v}`).join(", ");
     lines.push([`loop ${budget.node_slug}`, `${limits}${budget.worst_case_cost != null ? `; worst case ${JSON.stringify(budget.worst_case_cost)}` : ""}`]);
   }
-  lines.push(...needsLines(p.target_needs ?? {}, flags));
+  lines.push(...needsLines(p.target_needs ?? {}));
   return keyValues(lines);
 }
 
@@ -751,7 +750,7 @@ function sourceFiles(disk: PackageOnDisk): string[] {
 
 function previewIdOption(input: Parameters<CommandSpec["run"]>[1]): string | undefined {
   const id = stringOption(input, "confirm");
-  if (id !== undefined && !id.trim()) throw usageError("--confirm needs the preview id that `cavelon apply` printed.");
+  if (id !== undefined && !id.trim()) throw usageError(`--confirm needs the preview id that \`${cavelonCommand("apply")}\` printed.`);
   return id?.trim();
 }
 
@@ -759,7 +758,7 @@ function previewUnknown(previewId: string): CavelonError {
   return new CavelonError(ExitCode.usage, {
     code: "preview_unknown",
     message: `No open preview ${previewId} in this solution.`,
-    hint: "Run `cavelon apply` (with the same --env or --harness) for a new preview and confirm its id; `cavelon status` lists the open ones.",
+    hint: `Run \`${cavelonCommand("apply")}\` (with the same --env or --harness) for a new preview and confirm its id; \`${cavelonCommand("status")}\` lists the open ones.`,
   });
 }
 
@@ -884,7 +883,7 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
   const session = await ctx.session();
   if (!stored) {
     const retired = await retiredPreview(project.root, previewId);
-    throw retired ? previewRetired(retired, `${cavelonCommand("apply")}${targetFlags(session)}`) : previewUnknown(previewId);
+    throw retired ? previewRetired(retired, cavelonCommand("apply")) : previewUnknown(previewId);
   }
   const now = ctx.io.now().toISOString();
   const retire = (reason: RetiredPreview["reason"]) => retirePreviews(project.root, [{ preview_id: stored.preview_id, reason, at: now }]);
@@ -894,7 +893,7 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
     throw new CavelonError(ExitCode.conflict, {
       code: "preview_expired",
       message: `Preview ${previewId} was made at ${stored.created_at} and expired${expiry.expires_at ? ` at ${expiry.expires_at}` : ""}; nothing was imported.`,
-      hint: `Run \`${previewAgain(stored, session)}\` again, show the new preview, and confirm its id.`,
+      hint: `Run \`${previewAgain(stored)}\` again, show the new preview, and confirm its id.`,
       details: { preview_id: stored.preview_id, created_at: stored.created_at, expires_at: expiry.expires_at },
     });
   }
@@ -922,14 +921,14 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
         code: "preview_files_changed",
         message: `The package files changed since preview ${previewId}${changed.length ? ` (${list(changed, 5)})` : ""}; nothing was imported.`,
         hint:
-          `Run \`${previewAgain(stored, session)}\` for a preview of the files as they are now, show it, and confirm its id. ` +
+          `Run \`${previewAgain(stored)}\` for a preview of the files as they are now, show it, and confirm its id. ` +
           `To import what preview ${previewId} showed instead, add --allow-stale to the confirm.`,
         details: { preview_id: stored.preview_id, files: changed },
       });
     }
     ctx.warn(
       `The package files changed since this preview${changed.length ? ` (${list(changed, 5)})` : ""}; importing what the preview showed (--allow-stale). ` +
-        "The files keep their changes, which the instance does not hold; run `cavelon apply` to preview them.",
+        `The files keep their changes, which the instance does not hold; run \`${cavelonCommand("apply")}\` to preview them.`,
     );
   }
   try {
@@ -945,8 +944,7 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
     ]);
     await rememberImported(ctx, project, stored, disk, changed);
     const summary = (result.summary ?? {}) as Preview["summary"];
-    const flags = targetFlags(session, stored.env ?? session.envFile?.name);
-    const still = setCommands(stored.preview as Preview, flags);
+    const still = setCommands(stored.preview as Preview, stored.env ?? undefined);
     // The tenant-wide sections this import took along, as its preview reported them.
     const sharedSent = stored.request[INCLUDE_TENANT_WIDE] === true;
     const sharedReport = sharedSent ? tenantWideReport((stored.preview as Preview).tenant_wide) : undefined;
@@ -975,7 +973,7 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
       throw requirementsChanged(error, stored, session, await catalogFor(ctx, false), disk);
     }
     // A refused import with structured blockers: each with its package file and line, as a preview shows them.
-    if (error instanceof CavelonError && error.blockerDetails?.length) throw withBlockersLocated(error, disk, stored, session);
+    if (error instanceof CavelonError && error.blockerDetails?.length) throw withBlockersLocated(error, disk, stored);
     if (error instanceof CavelonError && (error.code === "import_preview_stale" || (error.status === 409 && /preview/i.test(error.message)))) {
       await retire("stale");
       // What changed, where the instance still knows what the preview was made over; an older one says nothing more.
@@ -985,7 +983,7 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
         code: error.code === "conflict" ? "import_preview_stale" : error.code,
         status: 409,
         message: `The target changed since preview ${stored.preview_id}${changed.length ? `: ${changed.join("; ")}` : ""}; nothing was imported.`,
-        hint: `Run \`${previewAgain(stored, session)}\` again, show the new preview, and confirm its id.`,
+        hint: `Run \`${previewAgain(stored)}\` again, show the new preview, and confirm its id.`,
         docs: error.docs,
         ...(changed.length ? { details: { preview_id: stored.preview_id, changed } } : {}),
       });
@@ -1014,7 +1012,7 @@ function requirementsChanged(error: CavelonError, stored: StoredPreview, session
     code: error.code,
     status: error.status,
     message: `The import's requirements changed since preview ${stored.preview_id}; nothing was imported; preview again.`,
-    hint: [...known.values(), `Run \`${previewAgain(stored, session)}\` again, show the new preview, and confirm its id.`].join(" "),
+    hint: [...known.values(), `Run \`${previewAgain(stored)}\` again, show the new preview, and confirm its id.`].join(" "),
     docs: error.docs,
     blockers,
     blockerDetails: details.length ? details : undefined,
@@ -1022,11 +1020,11 @@ function requirementsChanged(error: CavelonError, stored: StoredPreview, session
 }
 
 /** The same refusal, its structured blockers located in the package files. */
-function withBlockersLocated(error: CavelonError, disk: PackageOnDisk, stored: StoredPreview, session: Session): CavelonError {
+function withBlockersLocated(error: CavelonError, disk: PackageOnDisk, stored: StoredPreview): CavelonError {
   return new CavelonError(error.exitCode, {
     code: error.code,
     message: `The import's own check refused preview ${stored.preview_id} when it applied; nothing was imported.`,
-    hint: error.hint ?? `Fix what each blocker names, run \`${previewAgain(stored, session)}\` again, show the new preview, and confirm its id.`,
+    hint: error.hint ?? `Fix what each blocker names, run \`${previewAgain(stored)}\` again, show the new preview, and confirm its id.`,
     docs: error.docs,
     status: error.status,
     details: error.details,
@@ -1036,9 +1034,8 @@ function withBlockersLocated(error: CavelonError, disk: PackageOnDisk, stored: S
 }
 
 /** The `apply` that previews the same target again, in the same tenant. */
-function previewAgain(stored: StoredPreview, session: Session): string {
-  const harness = !stored.env && stored.harness ? ` --harness ${shellWord(stored.harness.slug)}` : "";
-  return `cavelon apply${harness}${targetFlags(session, stored.env)}`;
+function previewAgain(stored: StoredPreview): string {
+  return printedCommand(["apply", ...(!stored.env && stored.harness ? ["--harness", stored.harness.slug] : [])], { env: stored.env });
 }
 
 /**
@@ -1057,14 +1054,14 @@ async function applyTarget(
   if (!ref) return undefined;
   const { harness: found, candidates } = await lookupHarness<Harness>(ctx, ref);
   if (found) return found;
-  if (!source || source === "option" || isUuid(ref) || !SLUG.test(ref)) throw harnessNotFoundError(ref, candidates, source, undefined, contextFlags(session));
+  if (!source || source === "option" || isUuid(ref) || !SLUG.test(ref)) throw harnessNotFoundError(ref, candidates, source);
   const name = packageHarnessName(pkg, ref) ?? ref;
   // In the tenant the preview was for: a --tenant given here goes into the command, or the draft lands in another one.
-  const create = `${cavelonCommand("harness", "new", ref, ...(name !== ref ? ["--name", name] : []))}${targetFlags(session, null)}`;
+  const create = cavelonCommand("harness", "new", ref, ...(name !== ref ? ["--name", name] : []));
   throw new CavelonError(ExitCode.failure, {
     code: "solution_not_found",
     message: `Solution ${ref}, which ${source} names, is not on the instance yet; apply previews into an existing solution and creates none.`,
-    hint: `Create it as a draft: ${create}, then run \`${cavelonCommand("apply")}${targetFlags(session)}\` again.`,
+    hint: `Create it as a draft: ${create}, then run \`${cavelonCommand("apply")}\` again.`,
     details: { slug: ref, name, create },
   });
 }
@@ -1237,10 +1234,9 @@ export const apply: CommandSpec = {
     const sharedLine = sharedImported.length
       ? `tenant-wide: ${sharedImported.join(", ")} change for every solution of the tenant${reachText ? `, reaching ${reachText}` : ""}`
       : sharedLeftOut.length
-        ? `tenant-wide: ${sharedLeftOut.join(", ")} left out (\`cavelon apply --include-tenant-wide\` imports them, for every solution of the tenant${reachText ? `; they would reach ${reachText}` : ""})`
+        ? `tenant-wide: ${sharedLeftOut.join(", ")} left out (\`${cavelonCommand("apply", "--include-tenant-wide")}\` imports them, for every solution of the tenant${reachText ? `; they would reach ${reachText}` : ""})`
         : undefined;
-    const flags = targetFlags(session);
-    const commands = setCommands(preview, flags);
+    const commands = setCommands(preview);
     if (commands.secrets.length || commands.variables.length) data.set_commands = commands;
     const context: PreviewContext = { disk, harness: harness?.slug };
     Object.assign(data, previewReport(preview, context));
@@ -1263,12 +1259,12 @@ export const apply: CommandSpec = {
       return {
         data,
         text: [
-          previewText(preview, flags, context),
+          previewText(preview, context),
           ...(sharedLine ? [sharedLine] : []),
           "",
           ...(pair ? [`hint: ${pair.hint}`] : []),
           ...(sharedHint ? [`hint: ${sharedHint}`] : []),
-          "The preview has blockers; fix them and run `cavelon apply` again.",
+          `The preview has blockers; fix them and run \`${cavelonCommand("apply")}\` again.`,
         ].join("\n"),
         exitCode: ExitCode.validation,
       };
@@ -1281,7 +1277,7 @@ export const apply: CommandSpec = {
         data,
         text: [
           `Preview of ${project.layout.package}/ for ${harness ? `solution ${harness.slug}${harness.status ? ` (${harness.status})` : ""}` : "the tenant"}${envFile ? ` [env ${envFile.name}]` : ""}:`,
-          previewText(preview, flags, context),
+          previewText(preview, context),
           "",
           "Nothing to import: the instance already holds what the package files say. No preview was stored.",
         ].join("\n"),
@@ -1311,10 +1307,10 @@ export const apply: CommandSpec = {
     }
     const reason = personReason(preview, harness, mode, envFile?.name, sharedImported, reaches);
     data.show_to_person = Boolean(reason);
-    const confirmLine = preview.preview_id ? `${cavelonCommand("apply", "--confirm", preview.preview_id)}${flags}` : undefined;
+    const confirmLine = preview.preview_id ? cavelonCommand("apply", "--confirm", preview.preview_id) : undefined;
     const text = [
       `Preview of ${project.layout.package}/ for ${harness ? `solution ${harness.slug}${harness.status ? ` (${harness.status})` : ""}` : "the tenant"}${envFile ? ` [env ${envFile.name}]` : ""}:`,
-      previewText(preview, flags, context),
+      previewText(preview, context),
       ...(sharedLine ? [sharedLine] : []),
       "",
       ...(preview.preview_id ? [`preview id: ${preview.preview_id}`] : []),
@@ -1418,6 +1414,7 @@ const OUTCOME_KIND = "knowledge outcome (what a knowledge search found, as its r
 
 export const explain: CommandSpec = {
   name: "explain",
+  tenantless: true,
   summary: "Look a code up in the instance's error catalog: what it means and how to fix it.",
   description:
     "Rule codes come from the package and graph checks, API error codes from failed requests; cavelon's own codes (validate's\n" +

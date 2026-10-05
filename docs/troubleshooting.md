@@ -230,10 +230,13 @@ solution's (`qa-v2` beside `qa`) may be a typo, so `init --harness <name>`
 refuses it with `solution_not_found` and names the closest ones. For a new
 solution of that name, add `--new`.
 
-**A copied command acted in another tenant.** The commands `cavelon` prints
-carry the `--tenant` and `--instance` you gave on the command line. Outside a
-solution folder, pass `--tenant` to every command until `cavelon.yaml` names
-the tenant: without it a command acts in the tenant `cavelon use` chose.
+**A copied command acted in another tenant.** Every command `cavelon` prints
+(in a hint, a `next` or `resume` field, or a preview's confirm line) carries
+the `--tenant`, `--env` and `--instance` you gave on the command line, the
+confirm lines of `deactivate`, `activate --make-default`, `harness default` and
+`apply` included. Outside a solution folder, pass `--tenant` to every command
+until `cavelon.yaml` names the tenant: without it a command acts in the tenant
+`cavelon use` chose.
 
 **A coding agent's `--confirm` exits 5.** Run by a coding agent, a confirming
 command takes the token its preview printed (`--confirm <token>`); the bare

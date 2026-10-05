@@ -1,5 +1,5 @@
 /**
- * Commands the kit prints for a person or an agent to run next. Each word
+ * Quoting for the commands the kit prints (printed.ts builds them). Each word
  * that came from a name (a Sandbox called "Lab VM 4073", a path, a key name)
  * is quoted for the shell that runs cavelon, so the line can be copied as it
  * is. Ids and flags stay bare.
@@ -61,9 +61,4 @@ export function shellWord(word: string, shell: Shell = current): string {
       // Inside double quotes cmd passes spaces, &, | and ^ on; a quote doubles. A %NAME% of a set variable still expands.
       return `"${word.replaceAll('"', '""')}"`;
   }
-}
-
-/** `cavelon` and its words, each quoted where needed. */
-export function cavelonCommand(...words: string[]): string {
-  return ["cavelon", ...words.map((w) => shellWord(w))].join(" ");
 }

@@ -72,7 +72,7 @@ run's traces. Keep each `watch` or `wait` under your shell's time
 limit and run it again to resume (exit 6 means still running). Over MCP, use the
 `loop_iterations` and `operation_status` tools; `loop_iterations` never
 blocks, and `operation_status` waits only when given a `timeout` (at most 50
-seconds).
+seconds); its `resume` is the `operation_status` call to make again.
 
 - **Pause** at the next safe point: `cavelon loop pause <run>`. Resume with
   `cavelon loop resume <run>`. A paused loop makes `wait` and `loop watch` exit

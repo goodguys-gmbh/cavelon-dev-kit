@@ -80,13 +80,14 @@ describe("cavelon mcp", () => {
         chosen: false,
         reaches_all_tenants: false,
         choices: [
-          { id: tenant, slug: "acme", name: "Acme", command: "cavelon use acme" },
-          { id: globex, slug: "globex-mcp", name: "Globex", command: "cavelon use globex-mcp" },
+          // Over MCP a printed command is the tool call.
+          { id: tenant, slug: "acme", name: "Acme", command: 'use_tenant {"tenant":"acme"}' },
+          { id: globex, slug: "globex-mcp", name: "Globex", command: 'use_tenant {"tenant":"globex-mcp"}' },
         ],
       });
       const init = await other.callTool({ name: "init", arguments: {} });
       expect(init.isError).toBe(true);
-      expect(payload(init).error).toMatchObject({ code: "tenant_required", details: { tenants: [{ command: "cavelon init --tenant acme" }, { command: "cavelon init --tenant globex-mcp" }] } });
+      expect(payload(init).error).toMatchObject({ code: "tenant_required", details: { tenants: [{ command: 'init {"tenant":"acme"}' }, { command: 'init {"tenant":"globex-mcp"}' }] } });
 
       const chosen = payload(await other.callTool({ name: "use_tenant", arguments: { tenant: "Globex" } }));
       expect(chosen).toMatchObject({ tenant: { ref: "globex-mcp", id: globex } });
@@ -322,7 +323,7 @@ describe("cavelon mcp", () => {
     expect(iterations.loop.iteration).toBeGreaterThanOrEqual(1);
 
     const exported = payload(await client.callTool({ name: "artifacts_export", arguments: { sandbox: "orders-test", path: ["output"] } }));
-    expect(exported).toMatchObject({ status: "active", download: expect.stringContaining("--job") });
+    expect(exported).toMatchObject({ status: "active", download: expect.stringMatching(/^artifacts_export \{"sandbox":"orders-test","job":"[0-9a-f-]+"\}$/) });
     let status: Record<string, any> = {};
     for (let i = 0; i < 10; i++) {
       status = payload(await client.callTool({ name: "operation_status", arguments: { operation: [exported.operation_id] } }));
