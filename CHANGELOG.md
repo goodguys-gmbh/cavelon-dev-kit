@@ -7,6 +7,22 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Added
+
+- A developer who works only through a coding agent now hears of a new
+  release: the MCP server looks up the latest release as a session starts
+  (the terminal notice's lookup, daily cache and `CAVELON_NO_UPDATE_CHECK`) and
+  adds one warning to the session's first tool result when something is
+  behind, for the agent to pass on: `cavelon`, with the update command for the
+  way it was installed; the Cavelon plugin, whose MCP entry now tells the
+  server its version (`CAVELON_PLUGIN_VERSION`), with the update commands of
+  the agent that started it (Claude Code or Codex); and the skills
+  `cavelon init --agents` wrote in the solution folder, with
+  `cavelon init --update`. It holds the first tool call at most 1.5 seconds,
+  says nothing when the lookup fails, and never speaks for a build from a
+  clone or in CI; for `npx` it speaks only of the plugin and the folder's
+  skills. `docs/installation.md#updating` shows what an agent-only user sees.
+
 ## [0.1.8] - 2026-10-05
 
 `apply` and `pull` take the instance's name for the tenant-wide flag,

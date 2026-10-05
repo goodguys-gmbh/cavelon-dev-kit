@@ -19,8 +19,10 @@ The CLI, the skills and the plugin share one version.
 1. **Open a release pull request** that:
    - sets the new version in `cli/package.json` (and runs
      `npm install --package-lock-only --ignore-scripts` for the lockfile), both
-     plugin manifests and `.claude-plugin/marketplace.json`, which the tests
-     hold in step;
+     plugin manifests, `.claude-plugin/marketplace.json` and
+     `CAVELON_PLUGIN_VERSION` in `plugin/.mcp.json` (the plugin's version that
+     `cavelon mcp` compares with the latest release), which the tests hold in
+     step;
    - for a new minor version, moves the MCP entry's pin (`@cavelon/cli@0.1`)
      in `plugin/.mcp.json` and `cli/src/agents.ts`, which the tests also check;
    - turns `CHANGELOG.md`'s **Unreleased** section into the new version, with

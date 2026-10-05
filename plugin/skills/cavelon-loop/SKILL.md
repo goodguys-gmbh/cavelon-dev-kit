@@ -29,6 +29,11 @@ use it when you parse the result.
   `--env` and `--tenant`). Never ask for the value, never pipe or pass one yourself; there is
   no MCP tool for it. Plain-text variables you may set with `cavelon variables
   set <name> <value>` when the value is not a credential.
+- **Pass on an update warning.** The first MCP result of a session may warn
+  that `cavelon`, the Cavelon plugin or this folder's skills are behind the
+  latest release (`… is out; this is …`, `The Cavelon plugin is …`), with the
+  commands that update them. Tell the person, with those commands, before you
+  go on; they run them (an update takes effect in a new session), you do not.
 - **Read the limits before you plan a solution:** `cavelon limits` (the
   `limits` tool over MCP). It lists what this instance allows the tenant
   (upload size and file types, agent turns, tool calls, timeouts, rate limits,

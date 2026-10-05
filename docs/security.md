@@ -208,9 +208,12 @@ the token's role and ceiling on every request.
   number of the latest release: the GitHub release API (`api.github.com`) for
   the standalone executable, the npm registry for an npm install. The request
   is an anonymous GET with no token, no instance and nothing about you or your
-  solutions; never with `--json`, in MCP mode, in CI or through `npx`.
-  `CAVELON_NO_UPDATE_CHECK=1` turns it off; see
-  [Updating](installation.md#updating).
+  solutions; never with `--json`, in CI or through `npx`. The MCP server
+  (`cavelon mcp`) asks the same, once a day as a session starts, and through
+  `npx` only to compare the Cavelon plugin's version (from the GitHub release);
+  it also reads the version line of the skill files `cavelon init --agents`
+  wrote in the solution folder. `CAVELON_NO_UPDATE_CHECK=1` turns both off;
+  see [Updating](installation.md#updating).
 - **npm.** Installing or running through `npx` downloads `@cavelon/cli` and its
   dependencies from the npm registry. Releases are published from this
   repository's release workflow with npm provenance; `npm view @cavelon/cli

@@ -40,7 +40,8 @@ starts the installed `cavelon` when there is one, and `npx` otherwise.
 
 The entry pins the kit's minor version (`@0.1`): while the kit is in 0.x, a new
 minor version may change behaviour, and it reaches your agent only when you
-update the plugin or run `cavelon init --update`.
+update the plugin or run `cavelon init --update`. The server's first result of
+a session says when either is due ([Results and errors](#results-and-errors)).
 
 ## Before the agent starts
 
@@ -255,3 +256,13 @@ list: of messages, or for `validate` of `{code, message}` objects, as the
 error whose text is `{"error": {"code", "message", "hint", "exit_code", …}}`,
 the same shape as the CLI's `--json` errors; the codes are explained in
 [Troubleshooting](troubleshooting.md).
+
+The first result of a session, a failed one too, may carry one more warning:
+that `cavelon`, the Cavelon plugin or the skills `cavelon init --agents` wrote
+in the solution folder are behind, with the commands that update each, for the
+agent to pass on to the person. The server looks the latest release up as it
+starts, as the terminal's update notice does (once a day, from the same
+cache), and holds that first call at most 1.5 seconds for it; a failed lookup
+says nothing, and `CAVELON_NO_UPDATE_CHECK=1` turns it off.
+[When you work only through a coding agent](installation.md#when-you-work-only-through-a-coding-agent)
+shows the warning and what it names.

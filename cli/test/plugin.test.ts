@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import { MCP_COMMAND } from "../src/agents.js";
+import { PLUGIN_VERSION_VARIABLE } from "../src/update-check.js";
 
 /**
  * The plugin for Claude Code and Codex: one
@@ -85,7 +86,12 @@ describe("the plugin", () => {
     expect(MCP_COMMAND).toEqual({ command: "npx", args: ["-y", `@cavelon/cli@${minor}`, "mcp"] });
     const npx = [MCP_COMMAND.command, ...MCP_COMMAND.args].join(" ");
     expect(mcp.mcpServers).toEqual({
-      cavelon: { command: "sh", args: ["-c", `if command -v cavelon >/dev/null 2>&1; then exec cavelon mcp; else exec ${npx}; fi`] },
+      cavelon: {
+        command: "sh",
+        args: ["-c", `if command -v cavelon >/dev/null 2>&1; then exec cavelon mcp; else exec ${npx}; fi`],
+        // The server compares the plugin's version with the latest release.
+        env: { [PLUGIN_VERSION_VARIABLE]: version },
+      },
     });
   });
 

@@ -1,9 +1,14 @@
+import fs from "node:fs/promises";
 import path from "node:path";
+import { SKILL_ROOTS } from "./agents.js";
 import type { Install } from "./install.js";
-import { NPM_PACKAGE, REPOSITORY } from "./install.js";
+import { currentInstall, NPM_PACKAGE, REPOSITORY } from "./install.js";
 import type { Io } from "./io.js";
-import { readJsonFile, writeFileAtomic } from "./fsutil.js";
+import { readJsonFile, readTextFile, writeFileAtomic } from "./fsutil.js";
+import { isGenerated } from "./markers.js";
 import { cacheDir } from "./paths.js";
+import { findProject } from "./project.js";
+import { KIT_VERSION } from "./version.js";
 
 /**
  * Once a day, look up the latest release where this install updates from (the
@@ -12,13 +17,17 @@ import { cacheDir } from "./paths.js";
  * the command, never delays it by more than a short timeout, sends nothing but
  * the request, and stays silent on any failure. Only for a person at a
  * terminal: never with --json, in MCP mode, in CI or for npx, which already
- * runs the newest release it may.
+ * runs the newest release it may. The MCP server tells the agent instead
+ * (startSessionUpdateCheck), from the same lookup and cache.
  */
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
 export const CHECK_TIMEOUT_MS = 1500;
 const MAX_BODY = 1024 * 1024;
 const STATE_FILE = "update-check.json";
+/** The plugin's MCP entry sets it to the plugin's version; nothing else does. */
+export const PLUGIN_VERSION_VARIABLE = "CAVELON_PLUGIN_VERSION";
+const UPDATING_DOCS = `https://github.com/${REPOSITORY}/blob/main/docs/installation.md#updating`;
 
 const SOURCES = {
   github: { url: `https://api.github.com/repos/${REPOSITORY}/releases/latest`, field: "tag_name" },
@@ -77,7 +86,18 @@ export function startUpdateCheck(request: UpdateCheckRequest): Promise<string | 
 
 async function check(request: UpdateCheckRequest): Promise<string | undefined> {
   const { io, install, version } = request;
-  const source = install.source!;
+  return withState(io, install.source!, version, request.fetch ?? fetch, (state, now) => {
+    if (!state.latest || !newer(state.latest, version) || within(state.notified_at, now)) return undefined;
+    state.notified_at = now.toISOString();
+    return noticeText(state.latest, version, install);
+  });
+}
+
+/**
+ * The cached state, looked up again when it is a day old, handed to `use`;
+ * written back when `use` or the lookup changed it.
+ */
+async function withState<T>(io: Io, source: "github" | "npm", version: string, fetchImpl: typeof fetch, use: (state: State, now: Date) => T): Promise<T> {
   const file = path.join(cacheDir(io.env), STATE_FILE);
   const state = (await readJsonFile<State>(file)) ?? {};
   const now = io.now();
@@ -90,16 +110,12 @@ async function check(request: UpdateCheckRequest): Promise<string | undefined> {
   if (!within(state.checked_at, now)) {
     // A failed check counts as one, so a machine offline does not try on every run.
     state.checked_at = now.toISOString();
-    const latest = await latestVersion(source, version, request.fetch ?? fetch).catch(() => undefined);
+    const latest = await latestVersion(source, version, fetchImpl).catch(() => undefined);
     if (latest) state.latest = latest;
   }
-  let notice: string | undefined;
-  if (state.latest && newer(state.latest, version) && !within(state.notified_at, now)) {
-    notice = noticeText(state.latest, version, install);
-    state.notified_at = now.toISOString();
-  }
+  const result = use(state, now);
   if (JSON.stringify(state) !== before) await writeFileAtomic(file, `${JSON.stringify(state, null, 2)}\n`, 0o600, 0o700);
-  return notice;
+  return result;
 }
 
 function within(stamp: string | undefined, now: Date): boolean {
@@ -159,4 +175,168 @@ export function noticeText(latest: string, version: string, install: Install): s
   const head = `cavelon ${latest} is out; this is ${version}.`;
   if (install.update) return `${head} Update with:\n  ${install.update}\n`;
   return `${head}${install.advice ? ` ${install.advice}` : ""}\n`;
+}
+
+// ---------------------------------------------------------------------------
+// The MCP server's warning
+// ---------------------------------------------------------------------------
+
+export interface SessionUpdateOptions extends UpdateCheckOptions {
+  /** This cavelon's version; tests name another. */
+  version?: string;
+}
+
+/** What a session learnt: the latest release, and the oldest kit version of the skills `init --agents` wrote. */
+interface SessionFacts {
+  latest?: string;
+  skills?: string;
+}
+
+export interface SessionUpdateNotice {
+  /**
+   * Called as a tool call starts; the promise, awaited once the tool is done,
+   * gives the warning for its result, once a session. Only the first call
+   * waits for the lookup, and never past CHECK_TIMEOUT_MS; a later call takes
+   * it when it has arrived.
+   */
+  forCall(client: () => string | undefined): Promise<string | undefined>;
+  /** A result that cannot carry the warning hands it back for the next one. */
+  keep(): void;
+}
+
+/** Why an MCP session says nothing, or undefined when it may. */
+export function sessionQuietReason(io: Pick<Io, "env">, install: Install): string | undefined {
+  if (setTo(io.env.CAVELON_NO_UPDATE_CHECK)) return "CAVELON_NO_UPDATE_CHECK";
+  if (CI_VARIABLES.some((name) => setTo(io.env[name]))) return "ci";
+  // A build from a clone is a kit developer's, who updates it with git.
+  if (install.method === "source") return "source";
+  return undefined;
+}
+
+/**
+ * For `cavelon mcp`: a coding agent runs the kit without a terminal, so the
+ * terminal notice never reaches the person. The server looks the latest
+ * release up as it starts (the same lookup, cache and opt-out), reads which
+ * version the plugin that started it is (PLUGIN_VERSION_VARIABLE) and which
+ * version wrote the skills of this solution folder, and adds one warning to
+ * the first tool result of the session for the agent to pass on. It looks up
+ * nothing for npx, which runs the newest release of its range, unless the
+ * plugin's version needs comparing; it never fails a tool call.
+ */
+export function startSessionUpdateCheck(io: Io, options: SessionUpdateOptions = {}): SessionUpdateNotice {
+  const install = options.install ?? currentInstall(io.env);
+  const version = options.version ?? KIT_VERSION;
+  if (sessionQuietReason(io, install)) return { forCall: async () => undefined, keep: () => undefined };
+  const plugin = parseVersion(io.env[PLUGIN_VERSION_VARIABLE] ?? "")?.text;
+  // The plugin updates from the GitHub release whichever way cavelon came.
+  const source = install.source ?? (plugin ? "github" : undefined);
+  let facts: SessionFacts | undefined;
+  let settled = false;
+  const gathered = Promise.all([
+    source ? withState(io, source, version, options.fetch ?? fetch, (state) => state.latest).catch(() => undefined) : undefined,
+    initSkillsVersion(io.cwd).catch(() => undefined),
+  ]).then(([latest, skills]) => {
+    facts = { latest, skills };
+    settled = true;
+  });
+  let first = true;
+  let delivered = false;
+  return {
+    async forCall(client) {
+      if (delivered) return undefined;
+      if (first) {
+        first = false;
+        await bounded(gathered, CHECK_TIMEOUT_MS);
+      }
+      if (delivered || !settled) return undefined;
+      delivered = true;
+      return facts && sessionWarning({ ...facts, version, install, plugin, client: client() });
+    },
+    keep() {
+      delivered = false;
+    },
+  };
+}
+
+function bounded(promise: Promise<unknown>, ms: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, ms);
+  });
+  return Promise.race([promise.then(() => undefined), timeout]).finally(() => clearTimeout(timer));
+}
+
+const INIT_MARK = /written by `cavelon init --agents` \(cavelon ([0-9][0-9A-Za-z.-]{0,80})\)/;
+const SKILL_FOLDER = /^cavelon-[a-z0-9-]{1,64}$/;
+
+/** The oldest kit version among the skill files `init --agents` wrote in the solution folder. */
+async function initSkillsVersion(cwd: string): Promise<string | undefined> {
+  const root = (await findProject(cwd))?.root ?? cwd;
+  let oldest: string | undefined;
+  for (const skillRoot of SKILL_ROOTS) {
+    let names: string[];
+    try {
+      names = await fs.readdir(path.join(root, skillRoot));
+    } catch {
+      continue;
+    }
+    for (const name of names.filter((n) => SKILL_FOLDER.test(n))) {
+      const text = await readTextFile(path.join(root, skillRoot, name, "SKILL.md"));
+      if (!isGenerated(text)) continue;
+      const found = parseVersion(INIT_MARK.exec(text!)?.[1] ?? "")?.text;
+      if (found && (!oldest || newer(oldest, found))) oldest = found;
+    }
+  }
+  return oldest;
+}
+
+const PLUGIN_UPDATE = {
+  claude: "`claude plugin marketplace update cavelon-dev-kit` and `claude plugin update cavelon@cavelon-dev-kit`",
+  codex: "`codex plugin marketplace upgrade cavelon-dev-kit` and `codex plugin add cavelon@cavelon-dev-kit`",
+};
+
+/** The plugin's update commands for the client that started the server (MCP's clientInfo.name), or for both. */
+function pluginUpdate(client: string | undefined): string | undefined {
+  const name = client?.toLowerCase() ?? "";
+  if (name.includes("claude")) return PLUGIN_UPDATE.claude;
+  if (name.includes("codex")) return PLUGIN_UPDATE.codex;
+  return undefined;
+}
+
+export interface SessionWarningFacts extends SessionFacts {
+  version: string;
+  install: Install;
+  /** The plugin's version, when the plugin started the server. */
+  plugin?: string;
+  client?: string;
+}
+
+/** One warning for what is behind (cavelon, the plugin, this folder's skills), or nothing. */
+export function sessionWarning(facts: SessionWarningFacts): string | undefined {
+  const { version, install, plugin, skills } = facts;
+  const latest = facts.latest && install.source && newer(facts.latest, version) ? facts.latest : undefined;
+  const newest = facts.latest && newer(facts.latest, version) ? facts.latest : version;
+  const pluginBehind = plugin !== undefined && newer(newest, plugin);
+  const skillsBehind = skills !== undefined && newer(latest ?? version, skills);
+  if (!latest && !pluginBehind && !skillsBehind) return undefined;
+  const said: string[] = [];
+  const asks: string[] = [];
+  if (latest) {
+    said.push(`cavelon ${latest} is out; this is ${version}.`);
+    asks.push(install.update ? `Update cavelon with \`${install.update}\`.` : (install.advice ?? `Update cavelon to ${latest}.`));
+  }
+  if (pluginBehind) {
+    said.push(`The Cavelon plugin is ${plugin}${latest ? "" : `, older than cavelon ${newest}`}.`);
+    const commands = pluginUpdate(facts.client);
+    asks.push(commands ? `Update the plugin with ${commands}.` : `Update the plugin: in Claude Code with ${PLUGIN_UPDATE.claude}; in Codex with ${PLUGIN_UPDATE.codex}.`);
+  } else if (latest && plugin === undefined && pluginUpdate(facts.client)) {
+    // A plugin from before PLUGIN_VERSION_VARIABLE does not say its version.
+    asks.push(`If they use the Cavelon plugin, also update it with ${pluginUpdate(facts.client)}.`);
+  }
+  if (skillsBehind) {
+    said.push(`The skills \`cavelon init --agents\` wrote in this solution folder are from cavelon ${skills}.`);
+    asks.push(`Run \`cavelon init --update\` in it${latest ? " after updating cavelon" : ""}, and commit the result.`);
+  }
+  if (latest || pluginBehind) asks.push("Then start a new agent session.");
+  return `${said.join(" ")} Tell the user: ${asks.join(" ")} More: ${UPDATING_DOCS}`;
 }
