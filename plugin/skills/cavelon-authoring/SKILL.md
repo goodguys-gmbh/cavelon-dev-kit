@@ -305,7 +305,10 @@ schema has them: `cavelon validate` reports an unknown section):
    instance's export gives them (field order, the schema's defaults filled in,
    test cases and steps numbered in their written order), so the first `pull`
    after `apply` shows only what changed on the instance; `cavelon fmt
-   --check` changes nothing and exits 3 when a file would change.
+   --check` changes nothing and exits 3 when a file would change. fmt keeps
+   no comments (pull keeps none either) and names each file whose comments
+   it drops, as the example files' explanations: keep what the person needs
+   elsewhere before running it.
 2. `cavelon apply --env test` to see what the instance makes of it; the
    preview re-checks everything on the server, including rules that only the
    instance can check (graph rules, references between sections).

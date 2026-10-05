@@ -66,14 +66,25 @@ function namedType(schema: PackageSchema, raw: Node): string | undefined {
   return undefined;
 }
 
+/** How many shapes a union of objects and other values offers; undefined for one shape, or a union of plain values. */
+function shapeCount(schema: PackageSchema, raw: Node): number | undefined {
+  const all = variants(schema, raw);
+  return all.length > 1 && all.some((v) => v.node.properties) ? all.length : undefined;
+}
+
 function typeOf(schema: PackageSchema, raw: Node): string {
   const node = nonNull(schema, raw);
   const ref = namedType(schema, raw);
   const types = schemaTypes(node).filter((t) => t !== "null");
   if (types.includes("array") && node.items) {
     const item = node.items as Node;
+    // A step's evaluation_criteria: a text, a judge criterion or an assertion of one of several types, not "list of string".
+    const shapes = shapeCount(schema, item);
+    if (shapes) return `list of ${shapes} shapes`;
     return `list of ${refName(item) ?? (schemaTypes(resolve(schema, item)).join("|") || "any")}`;
   }
+  const shapes = ref ? undefined : shapeCount(schema, raw);
+  if (shapes) return `one of ${shapes} shapes`;
   return ref ?? (types.join("|") || "object");
 }
 
@@ -353,7 +364,7 @@ function fieldLines(data: TargetData): string[] {
   if (data.nested_example) lines.push("", "With one entry of each nested list:", yamlOf(data.nested_example));
   if (data.nested.length) {
     const rows = data.nested.map((n) => ({ command: `cavelon schema ${n.path}`, type: n.type }));
-    lines.push("", "Fields with fields of their own:", table(rows, ["command", "type"]));
+    lines.push("", "Fields with fields of their own:", table(rows, ["command", "type"], 60, ["command"]));
   }
   return lines;
 }

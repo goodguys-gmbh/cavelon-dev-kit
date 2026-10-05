@@ -83,7 +83,9 @@ use it when you parse the result.
    names a check it could not make (offline, no list). After writing files by
    hand, run `cavelon fmt`: it fills in the defaults the export writes and
    numbers test cases in their written order, so the first `pull` after the
-   apply rewrites only what changed on the instance.
+   apply rewrites only what changed on the instance. It drops comments, as
+   pull does, and names each file whose comments it drops (`cavelon fmt
+   --check` says so first): keep notes the person needs elsewhere.
 4. **Preview**: `cavelon apply --env test` (or `--harness <name or slug>`). Nothing is
    imported yet. Read the preview: what is created, updated or deleted, which
    active solutions it reaches, what the target still needs (variables and
@@ -93,12 +95,16 @@ use it when you parse the result.
    old → new`) and the fields it does not apply ("not applied", with the
    command that sets each). A blocked preview names each blocker with its
    code, package file and path, and hint; `cavelon explain <code>` says more.
+   A preview that changes nothing says "Nothing to import" and stores no
+   preview: there is nothing to confirm.
 5. **Confirm** exactly that preview: `cavelon apply --confirm <preview-id>`
    (the line `apply` printed, with the same `--env` and `--tenant`). Exit 4
    means the preview is stale and nothing was imported: the target changed on
    the instance (`import_preview_stale`), the package files changed since
-   (`preview_files_changed`, naming them), or the preview is more than a day
-   old (`preview_expired`). Preview again, show the new preview when the rules
+   (`preview_files_changed`, naming them), the preview is more than a day
+   old (`preview_expired`), another preview was imported after it
+   (`preview_superseded`), it was imported already (`preview_applied`), or it
+   was discarded (`preview_discarded`). Preview again, show the new preview when the rules
    below say so, and confirm the new id. Use `--allow-stale` only when the
    person wants exactly the old preview imported. When the error lists
    `blockers`, the import's own check found them as it applied: fix what each
@@ -125,6 +131,9 @@ use it when you parse the result.
      document is replaced once the new file is verified; where it cannot,
      `--replace` shows the documents it would deactivate after the upload and
      needs `--confirm`: show the person that first.
+   - A file whose content is already an active document is not uploaded
+     again: "identical to the active document …; nothing new was created
+     (deduplicated)", with nothing to wait for and nothing replaced.
    A test Sandbox gets its files with `cavelon sandbox seed <sandbox> <folder>`
    (isolated container) or `cavelon sandbox refresh <sandbox>` after the files
    were put on the VM (customer VM).

@@ -92,16 +92,22 @@ export async function listedPages(ctx: Context, pages: string[]): Promise<string
  * question uses. Without them, "Wie lade ich Dokumente in eine Wissensbasis
  * hoch?" matched every page with "in" in its summary.
  */
-const STOP_WORDS = new Set(
+const GERMAN_STOP_WORDS = new Set(
   (
-    "a an and are as at be by can could do does for from get got have how i in into is it its me my of on or our should so " +
-    "that the their them then there these this those to use using was we what when where which who why will with would you your " +
     "aber alle als am an auch auf aus bei bin bis da damit dann das dass dem den der des die dies diese diesem diesen dieser " +
     "doch du ein eine einem einen einer eines er es für geht gibt hat habe haben ich ihr im in ist ja kann kannst können man " +
     "mein meine meinem meinen meiner mich mir mit muss müssen nach nicht noch nur ob oder sich sie sind so soll um und uns " +
     "unser unsere vom von vor war was welche welcher welches wenn wer werden wie wird wo zu zum zur"
   ).split(" "),
 );
+
+const STOP_WORDS = new Set([
+  ...(
+    "a an and are as at be by can could do does for from get got have how i in into is it its me my of on or our should so " +
+    "that the their them then there these this those to use using was we what when where which who why will with would you your"
+  ).split(" "),
+  ...GERMAN_STOP_WORDS,
+]);
 
 /**
  * Words people ask with for the core concepts, in the English the docs are
@@ -228,7 +234,20 @@ const RELATED_TERMS: Record<string, string[]> = {
   incorrect: ["debug", "trace"],
   error: ["debug", "trace"],
   debug: ["trace", "playground"],
+  // The docs explain handoffs on the agent graph's pages; their titles say "agent graph", rarely "handoff".
+  handoff: ["agent", "graph"],
+  consult: ["agent", "graph"],
 };
+
+/** Words of a question that are English already and mean a concept: the German table maps them too, but they say nothing about the language. */
+const ENGLISH_CONCEPT_WORDS = new Set(["bot", "bots", "chatbot", "agent", "tests", "standard", "persona", "homepage"]);
+
+/** Whether a question is (partly) German: a German stop word, an umlaut or ß, or a German word the concept table knows. */
+function soundsGerman(query: string): boolean {
+  return words(query).some(
+    (w) => GERMAN_STOP_WORDS.has(w) || /[äöüß]/.test(w) || (Object.hasOwn(CONCEPT_TERMS, w) && !ENGLISH_CONCEPT_WORDS.has(w)),
+  );
+}
 
 /**
  * Words nearly every page and question shares ("Why did my agent answer
@@ -377,7 +396,9 @@ export const docsSearch: CommandSpec = {
     const items = hits.slice(0, limit).map(({ page, title, description, section }) => ({ page, title, section, description }));
     const none =
       `No page matches "${query}"${terms.length ? ` (looked for: ${terms.join(", ")})` : " (it has only stop words)"}. ` +
-      `The docs are in English: try English words for the concept (knowledge base, test, trigger, default), ` +
+      (soundsGerman(query)
+        ? `The docs are in English: try English words for the concept (knowledge base, test, trigger, default), `
+        : `No page's title or summary uses them: try another word for the concept, or a broader one, `) +
       `or read the list of all ${entries.length} pages with: ${cavelonCommand("docs", "get", INDEX_REF)}`;
     return {
       data: { query, terms, items, total: hits.length, ...(items.length ? {} : { hint: none }) },

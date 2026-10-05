@@ -102,6 +102,33 @@ describe("schema", () => {
     expect((await cli(sb, ["schema", "PackageTestCase", "--json"])).json()).toMatchObject({ used_in: ["test_suites.test_cases"], file: "package/test_suites.yaml" });
   });
 
+  it("calls a list of several shapes so, and never cuts a command in the nested fields' table", async () => {
+    const steps = (await cli(sb, ["schema", "test_suites.test_cases.steps", "--json"])).json<{ fields: Array<{ name: string; type: string }>; nested: Array<{ type: string }> }>();
+    // A text, a judge criterion and seven assertion types: not "list of string".
+    expect(steps.fields.find((f) => f.name === "evaluation_criteria")!.type).toBe("list of 9 shapes");
+    expect(steps.nested).toEqual([{ field: "evaluation_criteria", path: "test_suites.test_cases.steps.evaluation_criteria", type: "list of 9 shapes" }]);
+    const text = (await cli(sb, ["schema", "test_suites.test_cases.steps"])).stdout;
+    expect(text).toMatch(/^cavelon schema test_suites\.test_cases\.steps\.evaluation_criteria\s+list of 9 shapes$/m);
+  });
+
+  it("lists the allowed values of a field whose type the schema names, as an edge type would be", async () => {
+    const box = sandbox();
+    try {
+      await login(box, server.url, server.addToken({ kind: "pat", tenantIds: [tenant], defaultTenant: tenant }));
+      server.state.packageSchemaEdit = (schema) => {
+        const defs = (schema as unknown as { $defs: Record<string, Record<string, any>> }).$defs;
+        defs.EdgeType = { enum: ["handoff", "consult"], title: "EdgeType", type: "string" };
+        defs.PackageAgentHandoff!.properties.edge_type = { $ref: "#/$defs/EdgeType", default: "handoff" };
+      };
+      const handoffs = (await cli(box, ["schema", "agents.handoffs", "--json"])).json<{ fields: Array<{ name: string; type: string; enum?: string[] }> }>();
+      expect(handoffs.fields.find((f) => f.name === "edge_type")).toMatchObject({ type: "EdgeType", enum: ["handoff", "consult"] });
+      expect((await cli(box, ["schema", "agents.handoffs"])).stdout).toMatch(/^edge_type\s+EdgeType\s+one of handoff, consult/m);
+    } finally {
+      server.state.packageSchemaEdit = null;
+      box.cleanup();
+    }
+  });
+
   it("lists each shape an entry may take, as a step's criteria", async () => {
     const result = await cli(sb, ["schema", "test_suites.test_cases.steps.evaluation_criteria", "--json"]);
     expect(result.code, result.stderr).toBe(0);

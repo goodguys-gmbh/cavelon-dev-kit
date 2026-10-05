@@ -7,6 +7,49 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Changed
+
+- `cavelon apply` remembers why a stored preview went, so its confirm says so
+  (exit 4) instead of "No open preview" (exit 2): `preview_superseded` when
+  another preview was imported after it (`details.superseded_by`),
+  `preview_applied` when it was imported already, `preview_discarded` after
+  `--discard`, and `preview_expired` also for one a newer preview removed. An
+  id the folder never stored stays `preview_unknown` (exit 2).
+- A preview that changes nothing (`changes: none`) says "Nothing to import",
+  stores no preview and prints no confirm command (`nothing_to_import` in
+  `--json`).
+- `apply` for a solution that is not on the instance yet still exits 1
+  (`solution_not_found`); the `cavelon harness new` command it names now
+  carries the `--tenant` you gave, so the draft lands in that tenant.
+- `cavelon fmt` names each file whose comments it drops (`comments_dropped`
+  in `--json`; `--check` says so first) and points at `git diff` only when the
+  files were committed.
+- `cavelon schema` calls a list whose entries take several shapes so (a
+  step's `evaluation_criteria`: "list of 9 shapes", not "list of string"), and
+  never cuts a command in the table of fields with fields of their own.
+- `cavelon status` and `whoami` say where the tenant came from in words:
+  outside a solution folder, the tenant chosen with `cavelon use`, which holds
+  for every folder without a `cavelon.yaml`. `status` counts the operations of
+  other solutions it leaves out ("1 operation of other solutions not shown").
+- `cavelon docs search` finds the agent graph's pages for "handoff" and
+  "consult", and suggests English words only for a German question.
+
+### Fixed
+
+- `cavelon kb upload` of a file whose content is already active says only
+  that it was deduplicated: no "Both versions answer" note and no `cavelon
+  wait` for the operation that ingested the document once (`operation_ids`
+  leaves it out), and `--replace` never deactivates that document.
+- A YAML file with a quote that is never closed is reported at the line where
+  the quote opens, not at the end of the file.
+- `cavelon validate` warns (`solution_slug_mismatch`) when a test suite's
+  `harness_slug` names another solution than `cavelon.yaml`, also when the
+  package has a `harnesses` section.
+- The getting-started sample output matches the CLI: preview ids `pv1_…`,
+  the operations' phases (`ready` for an upload, `completed` for a test run),
+  `errors` in a test run's summary, the instance's readiness checks, and
+  `init`'s next step for an existing solution.
+
 ## [0.1.6] - 2026-10-05
 
 Safer and clearer for agents: confirmations over MCP are bound to the preview

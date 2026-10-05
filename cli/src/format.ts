@@ -2,14 +2,15 @@ import { shellWord } from "./shell.js";
 
 /** Short, plain text for a person; agents use --json. */
 
-export function table(rows: Array<Record<string, unknown>>, columns: string[], maxWidth = 60): string {
+/** Rows as aligned columns, each cell cut at `maxWidth`; the columns in `whole` (a command to copy) are never cut. */
+export function table(rows: Array<Record<string, unknown>>, columns: string[], maxWidth = 60, whole: string[] = []): string {
   if (rows.length === 0) return "";
-  const cell = (value: unknown): string => {
+  const cell = (value: unknown, column: string): string => {
     const text = value === null || value === undefined ? "" : typeof value === "object" ? JSON.stringify(value) : String(value);
     const oneLine = text.replace(/\s+/g, " ");
-    return oneLine.length > maxWidth ? `${oneLine.slice(0, maxWidth - 1)}…` : oneLine;
+    return oneLine.length > maxWidth && !whole.includes(column) ? `${oneLine.slice(0, maxWidth - 1)}…` : oneLine;
   };
-  const cells = rows.map((row) => columns.map((c) => cell(row[c])));
+  const cells = rows.map((row) => columns.map((c) => cell(row[c], c)));
   const widths = columns.map((c, i) => Math.max(c.length, ...cells.map((r) => r[i]!.length)));
   const line = (values: string[]) =>
     values

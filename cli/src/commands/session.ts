@@ -289,6 +289,28 @@ export const logout: CommandSpec = {
   },
 };
 
+/**
+ * Where the tenant a command acts in came from, in words. The tenant chosen
+ * with `cavelon use` holds in every folder whose cavelon.yaml names none, so
+ * outside a solution folder that is said.
+ */
+function tenantSourceText(session: Session): string | undefined {
+  switch (session.tenantSource) {
+    case undefined:
+      return undefined;
+    case "option":
+      return "--tenant";
+    case "CAVELON_TENANT":
+      return "the CAVELON_TENANT variable";
+    case "use":
+      return session.project
+        ? "`cavelon use` (this folder's cavelon.yaml names no tenant for this instance)"
+        : "`cavelon use`, for every folder without a cavelon.yaml (--tenant chooses another for one command)";
+    default:
+      return session.tenantSource;
+  }
+}
+
 function credentialSource(session: Session): string {
   if (session.tokenSource === "CAVELON_TOKEN") return "CAVELON_TOKEN";
   return session.tokenStore === "file" ? "login (user-only file)" : "login (credential store)";
@@ -427,7 +449,7 @@ export const whoami: CommandSpec = {
         ["instance", `${session.url} (${session.urlSource})`],
         ["acting as", owner],
         ["tenant", contextTenant ? tenantTitle({ id: contextTenant, name: tenantName, slug: tenantSlug }) : nowhere ? "none chosen (`cavelon use` chooses one)" : "none (Platform mode)"],
-        ["tenant from", session.tenant ? session.tenantSource : nowhere ? undefined : "the token's default"],
+        ["tenant from", session.tenant ? tenantSourceText(session) : nowhere ? undefined : "the token's default"],
         ["role", data.role ?? undefined],
         ["credential", `${session.tokenKind === "api_key" ? "tenant API key" : session.tokenKind === "personal_access_token" ? "personal access token" : "token"}${tokenName} from ${credentialSource(session)}`],
         ["expires", expires],
@@ -667,7 +689,7 @@ export const status: CommandSpec = {
     }
     const shownTenant = data.tenant as { id?: string; name?: string | null; slug?: string | null } | null;
     const tenantText = session.tenant
-      ? `${shownTenant?.id && (shownTenant.name || shownTenant.slug) ? tenantTitle({ id: shownTenant.id, name: shownTenant.name, slug: shownTenant.slug }) : session.tenant} (${session.tenantSource})`
+      ? `${shownTenant?.id && (shownTenant.name || shownTenant.slug) ? tenantTitle({ id: shownTenant.id, name: shownTenant.name, slug: shownTenant.slug }) : session.tenant}, from ${tenantSourceText(session)}`
       : session.tokenKind === "api_key"
         ? "the API key's tenant"
         : "not chosen (`cavelon use` lists your tenants to choose from)";
@@ -711,7 +733,9 @@ export const status: CommandSpec = {
       const waiting = waits.flatMap((wait, i) => (wait ? [{ operation_id: operations![i]!.id, ...wait }] : []));
       if (waiting.length) data.capacity_waits = waiting;
       const ops = data.operations as { scope?: string; harness?: string; other_solutions?: number };
-      const others = ops.other_solutions ? ` (${ops.other_solutions} of other solutions not shown; \`cavelon api list_operations_route\` lists all)` : "";
+      const others = ops.other_solutions
+        ? ` (${ops.other_solutions} operation${ops.other_solutions === 1 ? "" : "s"} of other solutions not shown; \`cavelon api list_operations_route\` lists all)`
+        : "";
       const heading = ops.scope === "solution" ? `Running operations of ${ops.harness} and the tenant's shared work${others}` : "Running operations in the tenant";
       text += operations.length
         ? `\n\n${heading}:\n${operations

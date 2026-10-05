@@ -1,6 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { LineCounter, parseDocument, type Document } from "yaml";
+import { CST, LineCounter, Parser, parseDocument, type Document, type YAMLError } from "yaml";
 import type { PackageSchema } from "./contracts.js";
 import { CavelonError, ExitCode } from "./errors.js";
 import { readTextFile, withoutBom, writeFileAtomic } from "./fsutil.js";
@@ -185,6 +185,31 @@ async function exists(dir: string): Promise<boolean> {
   }
 }
 
+/**
+ * The line a YAML error is at. A quote that is never closed is reported at
+ * the end of the file, where the parser gave up; the place to fix is where
+ * the quoted text starts.
+ */
+function errorLine(text: string, error: YAMLError, lines: LineCounter): number | undefined {
+  // The parser's position: `linePos` is only filled in with prettyErrors, which also rewrites the message.
+  const at = error.linePos?.[0]?.line ?? (typeof error.pos?.[0] === "number" ? lines.linePos(error.pos[0]).line : undefined);
+  if (error.code !== "MISSING_CHAR" || typeof error.pos?.[0] === "undefined") return at;
+  const pos = error.pos[0];
+  let start: number | undefined;
+  const quoted = (t: CST.Token | null | undefined) => {
+    if ((t?.type === "double-quoted-scalar" || t?.type === "single-quoted-scalar") && t.offset <= pos && t.offset + t.source.length >= pos) start = t.offset;
+  };
+  for (const token of new Parser().parse(text)) {
+    if (token.type !== "document") continue;
+    quoted(token.value);
+    CST.visit(token, (item) => {
+      quoted(item.key);
+      quoted(item.value);
+    });
+  }
+  return start === undefined ? at : lines.linePos(start).line;
+}
+
 function parseFile(root: string, file: string, text: string): { value?: unknown; source: Source; finding?: Finding } {
   const relative = rel(root, file);
   if (/\.json$/i.test(file)) {
@@ -207,8 +232,7 @@ function parseFile(root: string, file: string, text: string): { value?: unknown;
         code: "package_file_invalid",
         severity: "error",
         file: relative,
-        // The parser's position: `linePos` is only filled in with prettyErrors, which also rewrites the message.
-        line: first.linePos?.[0]?.line ?? (typeof first.pos?.[0] === "number" ? lines.linePos(first.pos[0]).line : undefined),
+        line: errorLine(text, first, lines),
         message: `Not valid YAML: ${first.message.split("\n")[0]}`,
       },
     };

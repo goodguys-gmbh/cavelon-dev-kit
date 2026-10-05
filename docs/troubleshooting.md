@@ -39,7 +39,7 @@ meaning.
 | 1 | anything else: not found, an operation failed or was cancelled, a test case failed, a test run measured nothing comparable | read the message; for a test run, `cavelon trace <run>` |
 | 2 | usage: unknown command or option, a missing argument, no instance chosen | `cavelon <command> --help` |
 | 3 | validation failed: the arguments, files or body do not match the instance's schema, or the instance refused them (400, 422) | fix what the findings name; `cavelon explain <code>` |
-| 4 | conflict or stale preview (409, 412), a confirm token of another change, a draft named as the default route | preview or read again, then repeat |
+| 4 | conflict or stale preview (409, 412): one that is expired, superseded by another import, already imported or discarded; a confirm token of another change, a draft named as the default route | preview or read again, then repeat |
 | 5 | needs a person (`needs_action`): an approval, a review, test answers that wait for a manual verdict or a knowledge base or value a case needs; run by a coding agent, an operation or a secret field the instance keeps for a person, or a `--confirm` without its preview's token | the message gives the reason, the Admin link or the command a person runs |
 | 6 | timed out; the work goes on | run the printed `cavelon wait …` again to resume |
 | 7 | not authorised: no token, or the instance refused it (401, 403) | see [Logging in and permissions](#logging-in-and-permissions) |
@@ -141,7 +141,7 @@ who may decide before you test, read the node's `approvers` in
 | `package_field_unknown` | 0 (a warning) | A field the package schema does not have; the import ignores it. The finding suggests the field you probably meant. A required field under another name is reported once, as the missing field, with the suggestion. |
 | `package_model_unknown` | 0 (a warning) | An agent's `llm_model` is not in the tenant's model list as `pull`, `models list` or `validate` last read it. The import preview blocks it, so `validate` does not say "Valid", and `--strict` fails. An empty Model Registry is not checked: the instance's defaults serve the agents. |
 | `solution_slug_mismatch` | 0 (a warning) | The package names another solution than `cavelon.yaml`: `package/harnesses.yaml` holds no entry of its slug, or (in a package without harnesses) an agent's or suite's `harness_slug` names another. Typical after copying an example under another name: change the slug and every `harness_slug`, or `harness` in `cavelon.yaml`. |
-| `package_file_invalid` | 3 | A package file is not valid YAML or JSON (the finding names the parser's line), or it is a symlink to a file outside the solution folder or to no file. A link inside the solution folder is read as the file it leads to. What names the entries of a file that cannot be read is not checked until it can be. |
+| `package_file_invalid` | 3 | A package file is not valid YAML or JSON (the finding names the parser's line; for a quote that is never closed, the line where it opens), or it is a symlink to a file outside the solution folder or to no file. A link inside the solution folder is read as the file it leads to. What names the entries of a file that cannot be read is not checked until it can be. |
 | `project_file_invalid`, `env_file_invalid` | 3 | `cavelon.yaml` or `env/<name>.yaml` is not valid YAML or has a wrong value. |
 | `project_file_has_secret` | 3 | `cavelon.yaml` contains something that looks like a token. Remove it, revoke the token, and use `cavelon login` or `CAVELON_TOKEN`. |
 | `no_solution` | 2 | The command needs a solution folder: run it in a folder with `cavelon.yaml`, or `cavelon init` first. |
@@ -190,10 +190,14 @@ used: cached or read now, when, and its hash.
 | (blocked preview) | 3 | The preview has blockers and no preview id. Each blocker names its code, the package file and path, and a hint where the instance sends them; `cavelon explain <code>` says more. Fix them and run `cavelon apply` again. |
 | `import_preview_stale` | 4 | The solution changed on the instance after the preview. Nothing was imported. Run `cavelon apply` again and confirm the new preview. |
 | `package_requirements_changed` | 4 | The import's own check found something the preview did not; each blocker is listed. Nothing was imported. Fix the blockers and preview again. |
-| `solution_not_found` | 1 | The solution the env file, `cavelon.yaml` or `--harness` names is not in this tenant. `apply` previews into an existing solution and never creates one: create the draft with the `cavelon harness new <slug>` the hint names (with `--name` when the package's `harnesses.yaml` has an entry with that slug), then preview again. `cavelon harness list` shows the tenant's solutions. |
-| `preview_unknown` | 2 | No open preview with that id in this folder. `cavelon status` lists the open ones. |
+| `solution_not_found` | 1 | The solution the env file, `cavelon.yaml` or `--harness` names is not in this tenant: "not found", so exit 1, also when it is only not created yet. `apply` previews into an existing solution and never creates one: create the draft with the `cavelon harness new <slug>` the hint names (with `--name` when the package's `harnesses.yaml` has an entry with that slug, and `--tenant` when you gave one), then preview again. `cavelon harness list` shows the tenant's solutions. |
+| (nothing to import) | 0 | The preview changes nothing: the instance already holds what the package files say. `apply` says "Nothing to import", stores no preview and prints no confirm command (`nothing_to_import` with `--json`). |
+| `preview_unknown` | 2 | No preview with that id was made in this folder (or it was removed long ago). `cavelon status` lists the open ones. |
+| `preview_superseded` | 4 | Another preview was imported after this one, so what it showed is no longer what an import would do (`details.superseded_by` names that preview). Nothing was imported. Run `cavelon apply` again and confirm the new preview. |
+| `preview_applied` | 4 | The preview was imported already; nothing was imported again. `cavelon apply` previews the files as they are now. |
+| `preview_discarded` | 4 | The preview was forgotten with `apply --discard`. Nothing was imported. Preview again. |
 | `preview_files_changed` | 4 | The package files changed in what they hold since the preview; the error names them. Nothing was imported. Run `cavelon apply` again and confirm the new preview, or add `--allow-stale` to the confirm to import what the old preview showed. |
-| `preview_expired` | 4 | The preview is more than a day old. Nothing was imported, and the stored preview is removed. Run `cavelon apply` again and confirm the new preview. |
+| `preview_expired` | 4 | The preview is more than a day old (or a newer preview removed it as expired). Nothing was imported, and the stored preview is removed. Run `cavelon apply` again and confirm the new preview. |
 | `preview_other_tenant`, `preview_other_instance` | 4 | The preview was made for another tenant or instance than the one this command uses. Preview again here. |
 | `uncommitted_changes` | 4 | `pull` would overwrite package files with uncommitted changes. Outside a git repository: it would overwrite or remove a package file that changed since the last pull, such as your edit or a test suite you have not applied. A file as the last pull or confirmed apply left it is never listed. The files are listed. Commit them, apply them, or use `--force` to discard them. |
 | `package_file_outside` | 4 | `pull` or `init --from` would write a package file that is a symlink to a file outside the solution folder. Nothing was written. Move the file into the solution folder, or replace the link with the file. |
@@ -243,8 +247,8 @@ Behind a proxy or a TLS-inspecting firewall, see
 - `cavelon docs search <words>` searches your instance's documentation. The
   docs are in English: German words for the core concepts (Wissensbasis,
   testen, Standard) are looked up in English, and other questions do best in
-  English words. When nothing matches, it says so; `cavelon docs get index`
-  lists every page.
+  English words. When nothing matches, it says so (and suggests English words
+  only for a German question); `cavelon docs get index` lists every page.
 - Report a problem with the kit on
   [GitHub issues](https://github.com/goodguys-gmbh/cavelon-dev-kit/issues),
   with the command, its output and `cavelon --version`. Leave out tokens,

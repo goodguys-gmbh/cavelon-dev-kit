@@ -276,6 +276,17 @@ describe("test results and traces", () => {
 });
 
 describe("status, whoami and the tenant", () => {
+  it("outside a solution folder, says the tenant is the one chosen with cavelon use, and where that holds", async () => {
+    const outside = path.join(sb.home, "outside");
+    mkdirSync(outside, { recursive: true });
+    const whoami = await cli(sb, ["whoami"], { cwd: outside });
+    expect(whoami.code, whoami.stderr).toBe(0);
+    expect(whoami.stdout).toMatch(/^tenant from: +`cavelon use`, for every folder without a cavelon\.yaml \(--tenant chooses another for one command\)$/m);
+    const status = await cli(sb, ["status"], { cwd: outside });
+    expect(status.stdout).toMatch(/^tenant: +Acme \(acme, [0-9a-f-]{36}\), from `cavelon use`, for every folder without a cavelon\.yaml/m);
+    expect((await cli(sb, ["whoami", "--json"], { cwd: outside })).json<{ tenant: { source: string } }>().tenant.source).toBe("use");
+  });
+
   it("names a tenant given by id that is none of the token's memberships, and says which solution is the default route", async () => {
     const beta = server.addTenant("beta", "Beta Corp");
     const operator = server.addToken({ kind: "pat", tenantIds: [], reachesAll: true, platform: true, globalRole: "superadmin" });
@@ -295,7 +306,7 @@ describe("status, whoami and the tenant", () => {
     const text = await cli(sb, ["status"], { cwd: dir });
     expect(text.stdout).toMatch(/^state:\s+active$/m);
     expect(text.stdout).toMatch(/^default route:\s+no: Default \(default\) answers the tenant's chat and widget; preview a change with cavelon harness default support$/m);
-    expect(text.stdout).toMatch(/^tenant:\s+Acme \(acme, [0-9a-f-]{36}\) \(cavelon\.yaml\)$/m);
+    expect(text.stdout).toMatch(/^tenant:\s+Acme \(acme, [0-9a-f-]{36}\), from cavelon\.yaml$/m);
     harness("support").is_default = true;
     harness("default").is_default = false;
     expect((await cli(sb, ["status", "--json"], { cwd: dir })).json()).toMatchObject({ solution: { state: { default_route: { is_default: true } } } });
@@ -315,7 +326,7 @@ describe("status, whoami and the tenant", () => {
       expect(ops.items.map((o) => o.id)).toContain(ours);
       expect(ops.items.map((o) => o.id)).not.toContain(theirs);
       expect(ops).toMatchObject({ scope: "solution", other_solutions: expect.any(Number) });
-      expect((await cli(sb, ["status"], { cwd: dir })).stdout).toMatch(/Running operations of support and the tenant's shared work \(\d+ of other solutions not shown/);
+      expect((await cli(sb, ["status"], { cwd: dir })).stdout).toMatch(/Running operations of support and the tenant's shared work \(1 operation of other solutions not shown/);
     } finally {
       server.state.defaultSteps = steps;
       for (const op of server.state.operations.values()) op.steps = ["succeeded"];
@@ -396,6 +407,17 @@ describe("kb upload", () => {
       expect(again.stdout).toMatch(/same-\w+\.md: identical to the active document [0-9a-f]{8}…; nothing new was created \(deduplicated\)/);
       const json = await cli(sb, ["kb", "upload", dir, "--kb", "FAQ", "--keep-both", "--json"]);
       expect(json.json<{ documents: Array<{ upload_outcome: string | null }> }>().documents.map((d) => d.upload_outcome)).toEqual(["deduplicated"]);
+      // Without --keep-both: no second version exists, so neither the note about both versions nor an old operation to wait for.
+      const plain = await cli(sb, ["kb", "upload", dir, "--kb", "FAQ"]);
+      expect(plain.code, plain.stderr).toBe(0);
+      expect(plain.stdout).toMatch(/nothing new was created \(deduplicated\)/);
+      expect(plain.stdout).not.toMatch(/Both versions answer|exists \(|Wait with|Operations:/);
+      const plainJson = (await cli(sb, ["kb", "upload", dir, "--kb", "FAQ", "--json"])).json<{ operation_ids: string[]; existing: Array<{ outcome: string }> }>();
+      expect(plainJson.operation_ids).toEqual([]);
+      expect(plainJson.existing.map((m) => m.outcome)).toEqual(["identical"]);
+      // --replace never deactivates the document the identical file is.
+      const replaced = await cli(sb, ["kb", "upload", dir, "--kb", "FAQ", "--replace", "--json"]);
+      expect(replaced.json<{ existing: Array<{ outcome: string }> }>().existing.map((m) => m.outcome)).not.toContain("deactivated");
     } finally {
       server.state.uploadDedup = false;
       server.state.uploadOutcome = false;

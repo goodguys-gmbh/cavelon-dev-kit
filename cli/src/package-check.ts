@@ -794,11 +794,12 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /**
  * The package names another solution than cavelon.yaml, as after copying an
  * example under another name: harnesses.yaml holds no entry of that slug (or
- * name), or, in a package without harnesses, an agent's or suite's
- * harness_slug names another. One warning per section. Where the package has
- * harnesses, a harness_slug naming none of them is a reference the reference
- * check reports. A solution named by its id is not checked: the package
- * cannot say it.
+ * name), or an agent's or suite's harness_slug names another. One warning per
+ * section. Where the package has harnesses, an agent's harness_slug naming
+ * one of them belongs to that one, and one naming none of them is a reference
+ * the reference check reports; a suite's harness_slug, which that check does
+ * not follow, warns here when it names none of them either. A solution named
+ * by its id is not checked: the package cannot say it.
  */
 function checkSolutionSlug(disk: PackageOnDisk, solution: string | undefined): Finding[] {
   if (!solution || UUID.test(solution)) return [];
@@ -818,10 +819,11 @@ function checkSolutionSlug(disk: PackageOnDisk, solution: string | undefined): F
         `rename the slug (and every harness_slug) to "${solution}", or set harness in cavelon.yaml to the package's.`,
     });
   }
-  if (harnesses.length) return findings;
-  for (const section of ["agents", "test_suites"]) {
+  const packaged = new Set(harnesses.map((h) => h.slug).filter((v): v is string => typeof v === "string"));
+  for (const section of harnesses.length ? ["test_suites"] : ["agents", "test_suites"]) {
     const entries = asList(pkg[section]);
-    const off = entries.flatMap((entry, i) => (typeof entry.harness_slug === "string" && entry.harness_slug !== slug ? [{ i, name: entry.harness_slug }] : []));
+    const fits = (name: string) => name === slug || packaged.has(name);
+    const off = entries.flatMap((entry, i) => (typeof entry.harness_slug === "string" && !fits(entry.harness_slug) ? [{ i, name: entry.harness_slug }] : []));
     if (!off.length) continue;
     const names = [...new Set(off.map((o) => o.name))];
     findings.push({
