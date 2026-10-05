@@ -3,7 +3,7 @@ import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSy
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { parse, stringify } from "yaml";
-import { CONTRACTS, FIXTURES, modelRow, startFakeServer, type FakeServer } from "./fake-server.js";
+import { CONTRACTS, modelRow, startFakeServer, type FakeServer } from "./fake-server.js";
 import { cli, login, sandbox, type Sandbox } from "./helpers.js";
 
 /**
@@ -1044,12 +1044,11 @@ describe("validate", () => {
 });
 
 describe("a test step's assertions, on an instance whose schema publishes them", () => {
-  /** The criterion shapes a recent instance publishes for a step: judge criteria, and assertions checked in code. */
-  const criteria = JSON.parse(readFileSync(path.join(FIXTURES, "step-criteria.json"), "utf8")) as { $defs: Record<string, unknown>; items: unknown };
-  const publishCriteria = (schema: { properties: Record<string, unknown> }) => {
+  /** A step's criteria as an instance before the criterion shapes publishes them: a list of anything. */
+  const withoutCriteria = (schema: { properties: Record<string, unknown> }) => {
     const all = schema as unknown as { $defs: Record<string, { properties: Record<string, unknown> }> };
-    Object.assign(all.$defs, criteria.$defs);
-    all.$defs.PackageTestCaseStep!.properties.evaluation_criteria = { anyOf: [{ type: "array", items: criteria.items, maxItems: 50 }, { type: "null" }], default: null };
+    for (const name of Object.keys(all.$defs)) if (name === "CriterionSpec" || name.endsWith("Criterion")) delete all.$defs[name];
+    all.$defs.PackageTestCaseStep!.properties.evaluation_criteria = { anyOf: [{ type: "array", items: {} }, { type: "null" }], default: null, title: "Evaluation Criteria" };
   };
   let own: Sandbox;
 
@@ -1068,7 +1067,6 @@ describe("a test step's assertions, on an instance whose schema publishes them",
 
   beforeEach(() => {
     own = sandbox();
-    server.state.packageSchemaEdit = publishCriteria;
   });
   afterEach(() => {
     server.state.packageSchemaEdit = null;
@@ -1100,7 +1098,7 @@ describe("a test step's assertions, on an instance whose schema publishes them",
   });
 
   it("on an instance whose schema does not describe a step's criteria, validate warns once per suite file that it cannot check them", async () => {
-    server.state.packageSchemaEdit = null;
+    server.state.packageSchemaEdit = withoutCriteria;
     const dir = await solution(routing);
     const result = await cli(own, ["validate", "--json"], { cwd: dir });
     expect(result.code, result.stdout).toBe(0);

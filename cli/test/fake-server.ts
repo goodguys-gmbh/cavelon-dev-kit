@@ -23,16 +23,25 @@ export function openapiSnapshot(): string {
 /**
  * The snapshot with its person-only markers changed, or without any (null),
  * and the body fields `secrets` names (component schema → its properties)
- * marked as an instance marks a secret value.
+ * marked as an instance marks a secret value, or without any marked (null).
  */
-function withMarkers(marks: Record<string, string | false> | null, secrets: Record<string, string[]>): string {
-  if (marks && !Object.keys(marks).length && !Object.keys(secrets).length) return openapiSnapshot();
+function withMarkers(marks: Record<string, string | false> | null, secrets: Record<string, string[]> | null): string {
+  if (marks && !Object.keys(marks).length && secrets && !Object.keys(secrets).length) return openapiSnapshot();
   const doc = JSON.parse(openapiSnapshot()) as {
     paths: Record<string, Record<string, Record<string, unknown>>>;
-    components: { schemas: Record<string, { properties: Record<string, Record<string, unknown>> }> };
+    components: { schemas: Record<string, { properties?: Record<string, Record<string, unknown>> }> };
   };
-  for (const [schema, fields] of Object.entries(secrets)) {
-    for (const field of fields) Object.assign(doc.components.schemas[schema]!.properties[field]!, { "x-cavelon-secret": true, writeOnly: true });
+  if (secrets === null) {
+    for (const schema of Object.values(doc.components.schemas)) {
+      for (const property of Object.values(schema.properties ?? {})) {
+        if (!property["x-cavelon-secret"]) continue;
+        delete property["x-cavelon-secret"];
+        delete property.writeOnly;
+      }
+    }
+  }
+  for (const [schema, fields] of Object.entries(secrets ?? {})) {
+    for (const field of fields) Object.assign(doc.components.schemas[schema]!.properties![field]!, { "x-cavelon-secret": true, writeOnly: true });
   }
   for (const [route, item] of Object.entries(doc.paths)) {
     for (const [method, op] of Object.entries(item)) {
@@ -47,19 +56,17 @@ function withMarkers(marks: Record<string, string | false> | null, secrets: Reco
   return JSON.stringify(doc);
 }
 /**
- * The upload as an instance of each kind publishes it: without
- * `replace_doc_ids` for an older one, with `replace_existing` and
- * `replaced_document_ids` for a newer one.
+ * The upload as an instance of each kind publishes it: as the snapshot, with
+ * `replace_existing` and `replaced_document_ids`, for a recent one; without
+ * those for an older one, and also without `replace_doc_ids` for the oldest.
  */
 function withUploadReplace(text: string, kind: FakeState["uploadReplace"]): string {
-  if (kind === "ids") return text;
+  if (kind === "name") return text;
   const doc = JSON.parse(text) as { components: { schemas: Record<string, { properties: Record<string, unknown>; required?: string[] }> } };
   const form = doc.components.schemas.Body_upload_documents_api_v1_knowledge_bases__kb_id__documents_upload_post!;
+  delete form.properties.replace_existing;
+  delete doc.components.schemas.DocumentResponse!.properties.replaced_document_ids;
   if (kind === "none") delete form.properties.replace_doc_ids;
-  else {
-    form.properties.replace_existing = { type: "boolean", title: "Replace Existing", default: true };
-    doc.components.schemas.DocumentResponse!.properties.replaced_document_ids = { type: "array", items: { type: "string" }, title: "Replaced Document Ids" };
-  }
   return JSON.stringify(doc);
 }
 const readContract = (name: string) => readFileSync(path.join(CONTRACTS, name), "utf8");
@@ -154,11 +161,11 @@ export interface FakeState {
   /** Uploaded documents; a replaced one is soft-deleted and no longer listed. */
   documents: Array<{ id: string; tenant_id: string; kb_id: string; filename: string; size: number; is_active: boolean; deleted: boolean; created_at: string }>;
   /**
-   * How an upload replaces a document named like an existing one: "ids" only
-   * the ones `replace_doc_ids` names, as the snapshot's instance; "name" also a
-   * same-named active one by default (`replace_existing`), reporting
-   * `replaced_document_ids`, as a newer instance; "none" neither, as an older
-   * instance whose upload form has no `replace_doc_ids`.
+   * How an upload replaces a document named like an existing one: "name" also
+   * a same-named active one by default (`replace_existing`), reporting
+   * `replaced_document_ids`, as the snapshot's instance; "ids" only the ones
+   * `replace_doc_ids` names, as an older instance; "none" neither, as an
+   * instance whose upload form has no `replace_doc_ids` either.
    */
   uploadReplace: "none" | "ids" | "name";
   suites: Array<{ id: string; tenant_id: string; name: string; harness_id: string | null; archived_at: string | null }>;
@@ -201,8 +208,12 @@ export interface FakeState {
    * OpenAPI without any marker, as an instance older than the marker.
    */
   personOnly: Record<string, string | false> | null;
-  /** Body fields marked `x-cavelon-secret`, by component schema; none in the snapshot, as before instances marked them. */
-  secretFields: Record<string, string[]>;
+  /**
+   * Body fields marked `x-cavelon-secret` beside the snapshot's own, by
+   * component schema; `null` serves the OpenAPI without any, as an instance
+   * older than the marker.
+   */
+  secretFields: Record<string, string[]> | null;
   /**
    * Answers that break off after the status and part of the body, as a proxy
    * or a dropped connection leaves them: "cut" closes the connection, "stall"
@@ -237,7 +248,9 @@ export interface FakeState {
    * 409 package_requirements_changed: with these
    * `blockers`, or without the field, as an older instance answers; and with
    * `blocker_details` (code, message, path, hint) beside them, as a preview
-   * sends them, where a test sets them.
+   * sends them, where a test sets them. The published contracts describe
+   * neither field (the OpenAPI leaves the body open, and the error catalog's
+   * hint names `blockers` only), so this body follows the catalog's entry.
    */
   importRequirementsChanged: { blockers?: string[]; blocker_details?: Array<Record<string, unknown>> } | null;
   /** Whether readiness lets a solution activate. */
@@ -463,7 +476,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     harnesses: [],
     kbs: [],
     documents: [],
-    uploadReplace: "ids",
+    uploadReplace: "name",
     suites: [],
     runs: [],
     operations: new Map(),

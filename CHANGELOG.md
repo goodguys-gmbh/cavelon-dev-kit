@@ -7,6 +7,19 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Changed
+
+- The contract snapshot is refreshed from an instance that publishes a test
+  step's criterion shapes in its package schema (judge criteria as text or
+  `{text, dimension}`, assertions by `type`), marks secret body fields
+  (`x-cavelon-secret`), replaces a same-named document on upload
+  (`replace_existing`, `replaced_document_ids`), and documents assertions and
+  knowledge outcomes on its regression-testing page. The tests now check
+  assertions against the published shapes instead of a hand-made fixture, and
+  play an older instance by taking those additions out.
+- `cli/scripts/scrub-contracts.mjs` also drops a sentence of the published
+  texts that names an issue outside parentheses.
+
 ## [0.1.5] - 2026-10-04
 
 Agents get further on their own: validate catches broken references, unknown

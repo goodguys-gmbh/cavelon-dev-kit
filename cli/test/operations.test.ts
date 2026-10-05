@@ -616,6 +616,7 @@ describe("kb upload of a file named like an existing document", () => {
   });
   beforeEach(async () => {
     server.state.documents = server.state.documents.filter((d) => d.kb_id !== kbId);
+    // An instance whose upload replaces only the ids it is given, unless a test plays another.
     server.state.uploadReplace = "ids";
     own = sandbox();
     own.env.CAVELON_CONTRACT_TTL_SECONDS = "0";
@@ -628,7 +629,7 @@ describe("kb upload of a file named like an existing document", () => {
   });
   afterEach(() => {
     own.cleanup();
-    server.state.uploadReplace = "ids";
+    server.state.uploadReplace = "name";
   });
 
   it("is named in the dry run and after the upload, and stays active without --replace", async () => {
@@ -660,7 +661,7 @@ describe("kb upload of a file named like an existing document", () => {
     expect(server.state.requests.some((r) => r.method === "PATCH")).toBe(false);
   });
 
-  it("reads replaced_document_ids from a newer instance, which replaces by default unless --keep-both", async () => {
+  it("reads replaced_document_ids from an instance that replaces by name, by default unless --keep-both", async () => {
     server.state.uploadReplace = "name";
     const old = seed("bergbahn-faq.md");
     const dry = await cli(own, ["kb", "upload", file, "--kb", "Bergbahn", "--dry-run"]);

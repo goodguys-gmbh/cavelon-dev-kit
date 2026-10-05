@@ -8,7 +8,11 @@ and the fake server in `cli/test/` serves them.
 
 Recorded on 2026-10-04 from an instance with its default settings: every
 optional feature off, rate limiting on, a tenant without settings of its own,
-no licence entitlement, and an empty billing month. The tests switch features
+no licence entitlement, and an empty billing month. Refreshed on 2026-10-05
+from an instance that publishes a test step's criterion shapes (judge criteria
+and assertions by `type`), marks secret body fields (`x-cavelon-secret`), and
+replaces a same-named document on upload (`replace_existing`); its
+capabilities differ from the snapshot's only in settings, so that file stays. The tests switch features
 on in the fake server where a command needs them (personal access tokens, the
 operations API, Sandboxes, Masterloop, archive uploads); the snapshot keeps
 the defaults.
@@ -19,7 +23,7 @@ the defaults.
 | `meta-capabilities.json` | `GET /api/v1/meta/capabilities`: the instance's version, features and contract versions, and `limits` with each limit's value, source, who changes it and how |
 | `meta-error-catalog.json` | `GET /api/v1/meta/error-catalog`: every rule and API error code with its message, hint and docs page |
 | `meta-package-schema-v3.json` | `GET /api/v1/meta/package-schema?version=v3`: the JSON Schema of a solution package |
-| `docs/llms.txt` | `GET /llms.txt`, with the base URL `https://cavelon.example.com` |
+| `docs/llms.txt` | `GET /llms.txt`, with the base URL `https://cavelon.example.com` and the version `meta-capabilities.json` reports |
 | `docs/<section>__<page>.md` | `GET /api/v1/docs/<section>/<page>.md`: the pages the kit's commands and skills point to |
 
 ## Refreshing
@@ -40,7 +44,11 @@ the defaults.
 
    `trim-openapi.mjs` stops when a listed operation is no longer published.
    `scrub-contracts.mjs` drops developer notes the texts may carry: issue
-   references, and a rule's explanation past its first paragraph.
+   references, and a rule's explanation past its first paragraph. Where the
+   instance was not at its default settings, `--rename` takes its texts back
+   to the defaults: `--rename <its base URL>=` makes the error catalog's docs
+   links relative, and a branded product name or a version can be renamed the
+   same way (rename whole words, so `CAVELON_TENANT` stays).
 3. Update the date above, run `npm test` in `cli/`, and fix what the new
    contracts break.
 
