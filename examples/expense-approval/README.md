@@ -74,14 +74,25 @@ Edit two lines of `cavelon.yaml`: `instance` is your Cavelon URL, `tenant` your
 tenant's slug, name or id (`cavelon tenant list` shows all three). The approval names three access
 groups: create them in your tenant and add the approvers' chat users, with
 their verified email (`cavelon docs get administration/chat-users-and-groups`),
-or name your own groups or tenant roles in `package/registry_entities.yaml`. Both agents use the model `gpt-4.1`
-from `openai`; `cavelon models list` shows the models your tenant has, so change
-`llm_model` and `llm_provider` in `package/agents.yaml` if it has another.
+or name your own groups or tenant roles in `package/registry_entities.yaml`.
+
+Pick the model: both agents use `gpt-5.4-mini` from `openai`, and the models a
+tenant has differ per instance. `cavelon models list` shows yours; set
+`llm_model` and `llm_provider` in `package/agents.yaml` to one of them. The
+agents' `temperature` is 0.4, the instance's default, because the package
+schema requires one. On a reasoning model (the GPT-5 family, the o-series) from
+OpenAI, Azure OpenAI or Anthropic the instance does not send it; set the
+reasoning level in each agent's **Model** tab in the Admin instead, and
+`cavelon pull` brings it into the file.
+
+`apply` previews into a solution that exists and never creates one, so create
+the draft first:
 
 ```bash
+cavelon harness new expense-approval --name "Expense approval"   # the empty draft solution
 cavelon validate                                  # the files against your instance's package schema
 cavelon apply --env test                          # a preview, and its id
-cavelon apply --env test --confirm <preview-id>   # creates the draft solution and its knowledge base
+cavelon apply --env test --confirm <preview-id>   # imports the agents, the pipeline, the knowledge base and tests
 cavelon kb upload seeds/policy --kb "Expense Policy" --wait
 cavelon test run --suite Acceptance --wait --timeout 10m
 cavelon trace <run>                               # why a case did or did not pass

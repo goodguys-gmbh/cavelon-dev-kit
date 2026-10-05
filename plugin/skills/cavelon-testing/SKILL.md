@@ -186,9 +186,16 @@ both as a gap to fill.
 
 ## Optimizing
 
-Change one thing at a time, then run the same suite again and compare:
+Change one thing at a time, then run the whole suite again and compare, not
+only the case that failed: a prompt change that fixes one case can break
+another. In one solution, a line "just answer directly" made the agent answer
+an off-topic question its persona forbade.
 
-- **Wrong or missing facts:** check retrieval first (which chunks came back in
+- **Wrong or missing facts:** check retrieval first. Under a case that did not
+  pass, `cavelon trace <run>` shows a `Knowledge:` line with the outcomes of
+  its knowledge searches (`knowledge_outcomes` per case in `--json`; `null`
+  where the instance or the run recorded none), so a `content_gap` shows
+  before you open the case's spans. Then read which chunks came back in
   the retrieval span, and its `knowledge_outcome`: `content_gap` means the
   knowledge base lacks the answer, `unusable_hits` that what came back did not
   answer it, `retrieval_fault` that the search failed). Fix the documents or
@@ -200,9 +207,25 @@ Change one thing at a time, then run the same suite again and compare:
   description and parameters, then the agent's instructions about when to use it.
 - **Right facts, poor answer:** adjust the agent's instructions; keep them short
   and specific.
+- **A limit that does not hold** (the agent writes the poem it should decline):
+  a limit stated only in the persona's `persona_prompt` is weaker than a direct
+  instruction in the agent's `system_prompt`, most of all on small models. Put
+  the hard limit in the agent's `system_prompt` too, and keep a test case that
+  checks it.
 - **Too slow or too costly:** read the token counts and durations in the trace;
   a smaller model or fewer tool rounds often suffice for a step.
 
-Record why a change helped in the commit message. When every suite passes,
+Record why a change helped in the commit message.
+
+To try a question outside the suite, `cavelon chat "<message>" --harness
+<solution>` (the `chat` tool over MCP) sends it to that solution and prints
+the answer, the session to continue with `--session`, and the conversation to
+trace. It reaches an active solution that is not the tenant's default route,
+which the tenant's chat and widget never answer with; a draft answers only a
+person's token, as a Playground run. `cavelon api chat` with `harness_id` in
+the body does the same, but needs the id and a confirm. `cavelon deactivate
+--harness <solution>` takes an active solution out of live traffic again; it
+previews first and is the person's decision, so show the preview and confirm
+only with their yes. When every suite passes,
 `cavelon activate --harness <name or slug>` goes through the readiness gate; if the
 token may not activate, a person activates in the Admin.

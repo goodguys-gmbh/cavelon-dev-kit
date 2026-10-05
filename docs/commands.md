@@ -38,6 +38,7 @@ the environment over the files. The exit codes are listed in [Troubleshooting](t
 - **Sandboxes:** [`sandbox list`](#cavelon-sandbox-list), [`sandbox validate`](#cavelon-sandbox-validate), [`sandbox files`](#cavelon-sandbox-files), [`sandbox cat`](#cavelon-sandbox-cat), [`sandbox activity`](#cavelon-sandbox-activity), [`sandbox logs`](#cavelon-sandbox-logs), [`sandbox receipt`](#cavelon-sandbox-receipt), [`sandbox seed`](#cavelon-sandbox-seed), [`sandbox refresh`](#cavelon-sandbox-refresh), [`artifacts export`](#cavelon-artifacts-export)
 - **API and docs:** [`api list`](#cavelon-api-list), [`api describe`](#cavelon-api-describe), [`api`](#cavelon-api), [`docs search`](#cavelon-docs-search), [`docs get`](#cavelon-docs-get)
 - **For agents:** [`commands`](#cavelon-commands), [`mcp`](#cavelon-mcp)
+- **Other commands:** [`deactivate`](#cavelon-deactivate), [`chat`](#cavelon-chat)
 
 ## Session
 
@@ -180,7 +181,7 @@ Never overwrites a file it did not create. AGENTS.md, .gitignore and an existing
 
 | Option | Description | MCP |
 |---|---|---|
-| `--harness <harness>` | The solution (harness) this folder holds, by name, slug or id; its slug goes into cavelon.yaml. Without it, init asks on a terminal. | yes |
+| `--harness <harness>` | The solution (harness) this folder holds, by name, slug or id; its slug goes into cavelon.yaml. One that is not on the instance yet is created as a draft with that name. Without it, init asks on a terminal. | yes |
 | `--agents <list>` | Write the fallback for these agents: claude, codex, cursor, copilot, gemini, kiro, pi, other or all (comma-separated). Repeatable. | yes |
 | `--hook` | Add a git pre-commit hook that runs `cavelon validate`; never in a hooks folder outside the repository. | yes |
 | `--update` | Only bring the marked blocks and fallback files to this version. | yes |
@@ -306,7 +307,7 @@ Preview the package files against the instance and print a preview id; --confirm
 cavelon apply [options]
 ```
 
-Without --confirm nothing is imported: the preview shows what changes, which active solutions it reaches, what the target still needs (secrets and variables with the command that sets each, grants, runtime bindings, trigger identities), loop budgets and ignored sections, and is stored in .cavelon/. When the env file names a solution that does not exist yet, apply creates it as a draft first. A person sets the secrets (`cavelon secrets set <name>`), never the agent. Show a preview that reaches an active solution or env/prod to a person before confirming. A stale preview exits 4 and imports nothing: one whose target changed on the instance since, one whose package files changed since (what they hold, not their formatting; --allow-stale imports what the preview showed anyway), and one older than a day. So does an import its own check refuses when it applies, naming each blocker. --discard &lt;id\|all&gt; forgets stored previews; `cavelon status` lists them with when each expires.
+Without --confirm nothing is imported: the preview shows what changes, which active solutions it reaches, what the target still needs (secrets and variables with the command that sets each, grants, runtime bindings, trigger identities), loop budgets and ignored sections, and is stored in .cavelon/. A preview never creates the solution: one the env file names that is not on the instance yet gets the `cavelon harness new` command that creates it as a draft. A person sets the secrets (`cavelon secrets set <name>`), never the agent. Show a preview that reaches an active solution or env/prod to a person before confirming. A stale preview exits 4 and imports nothing: one whose target changed on the instance since, one whose package files changed since (what they hold, not their formatting; --allow-stale imports what the preview showed anyway), and one older than a day. So does an import its own check refuses when it applies, naming each blocker. --discard &lt;id\|all&gt; forgets stored previews; `cavelon status` lists them with when each expires.
 
 | Option | Description | MCP |
 |---|---|---|
@@ -1578,3 +1579,61 @@ cavelon mcp
 ```
 
 Started by the agent's plugin (`cavelon mcp`); it does not return until the agent disconnects.
+
+## Other commands
+
+### cavelon deactivate
+
+Take an active solution out of service; previews first, --confirm deactivates.
+
+**changing (destructive)** · MCP tool: `deactivate`
+
+```text
+cavelon deactivate [options]
+```
+
+An active solution answers live traffic: the conversations, channels and API keys that name it. Deactivating stops that until it is activated again (`cavelon activate`, through its readiness gate). Without --confirm nothing changes: the preview says what would stop. Show it to a person and confirm only with their yes. The tenant's default route is refused before anything is sent: make another solution the default first (`cavelon harness default <solution>`). An instance that publishes no deactivate route is said so; a person deactivates in the Admin there.
+
+| Option | Description | MCP |
+|---|---|---|
+| `--harness <harness>` | The solution (harness): its name, slug or id; default: env file, then cavelon.yaml. | yes |
+| `--env <name>` | Use env/&lt;name&gt;.yaml: its tenant and solution. | yes |
+| `--confirm` | Deactivate it (after a person saw the preview). | yes |
+
+Examples:
+
+```bash
+cavelon deactivate --harness support-faq
+cavelon deactivate --harness support-faq --confirm
+```
+
+### cavelon chat
+
+Send one message to a solution and print its answer, with the session to continue and the conversation to trace.
+
+**changing** · MCP tool: `chat`
+
+```text
+cavelon chat <message> [options]
+```
+
+The tenant's chat and widget answer only with the default route; this names the solution, so an active solution that is not the default, or a draft, can be tried before it answers anyone. A draft answers a person's token as a Playground run (counted as testing), never a tenant API key. Without --harness: the env file's or cavelon.yaml's solution, else the tenant's default route. Each call is one turn; --session continues a conversation. Not streamed: waits for the whole answer, at most --timeout (default 2m; 50 s as an MCP tool).
+
+| Argument | Description |
+|---|---|
+| `message` | What the user says. Required. |
+
+| Option | Description | MCP |
+|---|---|---|
+| `--harness <harness>` | The solution (harness): its name, slug or id; default: env file, then cavelon.yaml. | yes |
+| `--env <name>` | Use env/&lt;name&gt;.yaml: its tenant and solution. | yes |
+| `--session <session_id>` | Continue this conversation (the session_id a previous chat printed). | yes |
+| `--timeout <duration>` | Wait at most this long for the answer (90s, 5m; default 2m). | yes |
+
+Examples:
+
+```bash
+cavelon chat "When are you open?" --harness support-faq
+cavelon chat "And on Saturdays?" --session <session_id>
+cavelon chat "Hello" --json
+```

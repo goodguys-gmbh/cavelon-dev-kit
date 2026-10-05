@@ -23,7 +23,7 @@ import { callStable, workflowOperation } from "../invoke.js";
 import { deref, type Operation } from "../openapi.js";
 import { bindsNow, changedBy, limitError, limitsOrWarn, readLimits, type Limit, type PublishedLimits } from "../limits.js";
 import { getOperation } from "../operations.js";
-import { caseCounts, caseLabel, countsText, failedCase, NOT_PASSED, runVerdict, type TestResultState } from "../results.js";
+import { caseCounts, caseLabel, countsText, failedCase, caseKnowledgeOutcomes, NOT_PASSED, runVerdict, type TestResultState } from "../results.js";
 import { isUuid } from "../session.js";
 import { cavelonCommand, shellWord } from "../shell.js";
 import { readZipSummary, ZipError, type ZipSummary } from "../zip.js";
@@ -1105,6 +1105,9 @@ function notPassedLines(r: TestResultState, max: number, full: boolean): string[
   const lines = [`  ${caseLabel(c)}  ${c.status}`];
   if (c.reason) lines.push(`    ${c.reason}`);
   if (r.llm_judge_reasoning && r.llm_judge_reasoning !== r.error_message) lines.push(`    Judge: ${clip(r.llm_judge_reasoning, max)}`);
+  // A case that failed because the knowledge base lacks the answer shows it here, before its spans are opened.
+  const knowledge = caseKnowledgeOutcomes(r);
+  if (knowledge) lines.push(`    Knowledge: ${knowledge.join(", ")}`);
   lines.push(...stepLines(r, full));
   // Whether the right agent answered is often why a routing assertion failed.
   if (r.agent_slug) lines.push(`    Answered by: ${r.agent_slug}`);
@@ -1141,6 +1144,7 @@ async function testRunView(ctx: Context, id: string, results: TestResultState[],
     answer: r.generated_answer ? clip(r.generated_answer, options.full ? max : ANSWER_CHARS) : null,
     assertions: stepAssertions(r.judge_breakdown, options.full),
     judge_reasoning: r.llm_judge_reasoning ? clip(r.llm_judge_reasoning, max) : null,
+    knowledge_outcomes: caseKnowledgeOutcomes(r),
     trace_command: caseTraceCommand(r)?.command ?? null,
     // judge_breakdown is an open object in the OpenAPI; it is passed on as the instance sends it.
     ...(NOT_PASSED.has(r.status) ? { reason: failedCase(r, max).reason, judge_breakdown: detailOf(r.judge_breakdown, options.full) } : {}),

@@ -123,7 +123,7 @@ describe("init chooses the tenant and the solution", () => {
     const result = await atTerminal(dir, ["init"], "globex", "2");
     expect(result.code, result.stderr + result.stdout).toBe(0);
     expect(result.stderr).toContain("This token reaches 2 tenants");
-    expect(result.stderr).toMatch(/This tenant has 2 solutions:\n {3}1 {2}Expense Approval {2}expense-approval {2}\(draft\)\n {3}2 {2}Support FAQ {2}support-faq {2}\(draft\)\n {3}3 {2}a new solution \(or type new\)/);
+    expect(result.stderr).toMatch(/This tenant has 2 solutions; choose one, or start a new one:\n {3}1 {2}Expense Approval {2}expense-approval {2}\(draft\)\n {3}2 {2}Support FAQ {2}support-faq {2}\(draft\)\n {3}3 {2}a new solution \(or type new\)/);
     const yaml = read(path.join(dir, "cavelon.yaml"));
     expect(yaml).toContain(`tenant: globex  # Globex, ${globex}\n`);
     expect(parse(yaml)).toMatchObject({ tenant: "globex", harness: "support-faq" });
@@ -163,13 +163,19 @@ describe("init chooses the tenant and the solution", () => {
     expect(byName.code, byName.stderr).toBe(0);
     expect(parse(read(path.join(dir, "cavelon.yaml")))).toMatchObject({ tenant: "globex", harness: "support-faq" });
 
-    // A slug that is not there yet is kept, for `apply --env test` to create; anything else names the closest.
+    // A solution that is not there yet is created as a draft with the name given; a name close to another one's is refused.
     const later = dirFor();
-    const fresh = await cli(other, ["init", "--tenant", "globex", "--harness", "brand-new", "--json"], { cwd: later });
-    expect(fresh.code).toBe(0);
-    expect(fresh.json<{ next: string[] }>().next).toEqual(expect.arrayContaining([expect.stringMatching(/brand-new is not on the instance yet: `cavelon apply --env test` creates it/)]));
+    const fresh = await cli(other, ["init", "--tenant", "globex", "--harness", "Brand New", "--json"], { cwd: later });
+    expect(fresh.code, fresh.stdout).toBe(0);
+    expect(fresh.stderr).toContain("Created the draft solution Brand New (brand-new).");
+    expect(server.state.harnesses.find((h) => h.tenant_id === globex && h.slug === "brand-new")).toMatchObject({ name: "Brand New", status: "draft" });
+    expect(parse(read(path.join(later, "cavelon.yaml")))).toMatchObject({ harness: "brand-new" });
+    expect(parse(read(path.join(later, "env", "test.yaml")))).toEqual({ harness: "brand-new" });
+    expect(fresh.json<{ next: string[] }>().next).toEqual(expect.arrayContaining(["Write the package files in package/, then: cavelon validate"]));
     const miss = await cli(other, ["init", "--tenant", "globex", "--harness", "Support FA", "--json"], { cwd: dirFor() });
     expect(miss.code).toBe(1);
+    const missed = miss.json<{ error: { code: string; hint: string } }>().error;
+    expect(missed.hint).toContain("For a new solution of that name: cavelon harness new support-fa --name 'Support FA', then cavelon init --harness support-fa.");
     expect(miss.json<{ error: { code: string; hint: string } }>().error).toMatchObject({ code: "solution_not_found", hint: expect.stringContaining("cavelon init --harness support-faq") });
   });
 });
@@ -472,10 +478,11 @@ describe("init --from", () => {
     expect(again.code, again.stdout).toBe(0);
     expect(again.json<{ imported: { files: { written: string[]; unchanged: string[] } } }>().imported.files).toMatchObject({ written: [] });
 
-    // apply creates the draft the env file names, under the package's harness name.
+    // init created the draft the package holds, under the package's harness name; apply previews into it.
+    expect(result.stderr).toContain("Created the draft solution Blueprint: sandbox-free counter (blueprint-counter).");
+    expect(server.state.harnesses.find((h) => h.slug === "blueprint-counter")).toMatchObject({ name: "Blueprint: sandbox-free counter", status: "draft" });
     const applied = await cli(sb, ["apply", "--env", "test", "--json"], { cwd: dir });
     expect(applied.code, applied.stdout).toBe(0);
-    expect(server.state.harnesses.find((h) => h.slug === "blueprint-counter")).toMatchObject({ name: "Blueprint: sandbox-free counter", status: "draft" });
   });
 
   it("refuses to change or remove a package file that holds something else, unless --force", async () => {
@@ -996,7 +1003,7 @@ describe("validate", () => {
     ]);
     expect(read(skillsFile).split("\n")[result.findings[0]!.line - 1]).toMatch(/knowledge_base_name: Handbook/);
     expect(result.findings[0]!.message).toBe(
-      'The agent "helper" is given the knowledge base "Handbook" through the skill "faq", but no search tool reaches it, so it cannot search it: add search_documents to the skill\'s tool_assignments.',
+      'The agent "helper" is given the knowledge base "Handbook" through the skill "faq", but no tool that searches or lists it reaches the agent, so it cannot read it: add search_documents (or list_documents) to the skill\'s tool_assignments.',
     );
     expect(result.findings[0]!.hint).toMatch(/tool_slug: search_documents/);
     expect(result.findings[0]!.docs).toMatch(/builtin-tools#binding-knowledge-bases-to-search_documents$/);
@@ -1007,13 +1014,30 @@ describe("validate", () => {
     writeFileSync(agentsFile, stringify(agents));
     expect((await cli(sb, ["validate", "--offline", "--json"], { cwd: dir })).json()).toMatchObject({ warning_count: 0, warnings: [], findings: [] });
 
+    // list_documents lists the knowledge base's documents, and read_document reads them: that reaches it too.
+    agents[0]!.tool_assignments = [{ tool_slug: "list_documents", config_overrides: { knowledge_base_names: ["Handbook"] } }, { tool_slug: "read_document" }];
+    agents[0]!.skill_assignments = [];
+    writeFileSync(agentsFile, stringify(agents));
+    expect((await cli(sb, ["validate", "--offline", "--json"], { cwd: dir })).json()).toMatchObject({ warning_count: 0, warnings: [] });
+    // So does a tenant's tool whose builtin_key is list_documents, under a slug of its own.
+    agents[0]!.tool_assignments = [{ tool_slug: "list_events", config_overrides: { knowledge_base_names: ["Handbook"] } }];
+    writeFileSync(agentsFile, stringify(agents));
+    const toolsFile = path.join(dir, "package", "tools.yaml");
+    const pulledTools = read(toolsFile);
+    const tools = parse(pulledTools) as Array<Record<string, unknown>>;
+    writeFileSync(toolsFile, stringify([...tools, { slug: "list_events", name: "List events", tool_type: "builtin", builtin_key: "list_documents" }]));
+    const listed = await cli(sb, ["validate", "--offline", "--json"], { cwd: dir });
+    expect(listed.json<{ findings: Array<{ code: string }> }>().findings.filter((f) => f.code === "knowledge_base_without_search_tool")).toEqual([]);
+    writeFileSync(toolsFile, pulledTools);
+    agents[0]!.skill_assignments = [{ skill_slug: "faq" }];
+
     // An agent's tool assignment that names knowledge bases on another tool is no search either.
     agents[0]!.tool_assignments = [{ tool_slug: "crm", config_overrides: { knowledge_base_names: ["Handbook"] } }];
     agents[0]!.skill_assignments = [];
     writeFileSync(agentsFile, stringify(agents));
     const own = await cli(sb, ["validate", "--offline"], { cwd: dir });
     expect(own.stdout).toMatch(
-      /warning knowledge_base_without_search_tool {2}package\/agents\.yaml:\d+ agents\[0\]\.tool_assignments\[0\]\.config_overrides\.knowledge_base_names: The agent "helper" is given the knowledge base "Handbook", but no search tool reaches it/,
+      /warning knowledge_base_without_search_tool {2}package\/agents\.yaml:\d+ agents\[0\]\.tool_assignments\[0\]\.config_overrides\.knowledge_base_names: The agent "helper" is given the knowledge base "Handbook", but no tool that searches or lists it reaches the agent/,
     );
 
     // A skill this package does not carry, which the tenant holds, may bring the tool: no warning.
@@ -1428,52 +1452,47 @@ describe("apply", () => {
     expect(existsSync(path.join(dir, ".cavelon", "previews", `${preview.preview_id}.json`))).toBe(false);
   });
 
-  it("creates the draft solution the env file names, and binds runtime requirements from it", async () => {
+  it("never creates the solution an env file names: it names the command that does, and binds runtime requirements once it exists", async () => {
     const dir = await pulled();
     const binding = "8f2b7c1e-1111-4222-8333-444455556666";
     writeFileSync(path.join(dir, "env", "test.yaml"), `harness: support-test\nruntime_bindings:\n  workspace: ${binding}\n`);
+    server.state.requests.length = 0;
     const result = await cli(sb, ["apply", "--env", "test", "--json"], { cwd: dir });
-    expect(result.code, result.stdout).toBe(0);
-    const data = result.json<{ harness: { slug: string; created: boolean }; env: string; warnings: string[] }>();
-    expect(data).toMatchObject({ env: "test", harness: { slug: "support-test", created: true } });
-    expect(data.warnings.join()).toMatch(/Created the draft solution Support \(support-test\)/);
+    expect(result.code, result.stdout).toBe(1);
+    const error = result.json<{ error: { code: string; message: string; hint: string; details: { create: string } } }>().error;
+    expect(error.code).toBe("solution_not_found");
+    expect(error.message).toBe("Solution support-test, which env/test.yaml names, is not on the instance yet; apply previews into an existing solution and creates none.");
+    // The package's harness of another slug does not name it: a copied package never names someone else's solution.
+    expect(error.details.create).toBe("cavelon harness new support-test");
+    expect(error.hint).toBe("Create it as a draft: cavelon harness new support-test, then run `cavelon apply --env test` again.");
+    expect(server.state.harnesses.find((h) => h.slug === "support-test")).toBeUndefined();
+    expect(server.state.requests.filter((r) => r.method !== "GET")).toEqual([]);
+
+    expect((await cli(sb, ["harness", "new", "support-test", "--name", "Support test"], { cwd: dir })).code).toBe(0);
+    const previewed = await cli(sb, ["apply", "--env", "test", "--json"], { cwd: dir });
+    expect(previewed.code, previewed.stdout).toBe(0);
     const created = server.state.harnesses.find((h) => h.slug === "support-test")!;
-    expect(created.status).toBe("draft");
-    // The draft takes the package's harness name, not the slug.
-    expect(created.name).toBe("Support");
+    expect(previewed.json<{ harness: Record<string, unknown> }>().harness).toEqual({ id: created.id, slug: "support-test" });
     const sent = server.state.requests.filter((r) => r.path === "/api/v1/agent-graph/import/preview").pop()!.body as Record<string, any>;
     expect(sent).toMatchObject({ harness_id: created.id, runtime_bindings: { workspace: binding }, mode: "overwrite" });
 
-    // A harness named on the command line is never created.
+    // A harness named on the command line gets the closest ones, not a create command.
     const missing = await cli(sb, ["apply", "--harness", "nope", "--json"], { cwd: dir });
     expect(missing.code).toBe(1);
-    expect(missing.json<{ error: { code: string } }>().error.code).toBe("solution_not_found");
+    expect(missing.json<{ error: { code: string; message: string } }>().error).toMatchObject({ code: "solution_not_found", message: expect.stringMatching(/^No solution "nope"/) });
   });
 
-  it("names a created draft after the package's harness with that slug, and after the slug when the package has none", async () => {
+  it("names the missing solution after the package's harness with that slug", async () => {
     const dir = await pulled();
-    const harnessesFile = path.join(dir, "package", "harnesses.yaml");
     writeFileSync(
-      harnessesFile,
+      path.join(dir, "package", "harnesses.yaml"),
       "- slug: support-parent\n  name: Support parent\n  status: draft\n- slug: support-loop\n  name: Support loop\n  status: draft\n",
     );
     writeFileSync(path.join(dir, "env", "test.yaml"), "harness: support-loop\n");
     const named = await cli(sb, ["apply", "--env", "test", "--json"], { cwd: dir });
-    expect(named.code, named.stdout).toBe(0);
-    expect(server.state.harnesses.find((h) => h.slug === "support-loop")!.name).toBe("Support loop");
-    const posted = server.state.requests.filter((r) => r.path === "/api/v1/harnesses" && r.method === "POST").pop()!.body;
-    expect(posted).toEqual({ slug: "support-loop", name: "Support loop" });
-
-    // Several harnesses and none with the slug, or none at all: the slug stays the name.
-    writeFileSync(path.join(dir, "env", "test.yaml"), "harness: support-other\n");
-    expect((await cli(sb, ["apply", "--env", "test", "--json"], { cwd: dir })).code).toBe(0);
-    expect(server.state.harnesses.find((h) => h.slug === "support-other")!.name).toBe("support-other");
-    rmSync(harnessesFile);
-    writeFileSync(path.join(dir, "env", "test.yaml"), "harness: support-bare\n");
-    const bare = await cli(sb, ["apply", "--env", "test", "--json"], { cwd: dir });
-    expect(bare.code, bare.stdout).toBe(0);
-    expect(server.state.harnesses.find((h) => h.slug === "support-bare")!.name).toBe("support-bare");
-    expect(bare.json<{ warnings: string[] }>().warnings.join()).toMatch(/Created the draft solution support-bare \(support-bare\)/);
+    expect(named.code, named.stdout).toBe(1);
+    expect(named.json<{ error: { hint: string } }>().error.hint).toContain("cavelon harness new support-loop --name 'Support loop', then");
+    expect(server.state.harnesses.find((h) => h.slug === "support-loop")).toBeUndefined();
   });
 
   it("asks for a person when the preview reaches an active solution", async () => {

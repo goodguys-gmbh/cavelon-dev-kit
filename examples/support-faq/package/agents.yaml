@@ -2,9 +2,12 @@
   harness_slug: support-faq
   name: FAQ agent
   description: The first and only agent of the support FAQ.
-  llm_model: gpt-4.1
+  # A model your tenant offers: cavelon models list.
+  llm_model: gpt-5.4-mini
   llm_provider: openai
-  temperature: 0.2
+  # The schema requires a temperature; 0.4 is the instance's default. On a reasoning model
+  # the instance does not send it: set the reasoning level instead (the agent's Model tab).
+  temperature: 0.4
   parallel_tool_calls: false
   is_entrypoint: true
   system_prompt: |-

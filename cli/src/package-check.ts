@@ -17,7 +17,7 @@ import {
   MODEL_UNKNOWN_CODE,
   REFERENCE_MISSING_CODE,
   REFERENCE_UNKNOWN_CODE,
-  SEARCH_TOOL_KEYS,
+  KNOWLEDGE_TOOL_KEYS,
 } from "./package-references.js";
 
 /**
@@ -34,19 +34,18 @@ const ENDPOINT_LIMIT_NOT_CARRIED = "model_endpoint_limit_not_in_package_schema";
 const REGISTRY_SECTION = "model_registry";
 const ENDPOINT_LIMIT_FIELD = "max_concurrent_requests";
 const PACKAGE_DOCS = "/docs/reference/api-endpoints";
+/** What a package carries and how its import resolves it: where a duplicate key or an ignored field matters. */
+const IMPORT_DOCS = "/docs/concepts/harnesses#import-export-and-backup";
 /** Branch concurrency: a node's width above the platform's, and branches that run in sequence. */
 const BRANCH_WIDTH_CODE = "branch_width_capped";
 const BRANCHES_SEQUENTIAL_CODE = "branches_run_in_sequence";
 const BRANCH_DOCS = "/docs/concepts/capacity-and-concurrency#branch-concurrency";
-/** Knowledge bases an agent is given without a tool that searches them. */
+/** Knowledge bases an agent is given without a tool that searches or lists them. */
 const KB_WITHOUT_SEARCH_CODE = "knowledge_base_without_search_tool";
 const SEARCH_DOCS = "/docs/reference/builtin-tools#binding-knowledge-bases-to-search_documents";
-/**
- * The built-in tool that searches knowledge bases. No contract publishes it as
- * data, only the instance's docs (reference/builtin-tools) name it; the
- * other names in SEARCH_TOOL_KEYS are the ones older instances searched with.
- */
+/** The built-in tool the check suggests: the search; `list_documents` reaches a knowledge base too. */
 const SEARCH_TOOL = "search_documents";
+const LIST_TOOL = "list_documents";
 
 /** A persona that shows a greeting or a fallback whose text is empty. */
 const PERSONA_MESSAGE_CODE = "persona_message_empty";
@@ -121,8 +120,10 @@ export const KIT_CODES: CatalogEntry[] = [
   {
     code: KB_WITHOUT_SEARCH_CODE,
     area: "package",
-    message: "An agent is given knowledge bases, but no search tool reaches it, so it cannot read them.",
-    hint: `A knowledge base reaches an agent only through a search tool: add \`- tool_slug: ${SEARCH_TOOL}\` to the tool_assignments of the skill that names the knowledge base, or of the agent. \`cavelon docs get reference/builtin-tools\` shows the binding.`,
+    message: "An agent is given knowledge bases, but no tool that searches or lists them reaches it, so it cannot read them.",
+    hint:
+      `A knowledge base reaches an agent only through a built-in document tool: add \`- tool_slug: ${SEARCH_TOOL}\` (or ${LIST_TOOL}, with read_document to read ` +
+      "what it lists) to the tool_assignments of the skill that names the knowledge base, or of the agent. `cavelon docs get reference/builtin-tools` shows the binding.",
     docs: SEARCH_DOCS,
   },
   {
@@ -148,7 +149,7 @@ export const KIT_CODES: CatalogEntry[] = [
     area: "package",
     message: "Two entries of one section have the same key (slug, or name for a knowledge base).",
     hint: "Rename or remove one of them: the import keeps only one entry per key.",
-    docs: PACKAGE_DOCS,
+    docs: IMPORT_DOCS,
   },
   {
     code: REFERENCE_MISSING_CODE,
@@ -171,7 +172,7 @@ export const KIT_CODES: CatalogEntry[] = [
     area: "package",
     message: "A package file sets a field this instance's package schema does not have; the import ignores it.",
     hint: "Check the field name for a typo (the finding suggests the closest field); a field from a newer instance is ignored by this one.",
-    docs: PACKAGE_DOCS,
+    docs: IMPORT_DOCS,
   },
   {
     code: MODEL_UNKNOWN_CODE,
@@ -535,8 +536,9 @@ const quoted = (names: string[]) => names.map((n) => `"${n}"`).join(", ");
 
 /**
  * A knowledge base named on a skill or an agent's tool assignment is only
- * scoping: the agent reads it through a search tool, from its own tool
- * assignments or from one of its skills. Without one, the agent cannot search
+ * scoping: the agent reads it through a built-in document tool that searches
+ * or lists it, from its own tool assignments or from one of its skills. Naming
+ * knowledge bases on another tool (a webhook, an MCP tool) reaches nothing. Without one, the agent cannot search
  * and answers from memory, while the import and the preview accept the
  * package. A warning: an agent may hold a skill this package does not carry,
  * and then the check stays silent.
@@ -544,9 +546,9 @@ const quoted = (names: string[]) => names.map((n) => `"${n}"`).join(", ");
 function checkKnowledgeSearch(disk: PackageOnDisk): Finding[] {
   const pkg = disk.package;
   // A tenant may carry the built-in under another slug; its builtin_key says what it is.
-  const searchSlugs = new Set(SEARCH_TOOL_KEYS);
+  const searchSlugs = new Set(KNOWLEDGE_TOOL_KEYS);
   for (const tool of asList(pkg.tools)) {
-    if (typeof tool.slug === "string" && typeof tool.builtin_key === "string" && SEARCH_TOOL_KEYS.has(tool.builtin_key)) searchSlugs.add(tool.slug);
+    if (typeof tool.slug === "string" && typeof tool.builtin_key === "string" && KNOWLEDGE_TOOL_KEYS.has(tool.builtin_key)) searchSlugs.add(tool.slug);
   }
   const searches = (assignments: unknown) => asList(assignments).some((a) => active(a) && typeof a.tool_slug === "string" && searchSlugs.has(a.tool_slug));
   const skills = asList(pkg.skills);
@@ -592,8 +594,8 @@ function checkKnowledgeSearch(disk: PackageOnDisk): Finding[] {
       ...locate(disk, first.pointer),
       message:
         `The agent${agentName} is given the knowledge base${names.length === 1 ? "" : "s"} ${quoted(names)}` +
-        `${first.via ? ` through the skill "${first.via}"` : ""}, but no search tool reaches it, so it cannot search ${names.length === 1 ? "it" : "them"}: ` +
-        `add ${SEARCH_TOOL} to the ${first.via ? "skill's" : "agent's"} tool_assignments.`,
+        `${first.via ? ` through the skill "${first.via}"` : ""}, but no tool that searches or lists ${names.length === 1 ? "it" : "them"} reaches the agent, ` +
+        `so it cannot read ${names.length === 1 ? "it" : "them"}: add ${SEARCH_TOOL} (or ${LIST_TOOL}) to the ${first.via ? "skill's" : "agent's"} tool_assignments.`,
     });
   });
   return findings;

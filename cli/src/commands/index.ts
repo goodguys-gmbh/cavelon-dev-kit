@@ -2,6 +2,7 @@ import type { CommandSpec } from "../command.js";
 import { table } from "../format.js";
 import { api, apiDescribe, apiList } from "./api.js";
 import { wait, watch } from "./async.js";
+import { chat, deactivate } from "./chat.js";
 import { docsGet, docsSearch } from "./docs.js";
 import { login, logout, status, use, whoami } from "./session.js";
 import { init } from "./init.js";
@@ -89,6 +90,8 @@ export const COMMANDS: CommandSpec[] = [
   harnessNew,
   harnessClone,
   activate,
+  deactivate,
+  chat,
   init,
   pull,
   validate,

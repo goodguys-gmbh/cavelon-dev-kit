@@ -38,6 +38,25 @@ export interface TestResultState {
   llm_judge_reasoning?: string | null;
   judge_breakdown?: Record<string, unknown> | null;
   error_message?: string | null;
+  /** The step's tool calls; the OpenAPI publishes only `items: {}`, so each row is read defensively. */
+  tool_calls?: unknown;
+}
+
+/**
+ * What the step's knowledge searches found, as a recent instance records it on
+ * each search's row in `tool_calls` (`content_gap`, `usable_evidence`, …),
+ * each value once, in the order of the calls. Null when the result carries no
+ * rows or no row carries the field: an older instance, or a run recorded
+ * before it.
+ */
+export function caseKnowledgeOutcomes(r: TestResultState): string[] | null {
+  if (!Array.isArray(r.tool_calls)) return null;
+  const outcomes: string[] = [];
+  for (const row of r.tool_calls) {
+    const outcome = row && typeof row === "object" ? (row as Record<string, unknown>).knowledge_outcome : undefined;
+    if (typeof outcome === "string" && outcome && !outcomes.includes(outcome)) outcomes.push(outcome);
+  }
+  return outcomes.length ? outcomes : null;
 }
 
 /** Result statuses that are no pass: a failed verdict and a step that could not run or be scored. */

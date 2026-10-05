@@ -99,6 +99,8 @@ describe("cavelon mcp", () => {
         "activate",
         "api",
         "artifacts_export",
+        "chat",
+        "deactivate",
         "loop_cancel",
         "loop_iterations",
         "loop_pause",
@@ -158,6 +160,8 @@ describe("cavelon mcp", () => {
     expect(byName.explain!.annotations).toMatchObject({ readOnlyHint: true });
     expect(byName.apply!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true });
     expect(byName.activate!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false });
+    expect(byName.deactivate!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true });
+    expect(byName.chat!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false });
     // The loop and Sandbox tools: what may stop or replace something is marked destructive and takes confirm.
     for (const name of ["loop_cancel", "sandbox_seed", "trigger_identity"]) {
       expect(byName[name]!.annotations, name).toMatchObject({ readOnlyHint: false, destructiveHint: true });
@@ -169,7 +173,7 @@ describe("cavelon mcp", () => {
     // Every tool that confirms a change takes its preview's token, a string; apply takes the preview's id.
     const confirming = tools.filter((t) => "confirm" in (t.inputSchema as { properties: object }).properties).map((t) => t.name);
     expect(confirming).toEqual(
-      expect.arrayContaining(["api", "limits_set", "models_set_limit", "loop_cancel", "sandbox_seed", "trigger_identity", "harness_default", "activate", "kb_upload", "apply"]),
+      expect.arrayContaining(["api", "limits_set", "models_set_limit", "loop_cancel", "sandbox_seed", "trigger_identity", "harness_default", "activate", "deactivate", "kb_upload", "apply"]),
     );
     for (const name of confirming) {
       const confirm = (byName[name]!.inputSchema as { properties: Record<string, { type: unknown; description: string }> }).properties.confirm!;

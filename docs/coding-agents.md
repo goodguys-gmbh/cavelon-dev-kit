@@ -81,9 +81,12 @@ agent can do. Choose the token accordingly (next section). See also
    `git init`, then `cavelon init`: in your terminal it asks for the tenant and
    the solution by name. An agent runs it with `--tenant` and `--harness` (a
    name, slug or id each), taken from `cavelon tenant list` and
-   `cavelon harness list`. `cavelon init` writes `cavelon.yaml`, `package/`, `tests/`,
-   `env/` and an `AGENTS.md` block the agent reads first. To work on a solution
-   that already exists, add `cavelon pull`.
+   `cavelon harness list`. For a new solution, `init --harness "<name>"` in a
+   shell creates the draft; as an MCP tool, `init` never creates one and names
+   the `cavelon harness new` command that does. `apply` never creates a
+   solution. `cavelon init` writes `cavelon.yaml`, `package/`, `tests/`, `env/`
+   and an `AGENTS.md` block the agent reads first. To work on a solution that
+   already exists, add `cavelon pull`.
 4. **Put the material in the folder.** Everything the solution must know or
    follow: policies, FAQ pages, product sheets, sample documents, example
    requests and the answers you expect, an API description for a tool. Put
@@ -219,7 +222,9 @@ runs.
     the Admin. When the solution is not the tenant's default route,
     `activate` says so, and the agent asks you whether it should become the
     default; `cavelon activate --make-default` shows the change, and only
-    `--confirm` makes it.
+    `--confirm` makes it. Until then, `cavelon chat "<message>" --harness
+    <solution>` talks to the solution by name, and `cavelon deactivate`
+    (previewed, then confirmed by you) takes it out of service again.
 
 To go to production, the agent prepares `env/prod.yaml` and previews with
 `cavelon apply --env prod`, then shows you the preview and waits. You confirm,
