@@ -27,6 +27,13 @@ const MAX_BODY = 1024 * 1024;
 const STATE_FILE = "update-check.json";
 /** The plugin's MCP entry sets it to the plugin's version; nothing else does. */
 export const PLUGIN_VERSION_VARIABLE = "CAVELON_PLUGIN_VERSION";
+/**
+ * Claude Code sets it to the folder of the plugin whose MCP server it starts,
+ * so a plugin from before PLUGIN_VERSION_VARIABLE still tells its version
+ * through its manifest. Codex sets nothing like it.
+ */
+export const CLAUDE_PLUGIN_ROOT_VARIABLE = "CLAUDE_PLUGIN_ROOT";
+const PLUGIN_NAME = "cavelon";
 const UPDATING_DOCS = `https://github.com/${REPOSITORY}/blob/main/docs/installation.md#updating`;
 
 const SOURCES = {
@@ -186,9 +193,14 @@ export interface SessionUpdateOptions extends UpdateCheckOptions {
   version?: string;
 }
 
-/** What a session learnt: the latest release, and the oldest kit version of the skills `init --agents` wrote. */
+/**
+ * What a session learnt: the latest release, the plugin's version when the
+ * plugin started the server, and the oldest kit version of the skills
+ * `init --agents` wrote.
+ */
 interface SessionFacts {
   latest?: string;
+  plugin?: string;
   skills?: string;
 }
 
@@ -217,7 +229,7 @@ export function sessionQuietReason(io: Pick<Io, "env">, install: Install): strin
  * For `cavelon mcp`: a coding agent runs the kit without a terminal, so the
  * terminal notice never reaches the person. The server looks the latest
  * release up as it starts (the same lookup, cache and opt-out), reads which
- * version the plugin that started it is (PLUGIN_VERSION_VARIABLE) and which
+ * version the plugin that started it is (pluginVersion) and which
  * version wrote the skills of this solution folder, and adds one warning to
  * the first tool result of the session for the agent to pass on. It looks up
  * nothing for npx, which runs the newest release of its range, unless the
@@ -227,16 +239,20 @@ export function startSessionUpdateCheck(io: Io, options: SessionUpdateOptions = 
   const install = options.install ?? currentInstall(io.env);
   const version = options.version ?? KIT_VERSION;
   if (sessionQuietReason(io, install)) return { forCall: async () => undefined, keep: () => undefined };
-  const plugin = parseVersion(io.env[PLUGIN_VERSION_VARIABLE] ?? "")?.text;
-  // The plugin updates from the GitHub release whichever way cavelon came.
-  const source = install.source ?? (plugin ? "github" : undefined);
   let facts: SessionFacts | undefined;
   let settled = false;
   const gathered = Promise.all([
-    source ? withState(io, source, version, options.fetch ?? fetch, (state) => state.latest).catch(() => undefined) : undefined,
+    pluginVersion(io.env)
+      .catch(() => undefined)
+      .then((plugin) => {
+        // The plugin updates from the GitHub release whichever way cavelon came.
+        const source = install.source ?? (plugin ? "github" : undefined);
+        const latest = source ? withState(io, source, version, options.fetch ?? fetch, (state) => state.latest).catch(() => undefined) : undefined;
+        return Promise.all([plugin, latest]);
+      }),
     initSkillsVersion(io.cwd).catch(() => undefined),
-  ]).then(([latest, skills]) => {
-    facts = { latest, skills };
+  ]).then(([[plugin, latest], skills]) => {
+    facts = { plugin, latest, skills };
     settled = true;
   });
   let first = true;
@@ -250,7 +266,7 @@ export function startSessionUpdateCheck(io: Io, options: SessionUpdateOptions = 
       }
       if (delivered || !settled) return undefined;
       delivered = true;
-      return facts && sessionWarning({ ...facts, version, install, plugin, client: client() });
+      return facts && sessionWarning({ ...facts, version, install, client: client() });
     },
     keep() {
       delivered = false;
@@ -264,6 +280,22 @@ function bounded(promise: Promise<unknown>, ms: number): Promise<void> {
     timer = setTimeout(resolve, ms);
   });
   return Promise.race([promise.then(() => undefined), timeout]).finally(() => clearTimeout(timer));
+}
+
+/**
+ * The version of the plugin that started the server: what its MCP entry says
+ * (PLUGIN_VERSION_VARIABLE), else what the manifest in the folder Claude Code
+ * names says. Unknown stays unknown; the warning never guesses a version.
+ */
+export async function pluginVersion(env: Io["env"]): Promise<string | undefined> {
+  const said = parseVersion(env[PLUGIN_VERSION_VARIABLE] ?? "")?.text;
+  if (said) return said;
+  const root = env[CLAUDE_PLUGIN_ROOT_VARIABLE];
+  if (!root || !path.isAbsolute(root)) return undefined;
+  const manifest = await readJsonFile<{ name?: unknown; version?: unknown }>(path.join(root, ".claude-plugin", "plugin.json"));
+  // Another plugin's folder says nothing about this one.
+  if (manifest?.name !== PLUGIN_NAME || typeof manifest.version !== "string") return undefined;
+  return parseVersion(manifest.version)?.text;
 }
 
 const INIT_MARK = /written by `cavelon init --agents` \(cavelon ([0-9][0-9A-Za-z.-]{0,80})\)/;
@@ -306,8 +338,6 @@ function pluginUpdate(client: string | undefined): string | undefined {
 export interface SessionWarningFacts extends SessionFacts {
   version: string;
   install: Install;
-  /** The plugin's version, when the plugin started the server. */
-  plugin?: string;
   client?: string;
 }
 
@@ -330,7 +360,8 @@ export function sessionWarning(facts: SessionWarningFacts): string | undefined {
     const commands = pluginUpdate(facts.client);
     asks.push(commands ? `Update the plugin with ${commands}.` : `Update the plugin: in Claude Code with ${PLUGIN_UPDATE.claude}; in Codex with ${PLUGIN_UPDATE.codex}.`);
   } else if (latest && plugin === undefined && pluginUpdate(facts.client)) {
-    // A plugin from before PLUGIN_VERSION_VARIABLE does not say its version.
+    // The plugin's version is unknown: Codex started a plugin from before
+    // PLUGIN_VERSION_VARIABLE, or the person configured the server themselves.
     asks.push(`If they use the Cavelon plugin, also update it with ${pluginUpdate(facts.client)}.`);
   }
   if (skillsBehind) {

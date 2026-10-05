@@ -16,7 +16,10 @@ CLI, the skills and the plugin.
   behind, for the agent to pass on: `cavelon`, with the update command for the
   way it was installed; the Cavelon plugin, whose MCP entry now tells the
   server its version (`CAVELON_PLUGIN_VERSION`), with the update commands of
-  the agent that started it (Claude Code or Codex); and the skills
+  the agent that started it (Claude Code or Codex); an installed plugin from
+  before this change is read from its own manifest in the folder Claude Code
+  names (`CLAUDE_PLUGIN_ROOT`), also when `cavelon` runs through `npx`; and the
+  skills
   `cavelon init --agents` wrote in the solution folder, with
   `cavelon init --update`. It holds the first tool call at most 1.5 seconds,
   says nothing when the lookup fails, and never speaks for a build from a

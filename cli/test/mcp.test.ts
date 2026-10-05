@@ -1,9 +1,10 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
+import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { bundledSkills, generatedCopy, SKILL_ROOTS } from "../src/agents.js";
 import { COMMANDS } from "../src/commands/index.js";
@@ -715,6 +716,42 @@ describe("the update warning over MCP", () => {
       expect(await firstOnly(s)).toContain(`Update the plugin: in Claude Code with ${CLAUDE}; in Codex with ${CODEX}.`);
       expect(s.calls).toEqual([RELEASES]);
     });
+  });
+
+  it("reads an installed plugin's version from its manifest when Claude Code names the plugin's folder", async () => {
+    // The plugin of this repository, as Claude Code installs it, from before its MCP entry said its version.
+    const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../plugin");
+    const manifest = JSON.parse(readFileSync(path.join(root, ".claude-plugin", "plugin.json"), "utf8")) as { version: string };
+    await inSession({ install: NPX, client: "claude-code", env: { CLAUDE_PLUGIN_ROOT: root } }, async (s) => {
+      const warning = await firstOnly(s);
+      expect(warning).toContain(`The Cavelon plugin is ${manifest.version}, older than cavelon 99.0.0. Tell the user: Update the plugin with ${CLAUDE}.`);
+      expect(s.calls).toEqual([RELEASES]);
+    });
+    // What the plugin's MCP entry says comes first.
+    await inSession({ install: NPX, cached: "99.0.0", client: "claude-code", env: { CLAUDE_PLUGIN_ROOT: root, CAVELON_PLUGIN_VERSION: "99.0.0" } }, async (s) => {
+      expect(updateWarnings(await s.whoami())).toEqual([]);
+    });
+  });
+
+  it.each([
+    ["another plugin's folder", { name: "other", version: "0.0.1" }],
+    ["a manifest without a version", { name: "cavelon" }],
+    ["a version that is not one", { name: "cavelon", version: "latest" }],
+    ["no manifest", undefined],
+  ])("guesses no plugin version from %s", async (_, manifest: Record<string, string> | undefined) => {
+    const root = mkdtempSync(path.join(os.tmpdir(), "cavelon-plugin-"));
+    try {
+      if (manifest) {
+        mkdirSync(path.join(root, ".claude-plugin"));
+        writeFileSync(path.join(root, ".claude-plugin", "plugin.json"), JSON.stringify(manifest));
+      }
+      await inSession({ install: NPX, cached: "99.0.0", client: "claude-code", env: { CLAUDE_PLUGIN_ROOT: root } }, async (s) => {
+        expect(updateWarnings(await s.whoami())).toEqual([]);
+        expect(s.calls).toEqual([]);
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("says nothing of a plugin at the latest release", async () => {

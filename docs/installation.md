@@ -452,9 +452,13 @@ It names what is behind, each with its update:
 - **The Cavelon plugin**, whose skills and MCP entry change only when you update
   it: its MCP entry tells the server the plugin's version
   (`CAVELON_PLUGIN_VERSION`), and the warning names the update commands of the
-  agent that started the server (Claude Code or Codex). An older plugin does
-  not say its version; then the warning adds the plugin's update commands to
-  `cavelon`'s, in Claude Code and Codex.
+  agent that started the server (Claude Code or Codex). A plugin from 0.1.8 or
+  older does not set that; in Claude Code the server then reads the version
+  from the plugin's own manifest (`.claude-plugin/plugin.json` in the folder
+  Claude Code names in `CLAUDE_PLUGIN_ROOT`), so you hear of it even through
+  `npx`. Codex names no such folder: there the warning only adds the plugin's
+  update commands to `cavelon`'s, and says nothing of a plugin whose version
+  it cannot read.
 - **The skills `cavelon init --agents` wrote** in the solution folder, when they
   are older than the running `cavelon`: run `cavelon init --update` there and
   commit the result.

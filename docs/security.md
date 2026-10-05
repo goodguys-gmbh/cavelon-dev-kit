@@ -212,7 +212,8 @@ the token's role and ceiling on every request.
   (`cavelon mcp`) asks the same, once a day as a session starts, and through
   `npx` only to compare the Cavelon plugin's version (from the GitHub release);
   it also reads the version line of the skill files `cavelon init --agents`
-  wrote in the solution folder. `CAVELON_NO_UPDATE_CHECK=1` turns both off;
+  wrote in the solution folder, and in Claude Code the version in the
+  plugin's own manifest (`CLAUDE_PLUGIN_ROOT`). `CAVELON_NO_UPDATE_CHECK=1` turns both off;
   see [Updating](installation.md#updating).
 - **npm.** Installing or running through `npx` downloads `@cavelon/cli` and its
   dependencies from the npm registry. Releases are published from this
