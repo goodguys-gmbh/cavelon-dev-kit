@@ -67,6 +67,9 @@ export const KIT_ERROR_CODES: CatalogEntry[] = [
   { code: "preview_unknown", area: "cli", message: "No open preview with that id in this solution.", hint: "Run `cavelon apply` for a new preview and confirm its id; `cavelon status` lists the open ones." },
   { code: "preview_other_instance", area: "cli", message: "The preview was made on another instance.", hint: "Confirm it with the instance it was made on, or preview again here." },
   { code: "preview_other_tenant", area: "cli", message: "The preview was made for another tenant than this command acts in.", hint: "Run the confirm command the preview printed (it names --env and --tenant), or preview again here." },
+  { code: "preview_files_changed", area: "cli", message: "The package files changed since the preview; nothing was imported.", hint: "Run `cavelon apply` for a preview of the files as they are now, show it, and confirm its id; --allow-stale with --confirm imports what the old preview showed." },
+  { code: "preview_expired", area: "cli", message: "The preview is older than the kit keeps previews; nothing was imported.", hint: "Run `cavelon apply` for a new preview, show it, and confirm its id." },
+  { code: "confirm_token_required", area: "cli", message: "Over MCP, a changing tool confirms only with the confirm_token its preview returned, never with true.", hint: "Call the tool without confirm, show the person the preview, then call it again with the same arguments and confirm set to its confirm_token." },
   { code: "default_route_unknown", area: "cli", message: "The instance does not say which solution is the tenant's default route (no is_default in its solution list).", hint: "The instance may be older than default routes; check the default in the Admin." },
   // Limits, quotas and models.
   { code: "limit_not_found", area: "cli", message: "The instance lists no limit by that key.", hint: "`cavelon limits` lists the keys." },

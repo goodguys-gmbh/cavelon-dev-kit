@@ -15,6 +15,7 @@ import {
 } from "../command.js";
 import type { OpenApiDoc } from "../contracts.js";
 import { CavelonError, ExitCode, usageError } from "../errors.js";
+import { confirmation } from "../confirm-token.js";
 import { confinedPath } from "../paths.js";
 import { idempotencyKey, instanceModes, requireFeature, stableKey, UUID_KEY_OPTION, withRetryKey } from "../features.js";
 import { clip, keyValues, moreHint, table } from "../format.js";
@@ -593,7 +594,7 @@ export const sandboxSeed: CommandSpec = {
   options: {
     harness: HARNESS_OPTION,
     revision: REVISION_OPTION,
-    confirm: { type: "boolean", description: "Send it; without it nothing changes." },
+    confirm: { type: "boolean", mcpToken: true, description: "Send it; without it nothing changes." },
     wait: WAIT_OPTION,
     timeout: TIMEOUT_OPTION,
     "idempotency-key": UUID_KEY_OPTION,
@@ -617,13 +618,16 @@ export const sandboxSeed: CommandSpec = {
     if (sandbox.lifecycle_state !== "ready") ctx.warn(`Sandbox "${sandbox.name}" is ${sandbox.lifecycle_state}; the instance accepts a seed only when it is ready (\`cavelon sandbox validate\`).`);
     if (sandbox.writer_owner_run_id) ctx.warn(`Run ${sandbox.writer_owner_run_id} holds the Sandbox's writer; the instance refuses a seed until it ends.`);
     const what = archive.files >= 0 ? `${archive.files} files in ${archive.directories} folders` : "the tar archive";
-    if (!boolOption(input, "confirm")) {
-      const confirm = seedCommand(sandbox, input);
+    const gate = await confirmation(ctx, input, "sandbox_seed", { sandbox: sandbox.id, harness, revision, sha256: archive.sha256 });
+    if (!gate.confirmed) {
+      const confirm = gate.confirm(seedCommand(sandbox, input));
       return {
-        data: { ...summary, seeded: false, confirm },
+        data: { ...summary, seeded: false, confirm, ...gate.fields },
         text:
           `Would replace the workspace of "${sandbox.name}" (${revision}) with ${what}, ${archive.bytes.length} bytes, sha256 ${archive.sha256}.\n` +
+          (gate.mismatch ? `${gate.mismatch}\n` : "") +
           `Nothing was sent. Seed it with: ${confirm}`,
+        ...(gate.exitCode ? { exitCode: gate.exitCode } : {}),
       };
     }
     const key = stringOption(input, "idempotency-key") !== undefined ? idempotencyKey(input) : stableKey(`seed:${sandbox.id}:${revision}:${archive.sha256}`);

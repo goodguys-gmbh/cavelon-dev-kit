@@ -95,12 +95,14 @@ export async function writePulledFiles(root: string, files: string[]): Promise<v
 }
 
 /**
- * Add the files an apply imported, as they were when previewed: the instance
- * holds them now, so a later pull may replace them like files it wrote.
+ * After an apply: the files whose bytes the instance now holds (`known`), so
+ * a later pull may replace them like files it wrote, and the files it does
+ * not hold as they are (`unknown`), so pull refuses to overwrite them.
  */
-export async function rememberAppliedFiles(root: string, digests: Record<string, string>): Promise<void> {
-  const known = await readPulledFiles(root);
-  await writeState(root, PULLED_FILES, JSON.stringify({ digests: { ...known, ...digests } }, null, 2));
+export async function rememberAppliedFiles(root: string, known: Record<string, string>, unknown: string[] = []): Promise<void> {
+  const digests = { ...(await readPulledFiles(root)), ...known };
+  for (const file of unknown) delete digests[file];
+  await writeState(root, PULLED_FILES, JSON.stringify({ digests }, null, 2));
 }
 
 /** The package files' digests as the last pull or apply left them. */
@@ -135,8 +137,25 @@ export async function deletePreview(root: string, previewId: string): Promise<vo
   await fs.rm(previewFile(root, previewId), { force: true });
 }
 
-/** The open previews, newest first. */
-export async function listPreviews(root: string): Promise<Array<Pick<StoredPreview, "preview_id" | "created_at" | "env" | "harness">>> {
+/**
+ * How long the kit keeps a preview confirmable. The instance publishes no
+ * lifetime for its previews; a day bounds how old a preview a later agent
+ * may find and confirm, while leaving a person the time to read it.
+ */
+export const PREVIEW_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+/** When a preview stops being confirmable; an unreadable creation time counts as expired. */
+export function previewExpiry(createdAt: string, now: Date): { expires_at: string | null; expired: boolean } {
+  const created = Date.parse(createdAt);
+  if (Number.isNaN(created)) return { expires_at: null, expired: true };
+  const expires = created + PREVIEW_MAX_AGE_MS;
+  return { expires_at: new Date(expires).toISOString(), expired: now.getTime() >= expires };
+}
+
+export type OpenPreview = Pick<StoredPreview, "preview_id" | "created_at" | "env" | "harness"> & { expires_at: string | null; expired: boolean };
+
+/** The open previews, newest first, each with when it expires. */
+export async function listPreviews(root: string, now: Date): Promise<OpenPreview[]> {
   const dir = path.join(stateDir(root), "previews");
   let names: string[];
   try {
@@ -147,7 +166,9 @@ export async function listPreviews(root: string): Promise<Array<Pick<StoredPrevi
   const out = [];
   for (const name of names.filter((n) => n.endsWith(".json"))) {
     const stored = await readJsonFile<StoredPreview>(path.join(dir, name));
-    if (stored?.preview_id) out.push({ preview_id: stored.preview_id, created_at: stored.created_at, env: stored.env, harness: stored.harness });
+    if (stored?.preview_id) {
+      out.push({ preview_id: stored.preview_id, created_at: stored.created_at, env: stored.env, harness: stored.harness, ...previewExpiry(stored.created_at, now) });
+    }
   }
   return out.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
 }

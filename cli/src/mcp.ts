@@ -23,11 +23,13 @@ const INSTRUCTIONS =
   "and follow a loop with loop_iterations. What needs confirmation: apply imports only with confirm set to a preview's id; " +
   "limits_set, models_set_limit, loop_cancel, sandbox_seed, trigger_identity, harness_default, activate with make_default, " +
   "and api for an operation that is not read-only, " +
-  "return what they would do and change nothing without confirm: true; show the person that first. The default route " +
+  "return what they would do and a confirm_token, and change nothing until called again with the same arguments and " +
+  "confirm set to that token: show the person the preview first. The token confirms exactly the change the preview showed; " +
+  "a different change needs a new preview, and confirm: true is refused. The default route " +
   "(harness_default, activate's make_default) decides which solution the tenant's chat and widget answer with: live traffic, " +
   "so ask the person, and confirm only with their yes. " +
   "kb_upload names files that match an active document of the knowledge base; with replace it replaces them, and where the " +
-  "instance's upload cannot, it returns what it would deactivate and uploads nothing without confirm: true. " +
+  "instance's upload cannot, it returns what it would deactivate and uploads nothing without its confirm_token. " +
   "init, pull and fmt change nothing on the instance (pull only reads it); they write files in the solution folder without confirm " +
   "(pull refuses to replace a package file that changed since the last pull or apply and is not committed, unless force), " +
   "and the other changing tools act at once. api refuses, even with confirm, an operation the instance marks for a person " +
@@ -49,6 +51,10 @@ const INSTRUCTIONS =
 
 type JsonSchema = Record<string, unknown>;
 
+/** What a `confirm` token option says over MCP, after what it does. */
+const TOKEN_DESCRIPTION =
+  "Over MCP: the confirm_token this tool's preview returned, which confirms exactly the change it showed; true is refused.";
+
 export function toolName(spec: CommandSpec): string | undefined {
   return spec.mcpTool || undefined;
 }
@@ -69,8 +75,9 @@ export function inputSchema(spec: CommandSpec): JsonSchema {
   }
   for (const [name, option] of Object.entries(spec.options ?? {})) {
     if (option.cliOnly) continue;
-    properties[name] =
-      option.type === "boolean" || option.mcpBoolean
+    properties[name] = option.mcpToken
+      ? { type: "string", description: `${option.description} ${TOKEN_DESCRIPTION}` }
+      : option.type === "boolean"
         ? { type: "boolean", description: option.description }
         : option.multiple
           ? { type: "array", items: { type: "string" }, description: option.description }
@@ -110,7 +117,9 @@ function inputFrom(spec: CommandSpec, args: Record<string, unknown>): Input {
     if (option.cliOnly) continue;
     const value = args[name];
     if (value === undefined || value === null) continue;
-    if (option.type === "boolean" || option.mcpBoolean) input.options[name] = value === true || value === "true";
+    // A token stays a string; `true` is kept as such, so the command refuses it rather than taking it as yes.
+    if (option.mcpToken) input.options[name] = value === true || value === "true" ? true : value === false ? false : String(value);
+    else if (option.type === "boolean") input.options[name] = value === true || value === "true";
     else if (option.multiple) input.options[name] = Array.isArray(value) ? value.map(String) : [String(value)];
     else input.options[name] = String(value);
   }

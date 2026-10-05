@@ -579,7 +579,7 @@ export const status: CommandSpec = {
             root: session.project.root,
             harness: session.project.harness ?? null,
             last_pull: (await readPull(session.project.root)) ?? null,
-            open_previews: await listPreviews(session.project.root),
+            open_previews: await listPreviews(session.project.root, ctx.io.now()),
           }
         : null,
       logged_in_at: session.settings.logged_in_at ?? null,
@@ -650,7 +650,7 @@ export const status: CommandSpec = {
     if (session.project) {
       const solution = data.solution as {
         last_pull: { at: string; harness: { slug: string } | null } | null;
-        open_previews: Array<{ preview_id: string; env: string | null; created_at: string }>;
+        open_previews: Array<{ preview_id: string; env: string | null; created_at: string; expires_at: string | null; expired: boolean }>;
         state?: SolutionState;
       };
       if (session.project.harness) lines.push(["harness", session.project.harness]);
@@ -659,7 +659,9 @@ export const status: CommandSpec = {
       lines.push([
         "open previews",
         solution.open_previews.length
-          ? solution.open_previews.map((p) => `\n  ${p.preview_id}${p.env ? `  env ${p.env}` : ""}  ${p.created_at}`).join("")
+          ? solution.open_previews
+              .map((p) => `\n  ${p.preview_id}${p.env ? `  env ${p.env}` : ""}  ${p.created_at}  ${p.expired ? "expired (`cavelon apply --discard all` removes it)" : `expires ${p.expires_at}`}`)
+              .join("")
           : "none",
       ]);
     }

@@ -221,6 +221,24 @@ describe("cavelon api and the api tool, run by an agent and by a person", () => 
       expect(changes(before)).toEqual([expect.objectContaining({ method: "PUT", path: "/api/v1/variables/region", body: { value: "eu" } })]);
     });
 
+    it("binds the MCP tool's confirm to the same token as the shell's, for the same request", async () => {
+      const shell = (await api(setVariable("fr"), AGENT)).json<{ confirm_token: string }>().confirm_token;
+      const client = await mcp();
+      try {
+        const args = { operation: "set_variable", params: ["name=region"], body: JSON.stringify({ value: "fr" }) };
+        const before = server.state.requests.length;
+        const shown = await tool(client, args);
+        expect(shown.body).toMatchObject({ sent: false, confirm_token: shell });
+        expect(shown.body.confirm).toBe(`Show the person this, then call api again with the same arguments and confirm: "${shell}" to make exactly this change.`);
+        expect((await tool(client, { ...args, confirm: "000000000000" })).body).toMatchObject({ sent: false, token_mismatch: true, exit_code: 4 });
+        expect(changes(before)).toEqual([]);
+        expect((await tool(client, { ...args, confirm: shell })).isError).toBe(false);
+        expect(changes(before)).toEqual([expect.objectContaining({ method: "PUT", body: { value: "fr" } })]);
+      } finally {
+        await client.close();
+      }
+    });
+
     it("is sent at once from a person's terminal, with or without a bare --confirm", async () => {
       const before = server.state.requests.length;
       expect((await api(setVariable("eu"))).code).toBe(0);
@@ -304,9 +322,10 @@ describe("cavelon api and the api tool, run by an agent and by a person", () => 
       // Clearing the key carries no value.
       expect((await tool(client, { operation: "update_model", params: [`model_registry_id=${id}`], body: '{"api_key":null}' })).body).toMatchObject({ sent: false });
       const preview = await tool(client, { operation: "update_model", params: [`model_registry_id=${id}`], body: '{"display_name":"Llama"}' });
-      expect(preview.body).toMatchObject({ sent: false, body: { display_name: "Llama" } });
+      expect(preview.body).toMatchObject({ sent: false, body: { display_name: "Llama" }, confirm_token: expect.stringMatching(/^[0-9a-f]{12}$/) });
       expect(changes(before)).toEqual([]);
-      expect((await tool(client, { operation: "update_model", params: [`model_registry_id=${id}`], body: '{"display_name":"Llama"}', confirm: true })).isError).toBe(false);
+      const confirm = preview.body.confirm_token as string;
+      expect((await tool(client, { operation: "update_model", params: [`model_registry_id=${id}`], body: '{"display_name":"Llama"}', confirm })).isError).toBe(false);
       expect(changes(before)).toEqual([expect.objectContaining({ method: "PATCH", body: { display_name: "Llama" } })]);
     });
 

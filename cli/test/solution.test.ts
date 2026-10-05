@@ -1280,18 +1280,138 @@ describe("apply", () => {
     expect(text.stdout).toMatch(/needs secrets:\s+- crm_token: cavelon secrets set crm_token/);
     expect(text.stdout).toMatch(new RegExp(`Import exactly this: cavelon apply --confirm ${data.preview_id}`));
 
-    // The files change after the preview; the import still sends what was previewed.
+    // The files change after the preview: the confirm is stale, exits 4 and imports nothing, and the preview stays.
     const agentsFile = path.join(dir, "package", "agents.yaml");
     writeFileSync(agentsFile, read(agentsFile).replace("temperature: 0.2", "temperature: 0.5"));
     server.state.requests.length = 0;
-    const confirmed = await cli(sb, ["apply", "--confirm", data.preview_id, "--json"], { cwd: dir });
+    const stale = await cli(sb, ["apply", "--confirm", data.preview_id, "--json"], { cwd: dir });
+    expect(stale.code, stale.stdout).toBe(4);
+    const error = stale.json<{ error: { code: string; message: string; hint: string; details: { files: string[] } } }>().error;
+    expect(error).toMatchObject({ code: "preview_files_changed", details: { files: ["package/agents.yaml"] } });
+    expect(error.message).toMatch(/changed since preview .* \(package\/agents\.yaml\); nothing was imported/);
+    expect(error.hint).toMatch(/Run `cavelon apply --harness support` for a preview of the files as they are now.*add --allow-stale to the confirm/);
+    expect(server.state.requests.some((r) => r.path === "/api/v1/agent-graph/import")).toBe(false);
+    expect(existsSync(stored)).toBe(true);
+
+    // --allow-stale imports what the preview showed, and says so.
+    const confirmed = await cli(sb, ["apply", "--confirm", data.preview_id, "--allow-stale", "--json"], { cwd: dir });
     expect(confirmed.code, confirmed.stdout).toBe(0);
     expect(confirmed.json<{ applied: boolean; warnings: string[] }>()).toMatchObject({ applied: true });
-    expect(confirmed.json<{ warnings: string[] }>().warnings.join()).toMatch(/files changed since this preview/);
+    expect(confirmed.json<{ warnings: string[] }>().warnings.join()).toMatch(/files changed since this preview \(package\/agents\.yaml\); importing what the preview showed \(--allow-stale\)/);
     const sent = server.state.requests.find((r) => r.path === "/api/v1/agent-graph/import")!.body as Record<string, any>;
     expect(sent.preview_id).toBe(data.preview_id);
     expect(sent.package.agents[0].temperature).toBe(0.2);
     expect(existsSync(stored)).toBe(false);
+    // The file holds what the instance does not, so pull does not take it for the instance's.
+    const refused = await cli(sb, ["pull", "--json"], { cwd: dir });
+    expect(refused.code).toBe(4);
+    expect(refused.json<{ error: { details: { files: string[] } } }>().error.details.files).toEqual(["package/agents.yaml"]);
+    expect(read(agentsFile)).toContain("temperature: 0.5");
+  });
+
+  it("after a confirm, a file whose bytes changed since the preview but whose content the instance holds is the base for pull", async () => {
+    const dir = await pulled();
+    const agentsFile = path.join(dir, "package", "agents.yaml");
+    writeFileSync(agentsFile, read(agentsFile).replace("temperature: 0.2", "temperature: 0.5"));
+    const preview = (await cli(sb, ["apply", "--json"], { cwd: dir })).json<{ preview_id: string }>();
+    // Only the formatting changes since: the package is the previewed one, so the confirm is not stale.
+    writeFileSync(agentsFile, `# Tuned for the FAQ.\n${read(agentsFile)}`);
+    server.state.requests.length = 0;
+    const confirmed = await cli(sb, ["apply", "--confirm", preview.preview_id, "--json"], { cwd: dir });
+    expect(confirmed.code, confirmed.stdout).toBe(0);
+    expect(confirmed.json<{ warnings?: string[] }>().warnings ?? []).toEqual([]);
+    expect(server.state.requests.some((r) => r.method === "GET" && r.path === "/api/v1/agent-graph/export")).toBe(true);
+    const pulledAgain = await cli(sb, ["pull"], { cwd: dir });
+    expect(pulledAgain.code, pulledAgain.stderr + pulledAgain.stdout).toBe(0);
+    expect(read(agentsFile)).toMatch(/^# Tuned for the FAQ\.\n[\s\S]*temperature: 0\.5/);
+  });
+
+  it("after a confirm, a changed file stays a local change for pull when the instance's export cannot be read", async () => {
+    const dir = await pulled();
+    const agentsFile = path.join(dir, "package", "agents.yaml");
+    const preview = (await cli(sb, ["apply", "--json"], { cwd: dir })).json<{ preview_id: string }>();
+    writeFileSync(agentsFile, `# Tuned for the FAQ.\n${read(agentsFile)}`);
+    server.state.failures = [{ method: "GET", path: /\/agent-graph\/export$/, status: 503 }];
+    try {
+      const confirmed = await cli(sb, ["apply", "--confirm", preview.preview_id, "--json"], { cwd: dir });
+      expect(confirmed.code, confirmed.stdout).toBe(0);
+      expect(confirmed.json<{ applied: boolean; warnings: string[] }>()).toMatchObject({ applied: true });
+      expect(confirmed.json<{ warnings: string[] }>().warnings.join()).toMatch(/Could not read what the instance holds after the import .*; pull treats package\/agents\.yaml as local changes/);
+    } finally {
+      server.state.failures = [];
+    }
+    // No base for the file: pull refuses to overwrite it, and keeps it where the instance holds the same.
+    const base = JSON.parse(read(path.join(dir, ".cavelon", "pulled-files.json"))) as { digests: Record<string, string> };
+    expect(Object.keys(base.digests)).not.toContain("package/agents.yaml");
+    expect(Object.keys(base.digests)).toContain("package/manifest.yaml");
+    const pulledAgain = await cli(sb, ["pull"], { cwd: dir });
+    expect(pulledAgain.code, pulledAgain.stderr + pulledAgain.stdout).toBe(0);
+    expect(read(agentsFile)).toMatch(/^# Tuned for the FAQ\./);
+  });
+
+  it("a preview older than a day expires: its confirm exits 4, status says so, and a new preview removes it", async () => {
+    const dir = await pulled();
+    const preview = (await cli(sb, ["apply", "--json"], { cwd: dir })).json<{ preview_id: string }>();
+    const stored = path.join(dir, ".cavelon", "previews", `${preview.preview_id}.json`);
+    const age = (hours: number) => {
+      const record = JSON.parse(read(stored));
+      record.created_at = new Date(Date.now() - hours * 3_600_000).toISOString();
+      writeFileSync(stored, JSON.stringify(record));
+      return record.created_at as string;
+    };
+
+    const fresh = age(23);
+    let status = (await cli(sb, ["status", "--offline", "--json"], { cwd: dir })).json<{ solution: { open_previews: Array<Record<string, unknown>> } }>();
+    expect(status.solution.open_previews).toEqual([
+      expect.objectContaining({ preview_id: preview.preview_id, created_at: fresh, expires_at: new Date(Date.parse(fresh) + 86_400_000).toISOString(), expired: false }),
+    ]);
+
+    age(25);
+    status = (await cli(sb, ["status", "--offline", "--json"], { cwd: dir })).json();
+    expect(status.solution.open_previews).toEqual([expect.objectContaining({ preview_id: preview.preview_id, expired: true })]);
+    expect((await cli(sb, ["status", "--offline"], { cwd: dir })).stdout).toMatch(/expired \(`cavelon apply --discard all` removes it\)/);
+    server.state.requests.length = 0;
+    const expired = await cli(sb, ["apply", "--confirm", preview.preview_id, "--json"], { cwd: dir });
+    expect(expired.code).toBe(4);
+    expect(expired.json<{ error: { code: string; hint: string } }>().error).toMatchObject({ code: "preview_expired", hint: expect.stringMatching(/cavelon apply --harness support` again/) });
+    expect(server.state.requests.some((r) => r.path === "/api/v1/agent-graph/import")).toBe(false);
+    expect(existsSync(stored)).toBe(false);
+
+    // A new preview in the folder removes the expired ones.
+    const replaced = (await cli(sb, ["apply", "--mode", "replace", "--json"], { cwd: dir })).json<{ preview_id: string }>();
+    const again = (await cli(sb, ["apply", "--json"], { cwd: dir })).json<{ preview_id: string }>();
+    const replacedFile = path.join(dir, ".cavelon", "previews", `${replaced.preview_id}.json`);
+    const record = JSON.parse(read(replacedFile));
+    record.created_at = new Date(Date.now() - 48 * 3_600_000).toISOString();
+    writeFileSync(replacedFile, JSON.stringify(record));
+    expect((await cli(sb, ["apply", "--json"], { cwd: dir })).code).toBe(0);
+    expect(readdirSync(path.join(dir, ".cavelon", "previews"))).toEqual([`${again.preview_id}.json`]);
+  });
+
+  it("--discard forgets one stored preview or all of them, and changes nothing on the instance", async () => {
+    const dir = await pulled();
+    const first = (await cli(sb, ["apply", "--json"], { cwd: dir })).json<{ preview_id: string }>();
+    const second = (await cli(sb, ["apply", "--mode", "replace", "--json"], { cwd: dir })).json<{ preview_id: string }>();
+    expect(first.preview_id).not.toBe(second.preview_id);
+    const previews = path.join(dir, ".cavelon", "previews");
+    server.state.requests.length = 0;
+
+    const one = await cli(sb, ["apply", "--discard", first.preview_id, "--json"], { cwd: dir });
+    expect(one.code).toBe(0);
+    expect(one.json()).toEqual({ discarded: [first.preview_id], count: 1 });
+    expect(readdirSync(previews)).toEqual([`${second.preview_id}.json`]);
+    expect((await cli(sb, ["apply", "--confirm", first.preview_id, "--json"], { cwd: dir })).json<{ error: { code: string } }>().error.code).toBe("preview_unknown");
+    expect((await cli(sb, ["apply", "--discard", first.preview_id], { cwd: dir })).code).toBe(2);
+
+    const all = await cli(sb, ["apply", "--discard", "all"], { cwd: dir });
+    expect(all.code).toBe(0);
+    expect(all.stdout).toMatch(new RegExp(`^Discarded preview: ${second.preview_id}\\. Nothing changed on the instance\\.`));
+    expect(readdirSync(previews)).toEqual([]);
+    expect((await cli(sb, ["apply", "--discard", "all", "--json"], { cwd: dir })).json()).toEqual({ discarded: [], count: 0 });
+    expect(server.state.requests.filter((r) => r.path.startsWith("/api/v1/agent-graph"))).toEqual([]);
+
+    expect((await cli(sb, ["apply", "--discard", "all", "--confirm", first.preview_id], { cwd: dir })).code).toBe(2);
+    expect((await cli(sb, ["apply", "--allow-stale"], { cwd: dir })).code).toBe(2);
   });
 
   it("turns a stale preview into exit 4 with the way forward", async () => {

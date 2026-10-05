@@ -302,13 +302,15 @@ Preview the package files against the instance and print a preview id; --confirm
 cavelon apply [options]
 ```
 
-Without --confirm nothing is imported: the preview shows what changes, which active solutions it reaches, what the target still needs (secrets and variables with the command that sets each, grants, runtime bindings, trigger identities), loop budgets and ignored sections, and is stored in .cavelon/. When the env file names a solution that does not exist yet, apply creates it as a draft first. A person sets the secrets (`cavelon secrets set <name>`), never the agent. Show a preview that reaches an active solution or env/prod to a person before confirming. A stale preview exits 4; so does an import its own check refuses when it applies, naming each blocker.
+Without --confirm nothing is imported: the preview shows what changes, which active solutions it reaches, what the target still needs (secrets and variables with the command that sets each, grants, runtime bindings, trigger identities), loop budgets and ignored sections, and is stored in .cavelon/. When the env file names a solution that does not exist yet, apply creates it as a draft first. A person sets the secrets (`cavelon secrets set <name>`), never the agent. Show a preview that reaches an active solution or env/prod to a person before confirming. A stale preview exits 4 and imports nothing: one whose target changed on the instance since, one whose package files changed since (what they hold, not their formatting; --allow-stale imports what the preview showed anyway), and one older than a day. So does an import its own check refuses when it applies, naming each blocker. --discard &lt;id\|all&gt; forgets stored previews; `cavelon status` lists them with when each expires.
 
 | Option | Description | MCP |
 |---|---|---|
 | `--env <name>` | Use env/&lt;name&gt;.yaml: its tenant, solution and runtime bindings. | yes |
 | `--harness <harness>` | The solution (harness): its name, slug or id; default: env file, then cavelon.yaml. | yes |
 | `--confirm <preview-id>` | Import exactly this stored preview. | yes |
+| `--allow-stale` | With --confirm: import what the preview showed although the package files changed since it. | yes |
+| `--discard <preview-id|all>` | Forget this stored preview, or all of them; changes nothing on the instance. | yes |
 | `--mode <mode>` | overwrite (default) or replace (deletes what the package does not hold). | yes |
 
 Examples:
@@ -317,6 +319,7 @@ Examples:
 cavelon apply --env test
 cavelon apply --confirm <preview-id>
 cavelon apply --env prod --json
+cavelon apply --discard all
 ```
 
 ### cavelon activate
@@ -1483,7 +1486,7 @@ Call any operation the instance publishes in its OpenAPI.
 cavelon api <operation> [params...] [options]
 ```
 
-The operation is its operationId or the short name before FastAPI's path suffix (list_harnesses). Parameters: -p name=value or name=value (not --name). Body: --body '&lt;json&gt;', --body @file.json or --body - (stdin); --json &lt;body&gt; still works for now but is deprecated: --json alone prints JSON, as on every command. The body is checked against the operation's schema before it is sent. As an MCP tool, or run by a coding agent (CLAUDECODE, CODEX_THREAD_ID, CODEX_SANDBOX, CURSOR_AGENT, GEMINI_CLI, COPILOT_CLI, COPILOT_AGENT, AI_AGENT or CAVELON_AGENT=1 is set), an operation that changes something returns what it would send and sends it only with confirm (as an MCP tool) or --confirm &lt;token&gt; (the token the preview printed). Run by an agent, one the instance marks for a person only (x-cavelon-person-only) is refused, as is a body that sets a field the instance marks as a secret value (x-cavelon-secret) and a file outside the solution folder. On an instance that marks no operation, one that changes a secret, creates or revokes a credential or decides an approval is refused. A person's own terminal sends at once. In a solution folder, the persona operations (get_bot_persona, upsert_bot_persona, …) get the folder's solution as harness_id when none is passed, since without it they reach the tenant's default route.
+The operation is its operationId or the short name before FastAPI's path suffix (list_harnesses). Parameters: -p name=value or name=value (not --name). Body: --body '&lt;json&gt;', --body @file.json or --body - (stdin); --json &lt;body&gt; still works for now but is deprecated: --json alone prints JSON, as on every command. The body is checked against the operation's schema before it is sent. As an MCP tool, or run by a coding agent (CLAUDECODE, CODEX_THREAD_ID, CODEX_SANDBOX, CURSOR_AGENT, GEMINI_CLI, COPILOT_CLI, COPILOT_AGENT, AI_AGENT or CAVELON_AGENT=1 is set), an operation that changes something returns what it would send and a confirm token, and sends it only with that token: --confirm &lt;token&gt;, or confirm: "&lt;token&gt;" as an MCP tool. A changed request needs a new preview; confirm: true is refused. Run by an agent, one the instance marks for a person only (x-cavelon-person-only) is refused, as is a body that sets a field the instance marks as a secret value (x-cavelon-secret) and a file outside the solution folder. On an instance that marks no operation, one that changes a secret, creates or revokes a credential or decides an approval is refused. A person's own terminal sends at once. In a solution folder, the persona operations (get_bot_persona, upsert_bot_persona, …) get the folder's solution as harness_id when none is passed, since without it they reach the tenant's default route.
 
 | Argument | Description |
 |---|---|
@@ -1496,7 +1499,7 @@ The operation is its operationId or the short name before FastAPI's path suffix 
 | `--body <json|@file|->` | The request body: JSON, @file.json or - for stdin (--json &lt;body&gt; is a deprecated alias). | yes |
 | `--file <field=path>` | Attach a file to a multipart body. Repeatable. | yes |
 | `--output <file>` | Write the response body to a file instead of printing it. | CLI only |
-| `--confirm <token>` | Send an operation that changes something: run by a coding agent, the token its preview printed; as an MCP tool, true. Without it, nothing is sent. A person's terminal sends at once. | yes |
+| `--confirm <token>` | Send an operation that changes something: run by a coding agent or as an MCP tool, the token its preview returned. Without it, nothing is sent. A person's terminal sends at once. | yes |
 | `--limit <n>` | Show at most n items of a list response (default 50, 0 for all). | yes |
 
 Examples:

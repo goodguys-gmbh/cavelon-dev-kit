@@ -192,8 +192,7 @@ Changing a solution always takes two steps:
    OAuth grants, runtime bindings, trigger identities). Nothing changes. The
    preview gets an id (`pv_…`), and the exact request is stored in
    `.cavelon/previews/`.
-2. **`cavelon apply --confirm <id>`** imports exactly that preview, even if the
-   files changed since (it warns).
+2. **`cavelon apply --confirm <id>`** imports exactly that preview.
 
 A recent instance's preview also lists each field it would change
 (`object.field: old → new`), the fields an import does not apply (such as a
@@ -201,10 +200,25 @@ solution's `status` or `is_default`, each with the command that sets it), and,
 when it is blocked, each blocker with its code, package file and path, and a
 hint. An older instance's preview shows what it publishes.
 
-If the target changed after the preview, the instance refuses the import
-(`import_preview_stale`, exit 4) and nothing is imported: preview again. If the
-import's own check finds something the preview did not, it refuses with its
-blockers (`package_requirements_changed`, exit 4).
+A confirm imports nothing and exits 4 when the preview is **stale**:
+
+- the target changed on the instance after the preview: the instance refuses
+  the import (`import_preview_stale`);
+- the package files changed after the preview, in what they hold rather than
+  in formatting or comments (`preview_files_changed`, naming the files). Preview
+  again; or, to import what the old preview showed anyway, add
+  `--allow-stale` to the confirm;
+- the preview is more than a day old (`preview_expired`).
+
+If the import's own check finds something the preview did not, it refuses with
+its blockers (`package_requirements_changed`, exit 4).
+
+`cavelon status` lists the open previews with when each expires;
+`cavelon apply --discard <id>` (or `--discard all`) forgets stored previews, so
+none is left for a later agent to confirm. After an import, `pull` takes the
+package files as the instance now holds them as its base: a file that changed
+after the preview stays a local change unless the instance's export holds the
+same content.
 
 `--mode overwrite` (the default) creates and updates; `--mode replace` also
 deletes what the package does not hold. A preview that reaches an active
@@ -214,7 +228,9 @@ before confirming, and the Cavelon skills make the agent do so.
 Other commands that delete or overwrite follow the same pattern: `limits set`,
 `models set-limit`, `variables delete`, `secrets delete`, `loop cancel`,
 `sandbox seed`, `trigger identity`, `harness default` and `activate
---make-default` show what they would do, and act only with `--confirm`.
+--make-default` show what they would do, and act only with `--confirm`. Over
+MCP, their tools return a `confirm_token` with the preview and act only when
+`confirm` is that token, which confirms exactly the change shown.
 
 ## Operations and waiting
 

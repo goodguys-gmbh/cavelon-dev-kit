@@ -4,7 +4,8 @@ import { CAPACITY_CONCEPT_PAGE, CAPACITY_TUTORIAL_PAGE, capacityCodeIn, capacity
 import { boolOption, intOption, positional, stringOption, type CommandSpec, type Context } from "../command.js";
 import type { WarningEntry } from "../context.js";
 import { Contracts, type CachedContract, type ErrorCatalog, type PackageSchema } from "../contracts.js";
-import { CavelonError, ExitCode, usageError } from "../errors.js";
+import { CavelonError, ExitCode, usageError, type ExitCodeValue } from "../errors.js";
+import { confirmation, confirmGiven, confirmTokenRequired } from "../confirm-token.js";
 import { clip, keyValues } from "../format.js";
 import { readTextFile, writeFileAtomic } from "../fsutil.js";
 import { uncommitted } from "../git.js";
@@ -19,6 +20,7 @@ import {
   fileDigests,
   listPreviews,
   loadPreview,
+  previewExpiry,
   readPulledFiles,
   rememberAppliedFiles,
   savePreview,
@@ -598,16 +600,91 @@ function previewIdOption(input: Parameters<CommandSpec["run"]>[1]): string | und
   return id?.trim();
 }
 
-async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: string) {
+function previewUnknown(previewId: string): CavelonError {
+  return new CavelonError(ExitCode.usage, {
+    code: "preview_unknown",
+    message: `No open preview ${previewId} in this solution.`,
+    hint: "Run `cavelon apply` (with the same --env or --harness) for a new preview and confirm its id; `cavelon status` lists the open ones.",
+  });
+}
+
+/** `apply --discard <id|all>`: forget stored previews, so no later agent confirms one nobody looks at any more. */
+async function discardPreviews(ctx: Context, project: ProjectConfig, which: string) {
+  const open = await listPreviews(project.root, ctx.io.now());
+  const chosen = which === "all" ? open : open.filter((p) => p.preview_id === which);
+  if (which !== "all" && chosen.length === 0) throw previewUnknown(which);
+  for (const p of chosen) await deletePreview(project.root, p.preview_id);
+  const ids = chosen.map((p) => p.preview_id);
+  return {
+    data: { discarded: ids, count: ids.length },
+    text: ids.length ? `Discarded ${ids.length === 1 ? "preview" : `${ids.length} previews`}: ${ids.join(", ")}. Nothing changed on the instance.` : "No open previews to discard.",
+  };
+}
+
+/** The package files that differ from what a preview read: changed, added or removed since. */
+async function filesChangedSince(project: ProjectConfig, stored: StoredPreview, disk: PackageOnDisk): Promise<string[]> {
+  if (!stored.file_digests) return [];
+  const previewed = stored.file_digests;
+  const now = await fileDigests(project.root, sourceFiles(disk));
+  const files = new Set([...Object.keys(previewed), ...Object.keys(now)]);
+  return [...files].filter((file) => previewed[file] !== now[file]).sort((a, b) => a.localeCompare(b, "en"));
+}
+
+/**
+ * After an import: the package files as the instance now holds them become
+ * the base the next pull compares with. A file whose bytes are what the
+ * preview read is the instance's. One that changed since (a stale confirm,
+ * `fmt`) is the instance's only when the instance's export says the same;
+ * otherwise it holds what the instance lacks, and pull must not overwrite it.
+ */
+async function rememberImported(ctx: Context, project: ProjectConfig, stored: StoredPreview, disk: PackageOnDisk, changed: string[]): Promise<void> {
+  if (!stored.file_digests) return;
+  const now = await fileDigests(project.root, sourceFiles(disk));
+  const known: Record<string, string> = {};
+  for (const [file, value] of Object.entries(stored.file_digests)) if (now[file] === value) known[file] = value;
+  if (!changed.length) return rememberAppliedFiles(project.root, known);
+  const holds = await instanceHolds(ctx, project, stored).catch((error: unknown) => {
+    ctx.warn(`Could not read what the instance holds after the import (${error instanceof Error ? error.message : String(error)}); pull treats ${changed.join(", ")} as local changes.`);
+    return undefined;
+  });
+  const unknown: string[] = [];
+  for (const file of changed) {
+    if (holds?.has(file) && now[file]) known[file] = now[file];
+    else unknown.push(file);
+  }
+  await rememberAppliedFiles(project.root, known, unknown);
+}
+
+/** The package files whose content the instance's export holds as they are; undefined when there is nothing to export to compare. */
+async function instanceHolds(ctx: Context, project: ProjectConfig, stored: StoredPreview): Promise<Set<string> | undefined> {
+  const harnessId = stored.request.harness_id;
+  const scope = harnessId ? "agent_graph" : ((stored.request.package.manifest as Record<string, unknown> | undefined)?.scope as string | undefined);
+  if (scope !== "agent_graph" && scope !== "full_config") return undefined;
+  if (scope === "agent_graph" && !harnessId) return undefined;
+  const exported = await callStable<Record<string, unknown>>(ctx, "GET", "/api/v1/agent-graph/export", "exporting packages", {
+    query: { scope, harness_id: harnessId },
+    timeoutMs: 120_000,
+  });
+  if (!exported || typeof exported !== "object" || Array.isArray(exported)) return undefined;
+  const { schema } = await schemaFor(ctx, packageVersionOf(exported), false);
+  const planned = await writePackage(project.root, project.layout, exported, schema, { dryRun: true });
+  return new Set(planned.unchanged);
+}
+
+async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: string, allowStale: boolean) {
   const stored = await loadPreview(project.root, previewId);
-  if (!stored) {
-    throw new CavelonError(ExitCode.usage, {
-      code: "preview_unknown",
-      message: `No open preview ${previewId} in this solution.`,
-      hint: "Run `cavelon apply` (with the same --env or --harness) for a new preview and confirm its id; `cavelon status` lists the open ones.",
+  if (!stored) throw previewUnknown(previewId);
+  const session = await ctx.session();
+  const expiry = previewExpiry(stored.created_at, ctx.io.now());
+  if (expiry.expired) {
+    await deletePreview(project.root, stored.preview_id);
+    throw new CavelonError(ExitCode.conflict, {
+      code: "preview_expired",
+      message: `Preview ${previewId} was made at ${stored.created_at} and expired${expiry.expires_at ? ` at ${expiry.expires_at}` : ""}; nothing was imported.`,
+      hint: `Run \`${previewAgain(stored, session)}\` again, show the new preview, and confirm its id.`,
+      details: { preview_id: stored.preview_id, created_at: stored.created_at, expires_at: expiry.expires_at },
     });
   }
-  const session = await ctx.session();
   if (requireInstance(session) !== stored.instance) {
     throw new CavelonError(ExitCode.conflict, {
       code: "preview_other_instance",
@@ -625,8 +702,22 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
   }
   if (stored.tenant_id && session.tokenKind !== "api_key") client.target.tenantId = stored.tenant_id;
   const disk = await readPackage(project.root, project.layout);
+  const changed = await filesChangedSince(project, stored, disk);
   if (digest(disk.package) !== stored.package_digest) {
-    ctx.warn("The package files changed since this preview; importing what the preview showed. Run `cavelon apply` to preview the files as they are now.");
+    if (!allowStale) {
+      throw new CavelonError(ExitCode.conflict, {
+        code: "preview_files_changed",
+        message: `The package files changed since preview ${previewId}${changed.length ? ` (${list(changed, 5)})` : ""}; nothing was imported.`,
+        hint:
+          `Run \`${previewAgain(stored, session)}\` for a preview of the files as they are now, show it, and confirm its id. ` +
+          `To import what preview ${previewId} showed instead, add --allow-stale to the confirm.`,
+        details: { preview_id: stored.preview_id, files: changed },
+      });
+    }
+    ctx.warn(
+      `The package files changed since this preview${changed.length ? ` (${list(changed, 5)})` : ""}; importing what the preview showed (--allow-stale). ` +
+        "The files keep their changes, which the instance does not hold; run `cavelon apply` to preview them.",
+    );
   }
   try {
     const result = await callStable<Record<string, unknown>>(ctx, "POST", "/api/v1/agent-graph/import", "importing packages", {
@@ -634,8 +725,8 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
       timeoutMs: 300_000,
     });
     // Every other open preview was made against the state this import changed.
-    for (const other of await listPreviews(project.root)) await deletePreview(project.root, other.preview_id);
-    if (stored.file_digests) await rememberAppliedFiles(project.root, stored.file_digests);
+    for (const other of await listPreviews(project.root, ctx.io.now())) await deletePreview(project.root, other.preview_id);
+    await rememberImported(ctx, project, stored, disk, changed);
     const summary = (result.summary ?? {}) as Preview["summary"];
     const flags = targetFlags(session, stored.env ?? session.envFile?.name);
     const still = setCommands(stored.preview as Preview, flags);
@@ -774,8 +865,11 @@ export const apply: CommandSpec = {
     "still needs (secrets and variables with the command that sets each, grants, runtime bindings, trigger identities), loop\n" +
     "budgets and ignored sections, and is stored in .cavelon/. When the env file names a solution that does not exist yet,\n" +
     "apply creates it as a draft first. A person sets the secrets (`cavelon secrets set <name>`), never the agent.\n" +
-    "Show a preview that reaches an active solution or env/prod to a person before confirming. A stale preview exits 4;\n" +
-    "so does an import its own check refuses when it applies, naming each blocker.",
+    "Show a preview that reaches an active solution or env/prod to a person before confirming. A stale preview exits 4 and\n" +
+    "imports nothing: one whose target changed on the instance since, one whose package files changed since (what they\n" +
+    "hold, not their formatting; --allow-stale imports what the preview showed anyway), and one older than a day. So does\n" +
+    "an import its own check refuses when it applies, naming each blocker. --discard <id|all> forgets stored previews;\n" +
+    "`cavelon status` lists them with when each expires.",
   readOnly: false,
   destructive: true,
   mcpTool: "apply",
@@ -783,15 +877,28 @@ export const apply: CommandSpec = {
     env: ENV_OPTION,
     harness: HARNESS_OPTION,
     confirm: { type: "string", value: "<preview-id>", description: "Import exactly this stored preview." },
+    "allow-stale": {
+      type: "boolean",
+      description: "With --confirm: import what the preview showed although the package files changed since it.",
+    },
+    discard: { type: "string", value: "<preview-id|all>", description: "Forget this stored preview, or all of them; changes nothing on the instance." },
     mode: { type: "string", value: "<mode>", description: "overwrite (default) or replace (deletes what the package does not hold)." },
   },
-  examples: ["cavelon apply --env test", "cavelon apply --confirm <preview-id>", "cavelon apply --env prod --json"],
+  examples: ["cavelon apply --env test", "cavelon apply --confirm <preview-id>", "cavelon apply --env prod --json", "cavelon apply --discard all"],
   async run(ctx, input) {
     const session = await ctx.session();
     const project = requireSolution(session);
     const url = requireInstance(session);
     const confirm = previewIdOption(input);
-    if (confirm) return confirmPreview(ctx, project, confirm);
+    const discard = stringOption(input, "discard")?.trim();
+    const allowStale = boolOption(input, "allow-stale");
+    if (discard !== undefined && confirm) throw usageError("Pass --confirm or --discard, not both.");
+    if (allowStale && !confirm) throw usageError("--allow-stale only applies to --confirm <preview-id>.");
+    if (discard !== undefined) {
+      if (!discard) throw usageError("--discard needs a preview id, or all.", "`cavelon status` lists the open previews.");
+      return discardPreviews(ctx, project, discard);
+    }
+    if (confirm) return confirmPreview(ctx, project, confirm, allowStale);
 
     const envFile = session.envFile;
     if (envFile?.tenant && session.tenantSource !== `env/${envFile.name}.yaml`) {
@@ -867,6 +974,8 @@ export const apply: CommandSpec = {
         preview,
       };
       await savePreview(project.root, stored);
+      // An expired preview can no longer be confirmed; it would only pile up for a later agent to find.
+      for (const old of await listPreviews(project.root, ctx.io.now())) if (old.expired) await deletePreview(project.root, old.preview_id);
     }
     const reason = personReason(preview, harness, mode, envFile?.name);
     data.show_to_person = Boolean(reason);
@@ -1170,7 +1279,7 @@ async function defaultRouteAfterActivation(
   ctx: Context,
   harness: Harness,
   input: Parameters<CommandSpec["run"]>[1],
-): Promise<{ data: Record<string, unknown>; lines: string[]; failed?: boolean }> {
+): Promise<{ data: Record<string, unknown>; lines: string[]; failed?: boolean; exitCode?: ExitCodeValue }> {
   const make = boolOption(input, "make-default");
   let route;
   try {
@@ -1182,7 +1291,8 @@ async function defaultRouteAfterActivation(
   const current = route.current ? { id: route.current.id, slug: route.current.slug, name: route.current.name } : null;
   if (route.current?.id === harness.id) return { data: { default_route: { is_default: true, current } }, lines: [`${named(harness)} is the tenant's default route.`] };
   const commands = defaultCommands(harness.slug);
-  if (make && boolOption(input, "confirm")) {
+  const gate = make ? await confirmation(ctx, input, "activate", { harness: harness.id, from: current?.id ?? null }) : undefined;
+  if (gate?.confirmed) {
     try {
       await setDefaultRoute(ctx, harness.id);
     } catch (error) {
@@ -1202,12 +1312,18 @@ async function defaultRouteAfterActivation(
     };
   }
   if (!route.known && !make) return { data: { default_route: { is_default: null, known: false } }, lines: [] };
-  const lines = make
-    ? [defaultChangeLine(harness, route), `Show this to a person; with their yes: ${cavelonCommand("activate", "--harness", harness.slug, "--make-default", "--confirm")}`]
-    : [
-        `Not the default route: ${current ? `the tenant's chat and widget answer with ${named(current)}` : "the tenant has none"} where a conversation names no solution.`,
-        `Ask the person whether ${named(harness)} should answer there; that changes live traffic. Preview: ${commands.preview}`,
-      ];
+  if (gate) {
+    const confirm = cavelonCommand("activate", "--harness", harness.slug, "--make-default", "--confirm");
+    return {
+      data: { default_route: { is_default: false, known: route.known, current, preview: commands.preview, confirm: gate.confirm(confirm), ...gate.fields } },
+      lines: [defaultChangeLine(harness, route), ...(gate.mismatch ? [gate.mismatch] : []), `Show this to a person; with their yes: ${confirm}`],
+      ...(gate.exitCode ? { exitCode: gate.exitCode } : {}),
+    };
+  }
+  const lines = [
+    `Not the default route: ${current ? `the tenant's chat and widget answer with ${named(current)}` : "the tenant has none"} where a conversation names no solution.`,
+    `Ask the person whether ${named(harness)} should answer there; that changes live traffic. Preview: ${commands.preview}`,
+  ];
   return { data: { default_route: { is_default: false, known: route.known, current, preview: commands.preview, confirm: commands.confirm } }, lines };
 }
 
@@ -1228,16 +1344,18 @@ export const activate: CommandSpec = {
     harness: HARNESS_OPTION,
     env: ENV_OPTION,
     "make-default": { type: "boolean", description: "Also make it the tenant's default route: previews the change; with --confirm, makes it." },
-    confirm: { type: "boolean", description: "With --make-default: change the default route (after a person saw the preview)." },
+    confirm: { type: "boolean", mcpToken: true, description: "With --make-default: change the default route (after a person saw the preview)." },
   },
   examples: ["cavelon activate", "cavelon activate --make-default", "cavelon activate --make-default --confirm"],
   async run(ctx, input) {
     const session = await ctx.session();
     const { ref, source } = harnessRef(session, input);
     if (!ref) throw usageError("Which solution?", "Pass --harness <name or slug> (`cavelon harness list` shows them), or set harness in cavelon.yaml or the env file.");
-    if (boolOption(input, "confirm") && !boolOption(input, "make-default")) {
+    if (confirmGiven(input) && !boolOption(input, "make-default")) {
       throw usageError("--confirm only applies to --make-default.", "Activation itself needs no confirmation; the default route does.");
     }
+    // Refused before the activation, so a refused confirm never leaves half of the call done.
+    if (ctx.mode === "mcp" && input.options.confirm === true) throw confirmTokenRequired("activate");
     const client = await ctx.client();
     const principal = await readPrincipal(client);
     if (principal?.kind === "personal_access_token" && principal.token && !principal.token.may_activate) {
@@ -1253,7 +1371,7 @@ export const activate: CommandSpec = {
       return {
         data: { activated: false, already_active: true, harness, ...route.data },
         text: [`${harness.name} (${harness.slug}) is already active.`, ...route.lines].join("\n"),
-        ...(route.failed ? { exitCode: ExitCode.failure } : {}),
+        ...(route.failed ? { exitCode: ExitCode.failure } : route.exitCode ? { exitCode: route.exitCode } : {}),
       };
     }
     const readiness = await callStable<Readiness>(ctx, "GET", "/api/v1/harnesses/{harness_id}/readiness", "reading readiness", {
@@ -1286,7 +1404,7 @@ export const activate: CommandSpec = {
       data: { activated: true, harness: activated, checks, warnings, readiness, ...route.data },
       text: [`Activated ${activated.name} (${activated.slug}); status ${activated.status}.`, ...readinessText(checks, warnings), ...route.lines].join("\n"),
       // Activated, but the default route the person asked for did not change.
-      ...(route.failed ? { exitCode: ExitCode.failure } : {}),
+      ...(route.failed ? { exitCode: ExitCode.failure } : route.exitCode ? { exitCode: route.exitCode } : {}),
     };
   },
 };

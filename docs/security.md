@@ -97,9 +97,14 @@ activate** for day-to-day work, so the agent can build and test but a person
 activates. Over MCP, `cavelon` limits it further:
 
 - `apply` imports only with the id of a preview, and `limits_set`,
-  `models_set_limit`, `loop_cancel`, `sandbox_seed`, `trigger_identity` and
-  `api` (for any operation that is not read-only) change nothing without
-  `confirm: true`. The other changing tools act at once; the
+  `models_set_limit`, `loop_cancel`, `sandbox_seed`, `trigger_identity`,
+  `harness_default`, `activate` with `make-default`, `kb_upload` where it
+  would deactivate documents, and `api` (for any operation that is not
+  read-only) change nothing without the `confirm_token` their preview
+  returned. The token is a hash of the change the preview showed, the tool,
+  the tenant and the instance, so the agent cannot skip the preview or
+  confirm another change than the one it showed; `confirm: true` is refused.
+  The other changing tools act at once; the
   [MCP page](mcp.md#how-agents-use-it) lists which they are. The Cavelon
   skills tell the agent to show you any preview that reaches an active
   solution or production first.
@@ -172,7 +177,8 @@ they are not a boundary. An agent that unsets the variable, or calls the API
 some other way, has whatever your shell and the token allow it. Your agent
 client's permission settings decide what it may run, and the instance enforces
 the token's role and ceiling on every request. The other commands run by an
-agent's shell act as they do in your terminal.
+agent's shell act as they do in your terminal: `limits set`, `harness default`
+and the other commands with a `--confirm` flag take it without a token there.
 
 ## What is sent where
 

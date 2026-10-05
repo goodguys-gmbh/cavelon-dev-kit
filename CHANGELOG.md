@@ -7,7 +7,39 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Added
+
+- `cavelon apply --discard <preview-id>` (or `--discard all`) forgets stored
+  previews, so none is left for a later agent to confirm. A stored preview
+  expires after a day: its confirm exits 4 (`preview_expired`), `cavelon
+  status` lists each open preview with when it expires, and a new preview
+  removes the expired ones.
+- `cavelon apply --confirm <id> --allow-stale` imports what a preview showed
+  although the package files changed since.
+
 ### Changed
+
+- **Over MCP, a tool confirms only the change its preview showed.** `api`,
+  `limits_set`, `models_set_limit`, `loop_cancel`, `sandbox_seed`,
+  `trigger_identity`, `harness_default`, `activate` with `make-default`, and
+  `kb_upload` where it would deactivate documents return a `confirm_token`
+  with their preview, and change something only when `confirm` is that token:
+  a hash of the change, the tool, the tenant and the instance. `confirm: true`
+  is refused (`confirm_token_required`), since it let an agent skip the
+  preview or send another body than it showed; a token of another change
+  returns the new preview with `token_mismatch` and exit code 4. The `api`
+  tool's token is the one `cavelon api` prints in an agent's shell for the
+  same request. A client that sent `confirm: true` must preview first and pass
+  the token.
+- **A stale preview no longer imports.** `cavelon apply --confirm <id>` after
+  the package files changed in what they hold (not formatting or comments)
+  exits 4 with `preview_files_changed`, naming the files, and imports nothing;
+  it used to warn and exit 0. `--allow-stale` keeps the old behaviour.
+- After a confirmed import, `pull` compares with the package files as the
+  instance now holds them. A file that changed after the preview counts as the
+  instance's only when the instance's export holds the same content, so a
+  comment or formatting change after the preview no longer makes the next
+  `pull` refuse, and an edit the instance lacks is still protected.
 
 - The contract snapshot is refreshed from an instance that publishes a test
   step's criterion shapes in its package schema (judge criteria as text or

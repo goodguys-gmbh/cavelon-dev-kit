@@ -1,9 +1,7 @@
-import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { AGENT_VARIABLES, drivenByAgent, type DrivenBy } from "../agent-env.js";
 import {
-  boolOption,
   CURSOR_OPTION,
   intOption,
   LIMIT_OPTION,
@@ -22,8 +20,8 @@ import { readAll } from "../io.js";
 import { callOperation, previewRequest, type CallArguments } from "../invoke.js";
 import { confinedPath } from "../paths.js";
 import { describeSchema, findOperation, jsonBodySchema, matchedLoosely, operations, schemaTypes, secretFields, type Operation } from "../openapi.js";
-import { canonical } from "../package-files.js";
 import { harnessNotFoundError, lookupHarness } from "../harness-ref.js";
+import { CONFIRM_TOKEN, confirmToken, confirmTokenRequired, confirmWith } from "../confirm-token.js";
 import { cavelonCommand } from "../shell.js";
 
 /** Said once when `--json` carried the body: the alias goes away in a later release. */
@@ -58,9 +56,6 @@ export function splitJsonBody(args: string[], warn?: (message: string) => void):
   if (aliased) warn?.(JSON_BODY_DEPRECATED);
   return out;
 }
-
-/** The token a preview prints for `--confirm`: 12 hex digits of the request's hash. */
-const CONFIRM_TOKEN = /^[0-9a-f]{12}$/;
 
 /**
  * `--confirm` takes the preview's token, but a person may pass it alone, as
@@ -225,19 +220,6 @@ function secretRefusal(op: Operation, fields: string[], driven: DrivenBy): Cavel
   });
 }
 
-/**
- * The token that sends exactly a previewed request from an agent's shell: a
- * hash of where it goes and what it carries, so a changed body, parameter,
- * file, tenant or instance needs a new preview. It holds no secret; it only
- * makes sending take a preview first.
- */
-function confirmToken(target: { url?: string; tenant?: string }, request: unknown, files: unknown): string {
-  return createHash("sha256")
-    .update(canonical({ instance: target.url ?? null, tenant: target.tenant ?? null, request, files }))
-    .digest("hex")
-    .slice(0, 12);
-}
-
 function truncate(data: unknown, limit: number): { data: unknown; total?: number } {
   if (limit <= 0) return { data };
   if (Array.isArray(data) && data.length > limit) return { data: data.slice(0, limit), total: data.length };
@@ -286,8 +268,9 @@ export const api: CommandSpec = {
     "The body is checked against the operation's schema before it is sent.\n" +
     "As an MCP tool, or run by a coding agent (" +
     AGENT_VARIABLES.filter((v) => v.variable !== "CAVELON_AGENT").map((v) => v.variable).join(", ") +
-    "\nor CAVELON_AGENT=1 is set), an operation that changes something returns what it would send and sends it only\n" +
-    "with confirm (as an MCP tool) or --confirm <token> (the token the preview printed).\n" +
+    "\nor CAVELON_AGENT=1 is set), an operation that changes something returns what it would send and a confirm token,\n" +
+    "and sends it only with that token: --confirm <token>, or confirm: \"<token>\" as an MCP tool. A changed request\n" +
+    "needs a new preview; confirm: true is refused.\n" +
     "Run by an agent, one the instance marks for a person only (x-cavelon-person-only) is refused, as is a body that\n" +
     "sets a field the instance marks as a secret value (x-cavelon-secret) and a file outside the solution folder. On an\n" +
     "instance that marks no operation, one that changes a secret, creates or revokes a credential or decides an\n" +
@@ -309,9 +292,9 @@ export const api: CommandSpec = {
     confirm: {
       type: "string",
       value: "<token>",
-      mcpBoolean: true,
+      mcpToken: true,
       description:
-        "Send an operation that changes something: run by a coding agent, the token its preview printed; as an MCP tool, true. " +
+        "Send an operation that changes something: run by a coding agent or as an MCP tool, the token its preview returned. " +
         "Without it, nothing is sent. A person's terminal sends at once.",
     },
     limit: { type: "string", value: "<n>", description: "Show at most n items of a list response (default 50, 0 for all)." },
@@ -380,9 +363,9 @@ export const api: CommandSpec = {
 
 /**
  * What a changing operation would send, when an agent has not confirmed it
- * yet; undefined when it has. Over MCP `confirm: true` sends; from an agent's
- * shell only the token of this very request does, so the agent has to show
- * the preview before it can send.
+ * yet; undefined when it has. Over MCP and from an agent's shell alike, only
+ * the token of this very request sends it, so the agent has to show the
+ * preview before it can send, and cannot send another body than it showed.
  */
 async function previewUnlessConfirmed(
   ctx: Context,
@@ -392,24 +375,21 @@ async function previewUnlessConfirmed(
   args: CallArguments,
   driven: DrivenBy,
 ): Promise<CommandResult | undefined> {
-  if (driven.by === "mcp" && boolOption(input, "confirm")) return undefined;
+  const given = input.options.confirm;
+  if (given === true) throw confirmTokenRequired("api");
   const request = previewRequest(doc, op, args);
   const files = (args.files ?? []).map((f) => ({ field: f.field, file: path.relative(ctx.io.cwd, f.path) || f.path }));
-  const shown = { operation: op.alias, ...request, ...(files.length ? { files } : {}), sent: false };
-  if (driven.by === "mcp") {
-    return {
-      data: { ...shown, confirm: "Call api again with the same arguments and confirm: true." },
-      text: `Would send ${request.method} ${request.path}. Nothing was sent.`,
-    };
-  }
   const session = await ctx.session();
-  const token = confirmToken({ url: session.url, tenant: session.tenant }, request, files);
-  const given = stringOption(input, "confirm");
-  if (given === token) return undefined;
-  const stale = Boolean(given);
-  const confirm = `Show the person this request, then run the same command again with --confirm ${token} to send exactly it.`;
+  const token = confirmToken({ url: session.url, tenant: session.tenant }, "api", { request, files });
+  if (typeof given === "string" && given === token) return undefined;
+  const stale = typeof given === "string" && given !== "";
+  const confirm =
+    driven.by === "mcp"
+      ? confirmWith("api", token)
+      : `Show the person this request, then run the same command again with --confirm ${token} to send exactly it.`;
+  const shown = { operation: op.alias, ...request, ...(files.length ? { files } : {}), sent: false };
   const lines = [`Would send ${request.method} ${request.path}. Nothing was sent.`];
-  if (stale) lines.push("The --confirm token is not this request's: the request changed since its preview, or the token is another one's.");
+  if (stale) lines.push("The confirm token is not this request's: the request changed since its preview, or the token is another one's.");
   if (Object.keys(request.query).length) lines.push(`Query: ${JSON.stringify(request.query)}`);
   if (Object.keys(request.headers).length) lines.push(`Headers: ${JSON.stringify(request.headers)}`);
   if (request.body !== null) lines.push("Body:", JSON.stringify(request.body, null, 2));
