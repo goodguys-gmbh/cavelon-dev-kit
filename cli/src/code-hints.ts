@@ -57,7 +57,7 @@ export function similarCodes(code: string, known: string[], max = 8): string[] {
 }
 
 /** The commands that do what a fix asks of a code directly. */
-const BY_CODE: Record<string, string> = {
+export const BY_CODE: Record<string, string> = {
   package_schema_invalid:
     "Run `cavelon validate`: it checks the package files against the package schema offline and names each field that " +
     "does not match, with file, line and path. `cavelon schema <section>` shows a section's fields and a minimal entry. " +
@@ -67,8 +67,8 @@ const BY_CODE: Record<string, string> = {
 };
 
 /** The commands that stand for an API route a fix names. */
-const BY_ROUTE: Array<{ route: string; command: string }> = [
-  { route: "/api/v1/meta/package-schema", command: "`cavelon schema [section]` shows the package schema; `cavelon validate` checks the files against it." },
+export const BY_ROUTE: Array<{ route: string; command: string }> = [
+  { route: "/api/v1/meta/package-schema", command: "`cavelon schema` shows the package schema, `cavelon schema <section>` one section; `cavelon validate` checks the files against it." },
   { route: "/api/v1/meta/error-catalog", command: "`cavelon explain <code>` reads the error catalog." },
   { route: "/api/v1/meta/capabilities", command: "`cavelon status` and `cavelon limits` read the capabilities." },
   { route: "/api/v1/agent-graph/import/preview", command: "`cavelon apply` previews the package files." },

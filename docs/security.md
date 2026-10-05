@@ -182,6 +182,9 @@ Run under a coding agent, each prints its preview with a confirm token and
 the command that confirms exactly that change (`--confirm <token>`, the same token the MCP
 tool returns). A bare `--confirm` changes nothing: it shows the preview and
 exits 5, and `activate --make-default --confirm` refuses before it activates.
+A confirm line printed before its preview exists (`activate`'s default route,
+the stop command of a running loop, a hint) names the token it needs:
+`--confirm <confirm_token of its preview>`.
 A token of another change exits 4. In your own terminal the plain flag
 confirms, as before; a token given there is checked too.
 

@@ -156,6 +156,14 @@ descriptions spell their arguments the same way (`make_default`, not
 solution's slug and name) and then `pull` for a solution that is not on the
 instance yet, since it creates none.
 
+The fixed texts say it the same way: the hints of `explain` (its `hint`,
+`cli_fix` and `kit_hint`) and of a refusal, the hints of `validate`'s
+findings, a test-case status's next step, the trace's knowledge outcomes and
+these server instructions name `trace {"run":"<test-run-id>"}` where the
+terminal reads `cavelon trace <test-run-id>`, and a tool without arguments by
+its name alone (`status`). A command an instance's error
+catalog names that the kit does not have stays as the catalog wrote it.
+
 ### What is not a tool
 
 - **`login` and `logout`**: a person runs them.

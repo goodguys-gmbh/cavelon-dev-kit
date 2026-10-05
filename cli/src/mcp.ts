@@ -6,7 +6,7 @@ import { createContext, withWarnings } from "./context.js";
 import { asCavelonError, CavelonError, ExitCode, usageError } from "./errors.js";
 import type { Io } from "./io.js";
 import { closest } from "./package-references.js";
-import { printingFor } from "./printed.js";
+import { printingFor, spoken, spokenError, spokenHints } from "./printed.js";
 import { startSessionUpdateCheck, type SessionUpdateOptions } from "./update-check.js";
 import { KIT_VERSION } from "./version.js";
 
@@ -44,7 +44,7 @@ const INSTRUCTIONS =
   "(x-cavelon-person-only; its reason is in the error), or on an instance that marks none, one that changes a secret, " +
   "creates or revokes a credential (tokens, API keys, sign-in) or decides an approval; it also refuses a body that sets a field " +
   "the instance marks as a secret value (x-cavelon-secret): leave the field out and let a person enter the value. " +
-  "`cavelon api` run from your shell applies the same guards, and sends a changing operation only with --confirm and the token " +
+  "Run from your shell, cavelon's api command applies the same guards, and sends a changing operation only with --confirm and the token " +
   "its preview printed. Tools read and write files only " +
   "inside the solution folder (the folder of cavelon.yaml, or the one the server started in), never in cavelon's own " +
   "config or cache directory. Read limits before planning a solution: it lists what the " +
@@ -58,6 +58,11 @@ const INSTRUCTIONS =
   "and api_list/api_describe/api for anything without its own tool. " +
   "The first result of a session may carry a warning that cavelon, the Cavelon plugin or this folder's skills are behind " +
   "the latest release, with the commands that update them: pass it on to the person, who runs them; do not run them yourself.";
+
+/** The instructions with each command they name in backticks as the tool call; a person's command (login, secrets set) stays. */
+export function mcpInstructions(commands: readonly CommandSpec[]): string {
+  return printingFor({ mode: "mcp", commands }, () => spoken(INSTRUCTIONS));
+}
 
 type JsonSchema = Record<string, unknown>;
 
@@ -207,7 +212,7 @@ function mcpIo(io: Io): Io {
 export function createMcpServer(io: Io, commands: CommandSpec[], updates: SessionUpdateOptions = {}): Server {
   const tools = commands.filter((c) => c.mcpTool);
   const byName = new Map(tools.map((c) => [toolName(c)!, c]));
-  const server = new Server({ name: "cavelon", version: KIT_VERSION }, { capabilities: { tools: {} }, instructions: INSTRUCTIONS });
+  const server = new Server({ name: "cavelon", version: KIT_VERSION }, { capabilities: { tools: {} }, instructions: mcpInstructions(commands) });
   const notice = startSessionUpdateCheck(io, updates);
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: tools.map((t) => toolFor(t, commands)) }));
@@ -233,10 +238,18 @@ export function createMcpServer(io: Io, commands: CommandSpec[], updates: Sessio
     const ctx = createContext(mcpIo(io), { json: true, tenant, solutionEnv }, "mcp");
     for (const message of renamed) ctx.warn(message);
     try {
-      const result = await printingFor({ mode: "mcp", commands, ...(spec.storesTarget ? {} : { tenant, env: solutionEnv }) }, () => spec.run(ctx, inputFrom(spec, args)));
+      // The answer's hints, warnings and a refusal's hint name tool calls, as the commands it prints do.
+      const { result, warnings } = await printingFor({ mode: "mcp", commands, ...(spec.storesTarget ? {} : { tenant, env: solutionEnv }) }, async () => {
+        try {
+          const done = await spec.run(ctx, inputFrom(spec, args));
+          return { result: { ...done, data: spokenHints(done.data) }, warnings: ctx.warnings.map(spoken) };
+        } catch (error) {
+          throw spokenError(error);
+        }
+      });
       let data = result.data;
       if (data && typeof data === "object" && !Array.isArray(data)) {
-        data = ctx.warnings.length ? withWarnings(data as Record<string, unknown>, ctx.warnings) : { ...(data as Record<string, unknown>) };
+        data = warnings.length ? withWarnings(data as Record<string, unknown>, warnings) : { ...(data as Record<string, unknown>) };
         if (result.exitCode) (data as Record<string, unknown>).exit_code = result.exitCode;
       }
       return { body: data ?? null };

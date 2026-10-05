@@ -249,7 +249,9 @@ print their preview with a confirm token and the command that confirms it
 (`… --confirm <token>`). Show the preview, then run exactly that command. A
 bare `--confirm`, as the docs show it for a person's terminal, changes nothing
 from your shell and exits 5; a token of another change exits 4 with the new
-preview.
+preview. A line printed before its preview exists ends in
+`--confirm <confirm_token of its preview>`: run the command without
+`--confirm` first for the preview and its token.
 
 **`cavelon api` from your shell has the guards of the MCP `api` tool**, since
 `cavelon` sees that a coding agent runs it (`CLAUDECODE`, `CODEX_THREAD_ID`, `CODEX_SANDBOX`,

@@ -58,6 +58,18 @@ CLI, the skills and the plugin.
   `include_tenant_wide`, `replace`) and other tools by name, and `init`'s
   `harness` no longer says the tool creates a missing solution (#120). The
   CLI's help and text output keep the CLI's spelling.
+- Over MCP, the fixed hint texts name tool calls too, through the same
+  builder as the printed commands: the kit's error catalog and code hints
+  (`explain`'s `hint`, `cli_fix` and `kit_hint`, a refusal's `hint`),
+  `validate`'s finding hints, a test-case status's next step, the trace's
+  knowledge-outcome hints and the MCP server's instructions. A tool without
+  arguments is named alone (`status`); a person's command (`login`,
+  `secrets set`) stays a command line. In a terminal these hints keep the
+  `--tenant`, `--env` and `--instance` the command was given (#126).
+- Run by a coding agent, a confirm line printed before its preview exists
+  (`activate`'s default route, a running loop's stop command, a hint) ends in
+  `--confirm <confirm_token of its preview>` instead of a bare `--confirm` its
+  shell refuses; a seed's resume line carries the token it confirmed with (#126).
 - `init` from a terminal that creates the draft names `pull` before
   `validate`, since a new draft's own manifest comes from its export.
 - A change in a long field (an agent's `system_prompt`) shows where the two
