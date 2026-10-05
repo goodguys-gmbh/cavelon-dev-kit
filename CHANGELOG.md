@@ -7,6 +7,13 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+## [0.1.10] - 2026-10-05
+
+Fixes from an agent test against a live instance: every command `cavelon`
+prints keeps the `--tenant` and `--env` it was given, and over MCP a next step
+is the tool call rather than a CLI command. `init` writes a manifest,
+a Builder is told who sets a secret, and previews show what actually changes.
+
 ### Added
 
 - `cavelon init` writes a minimal `package/manifest.yaml` (the package format
