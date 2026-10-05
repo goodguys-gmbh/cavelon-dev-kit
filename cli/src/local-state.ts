@@ -155,6 +155,41 @@ export async function deletePreview(root: string, previewId: string): Promise<vo
   await fs.rm(previewFile(root, previewId), { force: true });
 }
 
+/** Why a preview can no longer be confirmed. */
+export type RetiredReason = "applied" | "superseded" | "discarded" | "expired" | "stale";
+
+/** A preview whose file is gone, kept so that a later confirm says why instead of "no open preview". */
+export interface RetiredPreview {
+  preview_id: string;
+  reason: RetiredReason;
+  at: string;
+  /** For superseded: the preview whose import made this one stale. */
+  by?: string;
+}
+
+const RETIRED_PREVIEWS = "retired-previews.json";
+/** Enough for the previews a session leaves behind; the oldest go first. */
+const RETIRED_KEPT = 200;
+
+async function readRetired(root: string): Promise<RetiredPreview[]> {
+  const stored = await readJsonFile<RetiredPreview[]>(path.join(stateDir(root), RETIRED_PREVIEWS));
+  return Array.isArray(stored) ? stored.filter((r) => typeof r?.preview_id === "string") : [];
+}
+
+/** Remove previews and remember why each went. */
+export async function retirePreviews(root: string, retired: RetiredPreview[]): Promise<void> {
+  if (!retired.length) return;
+  for (const r of retired) await deletePreview(root, r.preview_id);
+  const ids = new Set(retired.map((r) => r.preview_id));
+  const kept = (await readRetired(root)).filter((r) => !ids.has(r.preview_id));
+  await writeState(root, RETIRED_PREVIEWS, JSON.stringify([...kept, ...retired].slice(-RETIRED_KEPT), null, 2));
+}
+
+/** Why a preview that is no longer stored went; undefined for an id this folder never stored, or one retired long ago. */
+export async function retiredPreview(root: string, previewId: string): Promise<RetiredPreview | undefined> {
+  return (await readRetired(root)).find((r) => r.preview_id === previewId);
+}
+
 /**
  * How long the kit keeps a preview confirmable. The instance publishes no
  * lifetime for its previews; a day bounds how old a preview a later agent

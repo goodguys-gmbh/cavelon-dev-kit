@@ -15,7 +15,6 @@ import { harnessNotFoundError, lookupHarness, SLUG } from "../harness-ref.js";
 import { defaultChangeLine, defaultCommands, named, readDefaultRoute, setDefaultRoute } from "../default-route.js";
 import { ceilingHint, LIMIT_ABOVE_CEILING, parseLimits, readLimits, type PublishedLimits } from "../limits.js";
 import {
-  deletePreview,
   digest,
   fileDigest,
   fileDigests,
@@ -25,11 +24,14 @@ import {
   readItemFiles,
   readPulledFiles,
   rememberAppliedFiles,
+  retiredPreview,
+  retirePreviews,
   savePreview,
   writePulledFiles,
   writeState,
   type ImportRequest,
   type PullRecord,
+  type RetiredPreview,
   type StoredPreview,
 } from "../local-state.js";
 import { catalogEntry, checkPackage, KIT_CODES, packageVersionOf } from "../package-check.js";
@@ -632,6 +634,17 @@ interface PreviewContext {
   harness?: string;
 }
 
+/**
+ * A preview that would change nothing: its summary counts nothing to create,
+ * update or delete, and it lists no field change. An instance whose preview
+ * publishes no summary is taken to change something.
+ */
+function changesNothing(p: Preview): boolean {
+  const s = p.summary;
+  if (!s || typeof s !== "object") return false;
+  return !counts(s.creates) && !counts(s.updates) && !counts(s.deletes) && fieldChanges(p.changes).length === 0;
+}
+
 export function previewText(p: Preview, flags = "", context: PreviewContext = {}): string {
   const lines: Array<[string, unknown]> = [["ready", p.ready ? "yes" : "no"]];
   const s = p.summary ?? {};
@@ -696,12 +709,63 @@ function previewUnknown(previewId: string): CavelonError {
   });
 }
 
+/** The instance's code for an import whose target changed since its preview (in its error catalog). */
+const PREVIEW_STALE = "import_preview_stale";
+
+/**
+ * A confirm of a preview this folder no longer holds, saying why it went: a
+ * stale preview (exit 4), as the confirm of one still stored but stale is.
+ */
+function previewRetired(retired: RetiredPreview, again: string): CavelonError {
+  const id = retired.preview_id;
+  const fresh = `Run \`${again}\` for a new preview, show it, and confirm its id.`;
+  const details = { preview_id: id, reason: retired.reason, at: retired.at, ...(retired.by ? { superseded_by: retired.by } : {}) };
+  switch (retired.reason) {
+    case "applied":
+      return new CavelonError(ExitCode.conflict, {
+        code: "preview_applied",
+        message: `Preview ${id} was imported already (${retired.at}); nothing was imported again.`,
+        hint: `To import the files as they are now: ${fresh}`,
+        details,
+      });
+    case "superseded":
+      return new CavelonError(ExitCode.conflict, {
+        code: "preview_superseded",
+        message: `Preview ${id} was superseded: preview ${retired.by ?? "another one"} was imported after it (${retired.at}), so what it showed is no longer what an import would do; nothing was imported.`,
+        hint: fresh,
+        details,
+      });
+    case "discarded":
+      return new CavelonError(ExitCode.conflict, {
+        code: "preview_discarded",
+        message: `Preview ${id} was discarded (${retired.at}); nothing was imported.`,
+        hint: fresh,
+        details,
+      });
+    case "expired":
+      return new CavelonError(ExitCode.conflict, {
+        code: "preview_expired",
+        message: `Preview ${id} expired and was removed (${retired.at}); nothing was imported.`,
+        hint: fresh,
+        details,
+      });
+    case "stale":
+      return new CavelonError(ExitCode.conflict, {
+        code: PREVIEW_STALE,
+        message: `Preview ${id} was refused earlier because its target changed since (${retired.at}); nothing was imported.`,
+        hint: fresh,
+        details,
+      });
+  }
+}
+
 /** `apply --discard <id|all>`: forget stored previews, so no later agent confirms one nobody looks at any more. */
 async function discardPreviews(ctx: Context, project: ProjectConfig, which: string) {
   const open = await listPreviews(project.root, ctx.io.now());
   const chosen = which === "all" ? open : open.filter((p) => p.preview_id === which);
   if (which !== "all" && chosen.length === 0) throw previewUnknown(which);
-  for (const p of chosen) await deletePreview(project.root, p.preview_id);
+  const at = ctx.io.now().toISOString();
+  await retirePreviews(project.root, chosen.map((p) => ({ preview_id: p.preview_id, reason: "discarded" as const, at })));
   const ids = chosen.map((p) => p.preview_id);
   return {
     data: { discarded: ids, count: ids.length },
@@ -761,11 +825,16 @@ async function instanceHolds(ctx: Context, project: ProjectConfig, stored: Store
 
 async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: string, allowStale: boolean) {
   const stored = await loadPreview(project.root, previewId);
-  if (!stored) throw previewUnknown(previewId);
   const session = await ctx.session();
+  if (!stored) {
+    const retired = await retiredPreview(project.root, previewId);
+    throw retired ? previewRetired(retired, `${cavelonCommand("apply")}${targetFlags(session)}`) : previewUnknown(previewId);
+  }
+  const now = ctx.io.now().toISOString();
+  const retire = (reason: RetiredPreview["reason"]) => retirePreviews(project.root, [{ preview_id: stored.preview_id, reason, at: now }]);
   const expiry = previewExpiry(stored.created_at, ctx.io.now());
   if (expiry.expired) {
-    await deletePreview(project.root, stored.preview_id);
+    await retire("expired");
     throw new CavelonError(ExitCode.conflict, {
       code: "preview_expired",
       message: `Preview ${previewId} was made at ${stored.created_at} and expired${expiry.expires_at ? ` at ${expiry.expires_at}` : ""}; nothing was imported.`,
@@ -813,7 +882,11 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
       timeoutMs: 300_000,
     });
     // Every other open preview was made against the state this import changed.
-    for (const other of await listPreviews(project.root, ctx.io.now())) await deletePreview(project.root, other.preview_id);
+    const others = (await listPreviews(project.root, ctx.io.now())).filter((p) => p.preview_id !== stored.preview_id);
+    await retirePreviews(project.root, [
+      { preview_id: stored.preview_id, reason: "applied", at: now },
+      ...others.map((p) => ({ preview_id: p.preview_id, reason: "superseded" as const, at: now, by: stored.preview_id })),
+    ]);
     await rememberImported(ctx, project, stored, disk, changed);
     const summary = (result.summary ?? {}) as Preview["summary"];
     const flags = targetFlags(session, stored.env ?? session.envFile?.name);
@@ -832,13 +905,13 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
     return { data, text };
   } catch (error) {
     if (error instanceof CavelonError && error.code === REQUIREMENTS_CHANGED && (error.blockers?.length || error.blockerDetails?.length)) {
-      await deletePreview(project.root, stored.preview_id);
+      await retire("stale");
       throw requirementsChanged(error, stored, session, await catalogFor(ctx, false), disk);
     }
     // A refused import with structured blockers: each with its package file and line, as a preview shows them.
     if (error instanceof CavelonError && error.blockerDetails?.length) throw withBlockersLocated(error, disk, stored, session);
     if (error instanceof CavelonError && (error.code === "import_preview_stale" || (error.status === 409 && /preview/i.test(error.message)))) {
-      await deletePreview(project.root, stored.preview_id);
+      await retire("stale");
       throw new CavelonError(ExitCode.conflict, {
         code: error.code === "conflict" ? "import_preview_stale" : error.code,
         status: 409,
@@ -916,7 +989,8 @@ async function applyTarget(
   if (found) return found;
   if (!source || source === "option" || isUuid(ref) || !SLUG.test(ref)) throw harnessNotFoundError(ref, candidates, source);
   const name = packageHarnessName(pkg, ref) ?? ref;
-  const create = cavelonCommand("harness", "new", ref, ...(name !== ref ? ["--name", name] : []));
+  // In the tenant the preview was for: a --tenant given here goes into the command, or the draft lands in another one.
+  const create = `${cavelonCommand("harness", "new", ref, ...(name !== ref ? ["--name", name] : []))}${targetFlags(session, null)}`;
   throw new CavelonError(ExitCode.failure, {
     code: "solution_not_found",
     message: `Solution ${ref}, which ${source} names, is not on the instance yet; apply previews into an existing solution and creates none.`,
@@ -1051,6 +1125,20 @@ export const apply: CommandSpec = {
         exitCode: ExitCode.validation,
       };
     }
+    // Nothing to confirm: no preview is stored, so no later agent finds one to import.
+    if (changesNothing(preview)) {
+      data.nothing_to_import = true;
+      delete data.preview_id;
+      return {
+        data,
+        text: [
+          `Preview of ${project.layout.package}/ for ${harness ? `solution ${harness.slug}${harness.status ? ` (${harness.status})` : ""}` : "the tenant"}${envFile ? ` [env ${envFile.name}]` : ""}:`,
+          previewText(preview, flags, context),
+          "",
+          "Nothing to import: the instance already holds what the package files say. No preview was stored.",
+        ].join("\n"),
+      };
+    }
     if (!preview.preview_id) {
       ctx.warn("This instance's preview returns no preview id, so `apply --confirm` cannot import exactly it; update the instance.");
     }
@@ -1069,7 +1157,9 @@ export const apply: CommandSpec = {
       };
       await savePreview(project.root, stored);
       // An expired preview can no longer be confirmed; it would only pile up for a later agent to find.
-      for (const old of await listPreviews(project.root, ctx.io.now())) if (old.expired) await deletePreview(project.root, old.preview_id);
+      const at = ctx.io.now().toISOString();
+      const expired = (await listPreviews(project.root, ctx.io.now())).filter((old) => old.expired);
+      await retirePreviews(project.root, expired.map((old) => ({ preview_id: old.preview_id, reason: "expired" as const, at })));
     }
     const reason = personReason(preview, harness, mode, envFile?.name);
     data.show_to_person = Boolean(reason);

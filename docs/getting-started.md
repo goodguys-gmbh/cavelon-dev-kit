@@ -111,7 +111,7 @@ cavelon whoami
 instance:     https://cavelon.example.com (login)
 acting as:    Ada Lovelace <ada@example.com>
 tenant:       Acme Support (acme-support, 4f6174cf-3060-4ff1-bd3c-8a8e7999256b)
-tenant from:  use
+tenant from:  `cavelon use`, for every folder without a cavelon.yaml (--tenant chooses another for one command)
 role:         tenant_admin
 credential:   personal access token "laptop" from login (credential store)
 expires:      2026-12-02T15:40:26.342Z (in 60 days)
@@ -164,6 +164,15 @@ that already exists, `init` writes its slug, and `cavelon pull` brings it into
 `package/`. As your coding agent's MCP tool, `init` never creates a solution:
 it names the `cavelon harness new` command that does, for you to run or
 approve.
+
+For a solution that exists already, `init` ends with the step that brings it
+into the folder:
+
+```text
+Next:
+  Bring the solution into package/: cavelon pull
+  Catch an invalid package before each commit: cavelon init --hook
+```
 
 `cavelon.yaml` names the instance, the tenant and the solution (a *harness* in
 Cavelon's API) by their slugs, with a comment that names the tenant, never a
@@ -288,7 +297,7 @@ publishes, and caches the schema, so later runs work offline
 
 ```text
 error package_schema_invalid  package/agents.yaml:4 agents[0].temperature: must be number
-1 errors, 0 warnings. `cavelon explain <code>` says more.
+1 error, 0 warnings. `cavelon explain <code>` says more.
 ```
 
 `validate` also checks what the schema cannot: two entries with one slug, a
@@ -309,7 +318,9 @@ closest ones.
 When you write package files by hand, `cavelon fmt` brings them into the form
 the instance's export gives them (field order, the defaults it fills in, and
 the written order of test cases), so the first `cavelon pull` after an apply
-shows only what changed on the instance.
+shows only what changed on the instance. Like `pull`, it keeps no comments: it
+names each file whose comments it drops, so keep notes you need (such as the
+explanations in the example files) elsewhere, or commit the files first.
 
 ## 6. Preview, then apply
 
@@ -328,8 +339,8 @@ warnings:
   - Knowledge bases are matched by name … "Support FAQ" …
   - … "Support FAQ" … imported as config only …
 
-preview id: pv_55ed52186395560a11ad7e525a2b9553
-Import exactly this: cavelon apply --confirm pv_55ed52186395560a11ad7e525a2b9553 --env test
+preview id: pv1_55ed52186395560a11ad7e525a2b9553
+Import exactly this: cavelon apply --confirm pv1_55ed52186395560a11ad7e525a2b9553 --env test
 ```
 
 The preview lists what the import would create, change and delete, which
@@ -356,11 +367,11 @@ hint: Create it as a draft: cavelon harness new support-faq --name 'Support FAQ'
 Read the preview, then confirm exactly that preview:
 
 ```bash
-cavelon apply --env test --confirm pv_55ed52186395560a11ad7e525a2b9553
+cavelon apply --env test --confirm pv1_55ed52186395560a11ad7e525a2b9553
 ```
 
 ```text
-applied: preview pv_55ed52186395560a11ad7e525a2b9553 to support-faq (env test)
+applied: preview pv1_55ed52186395560a11ad7e525a2b9553 to support-faq (env test)
 created: 1 agents, 1 knowledge_bases, 1 skills, 1 test_suites
 ```
 
@@ -377,9 +388,9 @@ cavelon kb upload seeds/faq --kb "Support FAQ" --wait
 
 ```text
 Uploaded 3 files.
-op_document_ingestion_3db2fad227b346a6a81a63d7e619edc3  document_ingestion  succeeded  phase succeeded  1/1
-op_document_ingestion_587709377db846d7ac299add39f815fc  document_ingestion  succeeded  phase succeeded  1/1
-op_document_ingestion_bc92267fb1f04e11adbbae5b83ae1cac  document_ingestion  succeeded  phase succeeded  1/1
+op_document_ingestion_3db2fad227b346a6a81a63d7e619edc3  document_ingestion  succeeded  phase ready  1/1
+op_document_ingestion_587709377db846d7ac299add39f815fc  document_ingestion  succeeded  phase ready  1/1
+op_document_ingestion_bc92267fb1f04e11adbbae5b83ae1cac  document_ingestion  succeeded  phase ready  1/1
 ```
 
 Each document is ingested on the instance as an *operation*. `--wait` follows
@@ -395,15 +406,15 @@ cavelon test run --suite Smoke --wait --timeout 5m
 ```
 
 ```text
-op_test_run_82f8a0a73ef74dc29e24b89e3e7d5303  test_run  succeeded  phase succeeded  1/1
+op_test_run_82f8a0a73ef74dc29e24b89e3e7d5303  test_run  succeeded  phase completed  1/1
 
-Smoke: completed  passed 4  failed 0  pass_rate 1
+Smoke: completed  passed 4  failed 0  errors 0  pass_rate 1
 ```
 
 When a case does not pass, the command exits 1 and names it:
 
 ```text
-op_test_run_82f8a0a73ef74dc29e24b89e3e7d5303  test_run  succeeded  phase succeeded  1/1
+op_test_run_82f8a0a73ef74dc29e24b89e3e7d5303  test_run  succeeded  phase completed  1/1
   test run 82f8a0a7-3ef7-4dc2-9e24-b89e3e7d5303 (Smoke) finished, but cases did not pass: 1 failed
     Not in the FAQ (step 1)  fail: The answer contains a poem.
   Look closer: cavelon trace 82f8a0a7-3ef7-4dc2-9e24-b89e3e7d5303
@@ -478,16 +489,22 @@ cavelon activate
 ```text
 Activated Support FAQ (support-faq); status active.
 Readiness checks:
-  complete  A passing test run: Smoke passed.
-  warning   Description and outcome: The outcome is undefined.
-Warnings:
-  - Description and outcome: The outcome is undefined.
+  ready  Outcome defined: …
+  ready  Solution setup is confirmed: …
+  ready  Runtime has an active agent: …
+  ready  A start path is defined: …
+  ready  Graph check passes: No blocking graph errors; 0 warnings.
+  ready  Expected behavior is tested: …
+  ready  Every agent has a model this tenant carries: All agents resolve to an active registry entry.
+  ready  Tenant values are filled in: Every variable the prompts reference has a value.
 ```
 
-`activate` reads the solution's readiness first and activates only when it
-passes; it never forces. It prints each check with its result and every
-warning; a warning does not block activation (`--json`: `checks` and
-`warnings`). A solution that is not ready exits 3 and lists its
+The checks, their names and their texts are the instance's own; `…` stands
+for a text that depends on your solution. `activate` reads the solution's
+readiness first and activates only when it passes; it never forces. It prints
+each check with its state (`ready`, or `action_required` for one that blocks)
+and every warning under `Warnings:`; a warning does not block activation
+(`--json`: `checks` and `warnings`). A solution that is not ready exits 3 and lists its
 blockers. A token without **May activate** is refused before anything is sent
 (exit 7): a person then activates in the Admin, or creates a token that may.
 

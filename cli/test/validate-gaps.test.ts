@@ -213,6 +213,18 @@ describe("the solution's slug", () => {
     expect((await cli(sb, ["explain", "solution_slug_mismatch", "--json"], { cwd: dir })).json()).toMatchObject({ code: "solution_slug_mismatch", kind: "kit" });
   });
 
+  it("with harnesses in the package, warns when a test suite's harness_slug names another solution", async () => {
+    const dir = await pulled();
+    writeFileSync(path.join(dir, "tests", "routing.yaml"), suite("          - States the price.\n").replace("harness_slug: support", "harness_slug: support-copy"));
+    const mismatch = (await cli(sb, ["validate", "--offline", "--json"], { cwd: dir })).json<Validated>().findings.filter((f) => f.code === "solution_slug_mismatch");
+    expect(mismatch.map((f) => [f.file, f.path, f.line])).toEqual([["tests/routing.yaml", "test_suites[1].harness_slug", 2]]);
+    expect(mismatch[0]!.message).toMatch(/^1 of the test_suites names the solution "support-copy" in harness_slug, and cavelon\.yaml names "support": set harness_slug to "support"\.$/);
+    // A suite of the solution cavelon.yaml names is fine.
+    writeFileSync(path.join(dir, "tests", "routing.yaml"), suite("          - States the price.\n"));
+    const fine = (await cli(sb, ["validate", "--offline", "--json"], { cwd: dir })).json<Validated>().findings;
+    expect(fine.filter((f) => f.code === "solution_slug_mismatch")).toEqual([]);
+  });
+
   it("without harnesses in the package, warns once per section whose harness_slug names another solution", async () => {
     const dir = await pulled();
     rmSync(path.join(dir, "package", "harnesses.yaml"));
@@ -222,5 +234,18 @@ describe("the solution's slug", () => {
     const mismatch = (await cli(sb, ["validate", "--offline", "--json"], { cwd: dir })).json<Validated>().findings.filter((f) => f.code === "solution_slug_mismatch");
     expect(mismatch.map((f) => f.path)).toEqual(["agents[0].harness_slug"]);
     expect(mismatch[0]!.message).toMatch(/^1 of the agents names the solution "support-faq" in harness_slug, and cavelon\.yaml names "support"/);
+  });
+});
+
+describe("a YAML syntax error", () => {
+  it("is reported where an unclosed quote starts, not at the end of the file", async () => {
+    const dir = await pulled();
+    const file = path.join(dir, "package", "skills.yaml");
+    writeFileSync(file, '- slug: faq\n  description: "Answers questions\n  instructions: Look it up.\n- slug: other\n  description: Other\n  instructions: More.\n');
+    const result = await cli(sb, ["validate", "--offline", "--json"], { cwd: dir });
+    expect(result.code).toBe(3);
+    const invalid = result.json<Validated>().findings.find((f) => f.code === "package_file_invalid")!;
+    expect(invalid).toMatchObject({ file: "package/skills.yaml", line: 2 });
+    expect(invalid.message).toMatch(/^Not valid YAML: Missing closing "quote/);
   });
 });

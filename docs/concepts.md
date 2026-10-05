@@ -204,7 +204,7 @@ Changing a solution always takes two steps:
    **preview**: what would be created, changed and deleted, which active
    solutions it reaches, and what the target still needs (secrets, variables,
    OAuth grants, runtime bindings, trigger identities). Nothing changes. The
-   preview gets an id (`pv_…`), and the exact request is stored in
+   preview gets an id (such as `pv1_…`), and the exact request is stored in
    `.cavelon/previews/`.
 2. **`cavelon apply --confirm <id>`** imports exactly that preview.
 
@@ -222,7 +222,14 @@ A confirm imports nothing and exits 4 when the preview is **stale**:
   in formatting or comments (`preview_files_changed`, naming the files). Preview
   again; or, to import what the old preview showed anyway, add
   `--allow-stale` to the confirm;
-- the preview is more than a day old (`preview_expired`).
+- the preview is more than a day old (`preview_expired`);
+- another preview was imported after it (`preview_superseded`), it was
+  imported already (`preview_applied`), or it was discarded
+  (`preview_discarded`). The kit remembers why each preview went, so the
+  confirm says which.
+
+A preview that changes nothing says "Nothing to import" and is not stored, so
+there is nothing to confirm.
 
 If the import's own check finds something the preview did not, it refuses with
 its blockers (`package_requirements_changed`, exit 4).

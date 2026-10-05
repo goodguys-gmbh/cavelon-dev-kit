@@ -386,6 +386,9 @@ describe("docs", () => {
       ["how do I upload documents to a knowledge base", "concepts/knowledge-bases"],
       ["how do I test my agent", "concepts/regression-testing"],
       ["triggers", "concepts/triggers"],
+      // The agent graph's pages say "agent graph" in their titles; a handoff is one of its edges.
+      ["handoff", "concepts/agent-graph"],
+      ["handoffs", "concepts/agent-graph"],
     ] as const) {
       const found = await first(question);
       expect(found.items[0]?.page, question).toBe(page);
@@ -409,8 +412,11 @@ describe("docs", () => {
     expect(result.code).toBe(0);
     const data = result.json<{ items: unknown[]; total: number; hint: string }>();
     expect(data).toMatchObject({ items: [], total: 0 });
-    expect(data.hint).toMatch(/^No page matches "Quarkstrudel" \(looked for: quarkstrudel\)\. The docs are in English: try English words/);
+    // An English-looking word gets no advice to use English.
+    expect(data.hint).toMatch(/^No page matches "Quarkstrudel" \(looked for: quarkstrudel\)\. No page's title or summary uses them: try another word/);
     expect(data.hint).toContain("cavelon docs get index");
+    const german = (await cli(sb, ["docs", "search", "wie", "geht", "Quarkstrudel", "--json"])).json<{ hint: string }>();
+    expect(german.hint).toMatch(/The docs are in English: try English words/);
     const text = await cli(sb, ["docs", "search", "Wie", "ist", "das?"]);
     expect(text.stdout).toMatch(/No page matches "Wie ist das\?" \(it has only stop words\)/);
 

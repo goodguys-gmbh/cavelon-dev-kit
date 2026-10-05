@@ -1425,7 +1425,10 @@ describe("apply", () => {
     expect(one.code).toBe(0);
     expect(one.json()).toEqual({ discarded: [first.preview_id], count: 1 });
     expect(readdirSync(previews)).toEqual([`${second.preview_id}.json`]);
-    expect((await cli(sb, ["apply", "--confirm", first.preview_id, "--json"], { cwd: dir })).json<{ error: { code: string } }>().error.code).toBe("preview_unknown");
+    // A discarded preview's confirm says so, as a stale preview's does (exit 4).
+    const discarded = await cli(sb, ["apply", "--confirm", first.preview_id, "--json"], { cwd: dir });
+    expect(discarded.code).toBe(4);
+    expect(discarded.json<{ error: { code: string } }>().error.code).toBe("preview_discarded");
     expect((await cli(sb, ["apply", "--discard", first.preview_id], { cwd: dir })).code).toBe(2);
 
     const all = await cli(sb, ["apply", "--discard", "all"], { cwd: dir });
@@ -1453,6 +1456,47 @@ describe("apply", () => {
     expect(existsSync(path.join(dir, ".cavelon", "previews", `${preview.preview_id}.json`))).toBe(false);
   });
 
+  it("says a confirmed preview was imported, and one made before it superseded (exit 4), instead of not knowing them", async () => {
+    const dir = await pulled();
+    const first = (await cli(sb, ["apply", "--json"], { cwd: dir })).json<{ preview_id: string }>();
+    const second = (await cli(sb, ["apply", "--mode", "replace", "--json"], { cwd: dir })).json<{ preview_id: string }>();
+    expect((await cli(sb, ["apply", "--confirm", second.preview_id], { cwd: dir })).code).toBe(0);
+    const before = server.state.requests.length;
+
+    const superseded = await cli(sb, ["apply", "--confirm", first.preview_id, "--json"], { cwd: dir });
+    expect(superseded.code).toBe(4);
+    const error = superseded.json<{ error: { code: string; message: string; hint: string; details: Record<string, unknown> } }>().error;
+    expect(error).toMatchObject({ code: "preview_superseded", details: { preview_id: first.preview_id, reason: "superseded", superseded_by: second.preview_id } });
+    expect(error.message).toMatch(new RegExp(`^Preview ${first.preview_id} was superseded: preview ${second.preview_id} was imported after it`));
+    expect(error.hint).toMatch(/^Run `cavelon apply` for a new preview/);
+
+    const applied = await cli(sb, ["apply", "--confirm", second.preview_id, "--json"], { cwd: dir });
+    expect(applied.code).toBe(4);
+    expect(applied.json<{ error: { code: string } }>().error.code).toBe("preview_applied");
+    // An id this folder never stored is still a usage error.
+    expect((await cli(sb, ["apply", "--confirm", "pv1_unknown", "--json"], { cwd: dir })).code).toBe(2);
+    expect(server.state.requests.slice(before).filter((r) => r.method !== "GET")).toEqual([]);
+    expect((await cli(sb, ["explain", "preview_superseded", "--json"], { cwd: dir })).json()).toMatchObject({ code: "preview_superseded", kind: "cli" });
+  });
+
+  it("says there is nothing to import when the preview changes nothing, and stores no preview to confirm", async () => {
+    const dir = await pulled();
+    server.state.previewExtras = { summary: { creates: {}, updates: {}, deletes: {}, references: { agents: 1 }, warnings: 0, blockers: 0 } };
+    try {
+      const result = await cli(sb, ["apply"], { cwd: dir });
+      expect(result.code, result.stderr).toBe(0);
+      expect(result.stdout).toMatch(/^changes: +none$/m);
+      expect(result.stdout).toMatch(/Nothing to import: the instance already holds what the package files say\. No preview was stored\.$/m);
+      expect(result.stdout).not.toMatch(/--confirm|preview id/);
+      const json = (await cli(sb, ["apply", "--json"], { cwd: dir })).json<Record<string, unknown>>();
+      expect(json).toMatchObject({ previewed: true, nothing_to_import: true });
+      expect(json.preview_id).toBeUndefined();
+      expect(existsSync(path.join(dir, ".cavelon", "previews")) ? readdirSync(path.join(dir, ".cavelon", "previews")) : []).toEqual([]);
+    } finally {
+      server.state.previewExtras = {};
+    }
+  });
+
   it("never creates the solution an env file names: it names the command that does, and binds runtime requirements once it exists", async () => {
     const dir = await pulled();
     const binding = "8f2b7c1e-1111-4222-8333-444455556666";
@@ -1468,6 +1512,10 @@ describe("apply", () => {
     expect(error.hint).toBe("Create it as a draft: cavelon harness new support-test, then run `cavelon apply --env test` again.");
     expect(server.state.harnesses.find((h) => h.slug === "support-test")).toBeUndefined();
     expect(server.state.requests.filter((r) => r.method !== "GET")).toEqual([]);
+    // With --tenant, the command that creates the draft creates it in that tenant.
+    const other = await cli(sb, ["apply", "--env", "test", "--tenant", tenant, "--json"], { cwd: dir });
+    expect(other.code).toBe(1);
+    expect(other.json<{ error: { details: { create: string } } }>().error.details.create).toBe(`cavelon harness new support-test --tenant ${tenant}`);
 
     expect((await cli(sb, ["harness", "new", "support-test", "--name", "Support test"], { cwd: dir })).code).toBe(0);
     const previewed = await cli(sb, ["apply", "--env", "test", "--json"], { cwd: dir });

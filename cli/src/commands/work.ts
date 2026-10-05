@@ -120,7 +120,7 @@ function replaceSupport(doc: OpenApiDoc | undefined, op: Operation): ReplaceSupp
  * deactivates it after the upload.
  */
 type ReplacePlan = "stays_active" | "replaced_by_name" | "replace_by_id" | "deactivate";
-type ReplaceOutcome = "stays_active" | "replaced" | "replace_requested" | "deactivated" | "not_uploaded";
+type ReplaceOutcome = "stays_active" | "replaced" | "replace_requested" | "deactivated" | "not_uploaded" | "identical";
 
 interface NameMatch {
   /** The local file, relative to the working folder. */
@@ -668,11 +668,16 @@ export const kbUpload: CommandSpec = {
       }
     }
     settleMatches(matches, documents, uploadedFiles);
-    const operationIds = documents.map((d) => d.operation_id).filter((id): id is string => Boolean(id));
     const before = new Set((existing ?? []).map((d) => d.id));
     const outcomes = new Map(documents.map((d) => [d, uploadOutcomeOf(d, before)]));
     const deduplicated = documents.filter((d) => outcomes.get(d) === "deduplicated");
-    const created = documents.length - deduplicated.length;
+    // A deduplicated file is the active document it matched, and the same-named document is that one: nothing of it to replace.
+    const same = new Set(deduplicated.map((d) => d.id));
+    for (const m of matches) if (same.has(m.document_id)) m.outcome = "identical";
+    const fresh = documents.filter((d) => !deduplicated.includes(d));
+    // A deduplicated document answers with the operation that ingested it once; there is nothing new to wait for.
+    const operationIds = fresh.map((d) => d.operation_id).filter((id): id is string => Boolean(id));
+    const created = fresh.length;
     const summary = () => ({
       kb: { id: kb.id, name: kb.name ?? null },
       documents: documents.map((d) => ({
@@ -690,13 +695,13 @@ export const kbUpload: CommandSpec = {
       const note = staysActiveHint(matches, mode);
       return [
         ...deduplicated.map((d) => `${d.filename}: identical to the active document ${shortId(d.id)}; nothing new was created (deduplicated)`),
-        ...matches.filter((m) => !deduplicated.some((d) => d.filename === m.filename)).map(outcomeLine),
+        ...matches.filter((m) => m.outcome !== "identical").map(outcomeLine),
         ...(note ? [note] : []),
       ];
     };
     const uploadedText = (where: string) =>
       created ? `Uploaded ${fileCount(created)}${where}.` : `Nothing new uploaded${where}: the content of ${deduplicated.length === 1 ? "the file is" : "every file is"} already active.`;
-    if (operationIds.length < documents.length) ctx.warn("The instance returned no operation id for some documents; it may be older than the operations API.");
+    if (operationIds.length < fresh.length) ctx.warn("The instance returned no operation id for some documents; it may be older than the operations API.");
     if (failure) {
       const refused = await deactivate(ctx, kb.id, matches);
       if (refused) ctx.warn(`The old documents stay active: ${refused.message}`);

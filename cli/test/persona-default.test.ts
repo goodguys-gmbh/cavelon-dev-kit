@@ -372,12 +372,16 @@ describe("fmt", () => {
     writeFileSync(agents, "# by hand\n- {slug: helper, name: Helper, llm_model: gpt-4.1, llm_provider: openai, temperature: 0.2, parallel_tool_calls: false, system_prompt: Hi}\n");
     const check = await cli(sb, ["fmt", "--check", "--json"], { cwd: dir });
     expect(check.code).toBe(3);
-    expect(check.json<{ changed: string[] }>().changed).toEqual(["package/agents.yaml"]);
+    expect(check.json<{ changed: string[]; comments_dropped: unknown[] }>()).toMatchObject({ changed: ["package/agents.yaml"], comments_dropped: [{ file: "package/agents.yaml", comments: 1 }] });
+    expect((await cli(sb, ["fmt", "--check"], { cwd: dir })).stdout).toMatch(/^fmt would drop the comments of package\/agents\.yaml \(1\); keep notes you need elsewhere first\.$/m);
     expect(read(agents)).toMatch(/^# by hand/);
 
     const formatted = await cli(sb, ["fmt"], { cwd: dir });
     expect(formatted.code, formatted.stderr).toBe(0);
     expect(formatted.stdout).toMatch(/formatted {2}package\/agents\.yaml/);
+    // The comment is gone, and fmt says so; outside git it does not point at git diff.
+    expect(formatted.stderr).toMatch(/fmt dropped the comments of package\/agents\.yaml \(1\).*not in a git repository/);
+    expect(formatted.stdout).toMatch(/^Check it: cavelon validate\.$/m);
     const value = parse(read(agents)) as Array<Record<string, unknown>>;
     expect(value[0]).toMatchObject({ slug: "helper", is_entrypoint: false, is_active: true, display_order: 0, output_mode: "text", skip_persona: false });
     // Block lists, fields in the schema's order.

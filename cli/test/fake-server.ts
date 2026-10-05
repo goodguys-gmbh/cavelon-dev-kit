@@ -917,8 +917,8 @@ export async function startFakeServer(): Promise<FakeServer> {
       const docs = files.map((file, index) => {
         const same = state.uploadDedup ? before.find((d) => d.is_active && d.sha256 === hashes[index]) : undefined;
         if (same) {
-          // Identical content is already active: the instance answers with that document and creates none.
-          const view = { ...documentView(same.id, same.filename, same.size, null), status: "ready" };
+          // Identical content is already active: the instance answers with that document, and the operation that once ingested it, and creates none.
+          const view = { ...documentView(same.id, same.filename, same.size, opId("document_ingestion", same.id)), status: "ready" };
           return state.uploadOutcome ? { ...view, upload_outcome: "deduplicated" } : view;
         }
         const id = randomUUID();
