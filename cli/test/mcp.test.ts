@@ -1,13 +1,18 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { existsSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
+import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { bundledSkills, generatedCopy, SKILL_ROOTS } from "../src/agents.js";
 import { COMMANDS } from "../src/commands/index.js";
+import { detectInstall, type Install } from "../src/install.js";
 import type { InStream, Io } from "../src/io.js";
 import { createMcpServer } from "../src/mcp.js";
+import type { UpdateCheckOptions } from "../src/update-check.js";
+import { KIT_VERSION } from "../src/version.js";
 import { modelRow, startFakeServer, type FakeServer } from "./fake-server.js";
 import { cli, login, sandbox, type Sandbox } from "./helpers.js";
 
@@ -584,5 +589,245 @@ describe("cavelon mcp", () => {
 
   it("writes nothing to stdout itself (stdout belongs to the protocol)", () => {
     expect(stdout).toBe("");
+  });
+});
+
+describe("the update warning over MCP", () => {
+  const SCRIPT: Install = detectInstall({ executable: true, file: "/u/ada/.local/bin/cavelon", platform: "linux", env: { HOME: "/u/ada" }, exists: () => false });
+  const NPX: Install = detectInstall({ executable: false, file: "/u/ada/.npm/_npx/0123abcd/node_modules/@cavelon/cli", platform: "linux", env: {}, exists: () => false });
+  const UPDATE = "curl -fsSL https://github.com/goodguys-gmbh/cavelon-dev-kit/releases/latest/download/install.sh | sh";
+  const CLAUDE = "`claude plugin marketplace update cavelon-dev-kit` and `claude plugin update cavelon@cavelon-dev-kit`";
+  const CODEX = "`codex plugin marketplace upgrade cavelon-dev-kit` and `codex plugin add cavelon@cavelon-dev-kit`";
+  const RELEASES = "https://api.github.com/repos/goodguys-gmbh/cavelon-dev-kit/releases/latest";
+
+  interface SessionOptions {
+    install: Install;
+    env?: Record<string, string>;
+    fetch?: typeof fetch;
+    /** The latest release, looked up earlier today. */
+    cached?: string;
+    /** The client's name in MCP's initialize, as Claude Code and Codex send theirs. */
+    client?: string;
+    /** The kit version that wrote this folder's skills with `init --agents`. */
+    skills?: string;
+  }
+
+  /** An agent's session in a solution folder of its own, with a cache folder of its own. */
+  async function session(options: SessionOptions) {
+    const cache = mkdtempSync(path.join(os.tmpdir(), "cavelon-cache-"));
+    const folder = mkdtempSync(path.join(os.tmpdir(), "cavelon-solution-"));
+    if (options.cached) {
+      const state = { source: "github", checked_at: new Date(Date.now() - 60_000).toISOString(), latest: options.cached };
+      writeFileSync(path.join(cache, "update-check.json"), JSON.stringify(state));
+    }
+    if (options.skills) {
+      const [skill] = await bundledSkills();
+      const file = skill!.files.find((f) => f.path === "SKILL.md")!;
+      for (const root of SKILL_ROOTS) {
+        mkdirSync(path.join(folder, root, skill!.name), { recursive: true });
+        writeFileSync(path.join(folder, root, skill!.name, "SKILL.md"), generatedCopy(file).replace(`(cavelon ${KIT_VERSION})`, `(cavelon ${options.skills})`));
+      }
+    }
+    const calls: string[] = [];
+    const fetchImpl =
+      options.fetch ??
+      ((async (input: string | URL | Request) => {
+        calls.push(String(input));
+        return Response.json({ tag_name: "v99.0.0" });
+      }) as typeof fetch);
+    const io: Io = {
+      stdout: { write: () => true },
+      stderr: { write: () => true },
+      stdin: Readable.from([]) as unknown as InStream,
+      env: { ...sb.env, CAVELON_CACHE_DIR: cache, ...options.env },
+      cwd: folder,
+      now: () => new Date(),
+      sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+    };
+    const updates: UpdateCheckOptions = { install: options.install, fetch: fetchImpl };
+    const mcp = createMcpServer(io, COMMANDS, updates);
+    const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+    await mcp.connect(serverSide);
+    const agent = new Client({ name: options.client ?? "test", version: "0" });
+    await agent.connect(clientSide);
+    return {
+      calls,
+      whoami: async () => payload(await agent.callTool({ name: "whoami", arguments: {} })),
+      call: (name: string, args: Record<string, unknown>) => agent.callTool({ name, arguments: args }),
+      close: async () => {
+        await agent.close();
+        rmSync(cache, { recursive: true, force: true });
+        rmSync(folder, { recursive: true, force: true });
+      },
+    };
+  }
+
+  async function inSession<T>(options: SessionOptions, use: (s: Awaited<ReturnType<typeof session>>) => Promise<T>): Promise<T> {
+    const s = await session(options);
+    try {
+      return await use(s);
+    } finally {
+      await s.close();
+    }
+  }
+
+  const KIT = ["is out; this is", "The Cavelon plugin is", "cavelon init --agents"];
+  const updateWarnings = (result: Record<string, any>) => ((result.warnings ?? []) as string[]).filter((w) => KIT.some((k) => w.includes(k)));
+
+  /** The first result's one warning; the second result carries none. */
+  async function firstOnly(s: Awaited<ReturnType<typeof session>>): Promise<string> {
+    const first = await s.whoami();
+    expect(first.owner.email).toBe("ada@example.com");
+    const found = updateWarnings(first);
+    expect(found).toHaveLength(1);
+    expect(updateWarnings(await s.whoami())).toEqual([]);
+    return found[0]!;
+  }
+
+  it("adds one warning to the first tool result when a newer release is cached, naming this install's update command", async () => {
+    await inSession({ install: SCRIPT, cached: "99.0.0" }, async (s) => {
+      const warning = await firstOnly(s);
+      expect(warning).toContain(`cavelon 99.0.0 is out; this is ${KIT_VERSION}. Tell the user: Update cavelon with \`${UPDATE}\`.`);
+      expect(warning).toContain("Then start a new agent session.");
+      expect(warning).toContain("docs/installation.md#updating");
+      // An agent without the plugin hears nothing of it; the cached answer needed no request.
+      expect(warning).not.toContain("plugin");
+      expect(s.calls).toEqual([]);
+    });
+  });
+
+  it("names the plugin's update for Claude Code when the plugin does not say its version", async () => {
+    await inSession({ install: SCRIPT, cached: "99.0.0", client: "claude-code" }, async (s) => {
+      expect(await firstOnly(s)).toContain(`If they use the Cavelon plugin, also update it with ${CLAUDE}.`);
+    });
+  });
+
+  it("names an older plugin and its update for that client, even when cavelon runs through npx", async () => {
+    await inSession({ install: NPX, cached: "99.0.0", client: "codex-mcp-client", env: { CAVELON_PLUGIN_VERSION: "0.1.7" } }, async (s) => {
+      const warning = await firstOnly(s);
+      expect(warning).toBe(
+        "The Cavelon plugin is 0.1.7, older than cavelon 99.0.0. " +
+          `Tell the user: Update the plugin with ${CODEX}. Then start a new agent session. ` +
+          "More: https://github.com/goodguys-gmbh/cavelon-dev-kit/blob/main/docs/installation.md#updating",
+      );
+    });
+    // Nothing cached: the plugin's version is compared with the GitHub release.
+    await inSession({ install: NPX, env: { CAVELON_PLUGIN_VERSION: "0.1.7" } }, async (s) => {
+      expect(await firstOnly(s)).toContain(`Update the plugin: in Claude Code with ${CLAUDE}; in Codex with ${CODEX}.`);
+      expect(s.calls).toEqual([RELEASES]);
+    });
+  });
+
+  it("reads an installed plugin's version from its manifest when Claude Code names the plugin's folder", async () => {
+    // The plugin of this repository, as Claude Code installs it, from before its MCP entry said its version.
+    const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../plugin");
+    const manifest = JSON.parse(readFileSync(path.join(root, ".claude-plugin", "plugin.json"), "utf8")) as { version: string };
+    await inSession({ install: NPX, client: "claude-code", env: { CLAUDE_PLUGIN_ROOT: root } }, async (s) => {
+      const warning = await firstOnly(s);
+      expect(warning).toContain(`The Cavelon plugin is ${manifest.version}, older than cavelon 99.0.0. Tell the user: Update the plugin with ${CLAUDE}.`);
+      expect(s.calls).toEqual([RELEASES]);
+    });
+    // What the plugin's MCP entry says comes first.
+    await inSession({ install: NPX, cached: "99.0.0", client: "claude-code", env: { CLAUDE_PLUGIN_ROOT: root, CAVELON_PLUGIN_VERSION: "99.0.0" } }, async (s) => {
+      expect(updateWarnings(await s.whoami())).toEqual([]);
+    });
+  });
+
+  it.each([
+    ["another plugin's folder", { name: "other", version: "0.0.1" }],
+    ["a manifest without a version", { name: "cavelon" }],
+    ["a version that is not one", { name: "cavelon", version: "latest" }],
+    ["no manifest", undefined],
+  ])("guesses no plugin version from %s", async (_, manifest: Record<string, string> | undefined) => {
+    const root = mkdtempSync(path.join(os.tmpdir(), "cavelon-plugin-"));
+    try {
+      if (manifest) {
+        mkdirSync(path.join(root, ".claude-plugin"));
+        writeFileSync(path.join(root, ".claude-plugin", "plugin.json"), JSON.stringify(manifest));
+      }
+      await inSession({ install: NPX, cached: "99.0.0", client: "claude-code", env: { CLAUDE_PLUGIN_ROOT: root } }, async (s) => {
+        expect(updateWarnings(await s.whoami())).toEqual([]);
+        expect(s.calls).toEqual([]);
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("says nothing of a plugin at the latest release", async () => {
+    await inSession({ install: NPX, cached: "99.0.0", client: "claude-code", env: { CAVELON_PLUGIN_VERSION: "99.0.0" } }, async (s) => {
+      expect(updateWarnings(await s.whoami())).toEqual([]);
+    });
+  });
+
+  it("asks for cavelon init --update when this folder's skills are older than this cavelon", async () => {
+    await inSession({ install: NPX, skills: "0.1.0" }, async (s) => {
+      const warning = await firstOnly(s);
+      expect(warning).toContain("The skills `cavelon init --agents` wrote in this solution folder are from cavelon 0.1.0.");
+      expect(warning).toContain("Run `cavelon init --update` in it, and commit the result.");
+      // Nothing to look up for npx without the plugin.
+      expect(s.calls).toEqual([]);
+    });
+    await inSession({ install: NPX, skills: KIT_VERSION }, async (s) => {
+      expect(updateWarnings(await s.whoami())).toEqual([]);
+    });
+  });
+
+  it("says all of it in one warning", async () => {
+    await inSession({ install: SCRIPT, cached: "99.0.0", client: "claude-code", skills: "0.1.0", env: { CAVELON_PLUGIN_VERSION: "0.1.0" } }, async (s) => {
+      const warning = await firstOnly(s);
+      expect(warning).toContain(`cavelon 99.0.0 is out; this is ${KIT_VERSION}. The Cavelon plugin is 0.1.0. The skills`);
+      expect(warning).toContain(`Update cavelon with \`${UPDATE}\`. Update the plugin with ${CLAUDE}. Run \`cavelon init --update\` in it after updating cavelon`);
+    });
+  });
+
+  it("rides on a failed first call too, beside the error", async () => {
+    await inSession({ install: SCRIPT, cached: "99.0.0" }, async (s) => {
+      const failed = await s.call("whoami", { no_such_argument: true });
+      expect(failed.isError).toBe(true);
+      const body = payload(failed);
+      expect(body.error.code).toBe("unknown_argument");
+      expect(updateWarnings(body)).toHaveLength(1);
+      expect(updateWarnings(await s.whoami())).toEqual([]);
+    });
+  });
+
+  it("looks the release up when nothing is cached, and keeps it for a day", async () => {
+    await inSession({ install: SCRIPT }, async (s) => {
+      expect(await firstOnly(s)).toContain("cavelon 99.0.0 is out");
+      expect(s.calls).toEqual([RELEASES]);
+    });
+  });
+
+  it.each([
+    ["CAVELON_NO_UPDATE_CHECK=1", { env: { CAVELON_NO_UPDATE_CHECK: "1", CAVELON_PLUGIN_VERSION: "0.1.0" }, install: SCRIPT }],
+    ["CI", { env: { CI: "true", CAVELON_PLUGIN_VERSION: "0.1.0" }, install: SCRIPT }],
+    ["npx, which already runs the newest release", { install: NPX }],
+    ["a build from a clone", { install: detectInstall({ executable: false, file: "/work/cavelon-dev-kit/cli", platform: "linux", env: {}, exists: () => false }), env: { CAVELON_PLUGIN_VERSION: "0.1.0" } }],
+  ])("says nothing with %s, and looks nothing up", async (_, options: { env?: Record<string, string>; install: Install }) => {
+    await inSession({ ...options, cached: "99.0.0", client: "claude-code", skills: options.install === NPX ? undefined : "0.1.0" }, async (s) => {
+      expect(updateWarnings(await s.whoami())).toEqual([]);
+      expect(updateWarnings(await s.whoami())).toEqual([]);
+      expect(s.calls).toEqual([]);
+    });
+  });
+
+  it("says nothing when this is the latest release", async () => {
+    await inSession({ install: SCRIPT, cached: KIT_VERSION }, async (s) => {
+      expect(updateWarnings(await s.whoami())).toEqual([]);
+    });
+  });
+
+  it("never holds a tool call past the lookup's timeout, and stays silent when it fails", async () => {
+    const hanging = ((_: string, init?: RequestInit) =>
+      new Promise<Response>((_, reject) => init?.signal?.addEventListener("abort", () => reject(init.signal!.reason)))) as typeof fetch;
+    await inSession({ install: SCRIPT, fetch: hanging }, async (s) => {
+      const began = Date.now();
+      const first = await s.whoami();
+      expect(Date.now() - began).toBeLessThan(3000);
+      expect(first.owner.email).toBe("ada@example.com");
+      expect(updateWarnings(first)).toEqual([]);
+      expect(updateWarnings(await s.whoami())).toEqual([]);
+    });
   });
 });

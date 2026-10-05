@@ -429,6 +429,46 @@ or another CI service's variable set), when the output is not a terminal (an
 agent running `cavelon`), for `npx` or for a build from a clone. To turn it
 off, set `CAVELON_NO_UPDATE_CHECK=1`.
 
+### When you work only through a coding agent
+
+An agent runs `cavelon` without a terminal, so the notice above never reaches
+you. The MCP server tells the agent instead: when the session starts it looks
+up the latest release (the same lookup, daily cache and
+`CAVELON_NO_UPDATE_CHECK`), and when something is behind it adds one warning to
+the first tool result of the session, which the agent passes on to you:
+
+```text
+cavelon 0.1.9 is out; this is 0.1.8. The Cavelon plugin is 0.1.8. Tell the user:
+Update cavelon with `brew upgrade cavelon`. Update the plugin with
+`claude plugin marketplace update cavelon-dev-kit` and
+`claude plugin update cavelon@cavelon-dev-kit`. Then start a new agent session.
+More: https://github.com/goodguys-gmbh/cavelon-dev-kit/blob/main/docs/installation.md#updating
+```
+
+It names what is behind, each with its update:
+
+- **`cavelon`**, with the command for the way it was installed (the table
+  above). Not for `npx`, which already starts the newest release of its range.
+- **The Cavelon plugin**, whose skills and MCP entry change only when you update
+  it: its MCP entry tells the server the plugin's version
+  (`CAVELON_PLUGIN_VERSION`), and the warning names the update commands of the
+  agent that started the server (Claude Code or Codex). A plugin from 0.1.8 or
+  older does not set that; in Claude Code the server then reads the version
+  from the plugin's own manifest (`.claude-plugin/plugin.json` in the folder
+  Claude Code names in `CLAUDE_PLUGIN_ROOT`), so you hear of it even through
+  `npx`. Codex names no such folder: there the warning only adds the plugin's
+  update commands to `cavelon`'s, and says nothing of a plugin whose version
+  it cannot read.
+- **The skills `cavelon init --agents` wrote** in the solution folder, when they
+  are older than the running `cavelon`: run `cavelon init --update` there and
+  commit the result.
+
+The lookup runs beside the tool call and holds the first one at most
+1.5 seconds; a failed lookup says nothing. Nothing is said in CI, for a build
+from a clone, or with `CAVELON_NO_UPDATE_CHECK=1`.
+
+### Updating each part
+
 Run the one-line install again: it replaces `cavelon` with the latest release
 (or the one `--version` names) and changes nothing else.
 

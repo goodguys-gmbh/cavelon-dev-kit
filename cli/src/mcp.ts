@@ -6,6 +6,7 @@ import { createContext, withWarnings } from "./context.js";
 import { asCavelonError, CavelonError, ExitCode, usageError } from "./errors.js";
 import type { Io } from "./io.js";
 import { closest } from "./package-references.js";
+import { startSessionUpdateCheck, type SessionUpdateOptions } from "./update-check.js";
 import { KIT_VERSION } from "./version.js";
 
 /**
@@ -13,7 +14,9 @@ import { KIT_VERSION } from "./version.js";
  * one tool per API operation. Each tool runs the command's own code, carries
  * its read-only or destructive annotation, and never blocks for long: work
  * that takes time returns an operation id, and `operation_status` reads it,
- * waiting only when asked to and never past MCP_MAX_WAIT_MS.
+ * waiting only when asked to and never past MCP_MAX_WAIT_MS. The first
+ * result of a session may carry one warning that cavelon, the plugin or the
+ * folder's skills are behind the latest release (startSessionUpdateCheck).
  */
 
 const INSTRUCTIONS =
@@ -51,7 +54,9 @@ const INSTRUCTIONS =
   "values are set, never a value: a person sets a secret, so tell them the exact `cavelon secrets set <name>` command " +
   "to run in their terminal, and never ask for, read or pass a secret value. Never approve or decide an approval; " +
   "that stays with a person. Use docs_search before guessing, " +
-  "and api_list/api_describe/api for anything without its own tool.";
+  "and api_list/api_describe/api for anything without its own tool. " +
+  "The first result of a session may carry a warning that cavelon, the Cavelon plugin or this folder's skills are behind " +
+  "the latest release, with the commands that update them: pass it on to the person, who runs them; do not run them yourself.";
 
 type JsonSchema = Record<string, unknown>;
 
@@ -191,21 +196,19 @@ function mcpIo(io: Io): Io {
   return { ...io, stdout: { write: () => true, isTTY: false } };
 }
 
-export function createMcpServer(io: Io, commands: CommandSpec[]): Server {
+export function createMcpServer(io: Io, commands: CommandSpec[], updates: SessionUpdateOptions = {}): Server {
   const tools = commands.filter((c) => c.mcpTool);
   const byName = new Map(tools.map((c) => [toolName(c)!, c]));
   const server = new Server({ name: "cavelon", version: KIT_VERSION }, { capabilities: { tools: {} }, instructions: INSTRUCTIONS });
+  const notice = startSessionUpdateCheck(io, updates);
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: tools.map(toolFor) }));
 
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const spec = byName.get(request.params.name);
-    const given = (request.params.arguments ?? {}) as Record<string, unknown>;
-    const fail = (error: unknown) => ({
-      isError: true,
-      content: [{ type: "text" as const, text: JSON.stringify({ error: asCavelonError(error).toJSON() }) }],
-    });
-    if (!spec) return fail(new Error(`Unknown tool ${request.params.name}.`));
+  /** The tool's `--json` document, or its error. */
+  async function call(name: string, given: Record<string, unknown>): Promise<{ body: unknown; isError?: true }> {
+    const spec = byName.get(name);
+    const fail = (error: unknown) => ({ isError: true as const, body: { error: asCavelonError(error).toJSON() } });
+    if (!spec) return fail(new Error(`Unknown tool ${name}.`));
     const renamed: string[] = [];
     let args: Record<string, unknown>;
     try {
@@ -228,10 +231,23 @@ export function createMcpServer(io: Io, commands: CommandSpec[]): Server {
         data = ctx.warnings.length ? withWarnings(data as Record<string, unknown>, ctx.warnings) : { ...(data as Record<string, unknown>) };
         if (result.exitCode) (data as Record<string, unknown>).exit_code = result.exitCode;
       }
-      return { content: [{ type: "text" as const, text: JSON.stringify(data ?? null) }] };
+      return { body: data ?? null };
     } catch (error) {
       return fail(error);
     }
+  }
+
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    // The lookup runs beside the tool; only the session's first call waits for it, and briefly.
+    const warning = notice.forCall(() => server.getClientVersion()?.name);
+    const { body, isError } = await call(request.params.name, (request.params.arguments ?? {}) as Record<string, unknown>);
+    let out = body;
+    const text = await warning;
+    if (text) {
+      if (out && typeof out === "object" && !Array.isArray(out)) out = withWarnings(out as Record<string, unknown>, [text]);
+      else notice.keep();
+    }
+    return { ...(isError ? { isError } : {}), content: [{ type: "text" as const, text: JSON.stringify(out) }] };
   });
   return server;
 }
