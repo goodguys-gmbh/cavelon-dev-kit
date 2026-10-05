@@ -260,7 +260,7 @@ export const KNOWLEDGE_OUTCOMES: readonly KnowledgeOutcome[] = [
     recorded_as: "no_usable_evidence",
     message:
       "The agent recorded no_usable_evidence although the search returned hits: none of them answers the question. A question the knowledge base does not cover usually shows here, not as content_gap, because a search almost always returns its closest passages.",
-    hint: "Read the hits on the retrieval span (`cavelon trace … --span <span_id>`). Add the missing content, or improve the document whose passage should have answered it.",
+    hint: "Read the hits on the retrieval span (`cavelon trace <run> --trace <trace_id> --span <span_id>`). Add the missing content, or improve the document whose passage should have answered it.",
   },
   {
     value: "retrieval_fault",

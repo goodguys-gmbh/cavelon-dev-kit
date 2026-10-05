@@ -6,7 +6,14 @@ import { ownsTenant } from "../src/command.js";
 import { COMMANDS } from "../src/commands/index.js";
 import type { InStream } from "../src/io.js";
 import { createMcpServer, propertyName } from "../src/mcp.js";
-import { cavelonCommand, fill, folderCommand, printingFor, printedCommand, type PrintTarget } from "../src/printed.js";
+import { readFileSync } from "node:fs";
+import { BY_CODE, BY_ROUTE, cliFix } from "../src/code-hints.js";
+import { KIT_ERROR_CODES, kitErrorEntry } from "../src/kit-codes.js";
+import { KIT_CODES } from "../src/package-check.js";
+import { CASE_STATUSES } from "../src/results.js";
+import { KNOWLEDGE_OUTCOMES } from "../src/trace-view.js";
+import { mcpInstructions } from "../src/mcp.js";
+import { cavelonCommand, fill, folderCommand, printingFor, printedCommand, spoken, type PrintTarget } from "../src/printed.js";
 import { currentShell, useShell } from "../src/shell.js";
 import { startFakeServer, type FakeServer } from "./fake-server.js";
 import { cli, login, sandbox, type Sandbox } from "./helpers.js";
@@ -259,3 +266,134 @@ describe("printedCommand", () => {
     expect(cavelonCommand("harness", "default", "support", "--confirm")).toBe("cavelon harness default support --confirm");
   });
 });
+
+/**
+ * Whether a `cavelon …` may stay one over MCP: a command a person runs in
+ * their terminal (login, secrets set), which has no tool and no tool that
+ * stands in, or one this kit does not have (an instance's catalog may name
+ * one: there is nothing to make it into).
+ */
+function staysCommand(line: string): boolean {
+  const words = line.split(" ").slice(1);
+  if (words[0]?.startsWith("<")) return false;
+  for (let n = Math.min(3, words.length); n > 0; n--) {
+    const spec = COMMANDS.find((c) => c.name === words.slice(0, n).join(" "));
+    if (spec) return !spec.mcpTool && !spec.mcpInstead;
+  }
+  return true;
+}
+
+/** What in a hint names a CLI command where an agent over MCP makes a tool call. */
+function cliCommandsIn(hint: string): string[] {
+  const named = [...hint.matchAll(/`([^`]+)`/g)].map((m) => m[1]!);
+  return [...(hint.startsWith("cavelon ") ? [hint] : []), ...named.filter((n) => n.startsWith("cavelon ") && !staysCommand(n))];
+}
+
+describe("over MCP, no hint names a CLI command", () => {
+  const catalog = JSON.parse(readFileSync(new URL("../../contracts/cavelon/meta-error-catalog.json", import.meta.url), "utf8")) as {
+    rule_codes?: Array<{ code: string }>;
+    api_error_codes?: Array<{ code: string }>;
+  };
+  const codes = [
+    ...KIT_ERROR_CODES.map((e) => e.code),
+    ...KIT_CODES.map((e) => e.code),
+    ...Object.keys(BY_CODE),
+    ...CASE_STATUSES.map((s) => s.status),
+    ...KNOWLEDGE_OUTCOMES.map((o) => o.value),
+    ...(catalog.rule_codes ?? []).map((e) => e.code),
+    ...(catalog.api_error_codes ?? []).map((e) => e.code),
+  ];
+
+  it("explain: every code the kit or the instance's catalog knows, with its hint, fix and kit hint", async () => {
+    const mcp = mcpClient();
+    const found: string[] = [];
+    try {
+      for (const code of new Set(codes)) {
+        const { body } = await mcp.call("explain", { code, tenant: "acme" });
+        for (const field of ["hint", "cli_fix", "kit_hint"]) {
+          const text = body[field] ?? body.error?.[field];
+          if (typeof text === "string") for (const named of cliCommandsIn(text)) found.push(`${code}.${field}: ${named}`);
+        }
+      }
+    } finally {
+      await mcp.close();
+    }
+    expect(found).toEqual([]);
+  });
+
+  it("the fixed texts a tool result or the server's instructions carry", () => {
+    const mcpTarget: PrintTarget = { mode: "mcp", commands: COMMANDS, tenant: "acme" };
+    const texts: Array<[string, string]> = [
+      ...KIT_ERROR_CODES.map((e) => [e.code, printingFor(mcpTarget, () => kitErrorEntry(e.code)?.hint) ?? ""] as [string, string]),
+      ...KIT_CODES.map((e) => [e.code, e.hint ?? ""] as [string, string]),
+      ...Object.entries(BY_CODE),
+      ...BY_ROUTE.map((r) => [r.route, cliFix({ code: "", message: r.route }) ?? ""] as [string, string]),
+      ...CASE_STATUSES.map((s) => [s.status, s.next] as [string, string]),
+      ...KNOWLEDGE_OUTCOMES.map((o) => [o.value, o.hint] as [string, string]),
+    ];
+    const found = printingFor(mcpTarget, () => texts.flatMap(([name, text]) => cliCommandsIn(spoken(text)).map((named) => `${name}: ${named}`)));
+    found.push(...cliCommandsIn(mcpInstructions(COMMANDS)).map((named) => `instructions: ${named}`));
+    // A tool without arguments is named alone.
+    printingFor({ mode: "mcp", commands: COMMANDS }, () => expect(spoken("`cavelon status` shows its version.")).toBe("`status` shows its version."));
+    expect(found).toEqual([]);
+    // Spoken as tool calls, with the tenant the tool was given.
+    printingFor(mcpTarget, () => {
+      expect(spoken(caseStatusNext("not_run"))).toContain('`trace {"run":"<test-run-id>","tenant":"acme"}`');
+      expect(spoken("`cavelon harness list` shows them.")).toBe('`harness_list {"tenant":"acme"}` shows them.');
+      expect(spoken("`cavelon status` shows its version.")).toBe('`status {"tenant":"acme"}` shows its version.');
+      // A person's command stays one, in the same tenant.
+      expect(spoken("A person runs `cavelon secrets set <name>`.")).toBe("A person runs `cavelon secrets set <name> --tenant acme`.");
+    });
+    // The instructions still name the person's commands as commands.
+    expect(mcpInstructions(COMMANDS)).toContain("`cavelon login`");
+    expect(mcpInstructions(COMMANDS)).toContain("`cavelon secrets set <name>`");
+  });
+
+  it("a refusal's hint names the tool call; in a terminal it keeps the --tenant it was given", async () => {
+    const mcp = mcpClient();
+    try {
+      const { isError, body } = await mcp.call("trace", { run: "run_does_not_exist", tenant: "acme" });
+      expect(isError).toBe(true);
+      expect(cliCommandsIn(body.error.hint ?? "")).toEqual([]);
+    } finally {
+      await mcp.close();
+    }
+    printingFor({ mode: "cli", commands: COMMANDS, tenant: "acme" }, () => {
+      expect(spoken("`cavelon harness list` shows them.")).toBe("`cavelon harness list --tenant acme` shows them.");
+    });
+    // Outside a command run, the text is as written.
+    expect(spoken("`cavelon harness list` shows them.")).toBe("`cavelon harness list` shows them.");
+  });
+});
+
+describe("in a coding agent's shell, a confirm line printed before its preview names the token it needs", () => {
+  it("activate's default route", async () => {
+    solution(acme, "support").status = "draft";
+    const activated = await cli(sb, ["activate", "--harness", "support", "--tenant", "acme", "--json"], { env: AGENT });
+    expect(activated.code, activated.stderr).toBe(0);
+    expect(activated.json()).toMatchObject({
+      default_route: {
+        preview: "cavelon harness default support --tenant acme",
+        confirm: "cavelon harness default support --tenant acme --confirm <confirm_token of its preview>",
+      },
+    });
+  });
+
+  it("a preview's own confirm line carries its token, not the placeholder", async () => {
+    const preview = await cli(sb, ["harness", "default", "support", "--tenant", "acme", "--json"], { env: AGENT });
+    const shown = preview.json<{ confirm: string; confirm_token: string }>();
+    expect(shown.confirm).toBe(`cavelon harness default support --tenant acme --confirm ${shown.confirm_token}`);
+  });
+
+  it("in a person's terminal the line stays a bare --confirm", () => {
+    printingFor({ mode: "cli", commands: COMMANDS }, () => expect(cavelonCommand("loop", "cancel", "run_1", "--confirm")).toBe("cavelon loop cancel run_1 --confirm"));
+    printingFor({ mode: "cli", commands: COMMANDS, agentShell: true }, () => {
+      expect(cavelonCommand("loop", "cancel", "run_1", "--confirm")).toBe("cavelon loop cancel run_1 --confirm <confirm_token of its preview>");
+      expect(cavelonCommand("apply", "--confirm", "pv_1")).toBe("cavelon apply --confirm pv_1");
+    });
+  });
+});
+
+function caseStatusNext(status: string): string {
+  return CASE_STATUSES.find((s) => s.status === status)!.next;
+}

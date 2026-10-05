@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { ownsTenant, propertyName, type CommandSpec, type OptionSpec } from "./command.js";
+import { CavelonError } from "./errors.js";
 import { shellWord } from "./shell.js";
 
 /**
@@ -27,6 +28,8 @@ export function fill(name: string): Placeholder {
 export interface PrintTarget {
   mode: "cli" | "mcp";
   commands: readonly CommandSpec[];
+  /** A coding agent runs this cavelon in its shell, where a bare `--confirm` confirms nothing. */
+  agentShell?: boolean;
   /** The options the running command was given (never one read from a file or the environment). */
   instance?: string;
   tenant?: string;
@@ -56,7 +59,7 @@ export function cavelonCommand(...words: Word[]): string {
  */
 export function folderCommand(...words: Word[]): string {
   const target = current.getStore();
-  return target ? current.run({ mode: target.mode, commands: target.commands }, () => printedCommand(words)) : printedCommand(words);
+  return target ? current.run({ mode: target.mode, commands: target.commands, agentShell: target.agentShell }, () => printedCommand(words)) : printedCommand(words);
 }
 
 /**
@@ -72,9 +75,23 @@ export function printedCommand(words: readonly Word[], override: { env?: string 
       const call = toolCall(target, spec, words.slice(spec.name.split(" ").length), env);
       if (call) return call;
     }
-    return commandLine(withTarget(spec, words, { ...target, env }));
+    const line = withTarget(spec, words, { ...target, env });
+    return commandLine(target.agentShell ? withTokenPlaceholder(line) : line);
   }
   return commandLine(words);
+}
+
+/**
+ * In a coding agent's shell a bare `--confirm` only shows the preview again
+ * (confirm-token.ts), so a confirm line printed before its preview exists
+ * names the token it will need.
+ */
+function withTokenPlaceholder(words: readonly Word[]): Word[] {
+  const at = words.indexOf("--confirm");
+  if (at < 0) return [...words];
+  const next = words[at + 1];
+  if (next !== undefined && (typeof next !== "string" || !next.startsWith("-"))) return [...words];
+  return [...words.slice(0, at + 1), fill(PREVIEW_TOKEN_NAME), ...words.slice(at + 1)];
 }
 
 function commandLine(words: readonly Word[]): string {
@@ -115,8 +132,9 @@ function takesTenant(spec: CommandSpec): boolean {
   return !spec.tenantless && !ownsTenant(spec);
 }
 
-/** What a confirm argument holds in a printed call before its preview gave the token. */
-const PREVIEW_TOKEN = "<confirm_token of its preview>";
+/** What a confirm holds in a printed line before its preview gave the token. */
+const PREVIEW_TOKEN_NAME = "confirm_token of its preview";
+export const PREVIEW_TOKEN = `<${PREVIEW_TOKEN_NAME}>`;
 
 /**
  * The tool call a printed command stands for: the tool's name and its
@@ -177,4 +195,58 @@ function toolCall(target: PrintTarget, spec: CommandSpec, args: readonly Word[],
   if (target.tenant && takesTenant(tool) && out.tenant === undefined) out.tenant = target.tenant;
   if (env && tool.options?.env && out.env === undefined) out.env = env;
   return `${tool.mcpTool} ${JSON.stringify(out)}`;
+}
+
+/** A `cavelon …` in backticks inside a fixed text; a placeholder may hold spaces. */
+const NAMED_COMMAND = /`cavelon ([^`]+)`/g;
+const SPAN_WORD = /<[^>]*>|\S+/g;
+
+/**
+ * A fixed text (a catalog's hint, a test-case status's next step, a refusal's
+ * hint) with each `cavelon …` it names in backticks printed the way the
+ * running command prints its own commands: over MCP the tool call (only the
+ * tool's name when it takes no argument), in a terminal the line with the
+ * running command's `--instance`, `--env` and `--tenant`. A command a person
+ * runs (login, secrets set) stays a command line. Outside a command run, and
+ * where nothing changes, the text stays as written.
+ */
+export function spoken(text: string): string {
+  if (!current.getStore() || !text.includes("`cavelon ")) return text;
+  return text.replace(NAMED_COMMAND, (whole, line: string) => {
+    const words: Word[] = (line.match(SPAN_WORD) ?? []).map((w) => (w.startsWith("<") && w.endsWith(">") ? fill(w.slice(1, -1)) : w));
+    const printed = printedCommand(words);
+    if (printed === commandLine(words)) return whole;
+    return `\`${printed.endsWith(" {}") ? printed.slice(0, -" {}".length) : printed}\``;
+  });
+}
+
+/** The fields of a tool's or command's answer that tell the reader what to do next. */
+const HINT_FIELDS = new Set(["hint", "next", "fix", "cli_fix", "kit_hint", "warnings"]);
+
+/**
+ * An answer with `spoken` applied to each of its hint fields, at any depth:
+ * the hints of validate's findings, explain's fix, a refusal's hint. Other
+ * text (a docs page, a file, an assistant's answer) is the instance's or the
+ * customer's and stays as it is.
+ */
+export function spokenHints<T>(value: T): T {
+  if (!current.getStore()) return value;
+  const walk = (v: unknown, hint: boolean): unknown => {
+    if (typeof v === "string") return hint ? spoken(v) : v;
+    if (Array.isArray(v)) return v.map((item) => walk(item, hint));
+    if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([key, item]) => [key, walk(item, HINT_FIELDS.has(key))]));
+    return v;
+  };
+  return walk(value, false) as T;
+}
+
+/** A thrown error with its hint and the hints in its details spoken; the runners call it inside the command's run. */
+export function spokenError(error: unknown): unknown {
+  if (!(error instanceof CavelonError) || !current.getStore()) return error;
+  const hint = error.hint === undefined ? undefined : spoken(error.hint);
+  const details = spokenHints(error.details);
+  const blockerDetails = spokenHints(error.blockerDetails);
+  if (hint === error.hint && JSON.stringify(details) === JSON.stringify(error.details) && JSON.stringify(blockerDetails) === JSON.stringify(error.blockerDetails)) return error;
+  const { exitCode, code, message, docs, status, blockers } = error;
+  return new CavelonError(exitCode, { code, message, hint, docs, status, details, blockers, blockerDetails });
 }

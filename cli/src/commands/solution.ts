@@ -49,7 +49,7 @@ import { isUuid, requireInstance, type Session } from "../session.js";
 import { listedPages } from "./docs.js";
 import { readInventory, readInventoryKinds, writeInventory, type InventoryKind } from "./inventory.js";
 import { checkedBy, MODEL_UNKNOWN_CODE, missingInventory, REFERENCE_UNKNOWN_CODE } from "../package-references.js";
-import { cavelonCommand, printedCommand } from "../printed.js";
+import { cavelonCommand, printedCommand, spoken } from "../printed.js";
 import { secretSetCommand, variableSetCommand } from "./values.js";
 import { maySetSecrets, SECRET_SETTER } from "../secret-access.js";
 
@@ -1409,7 +1409,7 @@ async function caseStatusAnswer(ctx: Context, status: CaseStatus) {
     code: status.status,
     kind: "test_case_status",
     message: status.meaning,
-    hint: status.next,
+    hint: spoken(status.next),
     summary_counts: status.counts,
     docs: instance ? `${instance}${page}` : page,
     read: [{ page: TESTING_PAGE, command: cavelonCommand("docs", "get", TESTING_PAGE) }],
@@ -1420,7 +1420,7 @@ async function caseStatusAnswer(ctx: Context, status: CaseStatus) {
       ["code", status.status],
       ["kind", "test-case status (neither pass nor fail)"],
       ["meaning", status.meaning],
-      ["next", status.next],
+      ["next", data.hint],
       ["counted as", status.counts.join(", ")],
       ["docs", data.docs],
       ["read", data.read[0]!.command],
@@ -1439,7 +1439,7 @@ async function knowledgeOutcomeAnswer(ctx: Context, outcome: KnowledgeOutcome) {
     code: outcome.value,
     kind: "knowledge_outcome",
     message: outcome.message,
-    hint: outcome.hint,
+    hint: spoken(outcome.hint),
     ...(outcome.recorded_as ? { recorded_as: outcome.recorded_as } : {}),
     docs: instance ? `${instance}${page}` : page,
     read: [{ page: KNOWLEDGE_OUTCOME_PAGE, command: cavelonCommand("docs", "get", KNOWLEDGE_OUTCOME_PAGE) }],
@@ -1450,7 +1450,7 @@ async function knowledgeOutcomeAnswer(ctx: Context, outcome: KnowledgeOutcome) {
       ["code", outcome.value],
       ["kind", OUTCOME_KIND],
       ["meaning", outcome.message],
-      ["next", outcome.hint],
+      ["next", data.hint],
       ["recorded as", outcome.recorded_as],
       ["docs", data.docs],
       ["read", data.read[0]!.command],
@@ -1525,19 +1525,22 @@ export const explain: CommandSpec = {
     const stepCap = entry.code.toUpperCase() === PROCESSING_STEP_CAP_CODE;
     // A value above a platform ceiling: today's ceilings and who raises them.
     const ceiling = entry.code === LIMIT_ABOVE_CEILING;
-    const kitHint = capacity
+    const kitText = capacity
       ? capacityHint(capacity, await readLimits(ctx).catch(() => undefined))
       : stepCap
         ? processingStepCapHint(await readLimits(ctx).catch(() => undefined))
         : ceiling
           ? ceilingHint(await readLimits(ctx).catch(() => undefined))
           : pairOrderPointer(entry.code);
+    const kitHint = kitText ? spoken(kitText) : undefined;
     // The instance's own pages on capacity, where it lists them; an endpoint's limit is planned in the tutorial.
     const pages = capacity === MODEL_ENDPOINT_BUSY ? [CAPACITY_TUTORIAL_PAGE, CAPACITY_CONCEPT_PAGE] : [CAPACITY_CONCEPT_PAGE, CAPACITY_TUTORIAL_PAGE];
     const read = capacity ? (await listedPages(ctx, pages)).map((page) => ({ page, command: cavelonCommand("docs", "get", page) })) : [];
     // The instance's fix may name an API route; the command that does the same is easier to follow.
-    const cli = entry.kind === "cli" ? undefined : cliFix(entry);
-    const data = { ...entry, ...(entry.area === KNOWLEDGE_OUTCOME_AREA ? { kind: "knowledge_outcome" } : {}), docs, ...(cli ? { cli_fix: cli } : {}), ...(kitHint ? { kit_hint: kitHint } : {}), ...(read.length ? { read } : {}) };
+    const fix = cliFix(entry);
+    const cli = entry.kind === "cli" || !fix ? undefined : spoken(fix);
+    const hint = entry.hint ? spoken(entry.hint) : entry.hint;
+    const data = { ...entry, hint, ...(entry.area === KNOWLEDGE_OUTCOME_AREA ? { kind: "knowledge_outcome" } : {}), docs, ...(cli ? { cli_fix: cli } : {}), ...(kitHint ? { kit_hint: kitHint } : {}), ...(read.length ? { read } : {}) };
     return {
       data,
       text: keyValues([
@@ -1555,7 +1558,7 @@ export const explain: CommandSpec = {
                   : `API error code${entry.area ? ` (${entry.area})` : ""}`,
         ],
         ["meaning", entry.message],
-        ["fix", entry.hint ?? undefined],
+        ["fix", hint ?? undefined],
         ["with the CLI", cli],
         [capacity || stepCap || ceiling ? "raise" : "order", kitHint],
         ["why", entry.explanation ? clip(entry.explanation.replace(/\s+/g, " "), 600) : undefined],

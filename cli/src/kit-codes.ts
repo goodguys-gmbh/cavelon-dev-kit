@@ -1,4 +1,5 @@
 import type { CatalogEntry } from "./contracts.js";
+import { printMode } from "./printed.js";
 
 /**
  * The codes `cavelon` itself answers with, beside the instance's catalog: an
@@ -40,7 +41,7 @@ export const KIT_ERROR_CODES: CatalogEntry[] = [
   { code: "operation_ambiguous", area: "cli", message: "The short name matches several operations.", hint: "Use the full operationId the message lists." },
   { code: "operation_for_a_person", area: "cli", message: "The operation stays with a person (the instance marks it, or it changes a secret, a credential or an approval), so an agent does not send it.", hint: "A person runs it in their own terminal, or in the Admin." },
   { code: "secret_field_for_a_person", area: "cli", message: "The request sets a field the instance marks as a secret value, so an agent does not send it.", hint: "Leave the field out; a person enters the value with `cavelon secrets set <name>` or in the Admin." },
-  { code: "confirmation_required", area: "cli", message: "The command changes something and there is no terminal to ask.", hint: "Read the plan it printed, then run it again with --yes (or --confirm, where it takes that)." },
+  { code: "confirmation_required", area: "cli", message: "The command changes something and there is no terminal to ask.", hint: "Read the plan it printed, then run it again with --yes." },
   // Operations (op_…).
   { code: "operations_unavailable", area: "cli", message: "The instance does not offer the operations API.", hint: "Its operator turns it on with OPERATIONS_API_ENABLED." },
   { code: "not_an_operation_id", area: "cli", message: "That is not an operation id; they start with op_.", hint: "Commands that start work print the operation id; `cavelon status` lists running ones." },
@@ -110,7 +111,14 @@ export const KIT_ERROR_CODES: CatalogEntry[] = [
   { code: "cancelled", area: "cli", message: "Nothing was chosen or confirmed, so nothing changed.", hint: "Run the command again, or name the choice with an option." },
 ];
 
-/** The kit's own codes that `cavelon explain` knows, by code. */
+/** What an agent over MCP reads where a hint's command has no tool to stand for it. */
+const MCP_HINTS: Record<string, string> = {
+  usage: "The message names the argument; the tool's input schema lists them all.",
+};
+
+/** The kit's own codes that `cavelon explain` knows, by code, with the hint for the mode the command runs in. */
 export function kitErrorEntry(code: string): CatalogEntry | undefined {
-  return KIT_ERROR_CODES.find((e) => e.code === code);
+  const entry = KIT_ERROR_CODES.find((e) => e.code === code);
+  const mcp = entry && printMode() === "mcp" ? MCP_HINTS[code] : undefined;
+  return mcp ? { ...entry!, hint: mcp } : entry;
 }

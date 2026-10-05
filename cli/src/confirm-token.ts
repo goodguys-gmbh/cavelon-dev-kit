@@ -3,6 +3,7 @@ import { drivenByAgent } from "./agent-env.js";
 import type { Context, Input } from "./command.js";
 import { CavelonError, ExitCode, type ExitCodeValue } from "./errors.js";
 import { canonical } from "./package-files.js";
+import { PREVIEW_TOKEN } from "./printed.js";
 
 /** The token a preview returns for confirming exactly it: 12 hex digits of the change's hash. */
 export const CONFIRM_TOKEN = /^[0-9a-f]{12}$/;
@@ -43,7 +44,9 @@ export interface Confirmation {
 }
 
 /** The confirming command with the token after its `--confirm`, as an agent's shell needs it. */
-export function withToken(command: string, token: string): string {
+export function withToken(printed: string, token: string): string {
+  // A line printed in an agent's shell names the token it needs where the preview's token now goes.
+  const command = printed.replace(` --confirm ${PREVIEW_TOKEN}`, " --confirm");
   if (command.endsWith(" --confirm")) return `${command} ${token}`;
   const at = command.indexOf(" --confirm ");
   if (at >= 0) return `${command.slice(0, at)} --confirm ${token}${command.slice(at + " --confirm".length)}`;

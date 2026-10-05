@@ -570,10 +570,10 @@ function jobFailed(job: ArchiveJob): CavelonError {
 
 const UPLOAD_READY_MS = 30_000;
 
-/** The same seed with --confirm: the Sandbox, the source and the solution it named. */
-function seedCommand(sandbox: Sandbox, input: Input): string {
+/** The same seed with --confirm: the Sandbox, the source and the solution it named; with the token it confirmed with, to run it again. */
+function seedCommand(sandbox: Sandbox, input: Input, token?: string): string {
   const harness = stringOption(input, "harness");
-  return cavelonCommand("sandbox", "seed", sandbox.name, positional(input, "source")!, ...(harness ? ["--harness", harness] : []), "--confirm");
+  return cavelonCommand("sandbox", "seed", sandbox.name, positional(input, "source")!, ...(harness ? ["--harness", harness] : []), "--confirm", ...(token ? [token] : []));
 }
 
 export const sandboxSeed: CommandSpec = {
@@ -645,7 +645,8 @@ export const sandboxSeed: CommandSpec = {
       job = await getJob(ctx, sandbox.id, job.id);
     }
     if (job.status === "failed" || job.status === "cancelled") throw jobFailed(job);
-    const resume = seedCommand(sandbox, input);
+    const given = input.options.confirm;
+    const resume = seedCommand(sandbox, input, typeof given === "string" && given ? given : undefined);
     if (job.status === "active" && job.phase === "awaiting_upload") {
       job = await upload(ctx, sandbox.id, job.id, archive.bytes);
     } else if (job.status === "active" && ["acquire", "operation"].includes(job.phase)) {

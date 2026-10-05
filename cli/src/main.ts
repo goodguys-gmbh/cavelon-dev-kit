@@ -1,12 +1,13 @@
 import { parseArgs, type ParseArgsConfig } from "node:util";
 import { GLOBAL_OPTIONS, optionDescription, optionFlag, renameFormerOptions, type CommandResult, type CommandSpec, type Context, type Input, type OptionSpec } from "./command.js";
+import { agentVariable } from "./agent-env.js";
 import { createContext, withWarnings } from "./context.js";
 import { CONFIRM_TOKEN } from "./confirm-token.js";
 import { asCavelonError, CavelonError, ExitCode, usageError } from "./errors.js";
 import { blockerLines } from "./format.js";
 import type { Io } from "./io.js";
 import { blockerLines as detailedBlockerLines } from "./preview-report.js";
-import { printingFor } from "./printed.js";
+import { printingFor, spokenError } from "./printed.js";
 import { KIT_VERSION } from "./version.js";
 import { currentInstall, installLabel, type Install } from "./install.js";
 import { startUpdateCheck, type UpdateCheckOptions } from "./update-check.js";
@@ -71,8 +72,14 @@ export async function run(argv: string[], io: Io, commands: CommandSpec[] = COMM
     });
     const { globals } = ctx;
     const given = spec.storesTarget ? {} : { instance: globals.instance, tenant: globals.tenant, env: globals.solutionEnv };
-    const target = { mode: "cli" as const, commands, ...given };
-    const result = await printingFor(target, () => spec.run(ctx!, parsed));
+    const target = { mode: "cli" as const, commands, agentShell: Boolean(agentVariable(io.env)), ...given };
+    const result = await printingFor(target, async () => {
+      try {
+        return await spec.run(ctx!, parsed);
+      } catch (error) {
+        throw spokenError(error);
+      }
+    });
     printResult(ctx, result);
     await printNotice(io, notice);
     return result.exitCode ?? ExitCode.ok;
