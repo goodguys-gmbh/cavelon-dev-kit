@@ -77,6 +77,7 @@ came from. The order is in [Concepts](concepts.md#tenant).
 | `operation_for_a_person` | 2 | Over MCP, `api` does not send an operation the instance marks for a person only (`x-cavelon-person-only`; the message has its reason), even with `confirm`. On an instance that marks none, that is an operation that changes a secret, creates or revokes a credential or decides an approval. A person does it: `cavelon secrets set <name>` in their terminal, or in Cavelon. |
 | `path_outside_solution` | 2 | Over MCP, a tool reads and writes files only inside the solution folder (the folder of `cavelon.yaml`, or the one the server started in), after following symlinks. Move the file into the folder, or run the command in your terminal. |
 | `path_in_kit_directory` | 2 | Over MCP, no tool reads or writes in `cavelon`'s own config or cache directory, which hold the stored token and the instance's contracts. |
+| `confirm_token_required` | 2 | Over MCP, a tool that confirms a change (`api`, `limits_set`, `harness_default`, …) was called with `confirm: true`. It confirms only with the `confirm_token` its preview returned: call it without `confirm`, show the preview, then call it again with the same arguments and that token. A token of another change returns the new preview with `token_mismatch` and exit code 4. |
 
 `CAVELON_TOKEN` is used only together with `CAVELON_URL`, and only for that
 instance. If you set `CAVELON_TOKEN` without `CAVELON_URL`, `cavelon` ignores it
@@ -173,6 +174,8 @@ used: cached or read now, when, and its hash.
 | `import_preview_stale` | 4 | The solution changed on the instance after the preview. Nothing was imported. Run `cavelon apply` again and confirm the new preview. |
 | `package_requirements_changed` | 4 | The import's own check found something the preview did not; each blocker is listed. Nothing was imported. Fix the blockers and preview again. |
 | `preview_unknown` | 2 | No open preview with that id in this folder. `cavelon status` lists the open ones. |
+| `preview_files_changed` | 4 | The package files changed in what they hold since the preview; the error names them. Nothing was imported. Run `cavelon apply` again and confirm the new preview, or add `--allow-stale` to the confirm to import what the old preview showed. |
+| `preview_expired` | 4 | The preview is more than a day old. Nothing was imported, and the stored preview is removed. Run `cavelon apply` again and confirm the new preview. |
 | `preview_other_tenant`, `preview_other_instance` | 4 | The preview was made for another tenant or instance than the one this command uses. Preview again here. |
 | `uncommitted_changes` | 4 | `pull` would overwrite package files with uncommitted changes. Outside a git repository: it would overwrite or remove a package file that changed since the last pull, such as your edit or a test suite you have not applied. A file as the last pull or confirmed apply left it is never listed. The files are listed. Commit them, apply them, or use `--force` to discard them. |
 | `package_file_outside` | 4 | `pull` or `init --from` would write a package file that is a symlink to a file outside the solution folder. Nothing was written. Move the file into the solution folder, or replace the link with the file. |

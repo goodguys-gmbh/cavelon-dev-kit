@@ -53,7 +53,9 @@ for a public widget), **propose the change; the person decides.**
   person with your reason (what fails or waits now), and wait for their answer.
 - Only after they agreed, run the confirm command it printed (the `confirm`
   field in `--json`) as it stands: it keeps the `--env` and `--tenant` of the
-  preview, so it changes the limit the preview showed. Never raise a limit on
+  preview, so it changes the limit the preview showed. Over MCP, call
+  `limits_set` again with the same arguments and `confirm` set to the
+  preview's `confirm_token`. Never raise a limit on
   your own, never pick a value higher than the need you named, and never change
   one without telling them.
 - The same goes for the tenant's monthly inference budget

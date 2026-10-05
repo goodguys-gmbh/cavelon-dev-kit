@@ -80,10 +80,18 @@ use it when you parse the result.
    command that sets each). A blocked preview names each blocker with its
    code, package file and path, and hint; `cavelon explain <code>` says more.
 5. **Confirm** exactly that preview: `cavelon apply --confirm <preview-id>`
-   (the line `apply` printed, with the same `--env` and `--tenant`). Exit 4 means the target changed since the preview:
-   preview again and confirm the new id. When the error lists `blockers`, the
-   import's own check found them as it applied: fix what each names (the hint
-   says how for a code the kit knows), then preview again.
+   (the line `apply` printed, with the same `--env` and `--tenant`). Exit 4
+   means the preview is stale and nothing was imported: the target changed on
+   the instance (`import_preview_stale`), the package files changed since
+   (`preview_files_changed`, naming them), or the preview is more than a day
+   old (`preview_expired`). Preview again, show the new preview when the rules
+   below say so, and confirm the new id. Use `--allow-stale` only when the
+   person wants exactly the old preview imported. When the error lists
+   `blockers`, the import's own check found them as it applied: fix what each
+   names (the hint says how for a code the kit knows), then preview again.
+   Discard a preview you will not confirm (`cavelon apply --discard <id>`, or
+   `--discard all`), so no later agent confirms it; `cavelon status` lists the
+   open ones with when each expires.
 6. **Seed** knowledge when needed: `cavelon kb upload <dir> --kb <kb>`. It
    refuses before sending when a file is larger than the instance allows or of
    a type it does not accept, and a `.zip` unless the tenant has archive
@@ -143,6 +151,15 @@ before `cavelon harness default … --confirm` or `cavelon activate
 --make-default --confirm` (it moves live traffic), and
 before `cavelon sandbox seed … --confirm` or `cavelon loop cancel … --confirm` on
 anything but a test Sandbox or a run you started yourself.
+
+**Over MCP, confirm with the preview's token.** `api`, `limits_set`,
+`models_set_limit`, `loop_cancel`, `sandbox_seed`, `trigger_identity`,
+`harness_default`, `activate` with `make-default`, and `kb_upload` where it
+would deactivate documents return a `confirm_token` with their preview. Show
+the preview, then call the tool again with the same arguments and `confirm`
+set to that token; it makes exactly the change shown. `confirm: true` is
+refused (`confirm_token_required`), and a token of another change returns the
+new preview with `token_mismatch` (exit code 4): show that one instead.
 
 **`cavelon api` from your shell has the guards of the MCP `api` tool**, since
 `cavelon` sees that a coding agent runs it (`CLAUDECODE`, `CODEX_THREAD_ID`, `CODEX_SANDBOX`,

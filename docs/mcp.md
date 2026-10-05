@@ -153,11 +153,16 @@ repeat them:
   `loop_cancel`, `sandbox_seed`, `trigger_identity`, `harness_default`,
   `activate` with `make_default`, and `api` for any operation that is not
   read-only (anything but GET, HEAD and OPTIONS), return what they would do
-  (for `api`: the method, path, parameters and body) and act only with
-  `confirm: true`. `kb_upload` with `replace` needs it only on an instance
-  whose upload cannot replace a document itself: there it returns the
-  documents it would deactivate after the upload, and uploads nothing without
-  `confirm: true`. The agent shows that to you first, and must show you any
+  (for `api`: the method, path, parameters and body) and a `confirm_token`,
+  and act only when called again with the same arguments and `confirm` set to
+  that token. The token is a hash of the change the preview showed, the tool,
+  the tenant and the instance: a different change (another body, value or
+  target) needs a new preview, a token of another change returns the new
+  preview with `token_mismatch` and exit code 4, and `confirm: true` is
+  refused (`confirm_token_required`). `kb_upload` with `replace` needs it only
+  on an instance whose upload cannot replace a document itself: there it
+  returns the documents it would deactivate after the upload, and uploads
+  nothing without its token. The agent shows that to you first, and must show you any
   preview that reaches an active solution or production. Making a solution
   the tenant's default route changes which solution the tenant's chat and
   widget answer with, so the agent asks you before it confirms that.

@@ -53,7 +53,7 @@ by the others:
 | Source | What it enforces |
 |---|---|
 | **The skills** (`cavelon-loop`, `cavelon-authoring`, `cavelon-testing`, `cavelon-long-running`) and the server's instructions when the agent connects | When to stop and show you a preview; propose a limit change and let you decide; never handle a token or secret; never approve. |
-| **The commands and their MCP tools** | `apply` imports only with the id of a preview; `limits set`, `models set-limit`, `loop cancel`, `sandbox seed` and `trigger identity` change nothing without `--confirm`, and neither does the `api` tool for an operation that is not read-only. The `api` tool refuses to change a secret, create or revoke a credential or decide an approval, or to send a body field the instance marks as a secret value, and the tools read and write files only inside the solution folder. `cavelon api` run from the agent's shell applies the same guards, with `--confirm <token>` from its preview ([Security](security.md#when-the-agent-runs-cavelon-in-its-shell)). Each tool is annotated read-only or destructive (`readOnlyHint`, `destructiveHint`), so your agent client can ask you before it calls a destructive one. There is no tool for `login`, `secrets set` or deciding an approval, and no command takes a token or secret value as an argument. `activate` goes through the readiness gate and never forces. |
+| **The commands and their MCP tools** | `apply` imports only with the id of a preview; `limits set`, `models set-limit`, `loop cancel`, `sandbox seed` and `trigger identity` change nothing without `--confirm`, and neither does the `api` tool for an operation that is not read-only. Over MCP, `confirm` is the token the tool's preview returned, so it confirms exactly the change shown. The `api` tool refuses to change a secret, create or revoke a credential or decide an approval, or to send a body field the instance marks as a secret value, and the tools read and write files only inside the solution folder. `cavelon api` run from the agent's shell applies the same guards, with `--confirm <token>` from its preview ([Security](security.md#when-the-agent-runs-cavelon-in-its-shell)). Each tool is annotated read-only or destructive (`readOnlyHint`, `destructiveHint`), so your agent client can ask you before it calls a destructive one. There is no tool for `login`, `secrets set` or deciding an approval, and no command takes a token or secret value as an argument. `activate` goes through the readiness gate and never forces. |
 | **Your token's permissions on the server** | The token acts as you, within your roles, and within the ceiling you chose when you created it. Without **May activate**, activation is refused, whatever the agent tries. A limit only a Tenant Owner or the operator may change is refused for anyone else. |
 
 The skills shape what a well-behaved agent does; the token decides what any
@@ -192,8 +192,9 @@ runs.
      format or a typo can cause.
 5. **Apply.** For a draft solution in test, the agent confirms with
    `cavelon apply --env test --confirm <preview-id>`, which imports exactly
-   what was previewed. If the solution changed in the meantime, the confirm is
-   refused (exit 4) and the agent previews again.
+   what was previewed. If the solution or the package files changed in the
+   meantime, or the preview is more than a day old, the confirm is refused
+   (exit 4) and the agent previews again.
 6. **Upload.** `cavelon kb upload seeds/<folder> --kb "<name>"` sends the
    knowledge documents, after checking them against the tenant's upload
    limits, and the agent waits for ingestion to finish. A file named like a

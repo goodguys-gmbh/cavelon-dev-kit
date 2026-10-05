@@ -10,6 +10,7 @@ import {
   type Context,
 } from "../command.js";
 import { CavelonError, ExitCode, usageError, type ExitCodeValue } from "../errors.js";
+import { confirmation } from "../confirm-token.js";
 import { idempotencyKey, requireFeature, UUID_KEY_OPTION, withRetryKey } from "../features.js";
 import { clip, keyValues, moreHint, table } from "../format.js";
 import type { ErrorCatalog } from "../contracts.js";
@@ -371,7 +372,7 @@ export const loopCancel: CommandSpec = {
   mcpTool: "loop_cancel",
   positionals: [{ name: "run", description: "The trigger run id (from `loop start`).", required: true }],
   options: {
-    confirm: { type: "boolean", description: "Stop the run; without it nothing is stopped." },
+    confirm: { type: "boolean", mcpToken: true, description: "Stop the run; without it nothing is stopped." },
   },
   examples: ["cavelon loop cancel <run>", "cavelon loop cancel <run> --confirm"],
   async run(ctx, input) {
@@ -382,15 +383,18 @@ export const loopCancel: CommandSpec = {
       return { data: { cancelled: false, run: runSummary(run, note) }, text: `Run ${run.id} is already ${run.status}; nothing to stop.${noteLines(note)}` };
     }
     const loops = (await loopsOf(ctx, run.id)).map(loopSummary);
-    if (!boolOption(input, "confirm")) {
-      const confirm = `cavelon loop cancel ${run.id} --confirm`;
+    const gate = await confirmation(ctx, input, "loop_cancel", { run: run.id });
+    if (!gate.confirmed) {
+      const confirm = gate.confirm(`cavelon loop cancel ${run.id} --confirm`);
       return {
-        data: { cancelled: false, run: runSummary(run, note), loops, confirm },
+        data: { cancelled: false, run: runSummary(run, note), loops, confirm, ...gate.fields },
         text:
           `Run ${run.id} (${run.workflow_name}) is ${run.status}` +
           (loops.length ? `, with loops:\n${table(loops, ["loop_id", "node", "state", "iteration"])}\n` : ".\n") +
           (note ? `${noteLines(note).slice(1)}\n` : "") +
+          (gate.mismatch ? `${gate.mismatch}\n` : "") +
           `Nothing was stopped. Stop it with: ${confirm}`,
+        ...(gate.exitCode ? { exitCode: gate.exitCode } : {}),
       };
     }
     const cancelled = await callStable<AgentRun>(ctx, "POST", "/api/v1/triggers/runs/{run_id}/cancel", "cancelling runs", { params: { run_id: [run.id] } });
@@ -1029,7 +1033,7 @@ export const triggerIdentity: CommandSpec = {
   ],
   options: {
     clear: { type: "boolean", description: "Remove the binding; scheduled and webhook runs then cannot start." },
-    confirm: { type: "boolean", description: "Make the change; without it nothing changes." },
+    confirm: { type: "boolean", mcpToken: true, description: "Make the change; without it nothing changes." },
   },
   examples: ["cavelon trigger identity orders", "cavelon trigger identity orders loop-runner --confirm", "cavelon trigger identity orders --clear --confirm"],
   async run(ctx, input) {
@@ -1049,11 +1053,13 @@ export const triggerIdentity: CommandSpec = {
     }
     const keyName = key && "name" in key ? key.name : wanted;
     const change = wanted ? `bind API key "${keyName}"` : "clear the binding";
-    if (!boolOption(input, "confirm")) {
-      const confirm = cavelonCommand("trigger", "identity", trigger.slug, keyRef ?? "--clear", "--confirm");
+    const gate = await confirmation(ctx, input, "trigger_identity", { trigger: trigger.id, from: current.api_key_id ?? null, to: wanted });
+    if (!gate.confirmed) {
+      const confirm = gate.confirm(cavelonCommand("trigger", "identity", trigger.slug, keyRef ?? "--clear", "--confirm"));
       return {
-        data: { trigger: trigger.slug, changed: false, would: change, current: view, confirm },
-        text: `${identityText(trigger, view)}\n\nNothing changed. To ${change}: ${confirm}`,
+        data: { trigger: trigger.slug, changed: false, would: change, current: view, confirm, ...gate.fields },
+        text: `${identityText(trigger, view)}\n\n${gate.mismatch ? `${gate.mismatch}\n` : ""}Nothing changed. To ${change}: ${confirm}`,
+        ...(gate.exitCode ? { exitCode: gate.exitCode } : {}),
       };
     }
     const updated = await callStable<ExecutionIdentity>(ctx, "PUT", route, "execution identities", {

@@ -1,7 +1,8 @@
 import { CAPACITY_TUTORIAL_PAGE } from "../capacity.js";
-import { boolOption, CURSOR_OPTION, intOption, LIMIT_OPTION, pageOf, positional, stringOption, type CommandSpec, type Context } from "../command.js";
+import { CURSOR_OPTION, intOption, LIMIT_OPTION, pageOf, positional, stringOption, type CommandSpec, type Context } from "../command.js";
 import type { OpenApiDoc } from "../contracts.js";
 import { CavelonError, ExitCode, usageError } from "../errors.js";
+import { confirmation } from "../confirm-token.js";
 import { moreHint, table } from "../format.js";
 import { callStable, workflowOperation } from "../invoke.js";
 import { deref, jsonBodySchema, validateBody, type Operation } from "../openapi.js";
@@ -190,7 +191,7 @@ export const modelsSetLimit: CommandSpec = {
     { name: "limit", description: "Requests the endpoint serves at once (a whole number), or none to clear the limit.", required: true },
   ],
   options: {
-    confirm: { type: "boolean", description: "Change it; without this nothing is changed." },
+    confirm: { type: "boolean", mcpToken: true, description: "Change it; without this nothing is changed." },
     env: ENV_OPTION,
   },
   examples: ["cavelon models set-limit llama-70b 8", "cavelon models set-limit llama-70b 8 --confirm", "cavelon models set-limit llama-70b none --confirm"],
@@ -223,11 +224,13 @@ export const modelsSetLimit: CommandSpec = {
       return { data: { ...base, changed: false, sent: false }, text: `${label} already has max_concurrent_requests ${limitText(limit)}; nothing to change.` };
     }
     const sharing = model.shares_endpoint_with?.length ? ` It shares the count with ${model.shares_endpoint_with.join(", ")} (same endpoint).` : "";
-    if (!boolOption(input, "confirm")) {
-      const confirm = `cavelon models set-limit ${shellWord(row.model_id)} ${limitText(limit)}${flags} --confirm`;
+    const gate = await confirmation(ctx, input, "models_set_limit", { row: row.id, previous, limit });
+    if (!gate.confirmed) {
+      const confirm = gate.confirm(`cavelon models set-limit ${shellWord(row.model_id)} ${limitText(limit)}${flags} --confirm`);
       return {
-        data: { ...base, changed: false, sent: false, confirm },
-        text: `${label}: max_concurrent_requests ${limitText(previous)} → ${limitText(limit)}.${sharing}\nNothing was changed. Change it with: ${confirm}`,
+        data: { ...base, changed: false, sent: false, confirm, ...gate.fields },
+        text: `${label}: max_concurrent_requests ${limitText(previous)} → ${limitText(limit)}.${sharing}\n${gate.mismatch ? `${gate.mismatch}\n` : ""}Nothing was changed. Change it with: ${confirm}`,
+        ...(gate.exitCode ? { exitCode: gate.exitCode } : {}),
       };
     }
     const saved = await callStable<ModelRow>(ctx, "PATCH", ROW_ROUTE, "changing Model Registry rows", {

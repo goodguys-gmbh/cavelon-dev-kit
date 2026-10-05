@@ -296,8 +296,9 @@ applied: preview pv_55ed52186395560a11ad7e525a2b9553 to support-faq (env test)
 created: 1 agents, 1 knowledge_bases, 1 skills, 1 test_suites
 ```
 
-If the solution changed on the instance after the preview, the confirm is
-refused (exit 4) and nothing is imported; preview again. See
+If the solution changed on the instance, or the package files changed, after
+the preview, the confirm is refused (exit 4) and nothing is imported; preview
+again. See
 [Preview and confirm](concepts.md#preview-and-confirm).
 
 ## 7. Upload the knowledge

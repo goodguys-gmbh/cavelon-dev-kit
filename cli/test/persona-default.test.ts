@@ -1,9 +1,15 @@
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { Readable } from "node:stream";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import { editDistance, similarCodes } from "../src/code-hints.js";
+import { COMMANDS } from "../src/commands/index.js";
+import type { InStream } from "../src/io.js";
 import { KIT_ERROR_CODES } from "../src/kit-codes.js";
+import { createMcpServer } from "../src/mcp.js";
 import { exportForm, personaYaml, sectionFields } from "../src/package-format.js";
 import { CONTRACTS, startFakeServer, type FakeServer } from "./fake-server.js";
 import { cli, login, sandbox, type Sandbox } from "./helpers.js";
@@ -189,6 +195,58 @@ describe("the default route", () => {
     const confirmed = await cli(sb, ["activate", "--make-default", "--confirm"], { cwd: dir });
     expect(confirmed.stdout).toMatch(/Default route: Support \(support\) \(was Default \(default\)\)\./);
     expect((await cli(sb, ["activate"], { cwd: dir })).stdout).toMatch(/Support \(support\) is the tenant's default route\./);
+  });
+
+  it("over MCP, harness_default and activate's make_default change the default route only with their own preview's confirm_token", async () => {
+    const dir = await initSolution();
+    const mcp = createMcpServer(
+      {
+        stdout: { write: () => true },
+        stderr: { write: () => true },
+        stdin: Readable.from([]) as unknown as InStream,
+        env: sb.env,
+        cwd: dir,
+        now: () => new Date(),
+        sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+      },
+      COMMANDS,
+    );
+    const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+    await mcp.connect(serverSide);
+    const client = new Client({ name: "test", version: "0" });
+    await client.connect(clientSide);
+    const call = async (name: string, args: Record<string, unknown>) => {
+      const result = await client.callTool({ name, arguments: args });
+      return { isError: Boolean(result.isError), body: JSON.parse((result.content as Array<{ text: string }>)[0]!.text) as Record<string, any> };
+    };
+    const support = () => server.state.harnesses.find((h) => h.slug === "support")!;
+    try {
+      // true is refused before anything happens: activate does not activate either.
+      for (const [name, args] of [
+        ["harness_default", { solution: "support", confirm: true }],
+        ["activate", { "make-default": true, confirm: true }],
+      ] as const) {
+        const bare = await call(name, args);
+        expect(bare.isError, name).toBe(true);
+        expect(bare.body.error, name).toMatchObject({ code: "confirm_token_required", exit_code: 2 });
+      }
+      expect(support()).toMatchObject({ status: "draft", is_default: false });
+
+      const shown = await call("harness_default", { solution: "support" });
+      expect(shown.body).toMatchObject({ changed: false, default_route: { slug: "default" }, confirm_token: expect.stringMatching(/^[0-9a-f]{12}$/) });
+      expect(shown.body.confirm).toMatch(/^Show the person this, then call harness_default again with the same arguments and confirm: "[0-9a-f]{12}"/);
+      // harness_default's token is not activate's: the activation stands, the default route stays.
+      const other = await call("activate", { "make-default": true, confirm: shown.body.confirm_token });
+      expect(other.body).toMatchObject({ activated: true, default_route: { is_default: false, token_mismatch: true }, exit_code: 4 });
+      expect(other.body.default_route.confirm_token).not.toBe(shown.body.confirm_token);
+      expect(support()).toMatchObject({ status: "active", is_default: false });
+
+      const done = await call("harness_default", { solution: "support", confirm: shown.body.confirm_token });
+      expect(done.body).toMatchObject({ changed: true, previous_default: { slug: "default" } });
+      expect(support().is_default).toBe(true);
+    } finally {
+      await client.close();
+    }
   });
 
   it("activate keeps its result when the instance refuses the default route, and exits 1", async () => {

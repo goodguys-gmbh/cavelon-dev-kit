@@ -166,6 +166,17 @@ describe("cavelon mcp", () => {
     for (const name of ["sandbox_list", "sandbox_files", "sandbox_cat", "sandbox_activity", "sandbox_logs", "sandbox_receipt", "loop_iterations"]) {
       expect(byName[name]!.annotations, name).toMatchObject({ readOnlyHint: true });
     }
+    // Every tool that confirms a change takes its preview's token, a string; apply takes the preview's id.
+    const confirming = tools.filter((t) => "confirm" in (t.inputSchema as { properties: object }).properties).map((t) => t.name);
+    expect(confirming).toEqual(
+      expect.arrayContaining(["api", "limits_set", "models_set_limit", "loop_cancel", "sandbox_seed", "trigger_identity", "harness_default", "activate", "kb_upload", "apply"]),
+    );
+    for (const name of confirming) {
+      const confirm = (byName[name]!.inputSchema as { properties: Record<string, { type: unknown; description: string }> }).properties.confirm!;
+      if (name === "apply") continue;
+      expect(confirm.type, name).toBe("string");
+      expect(confirm.description, name).toMatch(/the confirm_token this tool's preview returned.*true is refused/);
+    }
     // loop watch streams, like watch: no tool; loop_iterations and operation_status follow a loop instead.
     expect(names).not.toContain("loop_watch");
     for (const name of ["loop_start", "sandbox_seed", "artifacts_export"]) {
@@ -187,11 +198,21 @@ describe("cavelon mcp", () => {
     expect((tool.inputSchema as { required: string[] }).required).toEqual(["key", "value"]);
     expect(Object.keys((tool.inputSchema as { properties: object }).properties)).toEqual(expect.arrayContaining(["key", "value", "confirm"]));
     const before = server.state.requests.length;
+    expect((tool.inputSchema as { properties: Record<string, { type: string }> }).properties.confirm!.type).toBe("string");
     const preview = await client.callTool({ name: "limits_set", arguments: { key: "agent_max_turns", value: 40 } });
     expect(preview.isError).toBeFalsy();
-    expect(payload(preview)).toMatchObject({ key: "agent_max_turns", previous: 25, value: 40, changed: false, sent: false });
+    const shown = payload(preview);
+    expect(shown).toMatchObject({ key: "agent_max_turns", previous: 25, value: 40, changed: false, sent: false, confirm_token: expect.stringMatching(/^[0-9a-f]{12}$/) });
+    expect(shown.confirm).toBe(`Show the person this, then call limits_set again with the same arguments and confirm: "${shown.confirm_token}" to make exactly this change.`);
+    // true is refused, never taken as yes; a token of another change confirms nothing.
+    const bare = await client.callTool({ name: "limits_set", arguments: { key: "agent_max_turns", value: 40, confirm: true } });
+    expect(bare.isError).toBe(true);
+    expect(payload(bare).error).toMatchObject({ code: "confirm_token_required", exit_code: 2 });
+    const other = payload(await client.callTool({ name: "limits_set", arguments: { key: "agent_max_turns", value: 41, confirm: shown.confirm_token } }));
+    expect(other).toMatchObject({ value: 41, changed: false, sent: false, token_mismatch: true, exit_code: 4 });
+    expect(other.confirm_token).not.toBe(shown.confirm_token);
     expect(server.state.requests.slice(before).filter((r) => r.method === "PATCH")).toEqual([]);
-    const done = await client.callTool({ name: "limits_set", arguments: { key: "agent_max_turns", value: 40, confirm: true } });
+    const done = await client.callTool({ name: "limits_set", arguments: { key: "agent_max_turns", value: 40, confirm: shown.confirm_token } });
     expect(done.isError).toBeFalsy();
     expect(payload(done)).toMatchObject({ now: 40, source: "tenant", changed: true, sent: true });
     server.state.tenantLimits.clear();
@@ -389,7 +410,7 @@ describe("cavelon mcp", () => {
     const shown = payload(await client.callTool({ name: "models_set_limit", arguments: { model: "llama-70b", limit: "8" } }));
     expect(shown).toMatchObject({ previous: 4, limit: 8, changed: false, sent: false });
     expect(row.max_concurrent_requests).toBe(4);
-    const changed = payload(await client.callTool({ name: "models_set_limit", arguments: { model: "llama-70b", limit: "8", confirm: true } }));
+    const changed = payload(await client.callTool({ name: "models_set_limit", arguments: { model: "llama-70b", limit: "8", confirm: shown.confirm_token } }));
     expect(changed).toMatchObject({ previous: 4, limit: 8, changed: true });
     expect(row.max_concurrent_requests).toBe(8);
   });
@@ -412,7 +433,10 @@ describe("cavelon mcp", () => {
     const { tools } = await client.listTools();
     const api = tools.find((t) => t.name === "api")!;
     expect(Object.keys((api.inputSchema as { properties: object }).properties)).toContain("confirm");
-    expect(client.getInstructions()).toMatch(/api for an operation that is not read-only, return what they would do and change nothing without confirm: true/);
+    expect(client.getInstructions()).toMatch(
+      /api for an operation that is not read-only, return what they would do and a confirm_token, and change nothing until called again with the same arguments and confirm set to that token/,
+    );
+    expect(client.getInstructions()).toMatch(/a different change needs a new preview, and confirm: true is refused/);
     expect(client.getInstructions()).toMatch(/api refuses, even with confirm, an operation the instance marks for a person \(x-cavelon-person-only; its reason is in the error\), or on an instance that marks none, one that changes a secret, creates or revokes a credential/);
     const changes = (before: number) => server.state.requests.slice(before).filter((r) => r.method !== "GET");
 
@@ -420,11 +444,24 @@ describe("cavelon mcp", () => {
     let before = server.state.requests.length;
     const preview = await client.callTool({ name: "api", arguments: { operation: "set_variable", params: ["name=api_region"], body: '{"value":"eu"}' } });
     expect(preview.isError).toBeFalsy();
-    expect(payload(preview)).toMatchObject({ operation: "set_variable", method: "PUT", path: "/api/v1/variables/api_region", body: { value: "eu" }, sent: false });
+    const shown = payload(preview);
+    expect(shown).toMatchObject({ operation: "set_variable", method: "PUT", path: "/api/v1/variables/api_region", body: { value: "eu" }, sent: false });
+    expect(shown.confirm_token).toMatch(/^[0-9a-f]{12}$/);
     expect(changes(before)).toEqual([]);
     const missing = await client.callTool({ name: "api", arguments: { operation: "set_variable", body: '{"value":"eu"}' } });
     expect(payload(missing).error).toMatchObject({ code: "validation_failed" });
-    const sent = await client.callTool({ name: "api", arguments: { operation: "set_variable", params: ["name=api_region"], body: '{"value":"eu"}', confirm: true } });
+    // confirm without a preview's token sends nothing: true is refused, and so is the token of another body.
+    const bare = await client.callTool({ name: "api", arguments: { operation: "set_variable", params: ["name=api_region"], body: '{"value":"eu"}', confirm: true } });
+    expect(bare.isError).toBe(true);
+    expect(payload(bare).error).toMatchObject({ code: "confirm_token_required", exit_code: 2 });
+    const otherBody = payload(
+      await client.callTool({ name: "api", arguments: { operation: "set_variable", params: ["name=api_region"], body: '{"value":"us"}', confirm: shown.confirm_token } }),
+    );
+    expect(otherBody).toMatchObject({ body: { value: "us" }, sent: false, token_mismatch: true, exit_code: 4 });
+    expect(otherBody.confirm_token).not.toBe(shown.confirm_token);
+    expect(changes(before)).toEqual([]);
+    // The shown request's token sends it.
+    const sent = await client.callTool({ name: "api", arguments: { operation: "set_variable", params: ["name=api_region"], body: '{"value":"eu"}', confirm: shown.confirm_token } });
     expect(sent.isError).toBeFalsy();
     expect(payload(await client.callTool({ name: "variables_get", arguments: { name: "api_region" } }))).toMatchObject({ value: "eu" });
     before = server.state.requests.length;
@@ -493,8 +530,12 @@ describe("cavelon mcp", () => {
 
       // A file inside the solution folder goes, once confirmed.
       writeFileSync(path.join(sb.home, "faq.md"), "# FAQ\n");
-      const inside = await client.callTool({ name: "api", arguments: upload("faq.md") });
+      const { confirm: _bare, ...unconfirmed } = upload("faq.md");
+      const insidePreview = payload(await client.callTool({ name: "api", arguments: unconfirmed }));
+      expect(insidePreview).toMatchObject({ sent: false, files: [{ field: "files", file: "faq.md" }] });
+      const inside = await client.callTool({ name: "api", arguments: { ...unconfirmed, confirm: insidePreview.confirm_token } });
       expect(inside.isError).toBeFalsy();
+      expect(payload(inside).sent).toBeUndefined();
       // The CLI is a person, who may name any file.
       expect((await cli(sb, ["api", "set_variable", "name=from_outside", "--json", `@${path.join(outside, "body.json")}`])).code).toBe(0);
     } finally {

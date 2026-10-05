@@ -10,6 +10,7 @@ import {
   type Context,
 } from "../command.js";
 import { CavelonError, ExitCode, usageError } from "../errors.js";
+import { confirmation } from "../confirm-token.js";
 import { keyValues, moreHint, table } from "../format.js";
 import { callStable } from "../invoke.js";
 import { formatQuota, limitError, limitsOrWarn, readQuotas } from "../limits.js";
@@ -309,7 +310,7 @@ export const harnessDefault: CommandSpec = {
   mcpTool: "harness_default",
   positionals: [{ name: "solution", description: "Name, slug or id of the solution; default: cavelon.yaml's harness." }],
   options: {
-    confirm: { type: "boolean", description: "Change the default route (after a person saw the preview)." },
+    confirm: { type: "boolean", mcpToken: true, description: "Change the default route (after a person saw the preview)." },
   },
   examples: ["cavelon harness default support", "cavelon harness default support --confirm"],
   async run(ctx, input) {
@@ -326,14 +327,25 @@ export const harnessDefault: CommandSpec = {
     }
     const commands = defaultCommands(harness.slug);
     const draft = harness.status !== "active" ? `${named(harness)} is ${harness.status}; activate it first (\`cavelon activate --harness ${harness.slug}\`), or the instance may refuse.` : undefined;
-    if (!boolOption(input, "confirm")) {
+    const gate = await confirmation(ctx, input, "harness_default", { harness: harness.id, from: current?.id ?? null });
+    if (!gate.confirmed) {
       return {
-        data: { changed: false, harness: target, default_route: current, default_known: route.known, confirm: commands.confirm, ...(draft ? { note: draft } : {}) },
+        data: {
+          changed: false,
+          harness: target,
+          default_route: current,
+          default_known: route.known,
+          confirm: gate.confirm(commands.confirm),
+          ...gate.fields,
+          ...(draft ? { note: draft } : {}),
+        },
         text: [
           defaultChangeLine(harness, route),
           ...(draft ? [draft] : []),
+          ...(gate.mismatch ? [gate.mismatch] : []),
           `Show this to a person; with their yes: ${commands.confirm}`,
         ].join("\n"),
+        ...(gate.exitCode ? { exitCode: gate.exitCode } : {}),
       };
     }
     const updated = await setDefaultRoute<Harness>(ctx, harness.id);

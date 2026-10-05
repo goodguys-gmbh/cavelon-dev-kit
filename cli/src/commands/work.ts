@@ -14,6 +14,7 @@ import {
 } from "../command.js";
 import { capacityCodeIn, capacityHint, noteLines, runCapacityNote, type CapacityNote, type RunState } from "../capacity.js";
 import { CavelonError, ExitCode, usageError, type ExitCodeValue } from "../errors.js";
+import { confirmation } from "../confirm-token.js";
 import { confinedPath } from "../paths.js";
 import { clip, keyValues, moreHint, table } from "../format.js";
 import type { OpenApiDoc } from "../contracts.js";
@@ -517,7 +518,7 @@ export const kbUpload: CommandSpec = {
     ext: { type: "string", multiple: true, value: "<ext>", description: "Only these file extensions (pdf, md, …)." },
     replace: { type: "boolean", description: "Replace active documents with the same file name." },
     "keep-both": { type: "boolean", description: "Keep active documents with the same file name next to the new ones." },
-    confirm: { type: "boolean", description: "With --replace, deactivate the old documents the instance does not replace itself; without it nothing is sent." },
+    confirm: { type: "boolean", mcpToken: true, description: "With --replace, deactivate the old documents the instance does not replace itself; without it nothing is sent." },
     "dry-run": { type: "boolean", description: "List what would be uploaded and replaced, upload nothing." },
     wait: WAIT_OPTION,
     timeout: TIMEOUT_OPTION,
@@ -570,8 +571,9 @@ export const kbUpload: CommandSpec = {
         ].join("\n"),
       };
     }
-    if (deactivations.length && !boolOption(input, "confirm")) {
-      const confirm = cavelonCommand(
+    const gate = deactivations.length ? await confirmation(ctx, input, "kb_upload", { kb: kb.id, files: rel, existing: planned }) : undefined;
+    if (gate && !gate.confirmed) {
+      const confirm = gate.confirm(cavelonCommand(
         "kb",
         "upload",
         dirArg,
@@ -581,14 +583,16 @@ export const kbUpload: CommandSpec = {
         ...extensions.flatMap((e) => ["--ext", e]),
         "--replace",
         "--confirm",
-      );
+      ));
       return {
-        data: { kb: { id: kb.id, name: kb.name ?? null }, files: rel, count: rel.length, uploaded: false, existing: planned, confirm },
+        data: { kb: { id: kb.id, name: kb.name ?? null }, files: rel, count: rel.length, uploaded: false, existing: planned, confirm, ...gate.fields },
         text: [
           `--replace uploads ${rel.length} files and then deactivates ${deactivations.length} document${deactivations.length === 1 ? "" : "s"} the instance's upload does not replace itself:`,
           ...matches.map(plannedLine),
+          ...(gate.mismatch ? [gate.mismatch] : []),
           `Nothing was sent. Upload and deactivate with: ${confirm}`,
         ].join("\n"),
+        ...(gate.exitCode ? { exitCode: gate.exitCode } : {}),
       };
     }
     // Batches keep each request bounded in size and time.
