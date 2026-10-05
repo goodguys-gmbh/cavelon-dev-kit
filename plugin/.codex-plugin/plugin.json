@@ -1,6 +1,6 @@
 {
   "name": "cavelon",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Build, seed, test and improve Cavelon solutions from a repository: the Cavelon skills and the cavelon MCP server.",
   "author": {
     "name": "goodguys GmbH",

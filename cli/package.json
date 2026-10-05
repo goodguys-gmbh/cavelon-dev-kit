@@ -1,6 +1,6 @@
 {
   "name": "@cavelon/cli",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "The cavelon binary: CLI and local MCP server for building Cavelon solutions with a coding agent.",
   "license": "Apache-2.0",
   "homepage": "https://github.com/goodguys-gmbh/cavelon-dev-kit",
