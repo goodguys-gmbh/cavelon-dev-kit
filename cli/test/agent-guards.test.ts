@@ -279,8 +279,8 @@ describe("cavelon api and the api tool, run by an agent and by a person", () => 
 
   describe("a body field the instance marks as a secret value", () => {
     const updateModel = (body: Record<string, unknown>) => ["update_model", `model_registry_id=${server.state.models[0]!.id}`, "--body", JSON.stringify(body)];
+    // The snapshot marks ModelUpdateRequest.api_key, as a recent instance does.
     const mark = () => {
-      server.state.secretFields = { ModelUpdateRequest: ["api_key"] };
       server.state.models.push(modelRow(tenant, { model_id: "llama-70b", base_url: "http://vllm:8000/v1" }));
     };
 
@@ -325,6 +325,7 @@ describe("cavelon api and the api tool, run by an agent and by a person", () => 
     });
 
     it("is an ordinary field on an instance whose document marks none", async () => {
+      server.state.secretFields = null;
       server.state.models.push(modelRow(tenant, { model_id: "llama-70b", base_url: "http://vllm:8000/v1" }));
       const client = await mcp();
       const preview = await tool(client, { operation: "update_model", params: [`model_registry_id=${server.state.models[0]!.id}`], body: '{"api_key":"sk"}' });

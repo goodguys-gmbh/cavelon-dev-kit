@@ -1321,12 +1321,69 @@
         ],
         "summary": "Read Principal",
         "operationId": "read_principal_api_v1_meta_principal_get",
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 255
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MetaPrincipal"
+                }
+              }
+            }
+          },
+          "400": {},
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -6761,6 +6818,11 @@
               }
             ],
             "title": "External Source Urls"
+          },
+          "replace_existing": {
+            "type": "boolean",
+            "title": "Replace Existing",
+            "default": true
           }
         },
         "type": "object",
@@ -8553,6 +8615,20 @@
               }
             ],
             "title": "Enrichment Coverage"
+          },
+          "replaced_document_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replaced Document Ids"
           },
           "has_original": {
             "type": "boolean",
@@ -11159,7 +11235,8 @@
             "type": "string",
             "enum": [
               "tenant",
-              "platform"
+              "platform",
+              "none"
             ],
             "title": "Mode"
           },
@@ -11169,6 +11246,28 @@
             },
             "type": "array",
             "title": "Permissions"
+          },
+          "tenants": {
+            "items": {
+              "$ref": "#/components/schemas/PrincipalTenant"
+            },
+            "type": "array",
+            "title": "Tenants"
+          },
+          "reaches_all_tenants": {
+            "type": "boolean",
+            "title": "Reaches All Tenants"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
           }
         },
         "type": "object",
@@ -11179,7 +11278,10 @@
           "api_key",
           "tenant_id",
           "mode",
-          "permissions"
+          "permissions",
+          "tenants",
+          "reaches_all_tenants",
+          "next_cursor"
         ],
         "title": "MetaPrincipal"
       },
@@ -11539,7 +11641,9 @@
                 "type": "null"
               }
             ],
-            "title": "Api Key"
+            "title": "Api Key",
+            "writeOnly": true,
+            "x-cavelon-secret": true
           },
           "capabilities": {
             "anyOf": [
@@ -12059,6 +12163,47 @@
           "harness_ids"
         ],
         "title": "PrincipalApiKey"
+      },
+      "PrincipalTenant": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "is_default": {
+            "type": "boolean",
+            "title": "Is Default"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "role",
+          "is_default"
+        ],
+        "title": "PrincipalTenant"
       },
       "PrincipalToken": {
         "properties": {
@@ -14091,7 +14236,9 @@
             "type": "string",
             "maxLength": 16384,
             "minLength": 1,
-            "title": "Value"
+            "title": "Value",
+            "writeOnly": true,
+            "x-cavelon-secret": true
           }
         },
         "type": "object",
@@ -14394,6 +14541,10 @@
             "type": "string",
             "title": "Tenant Name"
           },
+          "tenant_slug": {
+            "type": "string",
+            "title": "Tenant Slug"
+          },
           "role": {
             "type": "string",
             "title": "Role"
@@ -14407,6 +14558,7 @@
         "required": [
           "tenant_id",
           "tenant_name",
+          "tenant_slug",
           "role",
           "is_primary"
         ],

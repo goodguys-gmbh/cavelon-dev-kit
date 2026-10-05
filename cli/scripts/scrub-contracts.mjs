@@ -6,8 +6,11 @@
 // An instance's texts can carry its developers' notes: issue references such as
 // "(#12)" and, in a rule's explanation, the reasoning behind the rule. The
 // snapshots keep what a user reads (codes, messages, hints, docs) and drop the
-// rest: issue references go, and a rule's explanation keeps its first
-// paragraph. `--rename` replaces a product name the texts still carry. The
+// rest: issue references go (in the JSON texts, with the sentence when the
+// reference is not in parentheses), and a rule's explanation keeps its first
+// paragraph. `--rename` replaces a product name the texts still carry, or with
+// `<base url>=` makes the docs links of an instance with a public base URL
+// relative, as an instance at its default settings publishes them. The
 // tests read the shapes, so nothing they check changes.
 
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -39,8 +42,19 @@ function firstParagraph(text) {
   return lead ? first.slice(lead[0].length) : first;
 }
 
+const BARE_ISSUE_REF = /#\d{2,}\b/;
+
+/** Drops each sentence that still names an issue outside parentheses ("exported before #12 carried"): it tells history, not use. */
+function withoutIssueSentences(text) {
+  if (!BARE_ISSUE_REF.test(text)) return text;
+  return text
+    .split(/(?<=\.) /)
+    .filter((sentence) => !BARE_ISSUE_REF.test(sentence))
+    .join(" ");
+}
+
 function scrubValue(value, key) {
-  if (typeof value === "string") return scrubText(key === "explanation" ? firstParagraph(value) : value);
+  if (typeof value === "string") return withoutIssueSentences(scrubText(key === "explanation" ? firstParagraph(value) : value));
   if (Array.isArray(value)) return value.map((item) => scrubValue(item));
   if (value && typeof value === "object") {
     const out = {};

@@ -202,10 +202,10 @@
     },
     {
       "code": "endpoint_missing",
-      "rule": "endpoints_must_match_role_constraints",
-      "message": "Source and target nodes must have roles the edge type allows.",
-      "explanation": "Source and target nodes must have roles the edge type allows.",
-      "hint": null,
+      "rule": "edge_endpoints_must_exist",
+      "message": "An edge references a node that does not exist in the graph.",
+      "explanation": "An edge references a node that does not exist in the graph.",
+      "hint": "Point the edge at an existing, active node, or delete the edge.",
       "docs": "/docs/reference/nodes-and-edges#graph-validation-rules"
     },
     {
@@ -1930,6 +1930,55 @@
       "docs": "/docs/reference/nodes-and-edges#masterloop"
     },
     {
+      "code": "config_invalid",
+      "area": "package",
+      "message": "A config value at the path is one its own editor would refuse.",
+      "hint": "Correct the value at the path; the message names what is wrong with it.",
+      "docs": "/docs/reference/api-endpoints"
+    },
+    {
+      "code": "duplicate_in_package",
+      "area": "package",
+      "message": "The package declares the same key, or binds the same pair, more than once.",
+      "hint": "Rename or remove the entry at the path; the first one stays.",
+      "docs": "/docs/reference/api-endpoints"
+    },
+    {
+      "code": "handoff_target_inactive",
+      "area": "package",
+      "message": "An active agent hands off to an inactive agent, which the graph leaves out.",
+      "hint": "Activate the target agent, or remove or deactivate the handoff at the path.",
+      "docs": "/docs/reference/api-endpoints"
+    },
+    {
+      "code": "import_blocked",
+      "area": "package",
+      "message": "The import cannot apply this package as it is.",
+      "hint": "Correct what the message names in the package or the target, and preview again.",
+      "docs": "/docs/reference/api-endpoints"
+    },
+    {
+      "code": "model_not_in_registry",
+      "area": "package",
+      "message": "An agent names a model that is not an active model in the target tenant's model registry.",
+      "hint": "Use a model `cavelon models list` shows, add the model under Settings > Models, or declare it in the package's model_registry.",
+      "docs": "/docs/reference/api-endpoints"
+    },
+    {
+      "code": "package_limit_exceeded",
+      "area": "package",
+      "message": "The package exceeds a size limit of this instance.",
+      "hint": "Split the package, or shorten the field at the path.",
+      "docs": "/docs/reference/api-endpoints"
+    },
+    {
+      "code": "reference_missing",
+      "area": "package",
+      "message": "The package references something that is neither in the package nor in the target.",
+      "hint": "Add it to the package or create it in the target first, or remove the reference at the path.",
+      "docs": "/docs/reference/api-endpoints"
+    },
+    {
       "code": "package_version_unsupported",
       "area": "package",
       "message": "This instance does not accept that package version.",
@@ -2094,7 +2143,14 @@
       "code": "approval_requester_cannot_decide",
       "area": "approval",
       "message": "You requested this approval, so someone else must decide it.",
-      "hint": "The Approval node forbids self-approval (`forbid_self_approval`): another person who may decide approvals decides it.",
+      "hint": "The Approval node forbids self-approval (`forbid_self_approval`): another person who may decide approvals decides it. An API key counts as the person who issued it, and a key whose issuer is unknown, such as one the platform minted, does not decide an approval that has a requester.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "chat_route_not_live",
+      "area": "solution",
+      "message": "This workspace has no live solution answering chat yet.",
+      "hint": "Activate a solution (`cavelon activate`, or Solutions in the dashboard): while the default route serves nothing a person wrote, the activated solution becomes it. Or send the `harness_id` of an active solution.",
       "docs": "/docs/reference/api-endpoints#errors-and-retries"
     },
     {
