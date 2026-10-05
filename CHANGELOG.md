@@ -7,6 +7,15 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-10-05
+
+Safer and clearer for agents: confirmations over MCP are bound to the preview
+that was shown, a stale preview no longer imports silently, and a preview never
+creates a solution. Validation and the schema explain more before an import,
+fmt and pull agree, trace shows each assertion and the answer, and new
+`cavelon chat` and `cavelon deactivate` let you try a solution that is not the
+default route and take one back to draft.
+
 ### Added
 
 - `cavelon chat <message> --harness <solution>` sends one message to a
