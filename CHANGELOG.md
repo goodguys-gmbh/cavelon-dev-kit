@@ -7,6 +7,22 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Added
+
+- `cavelon apply` shows the instance's own `tenant_wide` report from the
+  preview: the tenant-wide sections a solution's import leaves out, or, with
+  the flag, the active solutions they reach (`tenant-wide: … change for every
+  solution of the tenant, reaching the active solutions …`, and
+  `tenant_wide.reaches_active_solutions` in `--json`), and asks for a person
+  naming them. `tenant_wide.reported_by` says whether the instance reported it
+  or the kit read it from the package files, as on an instance that sends no
+  report. A confirm that sent the flag says which sections it imported for
+  the whole tenant.
+- A finding in a tenant-wide file of a solution's folder (such as
+  `model_endpoint_limit_without_base_url` on a Model Registry row) says that a
+  solution's apply leaves that section out unless `--include-tenant-wide`; the
+  endpoint limit checks name `cavelon models set-limit` for one row's limit.
+
 ### Changed
 
 - **The MCP server refuses the CLI's spelling of a tool argument.** Since
@@ -14,6 +30,15 @@ CLI, the skills and the plugin.
   spelling (`make-default`) with a warning; that grace period is over. A call
   with `make-default` now fails with `unknown_argument`, does nothing, and
   names `make_default`.
+- `apply --tenant-wide` and `pull --tenant-wide` are now
+  `--include-tenant-wide`, and the MCP tools' `tenant_wide` argument is
+  `include_tenant_wide`, the instance's name for the flag. The 0.1.7 spellings
+  are still taken, with a warning, and will be refused in a later release.
+- The contract snapshot's package schema marks the six tenant-wide sections
+  (`x-cavelon-scope: tenant`) as the instance publishes them, so tests cover
+  `model_role_defaults`, `realtime_config`, `telephony_config` and `kb_orders`
+  as well; an instance that marks none still falls back to `tenant_settings`
+  and `model_registry`.
 
 ## [0.1.7] - 2026-10-05
 

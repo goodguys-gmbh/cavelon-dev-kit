@@ -27,7 +27,7 @@ export interface ImportRequest {
   mode: "overwrite" | "replace";
   harness_id?: string;
   runtime_bindings?: Record<string, string>;
-  /** Also import a solution package's tenant-wide sections (`apply --tenant-wide`), on an instance that takes it. */
+  /** Also import a solution package's tenant-wide sections (`apply --include-tenant-wide`), on an instance that takes it. */
   include_tenant_wide?: boolean;
 }
 

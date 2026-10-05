@@ -127,10 +127,10 @@ Every command takes `--json` (one JSON document on stdout, errors included),
 | `chat <message> [--harness] [--env] [--session <id>] [--timeout 90s]` | changing | Send one message to a solution and print its answer, with the session to continue and the conversation to trace; tries a draft or an active solution that is not the default route. |
 | `deactivate [--harness] [--env] [--confirm [<token>]]` | changing (destructive) | Take an active solution out of live traffic: its status becomes `inactive` (not `draft`); previews first. |
 | `init [--harness [--new]] [--agents <list>] [--hook] [--update] [--from <file> [--force]]` | changing (files) | Make this folder a solution: `cavelon.yaml`, `package/`, `tests/`, `env/`, `.cavelon/`; on a terminal it asks for the tenant and the solution (or a new one by name); a name close to an existing solution's is refused unless `--new`; `--from` writes a package file into it. |
-| `pull [--harness] [--force] [--tenant-wide]` | changing (files) | Write the instance's package into `package/` and `tests/`, the inventory into `.cavelon/`. A solution's tenant-wide sections only with `--tenant-wide`, which says when the export carries none. |
+| `pull [--harness] [--force] [--include-tenant-wide]` | changing (files) | Write the instance's package into `package/` and `tests/`, the inventory into `.cavelon/`. A solution's tenant-wide sections only with `--include-tenant-wide`, which says when the export carries none. |
 | `validate [--offline] [--strict]` | read-only | Check the package files against the cached package schema, their references, unknown fields and models; `--strict` fails on warnings. |
 | `schema [<section>[.<field>…] \| <type>] [--offline]` | read-only | The package schema's sections, or the fields of a section, a nested field (`agents.handoffs`) or a type, with a minimal example. |
-| `apply [--env] [--harness] [--mode] [--tenant-wide]` | changing | Preview the files against the instance; prints and stores a preview id. A solution's tenant-wide sections go along only with `--tenant-wide`, for the whole tenant. |
+| `apply [--env] [--harness] [--mode] [--include-tenant-wide]` | changing | Preview the files against the instance; prints and stores a preview id. A solution's tenant-wide sections go along only with `--include-tenant-wide`, for the whole tenant. |
 | `apply --confirm <preview-id>` | changing | Import exactly that preview; a stale one, or one the import's own check refuses (it names the blockers), exits 4. |
 | `explain <code>` | read-only | Look a code up in the instance's error catalog. |
 | `variables list` / `variables get <name>` | read-only | The tenant's plain-text variables (`{{var:…}}`) with their values. |
@@ -637,9 +637,9 @@ cavelon activate --harness support
   which). Files of sections the schema does not know are kept byte for byte. A
   solution's pull leaves the tenant-wide sections out of the folder (those the
   schema marks `x-cavelon-scope: tenant`; on an instance that marks none,
-  `tenant_settings` and `model_registry`) unless `--tenant-wide`, which asks the
-  export for them (`include_tenant_wide`) where the instance takes it, and says
-  when the export carries none. A file of one already there is kept (listed
+  `tenant_settings` and `model_registry`) unless `--include-tenant-wide`, which
+  asks the export for them (`include_tenant_wide`) where the instance takes
+  it, and says when the export carries none. A file of one already there is kept (listed
   under `kept`). It refuses when package files have uncommitted changes
   (exit 4) unless `--force`, and writes the tenant's solutions, knowledge bases,
   tools, test suites and sandboxes to `.cavelon/inventory.md`.
@@ -674,10 +674,13 @@ cavelon activate --harness support
   (with `--name` as `package/harnesses.yaml` names that harness); preview again
   after it. `runtime_bindings` from the env file
   bind the package's runtime requirements. A solution's import leaves the
-  package's tenant-wide sections out; `--tenant-wide` sends them
-  (`include_tenant_wide`), for every solution of the tenant. An instance that
-  does not publish that flag imports them with every solution's package, and
-  `apply` says so. A preview that reaches an active solution, deletes, changes
+  package's tenant-wide sections out; `--include-tenant-wide` sends them
+  (`include_tenant_wide`), for every solution of the tenant, and the confirm
+  replays the flag with the preview it stored. The preview shows the
+  instance's `tenant_wide` report: the sections it left out, or the active
+  solutions they reach when applied. An instance that does not publish that
+  flag imports them with every solution's package, and `apply` says so.
+  (`--tenant-wide`, the flag's name in 0.1.7, is still taken with a warning.) A preview that reaches an active solution, deletes, changes
   tenant-wide sections or goes to `env/prod` says to show it to a person first.
 - **`explain <code>`** looks a rule code or API error code up in the instance's
   error catalog (and the codes `validate` reports itself): meaning, fix and docs

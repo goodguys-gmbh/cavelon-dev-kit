@@ -27,6 +27,49 @@ export interface OptionSpec {
    * shell needs; `api`'s is a string that may be empty.
    */
   mcpToken?: boolean;
+  /**
+   * The option's name in an earlier release, still taken with a warning (as
+   * `--<formerly>` and as the tool argument in snake_case), so a script or
+   * an agent's habit written against that release keeps working.
+   */
+  formerly?: string;
+}
+
+/** The warning for an option or argument given by its former name. */
+export function formerlyWarning(given: string, now: string): string {
+  return `${given} is now ${now}; ${given} is still taken for now and will be refused in a later release.`;
+}
+
+/**
+ * The arguments with each option's former name (`--<formerly>`, also
+ * `--<formerly>=<value>`) spelled as it is now, warning once per name.
+ */
+export function renameFormerOptions(spec: CommandSpec, args: string[], warn: (message: string) => void): string[] {
+  const former = new Map(
+    Object.entries(spec.options ?? {})
+      .filter(([, o]) => o.formerly)
+      .map(([name, o]) => [o.formerly!, name]),
+  );
+  if (!former.size) return args;
+  const warned = new Set<string>();
+  const out: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]!;
+    if (arg === "--") {
+      out.push(...args.slice(i));
+      break;
+    }
+    const flag = arg.startsWith("--") ? arg.slice(2).split("=")[0]! : undefined;
+    const now = flag !== undefined ? former.get(flag) : undefined;
+    if (!now) {
+      out.push(arg);
+      continue;
+    }
+    if (!warned.has(flag!)) warn(formerlyWarning(`--${flag}`, `--${now}`));
+    warned.add(flag!);
+    out.push(`--${now}${arg.slice(2 + flag!.length)}`);
+  }
+  return out;
 }
 
 export interface PositionalSpec {
@@ -114,7 +157,8 @@ export function optionDescription(name: string, o: OptionSpec): string {
     o.type === "boolean" && o.mcpToken
       ? ` In a person's terminal the flag alone confirms; run by a coding agent, \`--${name} <token>\` with the token its preview printed (the bare flag only shows the preview there, exit 5).`
       : "";
-  return o.description + token + (o.multiple ? " Repeatable." : "");
+  const former = o.formerly ? ` Formerly \`--${o.formerly}\`, still taken with a warning.` : "";
+  return o.description + token + (o.multiple ? " Repeatable." : "") + former;
 }
 
 export function stringOption(input: Input, name: string): string | undefined {

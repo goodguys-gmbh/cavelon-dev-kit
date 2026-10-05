@@ -6768,7 +6768,8 @@
       "$ref": "#/$defs/PackageManifest"
     },
     "tenant_settings": {
-      "$ref": "#/$defs/PackageTenantSettings"
+      "$ref": "#/$defs/PackageTenantSettings",
+      "x-cavelon-scope": "tenant"
     },
     "persona": {
       "anyOf": [
@@ -6849,14 +6850,16 @@
         "$ref": "#/$defs/PackageModelRegistryEntry"
       },
       "title": "Model Registry",
-      "type": "array"
+      "type": "array",
+      "x-cavelon-scope": "tenant"
     },
     "model_role_defaults": {
       "items": {
         "$ref": "#/$defs/PackageModelRoleDefault"
       },
       "title": "Model Role Defaults",
-      "type": "array"
+      "type": "array",
+      "x-cavelon-scope": "tenant"
     },
     "realtime_config": {
       "anyOf": [
@@ -6867,7 +6870,8 @@
           "type": "null"
         }
       ],
-      "default": null
+      "default": null,
+      "x-cavelon-scope": "tenant"
     },
     "telephony_config": {
       "anyOf": [
@@ -6878,7 +6882,8 @@
           "type": "null"
         }
       ],
-      "default": null
+      "default": null,
+      "x-cavelon-scope": "tenant"
     },
     "web_sources": {
       "items": {
@@ -6896,7 +6901,8 @@
           "type": "null"
         }
       ],
-      "default": null
+      "default": null,
+      "x-cavelon-scope": "tenant"
     },
     "registry_entities": {
       "type": "object",

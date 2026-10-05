@@ -40,7 +40,7 @@ import { cliFix, similarCodes } from "../code-hints.js";
 import { KIT_ERROR_CODES } from "../kit-codes.js";
 import { pairOrderHint, pairOrderPointer } from "../pair-order.js";
 import { readPackage, tenantWideSections, writePackage, type Finding, type ItemFiles, type PackageOnDisk, type WriteOptions } from "../package-files.js";
-import { blockerDetails, blockerLines, changeLines, fieldChanges, locateBlockers, notApplied, notAppliedLines } from "../preview-report.js";
+import { blockerDetails, blockerLines, changeLines, fieldChanges, locateBlockers, notApplied, notAppliedLines, tenantWideReport } from "../preview-report.js";
 import { readPrincipal } from "../principal.js";
 import type { ProjectConfig } from "../project.js";
 import { CASE_STATUSES, caseStatus, TESTING_PAGE, type CaseStatus } from "../results.js";
@@ -299,7 +299,7 @@ export const pull: CommandSpec = {
     "spells out that the file leaves out (an empty list, a default) is no change. A test suite goes back to the file it was\n" +
     "pulled into or applied from, whatever its name. Files of sections the schema does not know are kept byte for byte.\n" +
     "A solution's pull leaves the tenant-wide sections (the tenant's settings, its model list) out of the folder, unless\n" +
-    "--tenant-wide; it says when the export carries none. Refuses when package files have uncommitted changes, unless --force;\n" +
+    "--include-tenant-wide; it says when the export carries none. Refuses when package files have uncommitted changes, unless --force;\n" +
     "outside a git repository, when a file it would overwrite or remove changed since the last pull. A file as the last pull\n" +
     "or apply left it (digests in .cavelon/) counts as unchanged, committed or not.",
   readOnly: false,
@@ -312,13 +312,14 @@ export const pull: CommandSpec = {
   options: {
     harness: { type: "string", value: "<harness>", description: "The solution to export, by name, slug or id; its slug is recorded in cavelon.yaml when it names none." },
     force: { type: "boolean", description: "Overwrite package files that have uncommitted changes since the last pull or apply." },
-    "tenant-wide": {
+    "include-tenant-wide": {
       type: "boolean",
+      formerly: "tenant-wide",
       description:
-        "With a solution, also write the tenant-wide sections (tenant_settings, model_registry, …): asked of the export where the instance takes include_tenant_wide. Only `apply --tenant-wide` sends them back, for the whole tenant.",
+        "With a solution, also write the tenant-wide sections (tenant_settings, model_registry, …): asked of the export where the instance takes include_tenant_wide. Only `apply --include-tenant-wide` sends them back, for the whole tenant.",
     },
   },
-  examples: ["cavelon pull --harness support", "cavelon pull && git status --short -- package tests"],
+  examples: ["cavelon pull --harness support", "cavelon pull --include-tenant-wide", "cavelon pull && git status --short -- package tests"],
   async run(ctx, input) {
     const session = await ctx.session();
     const project = requireSolution(session, stringOption(input, "harness"));
@@ -337,8 +338,8 @@ export const pull: CommandSpec = {
       harness = await findHarness(ctx, ref);
     }
     const scope = harness ? "agent_graph" : "full_config";
-    const tenantWide = boolOption(input, "tenant-wide");
-    if (tenantWide && !harness) ctx.warn("--tenant-wide applies to a solution's pull; the tenant's full configuration carries the tenant-wide sections anyway.");
+    const tenantWide = boolOption(input, "include-tenant-wide");
+    if (tenantWide && !harness) ctx.warn("--include-tenant-wide applies to a solution's pull; the tenant's full configuration carries the tenant-wide sections anyway.");
     // A recent instance's export carries a solution's tenant-wide sections only when asked.
     const askTenantWide = Boolean(harness) && tenantWide && (await takesTenantWide(ctx, "export"));
     const exported = await callStable<Record<string, unknown>>(ctx, "GET", EXPORT_ROUTE, "exporting packages", {
@@ -384,12 +385,12 @@ export const pull: CommandSpec = {
       const section = path.posix.basename(file).replace(/\.(ya?ml|json)$/i, "");
       ctx.warn(
         report.tenant_wide.includes(section)
-          ? `Kept ${file} as it is: it holds a tenant-wide section, which pull leaves out of a solution's folder. apply leaves it out too, and \`apply --tenant-wide\` sends it for the whole tenant; remove the file unless you mean that.`
+          ? `Kept ${file} as it is: it holds a tenant-wide section, which pull leaves out of a solution's folder. apply leaves it out too, and \`apply --include-tenant-wide\` sends it for the whole tenant; remove the file unless you mean that.`
           : `Kept ${file}: its section is not in this instance's package schema.`,
       );
     }
     for (const section of report.refused) ctx.warn(`Did not write section ${JSON.stringify(section)}: its name is not a plain file name.`);
-    // What --tenant-wide brought, so an export without any says so instead of writing nothing silently.
+    // What --include-tenant-wide brought, so an export without any says so instead of writing nothing silently.
     const pulledShared = harness && tenantWide ? Object.keys(exported).filter((section) => shared.has(section)) : undefined;
 
     const rewritten = report.written.length + report.removed.length;
@@ -401,13 +402,13 @@ export const pull: CommandSpec = {
       ...report.removed.map((f) => `removed    ${f}`),
       `${report.unchanged.length} file${report.unchanged.length === 1 ? "" : "s"} unchanged.`,
       ...(report.tenant_wide.length
-        ? [`Left out the tenant-wide section${report.tenant_wide.length === 1 ? "" : "s"} ${report.tenant_wide.join(", ")} (--tenant-wide writes them).`]
+        ? [`Left out the tenant-wide section${report.tenant_wide.length === 1 ? "" : "s"} ${report.tenant_wide.join(", ")} (--include-tenant-wide writes them).`]
         : []),
       ...(pulledShared
         ? [
             pulledShared.length
-              ? `Tenant-wide: ${pulledShared.join(", ")} (shared by every solution of the tenant; only \`apply --tenant-wide\` sends them back).`
-              : `The export carries no tenant-wide sections${askTenantWide ? "" : " (this instance's export does not take include_tenant_wide)"}, so --tenant-wide wrote none.`,
+              ? `Tenant-wide: ${pulledShared.join(", ")} (shared by every solution of the tenant; only \`apply --include-tenant-wide\` sends them back).`
+              : `The export carries no tenant-wide sections${askTenantWide ? "" : " (this instance's export does not take include_tenant_wide)"}, so --include-tenant-wide wrote none.`,
           ]
         : []),
       `Inventory: ${inventory.file} (${inventory.counts.map((c) => `${c.count} ${c.label}`).join(", ")})`,
@@ -946,8 +947,17 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
     const summary = (result.summary ?? {}) as Preview["summary"];
     const flags = targetFlags(session, stored.env ?? session.envFile?.name);
     const still = setCommands(stored.preview as Preview, flags);
+    // The tenant-wide sections this import took along, as its preview reported them.
+    const sharedSent = stored.request[INCLUDE_TENANT_WIDE] === true;
+    const sharedReport = sharedSent ? tenantWideReport((stored.preview as Preview).tenant_wide) : undefined;
+    const sharedReaches = sharedReport?.reaches_active_solutions ?? [];
+    const sharedText = sharedSent
+      ? `${sharedReport?.sections.length ? sharedReport.sections.join(", ") : "the package's tenant-wide sections"}, for every solution of the tenant` +
+        (sharedReaches.length ? ` (active: ${list(sharedReaches, 10)})` : "")
+      : undefined;
     const text = keyValues([
       ["applied", `preview ${stored.preview_id}${stored.harness ? ` to ${stored.harness.slug}` : ""}${stored.env ? ` (env ${stored.env})` : ""}`],
+      ["tenant-wide", sharedText],
       ["created", counts(summary?.creates) || undefined],
       ["updated", counts(summary?.updates) || undefined],
       ["deleted", counts(summary?.deletes) || undefined],
@@ -956,6 +966,7 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
       ["set variables", still.variables.length ? indented(still.variables) : undefined],
     ]);
     const data: Record<string, unknown> = { applied: true, preview_id: stored.preview_id, env: stored.env, harness: stored.harness, result };
+    if (sharedSent) data.tenant_wide = { applied: true, sections: sharedReport?.sections ?? null, reaches_active_solutions: sharedReaches };
     if (still.secrets.length || still.variables.length) data.set_commands = still;
     return { data, text };
   } catch (error) {
@@ -1072,13 +1083,26 @@ function packageHarnessName(pkg: Record<string, unknown>, slug: string): string 
   return name ? name.slice(0, 255) : undefined;
 }
 
-/** Whether a preview needs a person's look before it is confirmed, and why; naming the active solutions it reaches. */
-function personReason(preview: Preview, harness: Harness | undefined, mode: string, env: string | undefined, shared: string[] = []): string | undefined {
+/**
+ * Whether a preview needs a person's look before it is confirmed, and why; naming the active solutions it reaches. Tenant-wide
+ * sections it imports come first: they change every solution of the tenant, active or not.
+ */
+function personReason(
+  preview: Preview,
+  harness: Harness | undefined,
+  mode: string,
+  env: string | undefined,
+  shared: string[] = [],
+  sharedReaches: string[] = [],
+): string | undefined {
+  if (shared.length) {
+    const reaching = sharedReaches.length ? `, reaching the active solution${sharedReaches.length === 1 ? "" : "s"} ${list(sharedReaches, 5)}` : "";
+    return `changes what the whole tenant shares (${list(shared, 5)})${reaching}`;
+  }
   const active = (preview.impact?.active_harnesses ?? []).map((h) => h.harness_slug ?? h.name).filter((n): n is string => Boolean(n));
   if (harness?.status === "active" && !active.includes(harness.slug)) active.unshift(harness.slug);
   if (active.length) return `reaches the active solution${active.length === 1 ? "" : "s"} ${list(active, 5)}`;
   if (preview.impact?.active_harnesses?.length) return "reaches an active solution";
-  if (shared.length) return `changes what the whole tenant shares (${list(shared, 5)})`;
   if (counts(preview.summary?.deletes) || mode === "replace") return "deletes";
   if (env === "prod") return "goes to env/prod";
   return undefined;
@@ -1098,7 +1122,7 @@ export const apply: CommandSpec = {
     "hold, not their formatting; --allow-stale imports what the preview showed anyway), and one older than a day. So does\n" +
     "an import its own check refuses when it applies, naming each blocker. --discard <id|all> forgets stored previews;\n" +
     "`cavelon status` lists them with when each expires.\n" +
-    "A solution's import leaves the package's tenant-wide sections (tenant_settings, model_registry, …) out; --tenant-wide\n" +
+    "A solution's import leaves the package's tenant-wide sections (tenant_settings, model_registry, …) out; --include-tenant-wide\n" +
     "imports them, for every solution of the tenant. An instance that does not publish include_tenant_wide imports them with\n" +
     "every solution's package, and apply says so.",
   readOnly: false,
@@ -1114,8 +1138,9 @@ export const apply: CommandSpec = {
     },
     discard: { type: "string", value: "<preview-id|all>", description: "Forget this stored preview, or all of them; changes nothing on the instance." },
     mode: { type: "string", value: "<mode>", description: "overwrite (default) or replace (deletes what the package does not hold)." },
-    "tenant-wide": {
+    "include-tenant-wide": {
       type: "boolean",
+      formerly: "tenant-wide",
       description:
         "With a solution, also import the package's tenant-wide sections (tenant_settings, model_registry, …): they change for every solution of the tenant, so a person sees the preview first.",
     },
@@ -1123,7 +1148,7 @@ export const apply: CommandSpec = {
   examples: [
     "cavelon apply --env test",
     "cavelon apply --confirm <preview-id>",
-    "cavelon apply --env test --tenant-wide",
+    "cavelon apply --env test --include-tenant-wide",
     "cavelon apply --env prod --json",
     "cavelon apply --discard all",
   ],
@@ -1169,22 +1194,13 @@ export const apply: CommandSpec = {
     if (envFile && Object.keys(envFile.runtimeBindings).length) request.runtime_bindings = envFile.runtimeBindings;
 
     // A solution's import leaves the sections the whole tenant shares out unless asked; an older instance imports them always.
-    const tenantWide = boolOption(input, "tenant-wide");
+    const tenantWide = boolOption(input, "include-tenant-wide");
     const solutionImport = Boolean(harness) && scope !== "full_config";
-    if (tenantWide && !solutionImport) ctx.warn("--tenant-wide applies to a solution's import; this one goes to the whole tenant anyway.");
+    if (tenantWide && !solutionImport) ctx.warn("--include-tenant-wide applies to a solution's import; this one goes to the whole tenant anyway.");
     const shared = solutionImport ? [...tenantWideSections(schema)].filter((section) => section in disk.package) : [];
     const takes = solutionImport && (tenantWide || shared.length > 0) && (await takesTenantWide(ctx, "import"));
     if (tenantWide && takes) request[INCLUDE_TENANT_WIDE] = true;
-    const sharedImported = tenantWide || !takes ? shared : [];
-    const sharedLeftOut = tenantWide || !takes ? [] : shared;
-    if (tenantWide && solutionImport && !shared.length) ctx.warn("--tenant-wide: the package holds no tenant-wide section, so this import changes nothing the whole tenant shares.");
-    if (sharedImported.length) {
-      const files = sectionFiles(disk, sharedImported).join(", ");
-      ctx.warn(
-        `${files} ${sharedImported.length === 1 ? "holds a section" : "hold sections"} the whole tenant shares: this import changes ${sharedImported.join(", ")} for every solution of the tenant` +
-          (takes ? "." : " (this instance does not publish include_tenant_wide and imports them with every solution's package); remove the file unless that is meant."),
-      );
-    }
+    if (tenantWide && solutionImport && !shared.length) ctx.warn("--include-tenant-wide: the package holds no tenant-wide section, so this import changes nothing the whole tenant shares.");
 
     const client = await ctx.client();
     const preview = await callStable<Preview>(ctx, "POST", "/api/v1/agent-graph/import/preview", "previewing imports", {
@@ -1193,11 +1209,35 @@ export const apply: CommandSpec = {
     });
     const target = harness ? { id: harness.id, slug: harness.slug } : null;
     const data: Record<string, unknown> = { previewed: true, ...preview, env: envFile?.name ?? null, harness: target };
-    if (shared.length || tenantWide) data.tenant_wide = { sections: shared, imported: sharedImported, left_out: sharedLeftOut };
+    // The instance's own report wins where it sends one: it decides what it leaves out, and knows the active solutions it reaches.
+    const reported = solutionImport ? tenantWideReport(preview.tenant_wide) : undefined;
+    const sections = reported?.sections ?? shared;
+    const applied = reported ? reported.applied : tenantWide || !takes;
+    const sharedImported = applied ? sections : [];
+    const sharedLeftOut = applied ? [] : sections;
+    const reaches = reported?.reaches_active_solutions ?? [];
+    if (sharedImported.length) {
+      const files = sectionFiles(disk, sharedImported).join(", ") || sharedImported.join(", ");
+      ctx.warn(
+        `${files} ${sharedImported.length === 1 ? "holds a section" : "hold sections"} the whole tenant shares: this import changes ${sharedImported.join(", ")} for every solution of the tenant` +
+          (takes ? "." : " (this instance does not publish include_tenant_wide and imports them with every solution's package); remove the file unless that is meant."),
+      );
+    }
+    if (sections.length || tenantWide) {
+      data.tenant_wide = {
+        sections,
+        applied,
+        imported: sharedImported,
+        left_out: sharedLeftOut,
+        reaches_active_solutions: reaches,
+        reported_by: reported ? "instance" : "kit",
+      };
+    }
+    const reachText = reaches.length ? `the active solution${reaches.length === 1 ? "" : "s"} ${list(reaches, 10)}` : "";
     const sharedLine = sharedImported.length
-      ? `tenant-wide: ${sharedImported.join(", ")} change for every solution of the tenant`
+      ? `tenant-wide: ${sharedImported.join(", ")} change for every solution of the tenant${reachText ? `, reaching ${reachText}` : ""}`
       : sharedLeftOut.length
-        ? `tenant-wide: ${sharedLeftOut.join(", ")} left out (\`cavelon apply --tenant-wide\` imports them, for every solution of the tenant)`
+        ? `tenant-wide: ${sharedLeftOut.join(", ")} left out (\`cavelon apply --include-tenant-wide\` imports them, for every solution of the tenant${reachText ? `; they would reach ${reachText}` : ""})`
         : undefined;
     const flags = targetFlags(session);
     const commands = setCommands(preview, flags);
@@ -1269,7 +1309,7 @@ export const apply: CommandSpec = {
       const expired = (await listPreviews(project.root, ctx.io.now())).filter((old) => old.expired);
       await retirePreviews(project.root, expired.map((old) => ({ preview_id: old.preview_id, reason: "expired" as const, at })));
     }
-    const reason = personReason(preview, harness, mode, envFile?.name, sharedImported);
+    const reason = personReason(preview, harness, mode, envFile?.name, sharedImported, reaches);
     data.show_to_person = Boolean(reason);
     const confirmLine = preview.preview_id ? `${cavelonCommand("apply", "--confirm", preview.preview_id)}${flags}` : undefined;
     const text = [

@@ -96,14 +96,18 @@ export const KIT_CODES: CatalogEntry[] = [
     code: ENDPOINT_LIMIT_CODE,
     area: "package",
     message: "A Model Registry row sets max_concurrent_requests without a base_url.",
-    hint: "The limit belongs to a self-hosted endpoint: add the row's base_url, or remove max_concurrent_requests (empty means no limit).",
+    hint:
+      "The limit belongs to a self-hosted endpoint: add the row's base_url, or remove max_concurrent_requests (empty means no limit). " +
+      "In a solution's folder, apply sends model_registry only with --include-tenant-wide, for the whole tenant; `cavelon models set-limit` changes one row's limit without a package.",
     docs: PACKAGE_DOCS,
   },
   {
     code: ENDPOINT_LIMIT_NOT_CARRIED,
     area: "package",
     message: "This instance's package format does not carry max_concurrent_requests on Model Registry rows.",
-    hint: "The import ignores it. Set it on the row in the Admin's model form, or with PATCH /api/v1/model-registry/{model_registry_id}.",
+    hint:
+      "The import ignores it. Set it on the row in the Admin's model form, or with `cavelon models set-limit` (PATCH /api/v1/model-registry/{model_registry_id}). " +
+      "In a solution's folder, apply sends model_registry only with --include-tenant-wide, for the whole tenant.",
     docs: PACKAGE_DOCS,
   },
   {
@@ -200,7 +204,7 @@ export const KIT_CODES: CatalogEntry[] = [
     area: "package",
     message: "A solution's folder holds a section the whole tenant shares, such as tenant_settings or model_registry.",
     hint:
-      "`cavelon apply` leaves it out of the solution's import; `cavelon apply --tenant-wide` sends it, and then every solution of the tenant sees the change. " +
+      "`cavelon apply` leaves it out of the solution's import; `cavelon apply --include-tenant-wide` sends it, and then every solution of the tenant sees the change. " +
       "Remove the file unless that is meant. An instance that does not publish include_tenant_wide imports it with every apply.",
     docs: PACKAGE_DOCS,
   },
@@ -401,6 +405,7 @@ export function checkPackage(disk: PackageOnDisk, options: CheckOptions): Findin
   findings.push(...checkUncheckedAssertions(disk, options.schema));
   findings.push(...checkSolutionSlug(disk, options.solution));
   findings.push(...checkTenantWide(disk, options.schema, options.solution));
+  noteTenantWide(findings, options.schema, options.solution);
 
   for (const finding of findings) {
     const entry = findingEntry(options.catalog, finding.code);
@@ -806,7 +811,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Sections the whole tenant shares in a solution's folder: a pull leaves them
- * out unless asked, and an apply sends them only with --tenant-wide, so a
+ * out unless asked, and an apply sends them only with --include-tenant-wide, so a
  * file of one is either meant for the tenant or left over. One warning each.
  */
 function checkTenantWide(disk: PackageOnDisk, schema: PackageSchema, solution: string | undefined): Finding[] {
@@ -822,10 +827,28 @@ function checkTenantWide(disk: PackageOnDisk, schema: PackageSchema, solution: s
         file: Array.isArray(source) ? source[0]?.file : source?.file,
         path: section,
         message:
-          `${section} is shared by the whole tenant, not this solution's: apply leaves it out unless --tenant-wide, which changes it for every solution ` +
+          `${section} is shared by the whole tenant, not this solution's: apply leaves it out unless --include-tenant-wide, which changes it for every solution ` +
           "(an instance that does not publish include_tenant_wide imports it with every apply). Remove the file unless that is meant.",
       };
     });
+}
+
+/**
+ * A finding inside a tenant-wide section of a solution's folder (a Model
+ * Registry row's limit, a schema error in tenant_settings) is about what a
+ * solution's apply leaves out unless asked: say so, so that fixing it is not
+ * taken to change the tenant with the next apply.
+ */
+function noteTenantWide(findings: Finding[], schema: PackageSchema, solution: string | undefined): void {
+  if (!solution) return;
+  const shared = tenantWideSections(schema);
+  for (const finding of findings) {
+    if (finding.code === TENANT_WIDE_CODE || !finding.path) continue;
+    const section = /^\/?([A-Za-z0-9_]+)/.exec(finding.path)?.[1];
+    if (!section || !shared.has(section)) continue;
+    finding.message +=
+      ` ${section} is tenant-wide: a solution's apply leaves it out unless --include-tenant-wide, which changes it for every solution of the tenant.`;
+  }
 }
 
 /**
