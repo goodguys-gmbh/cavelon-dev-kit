@@ -112,6 +112,10 @@ endpoint.
   preview's token, `--confirm <token>`). It refuses a row without a `base_url`.
   Where this instance's package format does not carry the field, `validate`
   warns that the import ignores it; set it this way instead.
+- `model_registry` is tenant-wide: in a solution's folder, `cavelon apply`
+  leaves it out of the import unless `--include-tenant-wide`, which changes it
+  for every solution of the tenant (`validate` says so on each finding in the
+  file). For one row's limit, prefer `cavelon models set-limit`.
 
 **Propose a limit; the person decides.** Say which value you would set and
 why (what the endpoint serves, which rows share it, what waits or fails now),

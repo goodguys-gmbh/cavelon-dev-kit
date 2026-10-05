@@ -370,6 +370,35 @@ describe("cavelon mcp", () => {
     expect(explained.kind).toBe("api");
   });
 
+  it("pull and apply take include_tenant_wide; apply returns the preview's tenant_wide report, and tenant_wide is still taken", async () => {
+    // The folder the repository loop above set up for the solution support.
+    const tool = (await client.listTools()).tools.find((t) => t.name === "apply")!;
+    expect(Object.keys(tool.inputSchema.properties ?? {})).toContain("include_tenant_wide");
+    expect(Object.keys(tool.inputSchema.properties ?? {})).not.toContain("tenant_wide");
+    const asked = () => server.state.requests.filter((r) => r.path === "/api/v1/agent-graph/export").map((r) => r.query.get("include_tenant_wide"));
+    // The import above left the tenant's settings out of the solution; the tenant still has its own.
+    server.state.configs.get(tenant)!.pkg.tenant_settings = { default_guardrail_slugs: [] };
+    server.state.requests.length = 0;
+    const pulled = payload(await client.callTool({ name: "pull", arguments: { include_tenant_wide: true } }));
+    expect(asked()).toEqual(["true"]);
+    expect(pulled.tenant_wide_pulled).toEqual(expect.arrayContaining(["tenant_settings"]));
+
+    const bodies = () => server.state.requests.filter((r) => r.path === "/api/v1/agent-graph/import/preview").map((r) => r.body as Record<string, unknown>);
+    const preview = payload(await client.callTool({ name: "apply", arguments: { include_tenant_wide: true } }));
+    expect(bodies().at(-1)).toMatchObject({ include_tenant_wide: true });
+    expect(preview.tenant_wide).toMatchObject({ applied: true, reported_by: "instance", sections: expect.arrayContaining(["tenant_settings"]) });
+    expect(preview.show_to_person).toBe(true);
+
+    const former = payload(await client.callTool({ name: "apply", arguments: { tenant_wide: true } }));
+    expect(bodies().at(-1)).toMatchObject({ include_tenant_wide: true });
+    expect(former.warnings).toEqual(expect.arrayContaining(['"tenant_wide" is now "include_tenant_wide"; "tenant_wide" is still taken for now and will be refused in a later release.']));
+    // The CLI's spelling is refused, as for every argument.
+    const kebab = await client.callTool({ name: "apply", arguments: { "tenant-wide": true } });
+    expect(kebab.isError).toBe(true);
+    expect(payload(kebab).error).toMatchObject({ code: "unknown_argument" });
+    payload(await client.callTool({ name: "apply", arguments: { discard: "all" } }));
+  });
+
   it("reads and sets variables; lists secrets but never sets one or shows a value", async () => {
     const { tools } = await client.listTools();
     const byName = Object.fromEntries(tools.map((t) => [t.name, t]));

@@ -173,13 +173,20 @@ list, so they keep the written order. A file that `cavelon` 0.1.5's `fmt` gave
 `pull` of a solution leaves the tenant-wide sections (`tenant_settings`,
 `model_registry`, or the sections the instance marks `x-cavelon-scope: tenant`)
 out of the solution's folder, and `apply` leaves them out of the solution's
-import. `cavelon pull --tenant-wide` writes them (it says so when the export
-carries none), and `cavelon apply --tenant-wide` imports them, for every
-solution of the tenant. A file of one already in the folder is kept, listed
-under `kept`, with a warning, and `validate` warns about it
-(`tenant_wide_section`). An instance that does not publish
-`include_tenant_wide` imports such a file with every solution's package, and
-`apply` says so: remove the file unless that is meant.
+import. `cavelon pull --include-tenant-wide` writes them (it says so when the
+export carries none), and `cavelon apply --include-tenant-wide` imports them,
+for every solution of the tenant. The preview says which it left out, or, with
+the flag, which active solutions the change reaches (`tenant-wide:` in the
+text, `tenant_wide` in `--json`, from the instance's own report where it sends
+one). A file of one already in the folder is kept, listed under `kept`, with a
+warning, and `validate` warns about it (`tenant_wide_section`); another finding
+in such a file (a Model Registry row's `max_concurrent_requests`, say) says
+that a solution's apply leaves the section out. To change one row's endpoint
+limit, `cavelon models set-limit` needs no package at all. An instance that
+does not publish `include_tenant_wide` imports such a file with every
+solution's package, and `apply` says so: remove the file unless that is meant.
+The flag was `--tenant-wide` in 0.1.7; that spelling is still taken, with a
+warning.
 
 On a development build of the instance, `validate` may report a field or
 section the instance has just gained as unknown: the build keeps its version

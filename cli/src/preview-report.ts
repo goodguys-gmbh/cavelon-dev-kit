@@ -190,3 +190,28 @@ export function notAppliedLines(list: NotApplied[]): string {
     })
     .join("") + (list.length > 20 ? `\n  … ${list.length - 20} more (--json)` : "");
 }
+
+/** The preview's report on a solution package's tenant-wide sections, as a recent instance sends it. */
+export interface TenantWideReport {
+  /** The tenant-wide sections the package holds. */
+  sections: string[];
+  /** Whether this import applies them (include_tenant_wide), or leaves them out. */
+  applied: boolean;
+  /** The active solutions that see them change, by slug or name, when applied. */
+  reaches_active_solutions: string[];
+}
+
+/**
+ * The preview's `tenant_wide`: `{sections, applied, reaches_active_solutions}`,
+ * an active solution named by a string or an object with its slug or name.
+ * Undefined on an instance that sends none, or a shape without sections.
+ */
+export function tenantWideReport(raw: unknown): TenantWideReport | undefined {
+  if (!isObject(raw) || !Array.isArray(raw.sections)) return undefined;
+  const sections = raw.sections.map(text).filter((s): s is string => s !== null);
+  const reaches = Array.isArray(raw.reaches_active_solutions) ? raw.reaches_active_solutions : [];
+  const names = reaches
+    .map((h) => (isObject(h) ? (text(h.slug) ?? text(h.harness_slug) ?? text(h.name) ?? text(h.id)) : text(h)))
+    .filter((n): n is string => n !== null);
+  return { sections, applied: raw.applied === true, reaches_active_solutions: [...new Set(names)] };
+}

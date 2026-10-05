@@ -209,6 +209,13 @@ export interface FakeState {
    */
   tenantWideFlag: boolean;
   /**
+   * Whether a solution's preview with tenant-wide sections reports them as
+   * `tenant_wide: {sections, applied, reaches_active_solutions}`, as the
+   * instance does with the flag; off, a preview that takes the flag but
+   * reports nothing.
+   */
+  tenantWideReport: boolean;
+  /**
    * How a stale confirm is refused: null as an older instance (the code in
    * `detail`); a list as a recent one (`code` at the top), with `changed`
    * naming what changed when the list is not empty.
@@ -528,6 +535,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     documents: [],
     uploadReplace: "name",
     tenantWideFlag: true,
+    tenantWideReport: true,
     staleChanged: null,
     suites: [],
     runs: [],
@@ -1119,6 +1127,16 @@ export async function startFakeServer(): Promise<FakeServer> {
         state.tenantWideFlag && request.harness_id && !b.include_tenant_wide
           ? [...tenantWideSections(packageSchema() as PackageSchema)].filter((section) => section in b.package)
           : [];
+      // The tenant-wide sections of a solution's package, and the active solutions they reach when applied.
+      const shared = [...tenantWideSections(packageSchema() as PackageSchema)].filter((section) => section in b.package);
+      const sharedApplied = b.include_tenant_wide === true;
+      const reaches = sharedApplied
+        ? state.harnesses.filter((h) => h.tenant_id === tid && h.status === "active").map((h) => ({ id: h.id, slug: h.slug, name: h.name }))
+        : [];
+      const tenantWide =
+        state.tenantWideFlag && state.tenantWideReport && request.harness_id && shared.length
+          ? { tenant_wide: { sections: shared, applied: sharedApplied, reaches_active_solutions: reaches } }
+          : {};
       const previewId = `pv_${createHash("sha256").update(`${tid}:${config.version}:${canonical(request)}`).digest("hex").slice(0, 32)}`;
       const ignored = Object.keys(b.package).filter((k) => !(k in schema.properties));
       const preview = {
@@ -1126,14 +1144,20 @@ export async function startFakeServer(): Promise<FakeServer> {
         text_blocks: [],
         mode: request.mode,
         summary: { creates: { agents: 1 }, updates: { knowledge_bases: 1 }, deletes: {}, references: {}, warnings: 0, blockers: state.previewBlockers.length },
-        warnings: sharedKept.map(
-          (section) => `This solution import leaves ${section} out: they hold what the whole tenant shares, so every solution would see the change. Import with include_tenant_wide to apply them.`,
-        ),
+        warnings: [
+          ...sharedKept.map(
+            (section) => `This solution import leaves ${section} out: they hold what the whole tenant shares, so every solution would see the change. Import with include_tenant_wide to apply them.`,
+          ),
+          ...(state.tenantWideFlag && request.harness_id && sharedApplied && shared.length
+            ? [`This import changes ${shared.join(", ")} for every solution of the tenant (include_tenant_wide).`]
+            : []),
+        ],
         blockers: state.previewBlockers,
         ignored: { sections: ignored, fields: [], count: ignored.length },
         impact: { changed_tools: [], changed_knowledge_bases: [], active_harnesses: [], sandbox_writers: [] },
         loop_budgets: [],
         target_needs: { ...valueNeeds(tid, b.package), oauth_grants: [], runtime_bindings: [], trigger_identities: [] },
+        ...tenantWide,
         ...state.previewExtras,
       };
       if (p.endsWith("/preview")) return send(res, 200, { ...preview, preview_id: previewId });

@@ -128,7 +128,10 @@ Options marked "CLI only" there, such as `--wait`, are not offered to the
 agent. A call with an argument the tool's schema does not list is refused
 (`unknown_argument`, exit code 2) and nothing is done; the error names the
 closest argument. The CLI's spelling of a multi-word option (`make-default`)
-is refused the same way, naming its snake_case form (`make_default`).
+is refused the same way, naming its snake_case form (`make_default`). An
+option's former name is still taken for a release, with a warning: `apply`'s
+and `pull`'s `tenant_wide` (0.1.7) is now `include_tenant_wide`, the
+instance's name for it.
 
 ### What is not a tool
 
@@ -173,7 +176,14 @@ repeat them:
   preview that reaches an active solution or production. Making a solution
   the tenant's default route changes which solution the tenant's chat and
   widget answer with, and deactivating one takes it out of live traffic, so
-  the agent asks you before it confirms either.
+  the agent asks you before it confirms either. The same goes for `apply` with
+  `include_tenant_wide`: it imports the package's tenant-wide sections
+  (`tenant_settings`, `model_registry`, …) for every solution of the tenant,
+  and its preview's `tenant_wide` names the active solutions the change
+  reaches (`reaches_active_solutions`). Without it, a solution's import leaves
+  those sections out, and `tenant_wide.left_out` says which. The preview it
+  stores keeps the flag, so the confirm sends the same request. `pull` takes
+  `include_tenant_wide` too, to write those sections into the folder.
 - **What changes without `confirm`.** `init`, `pull` and `fmt` change nothing
   on the instance; they write files in the solution folder (`pull` refuses to
   replace a package file that is neither committed nor as the last pull or

@@ -1,5 +1,5 @@
 import { parseArgs, type ParseArgsConfig } from "node:util";
-import { GLOBAL_OPTIONS, optionDescription, optionFlag, type CommandResult, type CommandSpec, type Context, type Input, type OptionSpec } from "./command.js";
+import { GLOBAL_OPTIONS, optionDescription, optionFlag, renameFormerOptions, type CommandResult, type CommandSpec, type Context, type Input, type OptionSpec } from "./command.js";
 import { createContext, withWarnings } from "./context.js";
 import { CONFIRM_TOKEN } from "./confirm-token.js";
 import { asCavelonError, CavelonError, ExitCode, usageError } from "./errors.js";
@@ -46,7 +46,8 @@ export async function run(argv: string[], io: Io, commands: CommandSpec[] = COMM
     }
     const { spec, rest } = found;
     const early: string[] = [];
-    const args = spec.preprocess ? spec.preprocess(rest, (message) => early.push(message)) : rest;
+    const renamed = renameFormerOptions(spec, rest, (message) => early.push(message));
+    const args = spec.preprocess ? spec.preprocess(renamed, (message) => early.push(message)) : renamed;
     const parsed = parse(spec, args);
     if (parsed.options.help === true) {
       io.stdout.write(commandHelp(spec));

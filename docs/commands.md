@@ -210,18 +210,19 @@ Write the instance's package into package/ (split along the schema's sections) a
 cavelon pull [options]
 ```
 
-With a solution (--harness, or cavelon.yaml's harness), exports that solution; without one, the tenant's full configuration. A file whose content did not change keeps its bytes, so `git diff` shows what changed on the instance; a field the export spells out that the file leaves out (an empty list, a default) is no change. A test suite goes back to the file it was pulled into or applied from, whatever its name. Files of sections the schema does not know are kept byte for byte. A solution's pull leaves the tenant-wide sections (the tenant's settings, its model list) out of the folder, unless --tenant-wide; it says when the export carries none. Refuses when package files have uncommitted changes, unless --force; outside a git repository, when a file it would overwrite or remove changed since the last pull. A file as the last pull or apply left it (digests in .cavelon/) counts as unchanged, committed or not.
+With a solution (--harness, or cavelon.yaml's harness), exports that solution; without one, the tenant's full configuration. A file whose content did not change keeps its bytes, so `git diff` shows what changed on the instance; a field the export spells out that the file leaves out (an empty list, a default) is no change. A test suite goes back to the file it was pulled into or applied from, whatever its name. Files of sections the schema does not know are kept byte for byte. A solution's pull leaves the tenant-wide sections (the tenant's settings, its model list) out of the folder, unless --include-tenant-wide; it says when the export carries none. Refuses when package files have uncommitted changes, unless --force; outside a git repository, when a file it would overwrite or remove changed since the last pull. A file as the last pull or apply left it (digests in .cavelon/) counts as unchanged, committed or not.
 
 | Option | Description | MCP |
 |---|---|---|
 | `--harness <harness>` | The solution to export, by name, slug or id; its slug is recorded in cavelon.yaml when it names none. | yes |
 | `--force` | Overwrite package files that have uncommitted changes since the last pull or apply. | yes |
-| `--tenant-wide` | With a solution, also write the tenant-wide sections (tenant_settings, model_registry, …): asked of the export where the instance takes include_tenant_wide. Only `apply --tenant-wide` sends them back, for the whole tenant. | yes |
+| `--include-tenant-wide` | With a solution, also write the tenant-wide sections (tenant_settings, model_registry, …): asked of the export where the instance takes include_tenant_wide. Only `apply --include-tenant-wide` sends them back, for the whole tenant. Formerly `--tenant-wide`, still taken with a warning. | yes |
 
 Examples:
 
 ```bash
 cavelon pull --harness support
+cavelon pull --include-tenant-wide
 cavelon pull && git status --short -- package tests
 ```
 
@@ -309,7 +310,7 @@ Preview the package files against the instance and print a preview id; --confirm
 cavelon apply [options]
 ```
 
-Without --confirm nothing is imported: the preview shows what changes, which active solutions it reaches, what the target still needs (secrets and variables with the command that sets each, grants, runtime bindings, trigger identities), loop budgets and ignored sections, and is stored in .cavelon/. A preview never creates the solution: one the env file names that is not on the instance yet gets the `cavelon harness new` command that creates it as a draft. A person sets the secrets (`cavelon secrets set <name>`), never the agent. Show a preview that reaches an active solution or env/prod to a person before confirming. A stale preview exits 4 and imports nothing: one whose target changed on the instance since, one whose package files changed since (what they hold, not their formatting; --allow-stale imports what the preview showed anyway), and one older than a day. So does an import its own check refuses when it applies, naming each blocker. --discard &lt;id\|all&gt; forgets stored previews; `cavelon status` lists them with when each expires. A solution's import leaves the package's tenant-wide sections (tenant_settings, model_registry, …) out; --tenant-wide imports them, for every solution of the tenant. An instance that does not publish include_tenant_wide imports them with every solution's package, and apply says so.
+Without --confirm nothing is imported: the preview shows what changes, which active solutions it reaches, what the target still needs (secrets and variables with the command that sets each, grants, runtime bindings, trigger identities), loop budgets and ignored sections, and is stored in .cavelon/. A preview never creates the solution: one the env file names that is not on the instance yet gets the `cavelon harness new` command that creates it as a draft. A person sets the secrets (`cavelon secrets set <name>`), never the agent. Show a preview that reaches an active solution or env/prod to a person before confirming. A stale preview exits 4 and imports nothing: one whose target changed on the instance since, one whose package files changed since (what they hold, not their formatting; --allow-stale imports what the preview showed anyway), and one older than a day. So does an import its own check refuses when it applies, naming each blocker. --discard &lt;id\|all&gt; forgets stored previews; `cavelon status` lists them with when each expires. A solution's import leaves the package's tenant-wide sections (tenant_settings, model_registry, …) out; --include-tenant-wide imports them, for every solution of the tenant. An instance that does not publish include_tenant_wide imports them with every solution's package, and apply says so.
 
 | Option | Description | MCP |
 |---|---|---|
@@ -319,14 +320,14 @@ Without --confirm nothing is imported: the preview shows what changes, which act
 | `--allow-stale` | With --confirm: import what the preview showed although the package files changed since it. | yes |
 | `--discard <preview-id|all>` | Forget this stored preview, or all of them; changes nothing on the instance. | yes |
 | `--mode <mode>` | overwrite (default) or replace (deletes what the package does not hold). | yes |
-| `--tenant-wide` | With a solution, also import the package's tenant-wide sections (tenant_settings, model_registry, …): they change for every solution of the tenant, so a person sees the preview first. | yes |
+| `--include-tenant-wide` | With a solution, also import the package's tenant-wide sections (tenant_settings, model_registry, …): they change for every solution of the tenant, so a person sees the preview first. Formerly `--tenant-wide`, still taken with a warning. | yes |
 
 Examples:
 
 ```bash
 cavelon apply --env test
 cavelon apply --confirm <preview-id>
-cavelon apply --env test --tenant-wide
+cavelon apply --env test --include-tenant-wide
 cavelon apply --env prod --json
 cavelon apply --discard all
 ```

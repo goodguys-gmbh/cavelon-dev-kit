@@ -130,8 +130,9 @@ the tenant's settings (`tenant_settings`), its model list (`model_registry`)
 and the others the package schema marks `x-cavelon-scope: tenant`. A
 solution's `pull` leaves them out of the folder and a solution's `apply` out of
 the import, so changing one solution never changes the others by the way.
-`pull --tenant-wide` writes them, and `apply --tenant-wide` imports them, for
-every solution of the tenant: the preview then says to show it to a person.
+`pull --include-tenant-wide` writes them, and `apply --include-tenant-wide`
+imports them, for every solution of the tenant: the preview then names the
+active solutions the change reaches and says to show it to a person.
 An instance that does not publish `include_tenant_wide` imports them with
 every solution's package; `apply` says so when the folder holds one, and
 `validate` warns about such a file in a solution's folder

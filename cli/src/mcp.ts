@@ -1,6 +1,6 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListToolsRequestSchema, type Tool } from "@modelcontextprotocol/sdk/types.js";
-import type { CommandSpec, Input } from "./command.js";
+import { formerlyWarning, type CommandSpec, type Input } from "./command.js";
 import { MCP_MAX_WAIT_MS } from "./commands/async.js";
 import { createContext, withWarnings } from "./context.js";
 import { asCavelonError, CavelonError, ExitCode, usageError } from "./errors.js";
@@ -29,7 +29,7 @@ const INSTRUCTIONS =
   "a different change needs a new preview, and confirm: true is refused. The default route " +
   "(harness_default, activate's make_default) decides which solution the tenant's chat and widget answer with: live traffic, " +
   "so ask the person, and confirm only with their yes; the same goes for deactivate, which takes a solution out of live traffic " +
-  "(its status becomes inactive), and for apply with tenant_wide, which imports the tenant-wide sections (tenant_settings, " +
+  "(its status becomes inactive), and for apply with include_tenant_wide, which imports the tenant-wide sections (tenant_settings, " +
   "model_registry, …) for every solution of the tenant. " +
   "chat sends one message to a solution and returns its answer: the way to try one that is not the default route. " +
   "kb_upload names files that match an active document of the knowledge base; with replace it replaces them, and where the " +
@@ -124,14 +124,27 @@ export function toolFor(spec: CommandSpec): Tool {
  * list is refused, naming the closest one, rather than dropped: an
  * `activate` that lost `make_default` would activate without the preview it
  * was asked for. The CLI's spelling of a multi-word option (`make-default`)
- * is refused like any other, naming the snake_case property.
+ * is refused like any other, naming the snake_case property. An option's
+ * former snake_case name (`tenant_wide` for `include_tenant_wide`) is still
+ * taken for a release, with a warning.
  */
-function argumentsOf(spec: CommandSpec, args: Record<string, unknown>): Record<string, unknown> {
+function argumentsOf(spec: CommandSpec, args: Record<string, unknown>, warn: (message: string) => void): Record<string, unknown> {
   const properties = Object.keys((inputSchema(spec).properties as Record<string, unknown>) ?? {});
+  const former = new Map(
+    Object.entries(spec.options ?? {})
+      .filter(([, o]) => o.formerly && !o.cliOnly)
+      .map(([name, o]) => [propertyName(o.formerly!), propertyName(name)]),
+  );
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(args)) {
     if (properties.includes(key)) {
       out[key] = value;
+      continue;
+    }
+    const now = former.get(key);
+    if (now) {
+      warn(formerlyWarning(`"${key}"`, `"${now}"`));
+      if (!(now in args)) out[now] = value;
       continue;
     }
     const spelled = propertyName(key);
@@ -193,9 +206,10 @@ export function createMcpServer(io: Io, commands: CommandSpec[]): Server {
       content: [{ type: "text" as const, text: JSON.stringify({ error: asCavelonError(error).toJSON() }) }],
     });
     if (!spec) return fail(new Error(`Unknown tool ${request.params.name}.`));
+    const renamed: string[] = [];
     let args: Record<string, unknown>;
     try {
-      args = argumentsOf(spec, given);
+      args = argumentsOf(spec, given, (message) => renamed.push(message));
     } catch (error) {
       return fail(error);
     }
@@ -206,6 +220,7 @@ export function createMcpServer(io: Io, commands: CommandSpec[]): Server {
     const tenant = !ownsTenant(spec) && typeof args.tenant === "string" ? args.tenant : undefined;
     const solutionEnv = spec.options?.env && typeof args.env === "string" ? args.env : undefined;
     const ctx = createContext(mcpIo(io), { json: true, tenant, solutionEnv }, "mcp");
+    for (const message of renamed) ctx.warn(message);
     try {
       const result = await spec.run(ctx, inputFrom(spec, args));
       let data = result.data;

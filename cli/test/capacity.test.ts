@@ -501,6 +501,14 @@ describe("Model Registry rows in a package", () => {
     expect(findings[0]!.hint).toMatch(/add the row's base_url/);
   });
 
+  it("in a solution's folder, says that the solution's apply leaves model_registry out unless --include-tenant-wide", () => {
+    const rows = [row({ max_concurrent_requests: 4 })];
+    const note = "model_registry is tenant-wide: a solution's apply leaves it out unless --include-tenant-wide";
+    expect(check(rows, schemaWithEndpointLimit())[0]!.message).not.toContain(note);
+    const inSolution = checkPackage(disk(rows), { schema: schemaWithEndpointLimit(), solution: "support" }).find((f) => f.code === "model_endpoint_limit_without_base_url");
+    expect(inSolution?.message).toContain(note);
+  });
+
   it("an empty limit (null clears the target's), or none (keeps the target's), needs no base_url", () => {
     expect(check([row({ max_concurrent_requests: null }), row({})], schemaWithEndpointLimit())).toEqual([]);
   });

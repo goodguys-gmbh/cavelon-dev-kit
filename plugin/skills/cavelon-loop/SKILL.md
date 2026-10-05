@@ -76,8 +76,10 @@ use it when you parse the result.
    suite goes back to the file it came from, whatever its name. A solution's
    pull leaves the tenant-wide sections (the tenant's settings, its model
    list) out of the folder, and `apply` leaves them out of the solution's
-   import. `pull --tenant-wide` writes them; `apply --tenant-wide` imports
-   them, for every solution of the tenant, so only with the person's say-so.
+   import. `pull --include-tenant-wide` writes them; `apply
+   --include-tenant-wide` (the MCP tool's `include_tenant_wide`) imports them,
+   for every solution of the tenant, so only with the person's say-so; its
+   preview names the active solutions the change reaches.
    `validate` warns about a tenant-wide file in the folder
    (`tenant_wide_section`); on an instance that does not publish
    `include_tenant_wide`, `apply` imports such a file anyway and says so:
@@ -201,8 +203,9 @@ show the preview to the person, and confirm only after they agree, when:
 - the environment is `prod` (`--env prod`), or the preview deletes anything
   (`--mode replace`);
 - the preview changes tenant-wide sections (`tenant-wide: … change for every
-  solution of the tenant`, after `--tenant-wide` or on an instance that
-  imports them anyway): every solution of the tenant sees the change;
+  solution of the tenant, reaching the active solutions …`, after
+  `--include-tenant-wide` or on an instance that imports them anyway): every
+  solution of the tenant sees the change;
 - the preview lists target needs (secrets, grants, identities): only a person
   can provide them, with `cavelon secrets set <name>` or in the Admin.
 
