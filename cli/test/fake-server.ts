@@ -216,6 +216,17 @@ export interface FakeState {
    */
   tenantWideReport: boolean;
   /**
+   * Whether that report also names `would_import` and `left_out`, and the
+   * import's result carries its own `tenant_wide` with `imported`, as a recent
+   * instance does; off, the snapshot's instance, whose kit reads `applied`.
+   * `tenantWideKept` names sections such an instance leaves out even with
+   * include_tenant_wide.
+   */
+  tenantWideLists: boolean;
+  tenantWideKept: string[];
+  /** The permissions that let a role set or delete secrets; an instance may name them otherwise than today's. */
+  secretsPermissions: string[];
+  /**
    * How a stale confirm is refused: null as an older instance (the code in
    * `detail`); a list as a recent one (`code` at the top), with `changed`
    * naming what changed when the list is not empty.
@@ -313,7 +324,7 @@ export interface FakeState {
   /** Whether readiness lets a solution activate. */
   ready: boolean;
   /** The blockers readiness names while not ready; a missing test run by default. */
-  readinessBlockers?: Array<{ key: string; label: string; state: string; detail: string; href: string | null }>;
+  readinessBlockers?: Array<{ key: string; label: string; state: string; detail: string; href: string | null; items?: Array<Record<string, unknown>> }>;
   /** Every check readiness ran, and its non-blocking warnings; none by default. */
   readinessChecks?: Array<{ key: string; label: string; state: string; detail: string; href: string }>;
   readinessWarnings?: Array<{ key: string; label: string; state: string; detail: string; href: string }>;
@@ -536,6 +547,9 @@ export async function startFakeServer(): Promise<FakeServer> {
     uploadReplace: "name",
     tenantWideFlag: true,
     tenantWideReport: true,
+    tenantWideLists: false,
+    tenantWideKept: [],
+    secretsPermissions: ["settings.manage", "settings.secrets.manage"],
     staleChanged: null,
     suites: [],
     runs: [],
@@ -1133,9 +1147,11 @@ export async function startFakeServer(): Promise<FakeServer> {
       const reaches = sharedApplied
         ? state.harnesses.filter((h) => h.tenant_id === tid && h.status === "active").map((h) => ({ id: h.id, slug: h.slug, name: h.name }))
         : [];
+      const wouldImport = sharedApplied ? shared.filter((section) => !state.tenantWideKept.includes(section)) : [];
+      const lists = state.tenantWideLists ? { would_import: wouldImport, left_out: shared.filter((section) => !wouldImport.includes(section)) } : {};
       const tenantWide =
         state.tenantWideFlag && state.tenantWideReport && request.harness_id && shared.length
-          ? { tenant_wide: { sections: shared, applied: sharedApplied, reaches_active_solutions: reaches } }
+          ? { tenant_wide: { sections: shared, applied: sharedApplied, ...lists, reaches_active_solutions: reaches } }
           : {};
       const previewId = `pv_${createHash("sha256").update(`${tid}:${config.version}:${canonical(request)}`).digest("hex").slice(0, 32)}`;
       const ignored = Object.keys(b.package).filter((k) => !(k in schema.properties));
@@ -1198,7 +1214,8 @@ export async function startFakeServer(): Promise<FakeServer> {
           docs: `http://${req.headers.host}${entry.docs}`,
         });
       }
-      const kept = Object.fromEntries(Object.entries(b.package).filter(([k]) => k in schema.properties && !sharedKept.includes(k)));
+      const leftOut = state.tenantWideLists && sharedApplied ? state.tenantWideKept : [];
+      const kept = Object.fromEntries(Object.entries(b.package).filter(([k]) => k in schema.properties && !sharedKept.includes(k) && !leftOut.includes(k)));
       for (const section of sharedKept) if (section in config.pkg) kept[section] = config.pkg[section];
       state.configs.set(tid, { pkg: kept, version: config.version + 1 });
       // Like the instance: an import adds the names a package declares, and never forgets one.
@@ -1206,7 +1223,19 @@ export async function startFakeServer(): Promise<FakeServer> {
       for (const kind of ["variables", "secrets"] as const) {
         for (const row of declarations(b.package, kind)) values.declared[kind].set(row.name, row.description ?? values.declared[kind].get(row.name) ?? null);
       }
-      return send(res, 200, { applied: true, mode: request.mode, summary: preview.summary, imported_agents: ["helper"], warnings: [] });
+      const importedShared =
+        state.tenantWideLists && "tenant_wide" in tenantWide
+          ? {
+              tenant_wide: {
+                sections: shared,
+                applied: sharedApplied,
+                imported: wouldImport,
+                left_out: shared.filter((section) => !wouldImport.includes(section)),
+                reaches_active_solutions: reaches,
+              },
+            }
+          : {};
+      return send(res, 200, { applied: true, mode: request.mode, summary: preview.summary, imported_agents: ["helper"], warnings: [], ...importedShared });
     }
 
     if (p === "/api/v1/operations" && state.serveOperations) {
@@ -1608,6 +1637,10 @@ export async function startFakeServer(): Promise<FakeServer> {
         hint: "A person sets it: in the Admin under Settings › Secrets, or with a personal access token.",
         docs: "/docs/reference/api-endpoints#errors-and-retries",
       });
+    }
+    // Like the instance, a role without either permission is refused, naming them.
+    if (!permissionsOf(info, tid).some((p) => state.secretsPermissions.includes(p))) {
+      return send(res, 403, { detail: `Missing one of permissions: ${state.secretsPermissions.join(", ")}` });
     }
     if (method === "PUT") {
       const value = (json as { value?: unknown } | undefined)?.value;

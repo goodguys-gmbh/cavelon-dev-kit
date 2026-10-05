@@ -51,6 +51,7 @@ import { readInventory, readInventoryKinds, writeInventory, type InventoryKind }
 import { checkedBy, MODEL_UNKNOWN_CODE, missingInventory, REFERENCE_UNKNOWN_CODE } from "../package-references.js";
 import { cavelonCommand, printedCommand } from "../printed.js";
 import { secretSetCommand, variableSetCommand } from "./values.js";
+import { maySetSecrets, SECRET_SETTER } from "../secret-access.js";
 
 /**
  * The repository loop (plan 04, "Working with a coding agent"): `pull` brings
@@ -390,7 +391,8 @@ export const pull: CommandSpec = {
     }
     for (const section of report.refused) ctx.warn(`Did not write section ${JSON.stringify(section)}: its name is not a plain file name.`);
     // What --include-tenant-wide brought, so an export without any says so instead of writing nothing silently.
-    const pulledShared = harness && tenantWide ? Object.keys(exported).filter((section) => shared.has(section)) : undefined;
+    // A section the export carries empty ([], {} or null) holds nothing of the tenant's, so it is not named.
+    const pulledShared = harness && tenantWide ? Object.keys(exported).filter((section) => shared.has(section) && !emptyValue(exported[section])) : undefined;
 
     const rewritten = report.written.length + report.removed.length;
     const lines = [
@@ -407,7 +409,9 @@ export const pull: CommandSpec = {
         ? [
             pulledShared.length
               ? `Tenant-wide: ${pulledShared.join(", ")} (shared by every solution of the tenant; only \`apply --include-tenant-wide\` sends them back).`
-              : `The export carries no tenant-wide sections${askTenantWide ? "" : " (this instance's export does not take include_tenant_wide)"}, so --include-tenant-wide wrote none.`,
+              : Object.keys(exported).some((section) => shared.has(section))
+                ? "The export's tenant-wide sections are empty: the tenant has none of their settings yet."
+                : `The export carries no tenant-wide sections${askTenantWide ? "" : " (this instance's export does not take include_tenant_wide)"}, so --include-tenant-wide wrote none.`,
           ]
         : []),
       `Inventory: ${inventory.file} (${inventory.counts.map((c) => `${c.count} ${c.label}`).join(", ")})`,
@@ -687,6 +691,26 @@ interface PreviewContext {
   harness?: string;
 }
 
+function emptyValue(value: unknown): boolean {
+  if (value === null || value === undefined) return true;
+  if (Array.isArray(value)) return value.length === 0;
+  return typeof value === "object" && Object.keys(value).length === 0;
+}
+
+/**
+ * The sections the preview says change: those its summary counts or its
+ * field diff names. Undefined when it may change them without saying so by
+ * section (its counts name other kinds only), so the kit cannot tell.
+ */
+function sectionsChanging(p: Preview, sections: string[]): string[] | undefined {
+  if (changesNothing(p)) return [];
+  const s = p.summary ?? {};
+  const counted = new Set([s.creates, s.updates, s.deletes].flatMap((map) => Object.entries(map ?? {}).filter(([, n]) => n > 0).map(([kind]) => kind)));
+  const objects = fieldChanges(p.changes).map((c) => c.object);
+  const found = sections.filter((section) => counted.has(section) || objects.some((o) => o === section || o.startsWith(`${section}:`) || o.startsWith(`${section}.`) || o.startsWith(`${section}[`)));
+  return found.length ? found : undefined;
+}
+
 /**
  * A preview that would change nothing: its summary counts nothing to create,
  * update or delete, and it lists no field change. An instance whose preview
@@ -945,14 +969,18 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
     await rememberImported(ctx, project, stored, disk, changed);
     const summary = (result.summary ?? {}) as Preview["summary"];
     const still = setCommands(stored.preview as Preview, stored.env ?? undefined);
-    // The tenant-wide sections this import took along, as its preview reported them.
+    // The tenant-wide sections this import took along: as its result says on a recent instance, else as its preview reported them.
     const sharedSent = stored.request[INCLUDE_TENANT_WIDE] === true;
-    const sharedReport = sharedSent ? tenantWideReport((stored.preview as Preview).tenant_wide) : undefined;
+    const resultReport = tenantWideReport(result.tenant_wide);
+    const sharedReport = resultReport ?? (sharedSent ? tenantWideReport((stored.preview as Preview).tenant_wide) : undefined);
+    const sharedImported = sharedReport ? sharedReport.imports : [];
     const sharedReaches = sharedReport?.reaches_active_solutions ?? [];
-    const sharedText = sharedSent
-      ? `${sharedReport?.sections.length ? sharedReport.sections.join(", ") : "the package's tenant-wide sections"}, for every solution of the tenant` +
-        (sharedReaches.length ? ` (active: ${list(sharedReaches, 10)})` : "")
-      : undefined;
+    const sharedText =
+      sharedSent || sharedImported.length
+        ? `${sharedImported.length ? sharedImported.join(", ") : resultReport ? "none" : "the package's tenant-wide sections"}` +
+          (sharedImported.length || !resultReport ? ", for every solution of the tenant" : "") +
+          (sharedReaches.length ? ` (active: ${list(sharedReaches, 10)})` : "")
+        : undefined;
     const text = keyValues([
       ["applied", `preview ${stored.preview_id}${stored.harness ? ` to ${stored.harness.slug}` : ""}${stored.env ? ` (env ${stored.env})` : ""}`],
       ["tenant-wide", sharedText],
@@ -964,7 +992,16 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
       ["set variables", still.variables.length ? indented(still.variables) : undefined],
     ]);
     const data: Record<string, unknown> = { applied: true, preview_id: stored.preview_id, env: stored.env, harness: stored.harness, result };
-    if (sharedSent) data.tenant_wide = { applied: true, sections: sharedReport?.sections ?? null, reaches_active_solutions: sharedReaches };
+    if (sharedSent || sharedImported.length) {
+      data.tenant_wide = {
+        applied: resultReport ? resultReport.applied : true,
+        sections: sharedReport?.sections ?? null,
+        imported: sharedReport ? sharedImported : null,
+        left_out: sharedReport ? sharedReport.left_out : null,
+        reaches_active_solutions: sharedReaches,
+        reported_by: resultReport ? "import" : sharedReport ? "preview" : "kit",
+      };
+    }
     if (still.secrets.length || still.variables.length) data.set_commands = still;
     return { data, text };
   } catch (error) {
@@ -1210,32 +1247,42 @@ export const apply: CommandSpec = {
     const reported = solutionImport ? tenantWideReport(preview.tenant_wide) : undefined;
     const sections = reported?.sections ?? shared;
     const applied = reported ? reported.applied : tenantWide || !takes;
-    const sharedImported = applied ? sections : [];
-    const sharedLeftOut = applied ? [] : sections;
+    const sharedImported = reported ? reported.imports : applied ? sections : [];
+    const sharedLeftOut = reported ? reported.left_out : applied ? [] : sections;
     const reaches = reported?.reaches_active_solutions ?? [];
-    if (sharedImported.length) {
+    // A tenant-wide section equal to the instance's changes nothing, so it is only sent, never announced as a change.
+    const sharedChanging = sharedImported.length ? sectionsChanging(preview, sharedImported) : [];
+    const sharedSame = sharedImported.length > 0 && sharedChanging !== undefined && !sharedChanging.length;
+    if (sharedImported.length && !sharedSame) {
       const files = sectionFiles(disk, sharedImported).join(", ") || sharedImported.join(", ");
+      const what = sharedChanging?.length
+        ? `this import changes ${sharedChanging.join(", ")} for every solution of the tenant`
+        : `this import sends ${sharedImported.join(", ")}, and what in ${sharedImported.length === 1 ? "it" : "them"} differs from the instance changes for every solution of the tenant`;
       ctx.warn(
-        `${files} ${sharedImported.length === 1 ? "holds a section" : "hold sections"} the whole tenant shares: this import changes ${sharedImported.join(", ")} for every solution of the tenant` +
+        `${files} ${sharedImported.length === 1 ? "holds a section" : "hold sections"} the whole tenant shares: ${what}` +
           (takes ? "." : " (this instance does not publish include_tenant_wide and imports them with every solution's package); remove the file unless that is meant."),
       );
     }
     if (sections.length || tenantWide) {
+      // Nothing is applied by a preview: what the confirm would import is would_import.
       data.tenant_wide = {
         sections,
-        applied,
-        imported: sharedImported,
+        applied: false,
+        would_import: sharedImported,
         left_out: sharedLeftOut,
+        changing: sharedImported.length ? (sharedChanging ?? null) : [],
         reaches_active_solutions: reaches,
         reported_by: reported ? "instance" : "kit",
       };
     }
     const reachText = reaches.length ? `the active solution${reaches.length === 1 ? "" : "s"} ${list(reaches, 10)}` : "";
-    const sharedLine = sharedImported.length
-      ? `tenant-wide: ${sharedImported.join(", ")} change for every solution of the tenant${reachText ? `, reaching ${reachText}` : ""}`
-      : sharedLeftOut.length
-        ? `tenant-wide: ${sharedLeftOut.join(", ")} left out (\`${cavelonCommand("apply", "--include-tenant-wide")}\` imports them, for every solution of the tenant${reachText ? `; they would reach ${reachText}` : ""})`
-        : undefined;
+    const sharedLine = sharedSame
+      ? `tenant-wide: ${sharedImported.join(", ")} sent as the instance holds ${sharedImported.length === 1 ? "it" : "them"}; nothing changes for the tenant's solutions`
+      : sharedImported.length
+        ? `tenant-wide: ${sharedChanging?.length ? sharedChanging.join(", ") : sharedImported.join(", ")} change for every solution of the tenant${reachText ? `, reaching ${reachText}` : ""}`
+        : sharedLeftOut.length
+          ? `tenant-wide: ${sharedLeftOut.join(", ")} left out (\`${cavelonCommand("apply", "--include-tenant-wide")}\` imports them, for every solution of the tenant${reachText ? `; they would reach ${reachText}` : ""})`
+          : undefined;
     const commands = setCommands(preview);
     if (commands.secrets.length || commands.variables.length) data.set_commands = commands;
     const context: PreviewContext = { disk, harness: harness?.slug };
@@ -1278,6 +1325,7 @@ export const apply: CommandSpec = {
         text: [
           `Preview of ${project.layout.package}/ for ${harness ? `solution ${harness.slug}${harness.status ? ` (${harness.status})` : ""}` : "the tenant"}${envFile ? ` [env ${envFile.name}]` : ""}:`,
           previewText(preview, context),
+          ...(sharedLine ? [sharedLine] : []),
           "",
           "Nothing to import: the instance already holds what the package files say. No preview was stored.",
         ].join("\n"),
@@ -1529,6 +1577,38 @@ interface ReadinessCheck {
   detail?: string | null;
   /** Not in the published readiness schema; kept for an instance that words a check this way. */
   message?: string | null;
+  /** What a check needs, one entry each (a secret, a variable, a binding), on a recent instance. */
+  items?: Array<{ key?: string | null; label?: string | null; kind?: string | null; status?: string | null; confirmed?: boolean | null }> | null;
+}
+
+const SATISFIED = /^(set|ok|configured|confirmed|satisfied|complete|ready|bound)$/i;
+
+/**
+ * The secrets the readiness gate's blockers name as not set: the items of
+ * kind secret, else, from an instance that lists no items, the "Secret <name>"
+ * its words name.
+ */
+function missingSecrets(blockers: ReadinessCheck[]): string[] {
+  const names = new Set<string>();
+  for (const check of blockers) {
+    const items = Array.isArray(check.items) ? check.items : [];
+    for (const item of items) {
+      if (!/secret/i.test(item.kind ?? "") || item.confirmed === true || SATISFIED.test(item.status ?? "")) continue;
+      const name = (item.key ?? "").replace(/^secrets?[:./]/i, "") || (item.label ?? "").replace(/^secret\s+/i, "");
+      if (name) names.add(name);
+    }
+    if (items.length) continue;
+    for (const match of `${check.label ?? ""} ${check.detail ?? check.message ?? ""}`.matchAll(/\bSecret ([A-Za-z0-9_.-]+)/g)) names.add(match[1]!);
+  }
+  return [...names];
+}
+
+/** What to do about secrets the gate names as not set: who sets each, by whether this credential may. */
+function missingSecretsLine(names: string[], may: boolean | null): string {
+  const which = `Secret${names.length === 1 ? "" : "s"} ${names.join(", ")} ${names.length === 1 ? "is" : "are"} not set`;
+  const commands = names.map((n) => secretSetCommand(n)).join("; ");
+  if (may === false) return `${which}, and this token's role cannot set secrets. ${SECRET_SETTER}: ${commands}`;
+  return `${which}: a person sets ${names.length === 1 ? "it" : "each"} (never the agent): ${commands}`;
 }
 
 interface Readiness {
@@ -1553,6 +1633,8 @@ export interface SolutionState {
    * instance does not say. Undefined when the solution list could not be read.
    */
   default_route?: { is_default: boolean | null; current: { id: string; slug: string; name: string } | null };
+  /** The secrets readiness names as not set, and whether this credential may set them (null: the instance does not say). */
+  missing_secrets?: { names: string[]; may_set: boolean | null };
   /** Why part of it could not be read; the rest stands. */
   unavailable?: string;
 }
@@ -1586,6 +1668,11 @@ export async function solutionState(ctx: Context, ref: string): Promise<Solution
     });
     state.ready_to_activate = typeof readiness.ready_to_activate === "boolean" ? readiness.ready_to_activate : null;
     state.blockers = (readiness.blockers ?? []).map((b) => clip(String(b.label ?? b.key ?? b.detail ?? "?"), 80));
+    const secrets = missingSecrets(readiness.blockers ?? []);
+    if (secrets.length) {
+      const principal = await readPrincipal(await ctx.client()).catch(() => undefined);
+      state.missing_secrets = { names: secrets, may_set: maySetSecrets(principal) };
+    }
     if ("latest_test_run" in readiness) {
       const run = readiness.latest_test_run;
       const summary = run?.summary ?? {};
@@ -1620,6 +1707,7 @@ export function solutionStateLines(state: SolutionState): Array<[string, unknown
           ? `not ready to activate${state.blockers?.length ? ` (${list(state.blockers, 3)})` : ""}`
           : undefined;
   const lines: Array<[string, unknown]> = [["state", [state.harness.status, ready].filter(Boolean).join(", ")]];
+  if (state.missing_secrets) lines.push(["secrets", missingSecretsLine(state.missing_secrets.names, state.missing_secrets.may_set)]);
   const route = state.default_route;
   if (route) lines.push(["default route", defaultRouteText(state.harness, route)]);
   const run = state.latest_test_run;
@@ -1788,13 +1876,26 @@ export const activate: CommandSpec = {
       const blockers = readiness.blockers ?? [];
       // A Masterloop parent activated before its iteration solution.
       const pair = pairOrderHint(await catalogFor(ctx, false), blockers.flatMap((b) => [b.message ?? undefined, b.detail ?? undefined]));
+      // A secret the package declares is a person's to set, and with a role that may not, someone else's.
+      const secrets = missingSecrets(blockers);
+      const maySet = maySetSecrets(principal);
+      const secretsLine = secrets.length ? missingSecretsLine(secrets, maySet) : undefined;
       return {
-        data: { activated: false, harness, checks, warnings, readiness, ...(pair ? { hint: pair.hint } : {}) },
+        data: {
+          activated: false,
+          harness,
+          checks,
+          warnings,
+          readiness,
+          ...(pair ? { hint: pair.hint } : {}),
+          ...(secrets.length ? { missing_secrets: { names: secrets, may_set: maySet, next: secretsLine } } : {}),
+        },
         text: [
           `${harness.name} (${harness.slug}) is not ready to activate:`,
           ...blockers.map((b) => `  - ${checkLine(b)}`),
           ...readinessText(checks, warnings),
           ...(pair ? [`hint: ${pair.hint}`] : []),
+          ...(secretsLine ? [secretsLine] : []),
           "Resolve these (often: a passing test run), then activate again. Forcing past the gate is a person's decision in the Admin.",
         ].join("\n"),
         exitCode: ExitCode.validation,

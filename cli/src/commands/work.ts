@@ -122,7 +122,7 @@ function replaceSupport(doc: OpenApiDoc | undefined, op: Operation): ReplaceSupp
  * instance replaces it by name or by the id the kit sends, or the kit
  * deactivates it after the upload.
  */
-type ReplacePlan = "stays_active" | "replaced_by_name" | "replace_by_id" | "deactivate";
+type ReplacePlan = "stays_active" | "replaced_by_name" | "replace_by_id" | "deactivate" | "identical";
 type ReplaceOutcome = "stays_active" | "replaced" | "replace_requested" | "deactivated" | "not_uploaded" | "identical";
 
 interface NameMatch {
@@ -223,6 +223,8 @@ function plannedLine(match: NameMatch): string {
       return `${head} and is replaced once the new file is verified`;
     case "deactivate":
       return `${head} and is deactivated after the upload`;
+    case "identical":
+      return `${head} and stays as it is: the file is identical to it`;
   }
 }
 
@@ -642,19 +644,23 @@ export const kbUpload: CommandSpec = {
       const differing = matches.filter((m) => !isIdentical(m));
       const dryHint = staysActiveHint(differing, mode);
       const dryDeactivations = differing.filter((m) => m.plan === "deactivate");
+      // A file identical to an active document creates nothing new, so the dry run does not count it as an upload.
+      const same = new Set((identical ?? []).map((i) => i.file));
+      const fresh = rel.filter((f) => !same.has(f));
       return {
         data: {
           kb: kbRef,
           files: rel,
           count: rel.length,
+          new_files: fresh,
           dry_run: true,
-          existing: planned.map((m, index) => (identical ? { ...m, identical: isIdentical(matches[index]!) } : m)),
+          existing: planned.map((m, index) => (identical ? { ...m, identical: isIdentical(matches[index]!), ...(isIdentical(matches[index]!) ? { plan: "identical" } : {}) } : m)),
           content_compared: identical !== undefined,
           identical: identical ?? [],
         },
         text: [
-          `Would upload ${fileCount(rel.length)}:`,
-          ...rel,
+          fresh.length ? `Would upload ${fileCount(fresh.length)}:` : "Nothing new to upload:",
+          ...fresh,
           ...(identical ?? []).map(
             (i) =>
               `${i.file}: identical to the active document ${shortId(i.document_id)}${i.filename === path.basename(i.file) ? "" : ` (${i.filename})`}; nothing new would be created (deduplicated)`,

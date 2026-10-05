@@ -199,6 +199,39 @@ describe("init chooses the tenant and the solution", () => {
 });
 
 describe("init", () => {
+  it("writes a minimal manifest, so validate passes before the first pull; the first pull replaces it", async () => {
+    const dir = folder();
+    const made = await cli(sb, ["init", "--instance", server.url, "--tenant", tenant, "--harness", "Manifest Test", "--new", "--json"], { cwd: dir });
+    expect(made.code, made.stderr).toBe(0);
+    expect(made.json<{ files: Array<{ file: string; action: string }> }>().files).toEqual(expect.arrayContaining([{ file: "package/manifest.yaml", action: "created" }]));
+    const manifest = parse(read(path.join(dir, "package", "manifest.yaml"))) as Record<string, unknown>;
+    expect(manifest).toEqual({ package_version: "v3", exported_at: expect.stringMatching(/^\d{4}-\d\d-\d\dT/), source_tenant_id: tenant, source_tenant_slug: "acme" });
+    // A manifest alone is no package yet: the next step is still to write one.
+    expect(made.json<{ next: string[] }>().next).toEqual(expect.arrayContaining(["Write the package files in package/, then: cavelon validate"]));
+    expect((await cli(sb, ["validate", "--offline"], { cwd: dir })).stderr).toMatch(/No package files in package\/ yet/);
+
+    // With the package files written by hand, the manifest is valid.
+    const example = path.resolve(CONTRACTS, "..", "..", "examples", "support-faq", "package");
+    for (const name of readdirSync(example).filter((n) => n !== "manifest.yaml")) copyFileSync(path.join(example, name), path.join(dir, "package", name));
+    const validated = await cli(sb, ["validate", "--offline", "--json"], { cwd: dir });
+    const findings = validated.json<{ findings: Array<{ code: string; message: string }> }>().findings;
+    expect(findings.filter((f) => f.code === "package_schema_invalid" && /manifest/.test(f.message))).toEqual([]);
+
+    // A folder whose manifest is gone: validate says where one comes from, and init writes it again.
+    rmSync(path.join(dir, "package", "manifest.yaml"));
+    const missing = (await cli(sb, ["validate", "--offline", "--json"], { cwd: dir })).json<{ findings: Array<{ code: string; message: string; hint?: string }> }>().findings;
+    expect(missing.find((f) => f.message === 'missing required field "manifest"')?.hint).toMatch(/`cavelon pull` writes the instance's manifest.*`cavelon init` again in this folder/);
+    const again = await cli(sb, ["init", "--json"], { cwd: dir });
+    expect(again.code, again.stderr).toBe(0);
+    expect(existsSync(path.join(dir, "package", "manifest.yaml"))).toBe(true);
+
+    // Recorded like a pulled file: the first pull may replace it; only the hand-written files are local changes.
+    const pulled = await cli(sb, ["pull"], { cwd: dir });
+    expect(pulled.code).toBe(4);
+    expect(pulled.stderr).toContain("package/agents.yaml");
+    expect(pulled.stderr).not.toContain("manifest.yaml");
+  });
+
   it("creates its own files and folders and the uncommitted .cavelon/", async () => {
     const dir = await initSolution();
     const project = parse(read(path.join(dir, "cavelon.yaml")));
@@ -1695,6 +1728,50 @@ describe("activate", () => {
       expect(server.state.requests.some((r) => r.method === "POST")).toBe(false);
     } finally {
       limited.cleanup();
+    }
+  });
+});
+
+describe("activate and status with a secret the package declares and nobody set", () => {
+  const items = [{ key: "secret:crm_api_token", label: "Secret crm_api_token", kind: "secret", required: true, status: "missing", confirmed: false, href: "/settings/secrets" }];
+  const blocker = { key: "requirements", label: "Required configuration", state: "action_required", detail: "set what its package declares it needs", href: null };
+
+  it("names who sets it: a person with this token, or a tenant Owner when the token's role may not", async () => {
+    await cli(sb, ["harness", "new", "needs-secret"]);
+    server.state.ready = false;
+    server.state.readinessBlockers = [{ ...blocker, items }];
+    const builder = sandbox();
+    try {
+      const own = await cli(sb, ["activate", "--harness", "needs-secret", "--json"]);
+      expect(own.code).toBe(3);
+      expect(own.json<{ missing_secrets: Record<string, unknown> }>().missing_secrets).toMatchObject({ names: ["crm_api_token"], may_set: true });
+      expect((await cli(sb, ["activate", "--harness", "needs-secret"])).stdout).toContain(
+        "Secret crm_api_token is not set: a person sets it (never the agent): cavelon secrets set crm_api_token",
+      );
+      // The line acts where the command did: it keeps the --tenant it was given.
+      expect((await cli(sb, ["activate", "--harness", "needs-secret", "--tenant", tenant])).stdout).toContain(
+        `a person sets it (never the agent): cavelon secrets set crm_api_token --tenant ${tenant}`,
+      );
+
+      await login(builder, server.url, server.addToken({ kind: "pat", tenantIds: [tenant], defaultTenant: tenant, mayActivate: true, permissions: ["agents.manage", "agents.view"] }));
+      const theirs = await cli(builder, ["activate", "--harness", "needs-secret"]);
+      expect(theirs.code, theirs.stderr + theirs.stdout).toBe(3);
+      expect(theirs.stdout).toContain(
+        "Secret crm_api_token is not set, and this token's role cannot set secrets. A tenant Owner (or another role allowed to manage secrets) sets it, " +
+          "in the Admin under Settings › Secrets or with their own token: cavelon secrets set crm_api_token",
+      );
+      const dir = folder();
+      expect((await cli(builder, ["init", "--instance", server.url, "--tenant", tenant, "--harness", "needs-secret"], { cwd: dir })).code).toBe(0);
+      const status = await cli(builder, ["status"], { cwd: dir });
+      expect(status.stdout).toMatch(/^secrets:\s+Secret crm_api_token is not set, and this token's role cannot set secrets\. A tenant Owner/m);
+
+      // An instance whose readiness lists no items still names the secret in its words.
+      server.state.readinessBlockers = [{ ...blocker, detail: "set what its package declares it needs: Secret crm_api_token" }];
+      expect((await cli(sb, ["activate", "--harness", "needs-secret", "--json"])).json<{ missing_secrets: { names: string[] } }>().missing_secrets.names).toEqual(["crm_api_token"]);
+    } finally {
+      server.state.ready = true;
+      server.state.readinessBlockers = undefined;
+      builder.cleanup();
     }
   });
 });

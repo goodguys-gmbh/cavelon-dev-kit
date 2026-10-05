@@ -321,6 +321,11 @@ describe("explain", () => {
     const schemaInvalid = await cli(sb, ["explain", "package_schema_invalid", "--json"], { cwd: dir });
     expect(schemaInvalid.json<{ cli_fix: string }>().cli_fix).toMatch(/cavelon validate/);
     expect((await cli(sb, ["explain", "package_schema_invalid"], { cwd: dir })).stdout).toMatch(/with the CLI:\s+Run `cavelon validate`/);
+    expect(schemaInvalid.json<{ cli_fix: string }>().cli_fix).toMatch(/A missing manifest comes from `cavelon pull`, or `cavelon init`/);
+    // What a confirm with another change's token returns, as the docs and the MCP server name it.
+    const mismatch = await cli(sb, ["explain", "token_mismatch", "--json"], { cwd: dir });
+    expect(mismatch.code, mismatch.stdout).toBe(0);
+    expect(mismatch.json()).toMatchObject({ code: "token_mismatch", kind: "cli", message: expect.stringMatching(/not the one for this change/) });
   });
 
   it("suggests codes a typo away or with the same start, never one that only shares a common word", async () => {
@@ -480,6 +485,23 @@ describe("apply shows the instance's structured preview", () => {
       field_changes: [{ object: "agents:helper", field: "system_prompt", old: "Answer.", new: "Answer from the handbook." }],
       not_applied: [expect.objectContaining({ path: "harnesses[0].is_default", command: "cavelon harness default support" }), expect.anything()],
     });
+  });
+
+  it("shows where two long texts differ, so an edit at the end of a long prompt is seen", async () => {
+    const dir = await pulled();
+    const start = "You answer questions about the product from the FAQ. ".repeat(4);
+    server.state.previewExtras = {
+      changes: [{ object: "agents:helper", field: "system_prompt", old: `${start}Answer only from the FAQ.`, new: `${start}Answer only from the FAQ, and name the page you used.` }],
+    };
+    try {
+      const result = await cli(sb, ["apply"], { cwd: dir });
+      expect(result.code, result.stderr).toBe(0);
+      expect(result.stdout).toContain(
+        `- agents:helper.system_prompt: …" FAQ. Answer only from the FAQ." → …" FAQ. Answer only from the FAQ, and name the page you used." (from character ${start.length + 25})`,
+      );
+    } finally {
+      server.state.previewExtras = {};
+    }
   });
 
   it("reads a diff grouped by object, and keeps today's output without these fields", async () => {

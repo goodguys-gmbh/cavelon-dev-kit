@@ -177,7 +177,7 @@ Make this folder a Cavelon solution: cavelon.yaml, package/, tests/, env/ and .c
 cavelon init [options]
 ```
 
-Never overwrites a file it did not create. AGENTS.md, .gitignore and an existing CLAUDE.md get at most a block between cavelon:begin and cavelon:end markers. --agents also writes the skills to .agents/skills/ and .claude/skills/ and each named agent's `cavelon mcp` entry, for agents without the Cavelon plugin. --update changes only those marked blocks and the fallback files a previous init wrote. --from writes an existing package file (JSON or YAML export) into package/ and tests/ as `pull` writes an export, so validate and apply take it from there; it refuses to change or remove a package file that holds something else unless --force, and names the sections the instance's schema does not know.
+Never overwrites a file it did not create. AGENTS.md, .gitignore and an existing CLAUDE.md get at most a block between cavelon:begin and cavelon:end markers. --agents also writes the skills to .agents/skills/ and .claude/skills/ and each named agent's `cavelon mcp` entry, for agents without the Cavelon plugin. --update changes only those marked blocks and the fallback files a previous init wrote. --from writes an existing package file (JSON or YAML export) into package/ and tests/ as `pull` writes an export, so validate and apply take it from there; it refuses to change or remove a package file that holds something else unless --force, and names the sections the instance's schema does not know. Without --from, a folder without package/manifest.yaml gets a minimal one (package format and tenant), which the first pull replaces.
 
 | Option | Description | MCP |
 |---|---|---|
@@ -773,7 +773,7 @@ List the tenant's secret names ({{secret:…}}) with whether each is set; never 
 cavelon secrets list [options]
 ```
 
-Lists every secret that has a value or that an imported package declared. A person sets a missing one with `cavelon secrets set <name>`; an agent never sets or reads a secret value.
+Lists every secret that has a value or that an imported package declared, and in a solution folder the ones its package declares that the tenant does not know yet. A person sets a missing one with `cavelon secrets set <name>`; an agent never sets or reads a secret value.
 
 | Option | Description | MCP |
 |---|---|---|
@@ -799,7 +799,7 @@ Set a secret's value (a person runs this, never the agent).
 cavelon secrets set <name> [options]
 ```
 
-Asks for the value without echoing it, or reads it from standard input when that is piped (one trailing line break is dropped). The value is never an argument, never printed and never read back. A tenant API key cannot set a secret.
+Asks for the value without echoing it, or reads it from standard input when that is piped (one trailing line break is dropped). The value is never an argument, never printed and never read back. A tenant API key cannot set a secret, nor can a role the instance does not allow to manage secrets (a Builder): its refusal then names who can, a tenant Owner.
 
 | Argument | Description |
 |---|---|

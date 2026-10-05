@@ -150,6 +150,7 @@ created   .cavelon/
 created   .gitignore
 created   AGENTS.md
 created   package/persona.yaml
+created   package/manifest.yaml
 
 Next:
   Write the package files in package/, then: cavelon validate
@@ -202,8 +203,10 @@ harness: support-faq
 ```
 
 `env/test.yaml` says where `apply --env test` goes. `.cavelon/` holds local
-state and is ignored by git. `package/persona.yaml` lists every field of the
-solution's persona as a comment, until you set one. See
+state and is ignored by git. `package/manifest.yaml` names the package format
+and the tenant the package is for, so `validate` passes before the first pull
+(the first `pull` replaces it with the instance's). `package/persona.yaml`
+lists every field of the solution's persona as a comment, until you set one. See
 [Concepts](concepts.md#the-solution-folder) for each file.
 
 This solution is new and empty, so take its files from the example.
@@ -242,7 +245,8 @@ seeds/faq/               three FAQ pages to upload
 ```
 
 Each file under `package/` is one section of the instance's package schema
-(copying `package/` replaces the `persona.yaml` that `init` wrote).
+(copying `package/` replaces the `persona.yaml` and `manifest.yaml` that `init`
+wrote).
 The persona says who the assistant is for every agent of the solution; an
 agent's `system_prompt` says what that agent does. See
 [Persona](concepts.md#persona).
@@ -370,6 +374,14 @@ grants), and the instance's warnings. The two warnings here are expected:
   name](#under-your-own-name)).
 - *Config only*: the package carries the knowledge base's settings, never its
   documents. They come in step 7.
+
+A solution that uses a secret (`{{secret:<name>}}`, declared in
+`package/required_secrets.yaml`) lists it under "needs secrets" with the
+`cavelon secrets set <name>` command that sets it. Only a role allowed to
+manage secrets runs that, such as the tenant's Owner: with a Builder's token
+`secrets set` is refused and names who sets it instead (a tenant Owner, in the
+Admin under Settings › Secrets or with their own token). `cavelon whoami` shows
+whether your token may ("may set secrets").
 
 `apply` previews into a solution that exists and never creates one. If
 `env/test.yaml` names a solution that is not on the instance (you skipped

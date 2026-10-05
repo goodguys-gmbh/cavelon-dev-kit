@@ -10,7 +10,7 @@ import { git } from "../git.js";
 import { ensureStateDir, fileDigests, rememberAppliedFiles, STATE_DIR } from "../local-state.js";
 import { isGenerated, upsertBlock, upsertJsonEntry, type BlockResult, type CommentStyle } from "../markers.js";
 import { packageVersionOf } from "../package-check.js";
-import { PERSONA_SECTION, personaYaml, sectionFields } from "../package-format.js";
+import { MANIFEST_SECTION, PERSONA_SECTION, personaYaml, requiredFields, sectionFields } from "../package-format.js";
 import { defaultLayoutFor, placeholdersOnly, safeSectionName, schemaSections, toYaml, writePackage, type WriteReport } from "../package-files.js";
 import { readPrincipal, readTenantless } from "../principal.js";
 import { ENV_DIR, parseProject, PROJECT_FILE, type ProjectConfig } from "../project.js";
@@ -18,6 +18,7 @@ import { canAsk, readLine } from "../prompt.js";
 import { pick } from "../choose.js";
 import { harnessNotFoundError, listHarnesses, lookupHarness, SLUG, slugFromName, type HarnessLookup, type HarnessSummary } from "../harness-ref.js";
 import { isUuid, lookupTenantId, requireInstance, requireToken, tenantRequiredError, type Session } from "../session.js";
+import type { PackageSchema } from "../contracts.js";
 import { cavelonCommand, fill, folderCommand } from "../printed.js";
 import { chooseTenant, listsTenants, noTenantError, tenantOpenError, tenantRef, tenantTitle } from "../tenant-choice.js";
 import { createHarness } from "./tenants.js";
@@ -115,6 +116,85 @@ async function personaPlaceholders(ctx: Context, project: ProjectConfig): Promis
   if (!fields) return undefined;
   const relative = `${project.layout.package}/${PERSONA_SECTION}.yaml`;
   const action = await ownFile(project.root, relative, personaYaml(null, fields));
+  if (action.action === "created") await rememberAppliedFiles(project.root, await fileDigests(project.root, [relative]));
+  return action;
+}
+
+/** The tenant a new package is made for, as its manifest names it. */
+interface ManifestTenant {
+  id: string;
+  slug: string;
+}
+
+/**
+ * The tenant for the manifest: the one init chose, else the one cavelon.yaml
+ * names, looked up. Undefined when its id or slug cannot be found out (no
+ * network, a token that may not look it up): then no manifest is written,
+ * and `pull` writes one.
+ */
+async function manifestTenant(ctx: Context, session: Session, chosen: InitTenant | undefined): Promise<ManifestTenant | undefined> {
+  if (chosen?.id && chosen.slug) return { id: chosen.id, slug: chosen.slug };
+  const ref = chosen?.ref ?? session.tenant;
+  if (!ref) return undefined;
+  try {
+    const found = await lookupTenantId(await ctx.client({ tenant: false }), ref, session.tenantSource);
+    // cavelon.yaml names a tenant by its slug where it can, so a slug-shaped name that is not an id is one.
+    const slug = found.slug ?? (!isUuid(ref) && SLUG.test(ref) ? ref : undefined);
+    return slug ? { id: found.id, slug } : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * A new solution's manifest, so `validate` passes before the first pull: each
+ * field the package schema requires, from its `const`, what init knows (the
+ * package format, the tenant, the time) or its default. Undefined when the
+ * schema requires a field none of these gives.
+ */
+function manifestFor(schema: PackageSchema | null, known: Record<string, unknown>): Record<string, unknown> | undefined {
+  const required = requiredFields(schema, MANIFEST_SECTION);
+  const fields = sectionFields(schema, MANIFEST_SECTION);
+  if (!required || !fields) return undefined;
+  const manifest: Record<string, unknown> = {};
+  // In the schema's order, as an export writes it.
+  for (const name of Object.keys(fields).filter((f) => required.includes(f))) {
+    const field = fields[name]!;
+    const value = field.const !== undefined ? field.const : known[name] !== undefined ? known[name] : field.default ?? undefined;
+    if (value === undefined || value === null) return undefined;
+    manifest[name] = value;
+  }
+  return required.every((name) => name in manifest) ? manifest : undefined;
+}
+
+/** Whether the package folder has a manifest file, in any of the forms a section file takes. */
+async function hasManifest(root: string, dir: string): Promise<boolean> {
+  const names = await fs.readdir(path.join(root, dir)).catch(() => [] as string[]);
+  return names.some((n) => n.replace(/\.(ya?ml|json)$/i, "") === MANIFEST_SECTION);
+}
+
+/**
+ * Write `package/manifest.yaml` when the folder has none and the kit knows
+ * every field the schema requires. Recorded like a pulled file, so the first
+ * pull replaces it with the instance's.
+ */
+async function manifestFile(ctx: Context, session: Session, project: ProjectConfig, chosen: InitTenant | undefined): Promise<FileAction | undefined> {
+  if (await hasManifest(project.root, project.layout.package)) return undefined;
+  const { schema } = await schemaFor(ctx, project.packageVersion, false).catch(() => ({ schema: null }));
+  if (!requiredFields(schema, MANIFEST_SECTION)) return undefined;
+  const tenant = await manifestTenant(ctx, session, chosen);
+  if (!tenant) return undefined;
+  const version = project.packageVersion ?? (typeof schema?.["x-package-version"] === "string" ? schema["x-package-version"] : undefined);
+  const manifest = manifestFor(schema, {
+    package_version: version,
+    source_tenant_id: tenant.id,
+    source_tenant_slug: tenant.slug,
+    exported_at: ctx.io.now().toISOString(),
+  });
+  if (!manifest) return undefined;
+  const relative = `${project.layout.package}/${MANIFEST_SECTION}.yaml`;
+  const content = ["# The package format and the tenant this package is for, written by `cavelon init`; `cavelon pull` replaces it.", toYaml(manifest).trimEnd(), ""].join("\n");
+  const action = await ownFile(project.root, relative, content);
   if (action.action === "created") await rememberAppliedFiles(project.root, await fileDigests(project.root, [relative]));
   return action;
 }
@@ -457,7 +537,11 @@ async function hasPackageFiles(root: string, dir: string): Promise<boolean> {
   } catch {
     return false;
   }
-  for (const name of names) if (!(await placeholdersOnly(root, `${dir}/${name}`))) return true;
+  // A manifest alone says only which tenant and format the package is for; init writes one into an empty folder.
+  for (const name of names) {
+    if (name.replace(/\.(ya?ml|json)$/i, "") === MANIFEST_SECTION) continue;
+    if (!(await placeholdersOnly(root, `${dir}/${name}`))) return true;
+  }
   return false;
 }
 
@@ -595,6 +679,7 @@ async function runInit(ctx: Context, input: Parameters<CommandSpec["run"]>[1]) {
   }
   const packageHarness = imported ? onlyHarnessSlug(imported) : undefined;
   let chosenHarness: InitHarness | undefined;
+  let chosenTenant: InitTenant | undefined;
 
   const root = ctx.io.cwd;
   const existing = await readTextFile(path.join(root, PROJECT_FILE));
@@ -606,6 +691,7 @@ async function runInit(ctx: Context, input: Parameters<CommandSpec["run"]>[1]) {
     requireToken(session);
     // The tenant comes first: a token that acts in no tenant yet is answered nowhere else.
     const tenant = await initTenant(ctx, session);
+    chosenTenant = tenant;
     // Every later call of this command sends the id, so a name or slug is not looked up twice.
     if (tenant?.id) [session.tenant, session.tenantSource] = [tenant.id, session.tenantSource ?? "option"];
     const contracts = await ctx.contracts();
@@ -675,7 +761,7 @@ async function runInit(ctx: Context, input: Parameters<CommandSpec["run"]>[1]) {
     );
   } else if (!(await hasPackageFiles(root, project.layout.package))) {
     const choices = chosenHarness?.choices ?? [];
-    // A new draft's export holds its manifest, which validate needs; pull writes it.
+    // A new draft's export holds its own manifest, which replaces the minimal one init writes; pull brings it.
     if (chosenHarness?.created || chosenHarness?.missing) {
       next.unshift(
         `Bring the draft into package/ (its manifest): ${folderCommand("pull")}`,
@@ -698,6 +784,11 @@ async function runInit(ctx: Context, input: Parameters<CommandSpec["run"]>[1]) {
     if (persona) actions.push(persona);
   }
   if (chosenHarness?.missing) next.unshift(`Solution ${harness} is not on the instance yet: create it as a draft with ${chosenHarness.create}.`);
+  // `--from` brings its own manifest; any other folder without one gets it, so validate passes before a pull.
+  if (!result) {
+    const manifest = await manifestFile(ctx, session, project, chosenTenant);
+    if (manifest) actions.push(manifest);
+  }
   return { root, actions, next, imported: result, harness: chosenHarness };
 }
 
@@ -710,7 +801,8 @@ export const init: CommandSpec = {
     "named agent's `cavelon mcp` entry, for agents without the Cavelon plugin. --update changes only those marked blocks and\n" +
     "the fallback files a previous init wrote. --from writes an existing package file (JSON or YAML export) into package/ and\n" +
     "tests/ as `pull` writes an export, so validate and apply take it from there; it refuses to change or remove a package\n" +
-    "file that holds something else unless --force, and names the sections the instance's schema does not know.",
+    "file that holds something else unless --force, and names the sections the instance's schema does not know. Without\n" +
+    "--from, a folder without package/manifest.yaml gets a minimal one (package format and tenant), which the first pull replaces.",
   readOnly: false,
   destructive: true,
   mcpEffect:

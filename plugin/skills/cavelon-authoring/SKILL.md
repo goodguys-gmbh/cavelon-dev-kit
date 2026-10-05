@@ -138,7 +138,9 @@ it and where, as the output says.
 
 A file of a section the instance does not know is kept as it is; the preview
 lists it under "ignored". `package/manifest.yaml` names the package format
-version; leave it as `pull` wrote it. Some fields are not applied by an
+version and the tenant the package is for; leave it as `pull` or `init`
+wrote it (`init` writes a minimal one for a new solution, and the first `pull`
+replaces it). Some fields are not applied by an
 import: the preview lists them under "not applied", each with the command
 that sets it (a solution's `status` with `cavelon activate`, its `is_default`
 with `cavelon harness default`).
@@ -300,7 +302,12 @@ schema has them: `cavelon validate` reports an unknown section):
   without echoing it. Never ask for the value, never put it into a file,
   an argument or a message, and never put a credential into a variable.
   `cavelon secrets list` (the `secrets_list` tool) shows which are set,
-  never a value. A tenant API key cannot set a secret at all.
+  never a value. A tenant API key cannot set a secret at all, and neither can
+  a person whose role may not manage secrets (a Builder): `cavelon whoami`
+  says "may set secrets: no", and `secrets set`, `activate` and `status` then
+  name who does instead. Tell the person that a tenant Owner sets it, in the
+  Admin under Settings › Secrets or with their own token; do not suggest the
+  command to someone whose role cannot run it.
 
 ## After each edit
 

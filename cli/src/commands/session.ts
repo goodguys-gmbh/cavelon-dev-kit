@@ -12,6 +12,7 @@ import { listPreviews, readPull } from "../local-state.js";
 import type { Operation } from "../operations.js";
 import { solutionState, solutionStateLines, type SolutionState } from "./solution.js";
 import { expiryOf, readPrincipal, readTenantless, type Tenantless } from "../principal.js";
+import { maySetSecrets } from "../secret-access.js";
 import { readHidden } from "../prompt.js";
 import { isUuid, lookupTenantId, requireInstance, requireToken, tenantRequiredError, type FoundTenant, type Session } from "../session.js";
 import { cavelonCommand, fill } from "../printed.js";
@@ -410,6 +411,8 @@ export const whoami: CommandSpec = {
         expires_at: expiry.expires_at,
         expires_in_days: expiry.days_left,
         may_activate: principal?.token ? principal.token.may_activate : null,
+        // Null where the instance does not publish the token's permissions in the tenant.
+        may_set_secrets: maySetSecrets(principal),
         ceiling_role: principal?.token?.ceiling_role ?? null,
         platform_mode_allowed: principal?.token?.platform_mode_allowed ?? null,
         scopes: principal?.api_key?.scopes ?? null,
@@ -458,6 +461,7 @@ export const whoami: CommandSpec = {
         ["credential", `${session.tokenKind === "api_key" ? "tenant API key" : session.tokenKind === "personal_access_token" ? "personal access token" : "token"}${tokenName} from ${credentialSource(session)}`],
         ["expires", expires],
         ["may activate", principal?.token ? (principal.token.may_activate ? "yes" : "no (a person activates in the Admin)") : undefined],
+        ["may set secrets", secretsText(data.credential.may_set_secrets)],
         // An instance that does not say whether the token allows Platform mode gets no line.
         ["platform mode", typeof principal?.token?.platform_mode_allowed === "boolean" ? platformModeText(principal.token) : undefined],
         ["reaches", reach ? reachText(reach) : undefined],
@@ -466,6 +470,11 @@ export const whoami: CommandSpec = {
     };
   },
 };
+
+function secretsText(may: boolean | null): string | undefined {
+  if (may === null) return undefined;
+  return may ? "yes" : "no (a tenant Owner sets them, in the Admin or with their own token)";
+}
 
 export const use: CommandSpec = {
   name: "use",

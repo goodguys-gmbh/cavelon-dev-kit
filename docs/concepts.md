@@ -141,7 +141,11 @@ every solution's package; `apply` says so when the folder holds one, and
 A package never contains a secret's value. It names the **variables**
 (`{{var:name}}`) and **secrets** (`{{secret:name}}`) the solution needs, in
 `required_variables` and `required_secrets`, and `apply` lists which of them
-the target tenant has not set yet.
+the target tenant has not set yet. Setting a secret takes a role allowed to
+manage secrets, such as the tenant's Owner: a Builder's token cannot, and
+`cavelon whoami` says whether yours may ("may set secrets"). When it may not,
+`secrets set`, `activate` and `status` name who sets it instead: a tenant Owner,
+in the Admin under Settings › Secrets or with their own token.
 
 ## The solution folder
 
