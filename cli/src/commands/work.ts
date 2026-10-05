@@ -1,4 +1,5 @@
-import { promises as fs } from "node:fs";
+import { createHash } from "node:crypto";
+import { createReadStream, promises as fs } from "node:fs";
 import path from "node:path";
 import {
   boolOption,
@@ -62,6 +63,8 @@ interface ExistingDocument {
   status?: string;
   is_active?: boolean;
   created_at?: string;
+  /** SHA-256 of the uploaded bytes, the value the upload's deduplication compares; null for a document that was no file or is older, absent on an older instance. */
+  file_sha256?: string | null;
 }
 
 const fileCount = (n: number) => `${n} file${n === 1 ? "" : "s"}`;
@@ -143,6 +146,46 @@ async function existingDocuments(ctx: Context, kbId: string): Promise<ExistingDo
     ctx.warn(`Could not list the knowledge base's documents (${error.message}); files named like an existing document are not reported.`);
     return undefined;
   }
+}
+
+/** A local file whose bytes are those of an active document: the instance would create nothing new for it. */
+interface IdenticalFile {
+  /** The local file, relative to the working folder. */
+  file: string;
+  document_id: string;
+  /** The document's name, which may differ from the file's. */
+  filename: string;
+}
+
+async function sha256Of(file: string): Promise<string> {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(file)) hash.update(chunk as Buffer);
+  return hash.digest("hex");
+}
+
+/**
+ * The files identical to an active document, by the `file_sha256` the instance
+ * publishes on its documents. Undefined when the knowledge base has documents
+ * and none carries a hash, as on an instance that does not publish it: then
+ * nothing can be said about content. A document without a hash (not a file, or
+ * older than the field) matches nothing.
+ */
+async function identicalFiles(files: string[], cwd: string, existing: ExistingDocument[]): Promise<IdenticalFile[] | undefined> {
+  const hashed = existing.filter((d): d is ExistingDocument & { file_sha256: string } => typeof d.file_sha256 === "string" && d.file_sha256 !== "");
+  if (existing.length && !hashed.length) return undefined;
+  const byHash = new Map<string, ExistingDocument>();
+  // The newest document of a content first, as the newest is the one a reader of the list sees.
+  for (const d of [...hashed].sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""))) {
+    const key = d.file_sha256.toLowerCase();
+    if (!byHash.has(key)) byHash.set(key, d);
+  }
+  const out: IdenticalFile[] = [];
+  if (!byHash.size) return out;
+  for (const file of files) {
+    const document = byHash.get(await sha256Of(file));
+    if (document) out.push({ file: path.relative(cwd, file) || file, document_id: document.id, filename: document.filename });
+  }
+  return out;
 }
 
 /**
@@ -540,7 +583,9 @@ export const kbUpload: CommandSpec = {
     "A file named like an active document of the knowledge base is listed, with what happens to that document. An\n" +
     "instance that replaces same-named documents on upload does so (--keep-both keeps both); elsewhere the old one stays\n" +
     "active. --replace replaces it: through the instance's own replacement where its upload offers one, else the kit\n" +
-    "deactivates the old document after the upload (after the wait with --wait), and then only with --confirm.",
+    "deactivates the old document after the upload (after the wait with --wait), and then only with --confirm.\n" +
+    "--dry-run also names each file identical to an active document, which the upload would not create again, where the\n" +
+    "instance publishes its documents' file hashes.",
   readOnly: false,
   mcpTool: "kb_upload",
   positionals: [{ name: "dir", description: "Folder (or single file) to upload.", required: true }],
@@ -551,7 +596,7 @@ export const kbUpload: CommandSpec = {
     replace: { type: "boolean", description: "Replace active documents with the same file name." },
     "keep-both": { type: "boolean", description: "Keep active documents with the same file name next to the new ones." },
     confirm: { type: "boolean", mcpToken: true, description: "With --replace, deactivate the old documents the instance does not replace itself; without it nothing is sent." },
-    "dry-run": { type: "boolean", description: "List what would be uploaded and replaced, upload nothing." },
+    "dry-run": { type: "boolean", description: "List what would be uploaded, replaced and found identical; upload nothing." },
     wait: WAIT_OPTION,
     timeout: TIMEOUT_OPTION,
   },
@@ -589,17 +634,34 @@ export const kbUpload: CommandSpec = {
     const matches = existing ? nameMatches(files, ctx.io.cwd, existing, mode, support) : [];
     const rel = files.map((f) => path.relative(ctx.io.cwd, f) || f);
     const planned = matches.map(({ outcome: _outcome, ...m }) => m);
-    const hint = staysActiveHint(matches, mode);
     const deactivations = matches.filter((m) => m.plan === "deactivate");
     if (boolOption(input, "dry-run")) {
+      const identical = existing ? await identicalFiles(files, ctx.io.cwd, existing) : undefined;
+      // A same-named document the file is identical to is what the upload answers with: nothing of it is replaced or deactivated.
+      const isIdentical = (m: NameMatch) => Boolean(identical?.some((i) => i.file === m.file && i.document_id === m.document_id));
+      const differing = matches.filter((m) => !isIdentical(m));
+      const dryHint = staysActiveHint(differing, mode);
+      const dryDeactivations = differing.filter((m) => m.plan === "deactivate");
       return {
-        data: { kb: kbRef, files: rel, count: rel.length, dry_run: true, existing: planned },
+        data: {
+          kb: kbRef,
+          files: rel,
+          count: rel.length,
+          dry_run: true,
+          existing: planned.map((m, index) => (identical ? { ...m, identical: isIdentical(matches[index]!) } : m)),
+          content_compared: identical !== undefined,
+          identical: identical ?? [],
+        },
         text: [
           `Would upload ${fileCount(rel.length)}:`,
           ...rel,
-          ...matches.map(plannedLine),
-          ...(hint ? [hint] : []),
-          ...(deactivations.length ? [`The kit deactivates ${deactivations.length === 1 ? "that document" : "those documents"} only with --replace --confirm.`] : []),
+          ...(identical ?? []).map(
+            (i) =>
+              `${i.file}: identical to the active document ${shortId(i.document_id)}${i.filename === path.basename(i.file) ? "" : ` (${i.filename})`}; nothing new would be created (deduplicated)`,
+          ),
+          ...differing.map(plannedLine),
+          ...(dryHint ? [dryHint] : []),
+          ...(dryDeactivations.length ? [`The kit deactivates ${dryDeactivations.length === 1 ? "that document" : "those documents"} only with --replace --confirm.`] : []),
         ].join("\n"),
       };
     }

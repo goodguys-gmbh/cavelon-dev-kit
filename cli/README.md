@@ -124,6 +124,7 @@ Every command takes `--json` (one JSON document on stdout, errors included),
 | `harness new <slug> [--name] [--description]` | changing | Create an empty draft solution. |
 | `harness clone <source> [--slug] [--name] [--no-tests] [--no-triggers]` | changing | Copy a solution into a new draft. |
 | `activate [--harness] [--env]` | changing | Activate through the readiness gate only, never by force. |
+| `chat <message> [--harness] [--env] [--session <id>] [--timeout 90s]` | changing | Send one message to a solution and print its answer, with the session to continue and the conversation to trace; tries a draft or an active solution that is not the default route. |
 | `deactivate [--harness] [--env] [--confirm [<token>]]` | changing (destructive) | Take an active solution out of live traffic: its status becomes `inactive` (not `draft`); previews first. |
 | `init [--harness [--new]] [--agents <list>] [--hook] [--update] [--from <file> [--force]]` | changing (files) | Make this folder a solution: `cavelon.yaml`, `package/`, `tests/`, `env/`, `.cavelon/`; on a terminal it asks for the tenant and the solution (or a new one by name); a name close to an existing solution's is refused unless `--new`; `--from` writes a package file into it. |
 | `pull [--harness] [--force] [--tenant-wide]` | changing (files) | Write the instance's package into `package/` and `tests/`, the inventory into `.cavelon/`. A solution's tenant-wide sections only with `--tenant-wide`, which says when the export carries none. |
@@ -145,7 +146,7 @@ Every command takes `--json` (one JSON document on stdout, errors included),
 | `docs get <page> [--max-chars] [--cursor]` | read-only | One docs page as markdown. |
 | `wait <operation…> [--timeout 90s]` | read-only | Wait for operations; resumable, and reports `waited_ms`. A test run with failed cases is a failure. |
 | `watch <operation> [--timeout 10m]` | read-only | Stream an operation's changes (server-sent events). |
-| `kb upload <dir> --kb <kb> [-r] [--ext pdf] [--replace] [--wait]` | changing | Upload documents; returns operation ids. Names files that match an active document; `--replace` replaces those. |
+| `kb upload <dir> --kb <kb> [-r] [--ext pdf] [--replace] [--dry-run] [--wait]` | changing | Upload documents; returns operation ids. Names files that match an active document; `--replace` replaces those. `--dry-run` also names files identical to an active document. |
 | `test run [--suite <s>] [--harness <h>] [--wait]` | changing | Start test-suite runs; returns operation ids. |
 | `trace <run> [--trace <id>] [--span <id>]` | read-only | Summarise a run's traces (or a test run's results, with why a case did not pass), then one trace's spans, then one span. |
 | `loop start <trigger> [--input <json>] [--wait]` | changing | Start a loop through its trigger, as you; returns the run and operation ids. |
@@ -405,6 +406,19 @@ base by file name, with what happens to that document, in `--dry-run` too:
 bergbahn-faq.md exists (094e95e9…) and stays active
 ```
 
+A file whose bytes are those of an active document, under any name, is not
+created again: the instance deduplicates it, and `kb upload` says
+"identical to the active document …; nothing new was created (deduplicated)".
+`--dry-run` says so before the upload ("nothing new would be created") where
+the instance publishes each document's `file_sha256` (the SHA-256 of the
+uploaded bytes, which its deduplication compares): it hashes each local file
+the same way, and `--json` lists those files under `identical` with the
+document each one matches, and sets `content_compared`. A same-named document
+the file is identical to is then neither replaced nor deactivated. On an
+instance that does not publish the hash, `content_compared` is `false` and
+the dry run names no file identical; a document without a hash (not a file,
+or uploaded before the instance published it) matches none.
+
 - Without a flag the old document stays active next to the new one, and both
   answer, unless the instance replaces same-named documents itself (its upload
   offers `replace_existing`); there `--keep-both` keeps both.
@@ -593,8 +607,11 @@ cavelon activate --harness support
   Sections the instance's package schema does not know are written, reported as
   `ignored` and warned about, as `validate` does. With no `--harness`,
   a package with one harness names the solution in a new `cavelon.yaml` and
-  `env/test.yaml`, so `apply --env test` creates that draft. The rest of `init`
-  runs as without `--from`: its own files, the marked blocks.
+  `env/test.yaml`. A solution the tenant does not have yet, `init` creates as a
+  draft, named as in the package, so `apply --env test` previews into it; the
+  MCP tool `init` creates none and names the `cavelon harness new` command
+  instead. The rest of `init` runs as without `--from`: its own files, the
+  marked blocks.
 
   ```bash
   mkdir counter && cd counter
@@ -649,10 +666,13 @@ cavelon activate --harness support
   finds what the preview did not answers `409 package_requirements_changed`
   with `blockers`: exit 4, each blocker on its own line (in `--json`, the
   error's `blockers`), "nothing was imported; preview again", and for a code
-  the kit knows (such as `runtime_draft_iteration_needs_draft_parent`) its hint. When the env file names a solution that does not exist
-  yet, `apply` creates it as a draft first, named as `package/harnesses.yaml`
-  names the harness with that slug (or its only harness), and after the slug
-  where the package has none; `runtime_bindings` from the env file
+  the kit knows (such as `runtime_draft_iteration_needs_draft_parent`) its hint.
+  `apply` previews into an existing solution and never creates one: when the
+  env file, `cavelon.yaml` or `--harness` names a solution the tenant does not
+  have, it stops with `solution_not_found` (exit 1) before anything is sent,
+  and names the `cavelon harness new <slug>` command that creates the draft
+  (with `--name` as `package/harnesses.yaml` names that harness); preview again
+  after it. `runtime_bindings` from the env file
   bind the package's runtime requirements. A solution's import leaves the
   package's tenant-wide sections out; `--tenant-wide` sends them
   (`include_tenant_wide`), for every solution of the tenant. An instance that

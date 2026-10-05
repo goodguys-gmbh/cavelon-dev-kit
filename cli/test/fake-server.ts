@@ -191,6 +191,8 @@ export interface FakeState {
   uploadDedup: boolean;
   /** Whether each uploaded document says `upload_outcome` (created, replaced, deduplicated); off is an older instance. */
   uploadOutcome: boolean;
+  /** Whether the document list publishes `file_sha256`, the hash the upload's dedup compares; off is an older instance. */
+  documentHashes: boolean;
   /**
    * How an upload replaces a document named like an existing one: "name" also
    * a same-named active one by default (`replace_existing`), reporting
@@ -555,6 +557,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     uploadsBeforeFailure: Infinity,
     uploadDedup: false,
     uploadOutcome: false,
+    documentHashes: false,
     dropStreams: 0,
     configs: new Map(),
     exportFillsDefaults: false,
@@ -975,7 +978,17 @@ export async function startFakeServer(): Promise<FakeServer> {
       const kb = state.kbs.find((k) => k.tenant_id === tid && k.id === m![1]);
       if (!kb) return send(res, 404, { detail: "Knowledge base not found" });
       const listed = state.documents.filter((d) => d.kb_id === kb.id && !d.deleted);
-      return send(res, 200, listed.map((d) => ({ ...documentView(d.id, d.filename, d.size, null), status: "ready", is_active: d.is_active, created_at: d.created_at })));
+      return send(
+        res,
+        200,
+        listed.map((d) => ({
+          ...documentView(d.id, d.filename, d.size, null),
+          status: "ready",
+          is_active: d.is_active,
+          created_at: d.created_at,
+          ...(state.documentHashes ? { file_sha256: d.sha256 ?? null } : {}),
+        })),
+      );
     }
     m = /^\/api\/v1\/knowledge-bases\/([^/]+)\/documents\/active$/.exec(p);
     if (m && method === "PATCH") {
