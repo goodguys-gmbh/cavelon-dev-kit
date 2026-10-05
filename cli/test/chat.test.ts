@@ -8,6 +8,7 @@ import { parse } from "yaml";
 import { COMMANDS } from "../src/commands/index.js";
 import type { InStream } from "../src/io.js";
 import { createMcpServer } from "../src/mcp.js";
+import { shellWord } from "../src/shell.js";
 import { startFakeServer, type FakeServer } from "./fake-server.js";
 import { cli, login, sandbox, type Sandbox } from "./helpers.js";
 
@@ -22,6 +23,7 @@ let sb: Sandbox;
 let tenant: string;
 let dirCount = 0;
 
+const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const solution = (slug: string) => server.state.harnesses.find((h) => h.tenant_id === tenant && h.slug === slug)!;
 
 async function initSolution(harness = "support"): Promise<string> {
@@ -82,7 +84,7 @@ describe("chat", () => {
   it("answers with the solution it names, a draft too for a person, and continues by session", async () => {
     const result = await cli(sb, ["chat", "When are you open?", "--harness", "Support"]);
     expect(result.code, result.stderr + result.stdout).toBe(0);
-    expect(result.stdout).toMatch(/^Support \(support\) answered:\nSupport answers: When are you open\?\n\nsession: +(\S+) {3}continue with: cavelon chat '<message>' --session \1\nconversation_id: +(\S+) {3}its traces: cavelon trace \2 --kind conversation\n$/);
+    expect(result.stdout).toMatch(new RegExp(`^Support \\(support\\) answered:\\nSupport answers: When are you open\\?\\n\\nsession: +(\\S+) {3}continue with: cavelon chat ${escaped(shellWord("<message>"))} --session \\1\\nconversation_id: +(\\S+) {3}its traces: cavelon trace \\2 --kind conversation\\n$`));
     expect(server.state.chats).toEqual([{ harness_id: solution("support").id, message: "When are you open?", session_id: expect.any(String) }]);
 
     const first = await cli(sb, ["chat", "Hello", "--harness", "support", "--json"]);
@@ -111,7 +113,7 @@ describe("chat", () => {
 
     const missing = await cli(sb, ["chat", "Hi", "--harness", "suport", "--json"]);
     expect(missing.code).toBe(1);
-    expect(missing.json<{ error: { code: string; hint: string } }>().error).toMatchObject({ code: "solution_not_found", hint: expect.stringContaining("cavelon chat '<message>' --harness support") });
+    expect(missing.json<{ error: { code: string; hint: string } }>().error).toMatchObject({ code: "solution_not_found", hint: expect.stringContaining(`cavelon chat ${shellWord("<message>")} --harness support`) });
   });
 
   it("a draft refuses a tenant API key, with the reason", async () => {
@@ -202,7 +204,7 @@ describe("init creates the solution it is given", () => {
       expect(result.isError, JSON.stringify(result.body)).toBe(false);
       expect(result.body.next).toEqual(
         expect.arrayContaining([
-          "Solution order-status is not on the instance yet: create it as a draft with cavelon harness new order-status --name 'Order Status', then cavelon apply --env test.",
+          `Solution order-status is not on the instance yet: create it as a draft with cavelon harness new order-status --name ${shellWord("Order Status")}, then cavelon apply --env test.`,
         ]),
       );
       expect(server.state.harnesses.find((h) => h.slug === "order-status")).toBeUndefined();

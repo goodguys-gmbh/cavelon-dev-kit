@@ -3,6 +3,7 @@ import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSy
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { parse, stringify } from "yaml";
+import { shellWord } from "../src/shell.js";
 import { CONTRACTS, modelRow, startFakeServer, type FakeServer } from "./fake-server.js";
 import { cli, login, sandbox, type Sandbox } from "./helpers.js";
 
@@ -175,7 +176,7 @@ describe("init chooses the tenant and the solution", () => {
     const miss = await cli(other, ["init", "--tenant", "globex", "--harness", "Support FA", "--json"], { cwd: dirFor() });
     expect(miss.code).toBe(1);
     const missed = miss.json<{ error: { code: string; hint: string } }>().error;
-    expect(missed.hint).toContain("For a new solution of that name: cavelon harness new support-fa --name 'Support FA', then cavelon init --harness support-fa.");
+    expect(missed.hint).toContain(`For a new solution of that name: cavelon harness new support-fa --name ${shellWord("Support FA")}, then cavelon init --harness support-fa.`);
     expect(miss.json<{ error: { code: string; hint: string } }>().error).toMatchObject({ code: "solution_not_found", hint: expect.stringContaining("cavelon init --harness support-faq") });
   });
 });
@@ -1491,7 +1492,7 @@ describe("apply", () => {
     writeFileSync(path.join(dir, "env", "test.yaml"), "harness: support-loop\n");
     const named = await cli(sb, ["apply", "--env", "test", "--json"], { cwd: dir });
     expect(named.code, named.stdout).toBe(1);
-    expect(named.json<{ error: { hint: string } }>().error.hint).toContain("cavelon harness new support-loop --name 'Support loop', then");
+    expect(named.json<{ error: { hint: string } }>().error.hint).toContain(`cavelon harness new support-loop --name ${shellWord("Support loop")}, then`);
     expect(server.state.harnesses.find((h) => h.slug === "support-loop")).toBeUndefined();
   });
 
