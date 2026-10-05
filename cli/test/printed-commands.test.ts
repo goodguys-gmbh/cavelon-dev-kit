@@ -7,6 +7,7 @@ import { COMMANDS } from "../src/commands/index.js";
 import type { InStream } from "../src/io.js";
 import { createMcpServer, propertyName } from "../src/mcp.js";
 import { cavelonCommand, fill, folderCommand, printingFor, printedCommand, type PrintTarget } from "../src/printed.js";
+import { currentShell, useShell } from "../src/shell.js";
 import { startFakeServer, type FakeServer } from "./fake-server.js";
 import { cli, login, sandbox, type Sandbox } from "./helpers.js";
 
@@ -216,9 +217,16 @@ describe("printedCommand", () => {
       // What a line names itself stays, once.
       expect(cavelonCommand("init", "--tenant", "beta")).toBe("cavelon init --tenant beta --instance https://cavelon.example.com");
       expect(printedCommand(["apply", "--confirm", "pv_1"], { env: null })).toBe("cavelon apply --instance https://cavelon.example.com --tenant acme --confirm pv_1");
-      expect(cavelonCommand("variables", "set", "crm url", fill("value"))).toBe(
-        "cavelon variables set 'crm url' <value> --instance https://cavelon.example.com --env prod --tenant acme",
-      );
+      // A word with a space is quoted for the shell the person types into; pin POSIX so Windows runners agree.
+      const shell = currentShell();
+      useShell("posix");
+      try {
+        expect(cavelonCommand("variables", "set", "crm url", fill("value"))).toBe(
+          "cavelon variables set 'crm url' <value> --instance https://cavelon.example.com --env prod --tenant acme",
+        );
+      } finally {
+        useShell(shell);
+      }
     });
   });
 
