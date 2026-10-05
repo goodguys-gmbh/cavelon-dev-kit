@@ -771,7 +771,7 @@ function misnamedVariants(schema: PackageSchema, pkg: Record<string, unknown>): 
           }
           return;
         }
-        found.push({ pointer, field, value: given, allowed: allowed.sort(), suggestion: closest(given, allowed) });
+        found.push({ pointer, field, value: given, allowed: allowed.sort((a, b) => a.localeCompare(b, "en")), suggestion: closest(given, allowed) });
         return;
       }
     }

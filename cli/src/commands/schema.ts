@@ -233,6 +233,139 @@ function fieldRows(fields: FieldRow[]) {
 
 const yamlOf = (value: unknown) => stringify(value, { lineWidth: 0 }).trimEnd();
 
+/** What `cavelon schema <name>` shows: a section or a field under it by path, or a type of the schema by name. */
+interface Target {
+  name: string;
+  node: Node;
+  /** The path the fields' own paths start from. */
+  at: string;
+  /** A field below a section (`agents.handoffs`). */
+  nested: boolean;
+  /** For a type by name: the paths it is used at. */
+  usedIn?: string[];
+}
+
+function unknownField(found: { at: string; key: string; options: string[] }): CavelonError {
+  const near = found.options.filter((o) => o.includes(found.key) || found.key.includes(o)).slice(0, 5);
+  const guess = near.length ? `Did you mean: ${near.map((o) => `${found.at}.${o}`).join(", ")}? ` : "";
+  return usageError(
+    `The package schema has no nested field "${found.key}" under ${found.at}.`,
+    found.options.length
+      ? `${guess}Nested under ${found.at}: ${found.options.join(", ")}.`
+      : `Nothing under ${found.at} has fields of its own; \`cavelon schema ${found.at}\` shows its fields.`,
+  );
+}
+
+function findTarget(schema: PackageSchema, name: string): Target {
+  const defs = (schema.$defs ?? {}) as Record<string, Node>;
+  const [section, ...keys] = name.split(".");
+  if (section && schema.properties![section]) {
+    const found = descend(schema, section, keys);
+    if ("options" in found) throw unknownField(found);
+    return { name, node: found.node, at: name, nested: keys.length > 0 };
+  }
+  if (!keys.length && Object.hasOwn(defs, name)) {
+    const usedIn = usesOf(schema, name);
+    return { name, node: { $ref: `#/$defs/${name}` }, at: usedIn[0] ?? name, nested: false, usedIn };
+  }
+  const lower = name.toLowerCase();
+  const near = [...Object.keys(schema.properties!), ...Object.keys(defs)].filter((s) => s.toLowerCase().includes(lower) || lower.includes(s.toLowerCase())).slice(0, 5);
+  throw usageError(
+    `The package schema has no section or type "${name}".`,
+    near.length ? `Did you mean: ${near.join(", ")}? (\`cavelon schema\` lists them)` : "`cavelon schema` lists the sections.",
+  );
+}
+
+type TargetData = ReturnType<typeof targetData>;
+
+function targetData(schema: PackageSchema, target: Target, context: { used: SchemaUsed; layout: Layout; required: Set<string> }) {
+  const { node, usedIn } = target;
+  const top = (usedIn?.[0] ?? target.name).split(".")[0]!;
+  const { list, shapes, others } = objectShapes(schema, node);
+  const one = shapes.length === 1 ? shapes[0]! : undefined;
+  const wrap = (value: unknown) => (list ? [value] : value);
+  const minimalOne = one ? minimal(schema, one.node) : undefined;
+  const fullOne = one ? fuller(schema, one.node) : undefined;
+  const fullDiffers = fullOne !== undefined && JSON.stringify(fullOne) !== JSON.stringify(minimalOne);
+  const entry = one?.name ?? (list ? namedType(schema, nonNull(schema, node).items as Node) : namedType(schema, node));
+  const unused = usedIn !== undefined && usedIn.length === 0;
+  return {
+    schema: context.used,
+    section: unused ? null : top,
+    path: usedIn ? (usedIn[0] ?? null) : target.name,
+    ...(usedIn ? { used_in: usedIn } : {}),
+    kind: list ? "list" : "object",
+    required: !usedIn && !target.nested ? context.required.has(target.name) : false,
+    file: unused ? null : fileOf(context.layout, top),
+    entry: entry ?? null,
+    fields: one ? fieldsOf(schema, one.node) : [],
+    example: minimalOne === undefined ? null : wrap(minimalOne),
+    ...(fullDiffers ? { nested_example: wrap(fullOne) } : {}),
+    nested: one ? nestedOf(schema, one.node, target.at) : [],
+    ...(shapes.length > 1
+      ? { shapes: shapes.map((s) => ({ type: s.name ?? null, fields: fieldsOf(schema, s.node), example: minimal(schema, s.node) })), other_shapes: others }
+      : {}),
+  };
+}
+
+/** The heading lines: what the target is, where it is used and kept, and which schema says so. */
+function headLines(target: Target, data: TargetData, used: SchemaUsed): string {
+  if (target.usedIn) {
+    const where = target.usedIn.length ? target.usedIn.join(", ") : "not used by any section";
+    return keyValues([
+      ["type", `${target.name} (an object)`],
+      ["used at", where],
+      ["file", data.file ?? "(none)"],
+      ["schema", sourceLine(used)],
+    ]);
+  }
+  const what = data.kind === "list" ? "a list of entries" : "one object";
+  const each = data.entry ? `, each a ${data.entry}` : "";
+  return keyValues([
+    [target.nested ? "field" : "section", `${target.name} (${what}${each})`],
+    ["file", data.file ?? "(none)"],
+    ["schema", sourceLine(used)],
+  ]);
+}
+
+const FIELD_COLUMNS = ["field", "type", "required", "notes"];
+
+function shapeLines(data: TargetData): string[] {
+  const shapes = data.shapes ?? [];
+  const others = data.other_shapes ?? [];
+  const besides = others.length ? ` (${others.map((o) => `a ${o}`).join(", ")}, or an object below)` : "";
+  const lines = [`Each entry takes one of ${shapes.length + others.length} shapes${besides}:`, ""];
+  for (const shape of shapes) {
+    const example = data.kind === "list" ? [shape.example] : shape.example;
+    lines.push(`${shape.type ?? "object"}:`, table(fieldRows(shape.fields), FIELD_COLUMNS), yamlOf(example), "");
+  }
+  return lines;
+}
+
+function fieldLines(data: TargetData): string[] {
+  const empty = data.example === null || Object.keys((Array.isArray(data.example) ? data.example[0] : data.example) as object).length === 0;
+  const lines = [
+    data.fields.length ? table(fieldRows(data.fields), FIELD_COLUMNS) : "No fields are published here.",
+    "",
+    empty ? "No field is required; the smallest entry is empty:" : "Minimal example (required fields only):",
+    yamlOf(data.example),
+  ];
+  if (data.nested_example) lines.push("", "With one entry of each nested list:", yamlOf(data.nested_example));
+  if (data.nested.length) {
+    const rows = data.nested.map((n) => ({ command: `cavelon schema ${n.path}`, type: n.type }));
+    lines.push("", "Fields with fields of their own:", table(rows, ["command", "type"]));
+  }
+  return lines;
+}
+
+function targetLines(schema: PackageSchema, target: Target, data: TargetData, used: SchemaUsed): string[] {
+  const head = [headLines(target, data, used), ""];
+  if (data.shapes) return [...head, ...shapeLines(data)];
+  if (data.example !== null) return [...head, ...fieldLines(data)];
+  const others = objectShapes(schema, target.node).others;
+  return [...head, `Each entry is a ${others.join(" or ") || typeOf(schema, entryOf(schema, target.node).entry)}; there are no fields to list.`];
+}
+
 export const schema: CommandSpec = {
   name: "schema",
   summary: "Show the package schema the instance publishes: its sections, or the fields of a section or a nested type, with a minimal example.",
@@ -292,90 +425,8 @@ export const schema: CommandSpec = {
       };
     }
 
-    const defs = (published.$defs ?? {}) as Record<string, Node>;
-    const [section, ...keys] = name.split(".");
-    let node: Node;
-    let at = name;
-    let usedIn: string[] | undefined;
-    if (section && published.properties[section]) {
-      const found = descend(published, section, keys);
-      if ("options" in found) {
-        const near = found.options.filter((o) => o.includes(found.key) || found.key.includes(o)).slice(0, 5);
-        throw usageError(
-          `The package schema has no nested field "${found.key}" under ${found.at}.`,
-          found.options.length
-            ? `${near.length ? `Did you mean: ${near.map((o) => `${found.at}.${o}`).join(", ")}? ` : ""}Nested under ${found.at}: ${found.options.join(", ")}.`
-            : `Nothing under ${found.at} has fields of its own; \`cavelon schema ${found.at}\` shows its fields.`,
-        );
-      }
-      node = found.node;
-    } else if (!keys.length && Object.hasOwn(defs, name)) {
-      node = { $ref: `#/$defs/${name}` };
-      usedIn = usesOf(published, name);
-      at = usedIn[0] ?? name;
-    } else {
-      const near = [...sections, ...Object.keys(defs)].filter((s) => s.toLowerCase().includes(name.toLowerCase()) || name.toLowerCase().includes(s.toLowerCase())).slice(0, 5);
-      throw usageError(
-        `The package schema has no section or type "${name}".`,
-        near.length ? `Did you mean: ${near.join(", ")}? (\`cavelon schema\` lists them)` : "`cavelon schema` lists the sections.",
-      );
-    }
-
-    const top = (usedIn?.[0] ?? name).split(".")[0]!;
-    const { list, shapes, others } = objectShapes(published, node);
-    const one = shapes.length === 1 ? shapes[0]! : undefined;
-    const entryNode = entryOf(published, node).entry;
-    const fields = one ? fieldsOf(published, one.node) : [];
-    const minimalOne = one ? minimal(published, one.node) : undefined;
-    const fullOne = one ? fuller(published, one.node) : undefined;
-    const wrap = (value: unknown) => (list ? [value] : value);
-    const shapeList = shapes.length > 1 ? shapes.map((s) => ({ type: s.name ?? null, fields: fieldsOf(published, s.node), example: minimal(published, s.node) })) : undefined;
-    const nested = one ? nestedOf(published, one.node, at) : [];
-    const data = {
-      schema: used,
-      section: usedIn ? (usedIn.length ? top : null) : top,
-      path: usedIn ? (usedIn[0] ?? null) : name,
-      ...(usedIn ? { used_in: usedIn } : {}),
-      kind: list ? "list" : "object",
-      required: !usedIn && !keys.length ? required.has(name) : false,
-      file: usedIn && !usedIn.length ? null : fileOf(layout, top),
-      entry: (one?.name ?? (list ? namedType(published, nonNull(published, node).items as Node) : namedType(published, node))) ?? null,
-      fields,
-      example: minimalOne !== undefined ? wrap(minimalOne) : null,
-      ...(fullOne && minimalOne && JSON.stringify(fullOne) !== JSON.stringify(minimalOne) ? { nested_example: wrap(fullOne) } : {}),
-      nested,
-      ...(shapeList ? { shapes: shapeList, other_shapes: others } : {}),
-    };
-
-    const where = usedIn ? (usedIn.length ? usedIn.join(", ") : "not used by any section") : name;
-    const what = list ? "a list of entries" : "one object";
-    const lines = [
-      keyValues([
-        [usedIn ? "type" : keys.length ? "field" : "section", usedIn ? `${name} (an object)` : `${name} (${what}${data.entry ? `, each a ${data.entry}` : ""})`],
-        ...(usedIn ? [["used at", where] as [string, unknown]] : []),
-        ["file", data.file ?? "(none)"],
-        ["schema", sourceLine(used)],
-      ]),
-      "",
-    ];
-    if (shapeList) {
-      lines.push(
-        `Each entry takes one of ${shapeList.length + others.length} shapes${others.length ? ` (${others.map((o) => `a ${o}`).join(", ")}, or an object below)` : ""}:`,
-        "",
-      );
-      for (const shape of shapeList) {
-        lines.push(`${shape.type ?? "object"}:`, table(fieldRows(shape.fields), ["field", "type", "required", "notes"]), yamlOf(list ? [shape.example] : shape.example), "");
-      }
-    } else if (one) {
-      lines.push(fields.length ? table(fieldRows(fields), ["field", "type", "required", "notes"]) : "No fields are published here.", "");
-      lines.push(Object.keys(minimalOne!).length ? "Minimal example (required fields only):" : "No field is required; the smallest entry is empty:", yamlOf(data.example));
-      if (data.nested_example) lines.push("", "With one entry of each nested list:", yamlOf(data.nested_example));
-      if (nested.length) {
-        lines.push("", "Fields with fields of their own:", table(nested.map((n) => ({ command: `cavelon schema ${n.path}`, type: n.type })), ["command", "type"]));
-      }
-    } else {
-      lines.push(`Each entry is a ${others.join(" or ") || typeOf(published, entryNode)}; there are no fields to list.`);
-    }
-    return { data, text: lines.join("\n").trimEnd() };
+    const target = findTarget(published, name);
+    const data = targetData(published, target, { used, layout, required });
+    return { data, text: targetLines(published, target, data, used).join("\n").trimEnd() };
   },
 };
