@@ -7,6 +7,12 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-10-05
+
+A developer who works only through a coding agent now hears of a new release:
+the MCP server tells the agent when `cavelon`, the Cavelon plugin or the
+folder's skills are behind, with the commands that update them.
+
 ### Added
 
 - A developer who works only through a coding agent now hears of a new
