@@ -425,6 +425,68 @@ describe("kb upload", () => {
   });
 });
 
+describe("kb upload --dry-run and identical content", () => {
+  beforeAll(() => {
+    if (!server.state.kbs.some((k) => k.tenant_id === tenant && k.name === "FAQ")) server.state.kbs.push({ id: randomUUID(), tenant_id: tenant, name: "FAQ" });
+  });
+
+  it.each([
+    ["names a file identical to an active document, by the published file hash", true],
+    ["without file_sha256 on the documents, stays as it was", false],
+  ])("%s", async (_label, published) => {
+    const dir = path.join(sb.home, `kb-identical-${String(published)}`);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(path.join(dir, `kept-${String(published)}.md`), `# Kept ${String(published)}\n`);
+    expect((await cli(sb, ["kb", "upload", dir, "--kb", "FAQ"])).code).toBe(0);
+    // The same bytes under another name, a changed file under the uploaded name, and a new file.
+    const copy = path.join(sb.home, `kb-identical-${String(published)}-next`);
+    mkdirSync(copy, { recursive: true });
+    writeFileSync(path.join(copy, `renamed-${String(published)}.md`), `# Kept ${String(published)}\n`);
+    writeFileSync(path.join(copy, `kept-${String(published)}.md`), `# Kept ${String(published)}, changed\n`);
+    writeFileSync(path.join(copy, `new-${String(published)}.md`), "# New\n");
+    server.state.documentHashes = published;
+    try {
+      const dry = await cli(sb, ["kb", "upload", copy, "--kb", "FAQ", "--dry-run"]);
+      expect(dry.code, dry.stderr).toBe(0);
+      expect(dry.stdout).toMatch(/^Would upload 3 files:$/m);
+      if (published) {
+        expect(dry.stdout).toMatch(new RegExp(`renamed-true\\.md: identical to the active document [0-9a-f]{8}… \\(kept-true\\.md\\); nothing new would be created \\(deduplicated\\)`));
+      } else {
+        expect(dry.stdout).not.toMatch(/identical to the active document/);
+      }
+      // A changed file under an uploaded name is never identical.
+      expect(dry.stdout).toMatch(new RegExp(`^kept-${String(published)}\\.md exists \\([0-9a-f]{8}…\\)`, "m"));
+      const json = (await cli(sb, ["kb", "upload", copy, "--kb", "FAQ", "--dry-run", "--json"])).json<{
+        content_compared: boolean;
+        identical: Array<{ file: string; filename: string }>;
+        existing: Array<{ identical?: boolean }>;
+      }>();
+      expect(json.content_compared).toBe(published);
+      expect(json.identical.map((i) => [path.basename(i.file), i.filename])).toEqual(published ? [["renamed-true.md", "kept-true.md"]] : []);
+      expect(json.existing.map((m) => m.identical)).toEqual([published ? false : undefined]);
+    } finally {
+      server.state.documentHashes = false;
+    }
+  });
+
+  it("does not offer to replace or deactivate a same-named document the file is identical to", async () => {
+    const dir = path.join(sb.home, "kb-identical-same");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(path.join(dir, "same-name.md"), "# Same name\n");
+    expect((await cli(sb, ["kb", "upload", dir, "--kb", "FAQ"])).code).toBe(0);
+    server.state.documentHashes = true;
+    try {
+      const dry = await cli(sb, ["kb", "upload", dir, "--kb", "FAQ", "--dry-run"]);
+      expect(dry.stdout).toMatch(/^\S*same-name\.md: identical to the active document [0-9a-f]{8}…; nothing new would be created \(deduplicated\)$/m);
+      expect(dry.stdout).not.toMatch(/exists \(|Both versions answer/);
+      const replace = await cli(sb, ["kb", "upload", dir, "--kb", "FAQ", "--replace", "--dry-run"]);
+      expect(replace.stdout).not.toMatch(/exists \(|deactivates/);
+    } finally {
+      server.state.documentHashes = false;
+    }
+  });
+});
+
 describe("pull and docs search", () => {
   it("pull outside git points at the files it listed, not at git diff", async () => {
     const dir = await initSolution("support");

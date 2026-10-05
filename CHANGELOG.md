@@ -23,6 +23,14 @@ CLI, the skills and the plugin.
   (`solution_exists`).
 - `cavelon validate` warns about a tenant-wide section in a solution's folder
   (`tenant_wide_section`).
+- `cavelon kb upload --dry-run` names each file whose bytes are those of an
+  active document of the knowledge base, under any name: "identical to the
+  active document …; nothing new would be created (deduplicated)", and in
+  `--json` under `identical` with the document it matches. It compares the
+  SHA-256 of each local file with the `file_sha256` the instance now publishes
+  on its documents; a same-named document the file is identical to is no
+  longer listed as replaced or deactivated. On an instance that does not
+  publish the hash, the dry run stays as it was (`content_compared: false`).
 
 ### Changed
 
@@ -95,6 +103,10 @@ CLI, the skills and the plugin.
   covers that an object-or-null field lists its properties
   (`agents.model_settings_extra` shows `reasoning_effort` where the instance
   declares it).
+- `cli/README.md` no longer says that `apply` creates a solution the tenant
+  does not have: it stops with `solution_not_found` and names `cavelon harness
+  new`, as since 0.1.6. It says that `init --from` creates the draft (the MCP
+  tool names the command instead), and the command table lists `cavelon chat`.
 
 ## [0.1.6] - 2026-10-05
 

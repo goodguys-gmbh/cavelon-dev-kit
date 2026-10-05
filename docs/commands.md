@@ -524,7 +524,7 @@ Upload a folder's documents into a knowledge base; returns operation ids.
 cavelon kb upload <dir> [options]
 ```
 
-Hidden files are skipped. Ingestion runs on the instance; `cavelon wait` follows it. Files are checked against the instance's published upload limits first. A .zip goes only to a tenant that expands archives, and only within its caps on file count, unpacked size and compression ratio. A file named like an active document of the knowledge base is listed, with what happens to that document. An instance that replaces same-named documents on upload does so (--keep-both keeps both); elsewhere the old one stays active. --replace replaces it: through the instance's own replacement where its upload offers one, else the kit deactivates the old document after the upload (after the wait with --wait), and then only with --confirm.
+Hidden files are skipped. Ingestion runs on the instance; `cavelon wait` follows it. Files are checked against the instance's published upload limits first. A .zip goes only to a tenant that expands archives, and only within its caps on file count, unpacked size and compression ratio. A file named like an active document of the knowledge base is listed, with what happens to that document. An instance that replaces same-named documents on upload does so (--keep-both keeps both); elsewhere the old one stays active. --replace replaces it: through the instance's own replacement where its upload offers one, else the kit deactivates the old document after the upload (after the wait with --wait), and then only with --confirm. --dry-run also names each file identical to an active document, which the upload would not create again, where the instance publishes its documents' file hashes.
 
 | Argument | Description |
 |---|---|
@@ -538,7 +538,7 @@ Hidden files are skipped. Ingestion runs on the instance; `cavelon wait` follows
 | `--replace` | Replace active documents with the same file name. | yes |
 | `--keep-both` | Keep active documents with the same file name next to the new ones. | yes |
 | `--confirm [<token>]` | With --replace, deactivate the old documents the instance does not replace itself; without it nothing is sent. In a person's terminal the flag alone confirms; run by a coding agent, `--confirm <token>` with the token its preview printed (the bare flag only shows the preview there, exit 5). | yes |
-| `--dry-run` | List what would be uploaded and replaced, upload nothing. | yes |
+| `--dry-run` | List what would be uploaded, replaced and found identical; upload nothing. | yes |
 | `--wait` | Wait for the work to finish (see `cavelon wait`). | CLI only |
 | `--timeout <duration>` | Stop waiting after this long (90s, 5m; default 90s). The work goes on; run wait again to resume. | yes |
 

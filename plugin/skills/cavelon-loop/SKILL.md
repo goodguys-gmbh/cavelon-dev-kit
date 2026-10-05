@@ -146,7 +146,10 @@ use it when you parse the result.
      needs `--confirm`: show the person that first.
    - A file whose content is already an active document is not uploaded
      again: "identical to the active document …; nothing new was created
-     (deduplicated)", with nothing to wait for and nothing replaced.
+     (deduplicated)", with nothing to wait for and nothing replaced. Where the
+     instance publishes its documents' file hashes, `--dry-run` says it first
+     ("nothing new would be created"; `--json`: `identical`, and
+     `content_compared` false where it cannot tell).
    A test Sandbox gets its files with `cavelon sandbox seed <sandbox> <folder>`
    (isolated container) or `cavelon sandbox refresh <sandbox>` after the files
    were put on the VM (customer VM).
