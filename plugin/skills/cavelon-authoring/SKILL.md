@@ -70,7 +70,8 @@ for a public widget), **propose the change; the person decides.**
   otherwise refuses naming the role and the Admin page; `--tenant <tenant>`
   then sets one tenant's own run cap. Without a `change` it cannot be changed
   at runtime. Tell the person who changes it and where, and design within it
-  meanwhile; never ask for an operator's token.
+  meanwhile; never ask for an operator's token. A docs page marked "Platform
+  page" describes such an operator's task: this token can read it, not do it.
 - A rate limit only goes down to what the operator allows; above the ceiling
   (`maximum_setting`), it is the operator's too. That holds for the per-visitor
   limits (`rate_limit_chat_visitor_rpm`, `rate_limit_widget_visitor_rpm`) as

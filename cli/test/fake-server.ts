@@ -340,6 +340,14 @@ export interface FakeState {
   latestTestRun?: Record<string, unknown> | null;
   /** An instance whose /meta/principal does not say whether a token allows Platform mode. */
   principalWithoutPlatformMode?: boolean;
+  /**
+   * A recent instance's docs: the platform pages are listed to a person with a
+   * platform role whatever the token may do, each line ending in
+   * `(audience: platform)`, and every page is sent with `X-Docs-Audience`. Off
+   * is an older instance, which lists them only in Platform mode and says
+   * neither.
+   */
+  docsAudience?: boolean;
   /** An instance whose readiness does not name the latest test run. */
   readinessWithoutLatestRun?: boolean;
   servePrincipal: boolean;
@@ -457,8 +465,14 @@ function ceilingRole(info: TokenInfo): string {
   return info.ceilingRole ?? (info.platform ? (info.globalRole ?? "platform_admin") : "tenant_admin");
 }
 
-/** A Platform-mode token's role: the lesser of its owner's global role and its ceiling. */
 const PLATFORM_ROLES = ["platform_support", "platform_admin", "superadmin"];
+
+/** Whether a token's owner has a platform role: a Platform-mode token's owner always does here. */
+function ownerHasPlatformRole(info: TokenInfo): boolean {
+  return info.kind === "pat" && (Boolean(info.platform) || PLATFORM_ROLES.includes(info.globalRole ?? ""));
+}
+
+/** A Platform-mode token's role: the lesser of its owner's global role and its ceiling. */
 function effectiveRole(info: TokenInfo): string | undefined {
   const owner = PLATFORM_ROLES.indexOf(info.globalRole ?? "platform_admin");
   const ceiling = PLATFORM_ROLES.indexOf(ceilingRole(info));
@@ -723,10 +737,14 @@ export async function startFakeServer(): Promise<FakeServer> {
         const index = readContract("docs/llms.txt").replaceAll("https://cavelon.example.com", host);
         // The index lists only the pages the caller may read: a platform
         // operator in Platform mode also gets the platform pages.
-        const platformPages = info.platform && !tenantId ? `\n${PLATFORM_DOCS_SECTION.replaceAll("https://cavelon.example.com", host)}` : "";
-        return send(res, 200, index + platformPages, "text/plain; charset=utf-8");
+        // A recent instance lists them to anyone whose owner has a platform role, marked by audience.
+        const listed = state.docsAudience ? ownerHasPlatformRole(info) : info.platform && !tenantId;
+        let section = PLATFORM_DOCS_SECTION.replaceAll("https://cavelon.example.com", host);
+        if (state.docsAudience) section = section.replace(/\n$/, " (audience: platform)\n");
+        return send(res, 200, index + (listed ? `\n${section}` : ""), "text/plain; charset=utf-8");
       }
       const m = /^\/api\/v1\/docs\/([^/]+)\/([^/]+)\.md$/.exec(p);
+      if (m && state.docsAudience) res.setHeader("x-docs-audience", m[1] === "platform" ? "platform" : "tenant");
       // The pages the snapshot holds are served as the instance renders them.
       if (m && existsSync(path.join(CONTRACTS, "docs", `${m[1]}__${m[2]}.md`))) {
         return send(res, 200, readContract(`docs/${m[1]}__${m[2]}.md`), "text/markdown; charset=utf-8");
@@ -808,7 +826,7 @@ export async function startFakeServer(): Promise<FakeServer> {
         email: info.email ?? "dev@example.com",
         display_name: info.name ?? "Dev Person",
         account_status: "active",
-        global_role: info.platform ? (info.globalRole ?? "platform_admin") : null,
+        global_role: info.platform ? (info.globalRole ?? "platform_admin") : (info.globalRole ?? null),
         context: { mode: tenantId ? "tenant" : "platform", tenant_id: tenantId ?? null, effective_role: "tenant_admin", role_scope: "tenant", permissions: [] },
         memberships,
         entitlements: { academy_access: false },

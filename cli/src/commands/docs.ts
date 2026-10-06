@@ -3,11 +3,14 @@ import { CavelonError, ExitCode } from "../errors.js";
 import { table } from "../format.js";
 import { NOT_HERE, type ApiClient } from "../http.js";
 import { cavelonCommand, fill } from "../printed.js";
+import { readPrincipal } from "../principal.js";
 
 /**
  * The instance's own docs, at its own version: `GET /llms.txt` lists the
  * pages a caller may read (`- [Title](url): description` under `## Section`),
- * and each page is one markdown document.
+ * and each page is one markdown document. A recent instance ends the line of
+ * a page written for platform operators with `(audience: platform)` and sends
+ * the page with `X-Docs-Audience`; an older one says neither.
  */
 
 export interface DocEntry {
@@ -16,6 +19,38 @@ export interface DocEntry {
   description: string;
   section: string;
   url: string;
+  /** Whom the page is written for, when the index says: "platform" for an operator's page. */
+  audience?: string;
+}
+
+/** The audience whose pages describe actions only Platform mode may take. */
+const PLATFORM_AUDIENCE = "platform";
+
+/**
+ * What a platform page carries when the token can read it but not act on it:
+ * the instance lists the platform pages to a person with a platform role
+ * whatever their token may do, so reading a page proves nothing about acting.
+ */
+export const PLATFORM_PAGE_MARK =
+  "Platform page: the actions it describes need a personal access token with Platform mode; this token can read the page but not act on it.";
+
+const AUDIENCE_PREFIX = "(audience:";
+
+/** A line of the index without its trailing `(audience: …)`, and that audience in lower case. */
+function splitAudience(line: string): { rest: string; audience?: string } {
+  const trimmed = line.trimEnd();
+  if (!trimmed.endsWith(")")) return { rest: line };
+  const start = trimmed.toLowerCase().lastIndexOf(AUDIENCE_PREFIX);
+  if (start < 0) return { rest: line };
+  const audience = trimmed.slice(start + AUDIENCE_PREFIX.length, -1).trim().toLowerCase();
+  if (!/^[a-z][a-z0-9_-]*$/.test(audience)) return { rest: line };
+  return { rest: trimmed.slice(0, start).trimEnd(), audience };
+}
+
+/** A page's audience as `X-Docs-Audience` names it, or undefined when the header is absent or empty. */
+function headerAudience(headers: Headers | undefined): string | undefined {
+  const value = headers?.get("x-docs-audience")?.trim().toLowerCase();
+  return value || undefined;
 }
 
 const INDEX_PATHS = ["/llms.txt", "/api/v1/docs/llms.txt"];
@@ -49,14 +84,15 @@ export function parseIndex(text: string, base: string): DocEntry[] {
       section = heading[1]!;
       continue;
     }
-    const link = /^\s*[-*]\s+\[([^\]]+)\]\(([^)\s]+)\)(?::\s*(.*))?$/.exec(line);
+    const { rest, audience } = splitAudience(line);
+    const link = /^\s*[-*]\s+\[([^\]]+)\]\(([^)\s]+)\)(?::\s*(.*))?$/.exec(rest);
     if (!link) continue;
     // The index may name the instance by an internal host name behind a proxy;
     // keep only the path and read it from the URL the kit talks to.
     const pathname = new URL(link[2]!, `${base}/`).pathname;
     const url = `${new URL(base).origin}${pathname}`;
     const page = pathname.replace(/^.*?\/docs\//, "").replace(/^\//, "").replace(/\.md$/, "");
-    entries.push({ page, title: link[1]!, description: (link[3] ?? "").trim(), section, url });
+    entries.push({ page, title: link[1]!, description: (link[3] ?? "").trim(), section, url, ...(audience ? { audience } : {}) });
   }
   return entries;
 }
@@ -70,6 +106,35 @@ async function loadIndex(ctx: Context): Promise<{ client: ApiClient; entries: Do
     text = await fetchIndex(client);
   }
   return { client, entries: parseIndex(text, client.url), text };
+}
+
+/**
+ * Whether the token cannot act in Platform mode, as `/meta/principal` says:
+ * a tenant API key never can, nor a personal access token that does not allow
+ * it, nor one whose ceiling leaves it no platform role (asked without a
+ * tenant, the instance answers it in no mode). False when the instance does
+ * not say (no route, no field, no token), so an older instance shows no mark.
+ */
+async function cannotActInPlatformMode(client: ApiClient): Promise<boolean> {
+  if (!client.target.token) return false;
+  const principal = await readPrincipal(client).catch(() => undefined);
+  if (principal?.kind === "api_key") return true;
+  const allowed = principal?.token?.platform_mode_allowed;
+  if (principal?.kind !== "personal_access_token" || typeof allowed !== "boolean") return false;
+  if (!allowed) return true;
+  if (principal.mode === "platform") return false;
+  const outside = principal.tenant_id ? await readPrincipal(client, { sendTenant: false }).catch(() => undefined) : principal;
+  return outside?.mode === "none";
+}
+
+/** Whether pages of this audience get the mark; the principal is read once, and only for a platform page. */
+function platformMarker(client: ApiClient): (audience: string | undefined) => Promise<boolean> {
+  let cannot: Promise<boolean> | undefined;
+  return (audience) => {
+    if (audience !== PLATFORM_AUDIENCE) return Promise.resolve(false);
+    cannot ??= cannotActInPlatformMode(client);
+    return cannot;
+  };
 }
 
 /**
@@ -371,6 +436,14 @@ export function searchIndex(entries: DocEntry[], query: string): Array<DocEntry 
     .map(({ evidence: _evidence, ...e }) => e);
 }
 
+/** The text with a line under its first `# ` heading, or on top when it has none (a later chunk of a page). */
+function underTitle(text: string, line: string): string {
+  const end = text.indexOf("\n");
+  const first = end < 0 ? text : text.slice(0, end);
+  if (!/^#\s/.test(first)) return `${line}\n\n${text}`;
+  return `${first}\n\n${line}\n${end < 0 ? "" : text.slice(end)}`;
+}
+
 /** What `docs get` takes for the whole index of pages. */
 const INDEX_REF = "index";
 
@@ -391,10 +464,24 @@ export const docsSearch: CommandSpec = {
   async run(ctx, input) {
     const query = ((input.positionals.query as string[] | undefined) ?? []).join(" ");
     const limit = intOption(input, "limit", { min: 1, max: 100, fallback: 10 })!;
-    const { entries } = await loadIndex(ctx);
+    const { client, entries } = await loadIndex(ctx);
     const hits = searchIndex(entries, query);
     const { terms } = queryTerms(query);
-    const items = hits.slice(0, limit).map(({ page, title, description, section }) => ({ page, title, section, description }));
+    const marked = platformMarker(client);
+    const items = await Promise.all(
+      hits.slice(0, limit).map(async ({ page, title, description, section, audience }) => ({
+        page,
+        title,
+        section,
+        description,
+        ...(audience ? { audience } : {}),
+        ...((await marked(audience)) ? { mark: PLATFORM_PAGE_MARK } : {}),
+      })),
+    );
+    const rows = items.map((item) => ("mark" in item ? { ...item, title: `${item.title} (platform page)` } : item));
+    const markLine = items.some((item) => "mark" in item)
+      ? `\n\nA (platform page) describes actions that need a personal access token with Platform mode: this token can read it but not act on it.`
+      : "";
     const none =
       `No page matches "${query}"${terms.length ? ` (looked for: ${terms.join(", ")})` : " (it has only stop words)"}. ` +
       (soundsGerman(query)
@@ -403,7 +490,7 @@ export const docsSearch: CommandSpec = {
       `or read the list of all ${entries.length} pages with: ${cavelonCommand("docs", "get", INDEX_REF)}`;
     return {
       data: { query, terms, items, total: hits.length, ...(items.length ? {} : { hint: none }) },
-      text: items.length ? `${table(items, ["page", "title", "description"], 70)}\n\nRead one: ${cavelonCommand("docs", "get", fill("page"))}` : none,
+      text: items.length ? `${table(rows, ["page", "title", "description"], 70)}${markLine}\n\nRead one: ${cavelonCommand("docs", "get", fill("page"))}` : none,
     };
   },
 };
@@ -448,11 +535,24 @@ export const docsGet: CommandSpec = {
     }
     const response = await client.get<string>(entry.url, { accept: "text/markdown, text/plain" });
     const markdown = response.text;
+    // The page's own header wins over the index, which a cache may have kept from before the instance said.
+    const audience = headerAudience(response.headers) ?? entry.audience;
+    const mark = (await platformMarker(client)(audience)) ? PLATFORM_PAGE_MARK : undefined;
     const chunk = markdown.slice(offset, offset + max);
     const next = offset + max < markdown.length ? String(offset + max) : null;
     return {
-      data: { page: entry.page, title: entry.title, url: entry.url, markdown: chunk, next_cursor: next, length: markdown.length },
-      text: chunk + (next ? `\n\n… page continues: ${cavelonCommand("docs", "get", entry.page, "--cursor", next)}` : ""),
+      data: {
+        page: entry.page,
+        title: entry.title,
+        url: entry.url,
+        ...(audience ? { audience } : {}),
+        // Before the markdown, so an agent reads it before the page's instructions.
+        ...(mark ? { mark } : {}),
+        markdown: chunk,
+        next_cursor: next,
+        length: markdown.length,
+      },
+      text: (mark ? underTitle(chunk, `> ${mark}`) : chunk) + (next ? `\n\n… page continues: ${cavelonCommand("docs", "get", entry.page, "--cursor", next)}` : ""),
     };
   },
 };

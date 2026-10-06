@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { splitJsonBody } from "../src/commands/api.js";
-import { parseIndex, searchIndex } from "../src/commands/docs.js";
+import { parseIndex, PLATFORM_PAGE_MARK, searchIndex } from "../src/commands/docs.js";
 import { aliasOf } from "../src/openapi.js";
 import { CONTRACTS, startFakeServer, type FakeServer } from "./fake-server.js";
 import { cli, login, sandbox, type Sandbox } from "./helpers.js";
@@ -406,6 +406,95 @@ describe("docs", () => {
         box.cleanup();
       }
     }
+  });
+
+  it("marks a platform page a token can read but not act on, on an instance that says a page's audience", async () => {
+    server.state.docsAudience = true;
+    const platformPage = "platform/operating-the-platform";
+    const tenantPage = "concepts/regression-testing";
+    const box = sandbox();
+    try {
+      const run = async (token: string, args: string[], env: Record<string, string> = {}) => {
+        const result = await cli(box, args, { env: { CAVELON_URL: server.url, CAVELON_TOKEN: token, ...env } });
+        expect(result.code, result.stderr).toBe(0);
+        return result;
+      };
+      type Item = { page: string; audience?: string; mark?: string };
+      const searched = async (token: string, words: string, env?: Record<string, string>) =>
+        (await run(token, ["docs", "search", ...words.split(" "), "--json"], env)).json<{ items: Item[] }>().items;
+      const got = async (token: string, page: string, env?: Record<string, string>) =>
+        (await run(token, ["docs", "get", page, "--json"], env)).json<Item & { markdown: string }>();
+
+      // A person with a platform role, through a token without Platform mode: the instance lists the page, the kit marks it.
+      const reader = server.addToken({ kind: "pat", tenantIds: [tenant], defaultTenant: tenant, globalRole: "platform_admin" });
+      const found = (await searched(reader, "operating the platform")).find((i) => i.page === platformPage);
+      expect(found).toMatchObject({ audience: "platform", mark: PLATFORM_PAGE_MARK });
+      expect((await searched(reader, "regression testing")).find((i) => i.page === tenantPage)?.mark).toBeUndefined();
+      const page = await got(reader, platformPage);
+      expect(page).toMatchObject({ audience: "platform", mark: PLATFORM_PAGE_MARK });
+      expect(page.markdown).not.toContain(PLATFORM_PAGE_MARK);
+      const text = (await run(reader, ["docs", "get", platformPage])).stdout.split("\n");
+      expect(text[0]).toMatch(/^# /);
+      expect(text.slice(1, 3)).toEqual(["", `> ${PLATFORM_PAGE_MARK}`]);
+      expect((await run(reader, ["docs", "search", "operating", "the", "platform"])).stdout).toContain("Operating the Platform (platform page)");
+      const plain = await got(reader, tenantPage);
+      expect(plain.audience).toBe("tenant");
+      expect(plain.mark).toBeUndefined();
+
+      // A token that allows Platform mode but whose ceiling leaves it no platform role cannot act there either.
+      const capped = server.addToken({ kind: "pat", tenantIds: [tenant], platform: true, ceilingRole: "tenant_admin" });
+      expect((await got(capped, platformPage, { CAVELON_TENANT: tenant })).mark).toBe(PLATFORM_PAGE_MARK);
+
+      // A Platform-mode token acts on what the page describes: no mark.
+      const operator = server.addToken({ kind: "pat", tenantIds: [], platform: true });
+      const operatorFound = (await searched(operator, "operating the platform")).find((i) => i.page === platformPage);
+      expect(operatorFound).toMatchObject({ audience: "platform" });
+      expect(operatorFound?.mark).toBeUndefined();
+      const operatorPage = await got(operator, platformPage);
+      expect(operatorPage.audience).toBe("platform");
+      expect(operatorPage.mark).toBeUndefined();
+    } finally {
+      server.state.docsAudience = false;
+      box.cleanup();
+    }
+  });
+
+  it("shows no mark on an instance that does not say a page's audience", async () => {
+    const box = sandbox();
+    try {
+      const env = { CAVELON_URL: server.url, CAVELON_TOKEN: server.addToken({ kind: "pat", tenantIds: [], platform: true }) };
+      const got = await cli(box, ["docs", "get", "platform/operating-the-platform", "--json"], { env });
+      expect(got.code, got.stderr + got.stdout).toBe(0);
+      const page = got.json<{ audience?: string; mark?: string }>();
+      expect(page.audience).toBeUndefined();
+      expect(page.mark).toBeUndefined();
+      const searched = await cli(box, ["docs", "search", "operating", "the", "platform", "--json"], { env });
+      const items = searched.json<{ items: Array<{ audience?: string; mark?: string }> }>().items;
+      expect(items.length).toBeGreaterThan(0);
+      for (const item of items) expect(item.audience ?? item.mark).toBeUndefined();
+    } finally {
+      box.cleanup();
+    }
+  });
+
+  it("reads a page's audience off the end of its index line, whatever its case, and keeps it out of the summary", () => {
+    const entries = parseIndex(
+      [
+        "## Platform Operations",
+        "- [Operating](https://x.example/api/v1/docs/platform/operating.md): Tenants and settings (audience: platform)",
+        "- [Bare](https://x.example/api/v1/docs/platform/bare.md) (Audience: Platform)",
+        "## Concepts",
+        "- [Tests](https://x.example/api/v1/docs/concepts/tests.md): Suites (and cases)",
+        "- [Plain](https://x.example/api/v1/docs/concepts/plain.md): No audience",
+      ].join("\n"),
+      "https://kit.example",
+    );
+    expect(entries.map((e) => [e.page, e.description, e.audience])).toEqual([
+      ["platform/operating", "Tenants and settings", "platform"],
+      ["platform/bare", "", "platform"],
+      ["concepts/tests", "Suites (and cases)", undefined],
+      ["concepts/plain", "No audience", undefined],
+    ]);
   });
 
   it("finds the concept page first for beginner questions in German and English", async () => {
