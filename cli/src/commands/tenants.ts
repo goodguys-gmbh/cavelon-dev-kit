@@ -16,6 +16,7 @@ import { callStable } from "../invoke.js";
 import { formatQuota, limitError, limitsOrWarn, readQuotas } from "../limits.js";
 import { containing } from "../choose.js";
 import { readPrincipal, readTenantless, type MetaPrincipal } from "../principal.js";
+import { ACTIVATOR, accessFor, mayActivate } from "../access.js";
 import type { ApiClient } from "../http.js";
 import { requireInstance } from "../session.js";
 import { listsTenants, searchTenants } from "../tenant-choice.js";
@@ -355,6 +356,7 @@ export const harnessDefault: CommandSpec = {
   readOnly: false,
   idempotent: true,
   mcpTool: "harness_default",
+  operations: ["POST /api/v1/harnesses/{harness_id}/default"],
   positionals: [{ name: "solution", description: "Name, slug or id of the solution; default: cavelon.yaml's harness." }],
   options: {
     confirm: { type: "boolean", mcpToken: true, description: "Change the default route (after a person saw the preview)." },
@@ -381,7 +383,9 @@ export const harnessDefault: CommandSpec = {
         code: "solution_not_active",
         message: `${named(harness)} is ${harness.status}, and only an active solution can be the tenant's default route; nothing was changed.`,
         hint:
-          `Activate it through the readiness gate and preview the default route in one step: ${cavelonCommand("activate", "--harness", harness.slug, "--make-default")}. ` +
+          (mayActivate(await accessFor(await ctx.client())) === false
+            ? `Only an active solution can be the default, and to activate it ${ACTIVATOR}. `
+            : `Activate it through the readiness gate and preview the default route in one step: ${cavelonCommand("activate", "--harness", harness.slug, "--make-default")}. `) +
           `The default route stays ${current ? named(current) : "as it is"} until then.`,
         details: { harness: target, default_route: current },
       });
@@ -474,6 +478,7 @@ export const harnessNew: CommandSpec = {
   summary: "Create an empty draft solution (harness).",
   readOnly: false,
   mcpTool: "harness_new",
+  operations: ["POST /api/v1/harnesses"],
   positionals: [{ name: "slug", description: "The new solution's slug.", required: true }],
   options: {
     name: { type: "string", value: "<name>", description: "Display name (default: the slug)." },
@@ -502,6 +507,7 @@ export const harnessClone: CommandSpec = {
   summary: "Copy a solution into a new draft solution.",
   readOnly: false,
   mcpTool: "harness_clone",
+  operations: ["POST /api/v1/harnesses/{harness_id}/clone"],
   positionals: [{ name: "source", description: "Name, slug or id of the solution to copy.", required: true }],
   options: {
     slug: { type: "string", value: "<slug>", description: "The copy's slug." },

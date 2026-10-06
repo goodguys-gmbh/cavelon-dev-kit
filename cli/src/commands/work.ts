@@ -590,6 +590,7 @@ export const kbUpload: CommandSpec = {
     "instance publishes its documents' file hashes.",
   readOnly: false,
   mcpTool: "kb_upload",
+  operations: ["POST /api/v1/knowledge-bases/{kb_id}/documents/upload"],
   positionals: [{ name: "dir", description: "Folder (or single file) to upload.", required: true }],
   options: {
     kb: { type: "string", value: "<kb>", description: "Knowledge base name or id (required)." },
@@ -858,6 +859,7 @@ export const testRun: CommandSpec = {
     "5 when answers wait for a manual verdict or a value a case needs.",
   readOnly: false,
   mcpTool: "test_run",
+  operations: ["POST /api/v1/test-suites/{suite_id}/runs"],
   options: {
     suite: { type: "string", multiple: true, value: "<suite>", description: "Suite name or id." },
     harness: { type: "string", value: "<harness>", description: "The solution to run against: its name, slug or id." },

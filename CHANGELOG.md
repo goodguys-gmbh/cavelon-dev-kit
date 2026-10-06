@@ -9,6 +9,28 @@ CLI, the skills and the plugin.
 
 ### Added
 
+- The kit offers and suggests only what the credential may do (#133). It
+  reads what a recent instance's `/meta/principal` publishes: the permissions
+  its routes accept from the credential (an API key's too, and
+  `harnesses.activate` for a token that may activate), `needs_a_person` (the
+  operations a person runs instead) and the acting tenant's name and slug.
+  `whoami` shows the permissions, an API key's scopes, the operations a
+  person runs, and whether the credential may activate and set variables;
+  `status` shows the permissions and scopes. The MCP server marks each tool
+  whose operation the credential may not send ("Not for this credential: …",
+  with who does it instead) and asks the client to list the tools again when
+  `use_tenant` or `tenant_create` chooses another tenant. `api list`
+  (`api_list`) marks each operation (`may_send`, `needs_a_person`, `needs`),
+  and `--usable` (`usable`) leaves out those it may not send. Hints that
+  would suggest `cavelon activate` (`apply`'s not-applied status, `status`'s
+  default route, `harness default` of a draft, `chat` with a draft,
+  `deactivate`) name who activates instead where the credential may not. On
+  an older instance, which does not publish these, a person's token is read as
+  before (`may_activate` for activation) and an API key's permissions are not
+  guessed: nothing is marked, and the kit behaves as before. Which
+  permissions an operation needs is published only in a refusal, so the kit's
+  table of them only marks and hints; the instance still decides.
+
 - `docs search` and `docs get` (`docs_search`, `docs_get`) mark a platform
   page that the token can read but not act on (#132). The instance lists the
   platform operators' pages to a person with a platform role whatever their
@@ -51,6 +73,22 @@ CLI, the skills and the plugin.
   `db` commands call.
 
 ### Fixed
+
+- A refused variable says who sets it (#133). `variables set` and
+  `variables delete` turn the instance's 403 for a role that may not manage
+  the tenant's settings (a Builder's) into `permission_missing`, naming the
+  permissions and who sets it instead (a tenant Owner, in the Admin under
+  Settings › Variables or with their own token), as a refused secret does;
+  `apply` says so under "needs variables", and the skills no longer tell an
+  agent it may set any variable.
+- A 403 the instance sends without a hint names what the credential lacks,
+  by its kind (#133): the permission the refusal names ("Missing
+  permissions: …", "Missing one of permissions: …") or, where it names none,
+  what `/meta/principal` and the operation say; a personal access token hears
+  about its role and ceiling, an API key about its scopes (never a ceiling),
+  with the scope a refusal names, and an operation the instance keeps for a
+  person says so with the instance's reason. `details` carries `credential`
+  and `permissions` or `scope`.
 
 - Some commands changed state without a preview, while `deactivate` and
   `harness default` needed one. Now these preview what they would do, change

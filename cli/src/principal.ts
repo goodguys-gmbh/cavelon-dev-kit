@@ -35,6 +35,28 @@ export interface MetaPrincipal {
    * older instance: then only an API key's scopes say anything up front.
    */
   permissions?: string[];
+  /**
+   * The tenant the request acts in, with its name and slug. Absent on an
+   * older instance, which names only `tenant_id`.
+   */
+  tenant?: { id: string; name: string | null; slug: string | null } | null;
+  /**
+   * The operations `permissions` would allow that this credential still
+   * cannot run, because a person runs them. Absent on an older instance,
+   * whose `permissions` are also not what the routes accept for an API key
+   * nor say whether a token may activate (see access.ts).
+   */
+  needs_a_person?: OperationNeedingAPerson[];
+}
+
+/** An operation the instance says this credential cannot run, because a person runs it. */
+export interface OperationNeedingAPerson {
+  /** The OpenAPI operationId; null where the instance has none for it. */
+  operation: string | null;
+  method: string;
+  /** The path as the OpenAPI names it (`/api/v1/secrets/{name}`). */
+  path: string;
+  reason: string;
 }
 
 /**
@@ -45,8 +67,28 @@ export interface MetaPrincipal {
 export async function readPrincipal(client: ApiClient, options: { sendTenant?: boolean } = {}): Promise<MetaPrincipal | undefined> {
   const response = await client.get<MetaPrincipal>("/api/v1/meta/principal", { allow: [400, 403, 404, 405], sendTenant: options.sendTenant });
   if (response.status !== 200 || !response.data?.kind) return undefined;
-  const { permissions, ...rest } = response.data;
-  return Array.isArray(permissions) ? { ...rest, permissions: permissions.filter((p) => typeof p === "string") } : rest;
+  const { permissions, needs_a_person: needsAPerson, tenant, ...rest } = response.data;
+  const principal: MetaPrincipal = rest;
+  if (Array.isArray(permissions)) principal.permissions = permissions.filter((p) => typeof p === "string");
+  if (Array.isArray(needsAPerson)) principal.needs_a_person = operationsNeedingAPerson(needsAPerson);
+  if (tenant === null) principal.tenant = null;
+  else if (tenant && typeof tenant === "object" && typeof tenant.id === "string") {
+    const text = (v: unknown) => (typeof v === "string" && v ? v : null);
+    principal.tenant = { id: tenant.id, name: text(tenant.name), slug: text(tenant.slug) };
+  }
+  return principal;
+}
+
+function operationsNeedingAPerson(value: unknown[]): OperationNeedingAPerson[] {
+  return value
+    .filter((o): o is Record<string, unknown> => Boolean(o) && typeof o === "object")
+    .filter((o) => typeof o.method === "string" && typeof o.path === "string")
+    .map((o) => ({
+      operation: typeof o.operation === "string" && o.operation ? o.operation : null,
+      method: (o.method as string).toUpperCase(),
+      path: o.path as string,
+      reason: typeof o.reason === "string" ? o.reason : "",
+    }));
 }
 
 /** A tenant a personal access token reaches, as `/meta/principal` without a tenant lists it on a recent instance. */

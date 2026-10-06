@@ -233,6 +233,7 @@ export const sandboxValidate: CommandSpec = {
   readOnly: false,
   idempotent: true,
   mcpTool: "sandbox_validate",
+  operations: ["POST /api/v1/sandboxes/{sandbox_id}/validate"],
   positionals: [{ name: "sandbox", description: "Sandbox name or id.", required: true }],
   examples: ["cavelon sandbox validate orders-test"],
   async run(ctx, input) {
@@ -499,6 +500,7 @@ export const sandboxRefresh: CommandSpec = {
   readOnly: false,
   idempotent: true,
   mcpTool: "sandbox_refresh",
+  operations: ["POST /api/v1/sandboxes/{sandbox_id}/refresh-workspace"],
   positionals: [{ name: "sandbox", description: "Sandbox name or id.", required: true }],
   options: { "idempotency-key": UUID_KEY_OPTION },
   examples: ["cavelon sandbox refresh spec-vm"],
@@ -587,6 +589,7 @@ export const sandboxSeed: CommandSpec = {
   destructive: true,
   idempotent: true,
   mcpTool: "sandbox_seed",
+  operations: ["POST /api/v1/sandboxes/{sandbox_id}/artifact-jobs"],
   positionals: [
     { name: "sandbox", description: "Sandbox name or id.", required: true },
     { name: "source", description: "A folder, an uncompressed .tar, or one file.", required: true },
@@ -683,7 +686,7 @@ async function upload(ctx: Context, sandboxId: string, jobId: string, bytes: Uin
   } catch {
     // not JSON; the refusal takes the text
   }
-  if (!response.ok) throw await client.refusal(response.status, data, `PUT ${target}`, response.headers);
+  if (!response.ok) throw await client.refusal(response.status, data, `PUT ${target}`, response.headers, { method: "PUT", path: new URL(client.resolve(target)).pathname });
   return data as ArchiveJob;
 }
 
@@ -705,7 +708,7 @@ async function download(ctx: Context, sandbox: Sandbox, job: ArchiveJob, out: st
     } catch {
       // not JSON
     }
-    throw await client.refusal(response.status, data, `GET ${target}`, response.headers);
+    throw await client.refusal(response.status, data, `GET ${target}`, response.headers, { method: "GET", path: new URL(client.resolve(target)).pathname });
   }
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   const declared = response.headers.get("x-content-sha256");
@@ -739,6 +742,7 @@ export const artifactsExport: CommandSpec = {
     "(default sandbox-<job>.tar), never over an existing file. On a customer VM, read results with `sandbox cat`.",
   readOnly: false,
   mcpTool: "artifacts_export",
+  operations: ["POST /api/v1/sandboxes/{sandbox_id}/artifact-jobs"],
   positionals: [{ name: "sandbox", description: "Sandbox name or id.", required: true }],
   options: {
     path: { type: "string", multiple: true, value: "<path>", description: "Export only these workspace paths (repeatable; default: all)." },

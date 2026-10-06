@@ -132,6 +132,12 @@ export interface CommandSpec {
   /** The MCP tool name, or false for commands only a person runs (login, logout). */
   mcpTool: string | false;
   /**
+   * The instance operations (`METHOD /path` as the OpenAPI names them) the
+   * command exists to send: where the credential may not send one of them,
+   * the MCP tool's description says so (access.ts).
+   */
+  operations?: readonly string[];
+  /**
    * For a command without a tool: the command whose tool does its job over
    * MCP (`wait` for `watch`), so a line the kit prints for it there names that
    * tool. It must take the same arguments.

@@ -8,6 +8,7 @@ import { callStable, workflowOperation } from "../invoke.js";
 import type { Session } from "../session.js";
 import { cavelonCommand, fill } from "../printed.js";
 import { MCP_MAX_WAIT_MS } from "./async.js";
+import { accessFor, activationStep, mayActivate } from "../access.js";
 
 /**
  * Talking to one solution, and taking one out of service. The tenant's chat
@@ -51,12 +52,12 @@ const ENV_OPTION = { type: "string" as const, value: "<name>", description: "Use
 const DEFAULT_CHAT_TIMEOUT = "2m";
 
 /** A refusal of the chat route, with what to do about it. */
-function chatError(error: unknown, harness: HarnessSummary | undefined): unknown {
+function chatError(error: unknown, harness: HarnessSummary | undefined, may: boolean | null = null): unknown {
   if (!(error instanceof CavelonError) || error.status !== 409) return error;
   const hint = !harness
     ? `Nothing answers on the tenant's default route yet: name a solution with --harness, or make an active one the default (\`${cavelonCommand("harness", "default", fill("solution"))}\`).`
     : harness.status !== "active"
-      ? `${named(harness)} is ${harness.status}: a draft answers only a person's token (as a Playground run), never a tenant API key. Use a personal access token, or activate it first (\`${cavelonCommand("activate", "--harness", harness.slug)}\`).`
+      ? `${named(harness)} is ${harness.status}: a draft answers only a person's token (as a Playground run), never a tenant API key. Use a personal access token, or activate it first (${activationStep(may, cavelonCommand("activate", "--harness", harness.slug))}).`
       : "A session belongs to the solution it started with: leave out --session to start a new one.";
   return new CavelonError(error.exitCode, { code: error.code, status: error.status, message: error.message, hint, docs: error.docs, details: error.details });
 }
@@ -73,6 +74,7 @@ export const chat: CommandSpec = {
   readOnly: false,
   mcpEffect: "Starts or continues a conversation with the solution and runs its agents (model usage, its tools' actions); changes no configuration.",
   mcpTool: "chat",
+  operations: ["POST /api/v1/chat"],
   positionals: [{ name: "message", description: "What the user says.", required: true }],
   options: {
     harness: HARNESS_OPTION,
@@ -97,7 +99,7 @@ export const chat: CommandSpec = {
     try {
       answer = await callStable<ChatResponse>(ctx, "POST", "/api/v1/chat", "chatting with a solution", { body, timeoutMs: timeout });
     } catch (error) {
-      throw chatError(error, harness);
+      throw chatError(error, harness, error instanceof CavelonError && error.status === 409 ? mayActivate(await accessFor(await ctx.client())) : null);
     }
     const target = harness ? { id: harness.id, slug: harness.slug, name: harness.name, status: harness.status } : null;
     if (answer.retrieval_warning) ctx.warn(answer.retrieval_warning);
@@ -136,6 +138,7 @@ export const deactivate: CommandSpec = {
   destructive: true,
   idempotent: true,
   mcpTool: "deactivate",
+  operations: ["POST /api/v1/harnesses/{harness_id}/deactivate"],
   options: {
     harness: HARNESS_OPTION,
     env: ENV_OPTION,
@@ -194,7 +197,11 @@ export const deactivate: CommandSpec = {
     });
     return {
       data: { changed: true, harness: { ...target, status: updated?.status ?? target.status } },
-      text: `Deactivated ${named(harness)}; status ${updated?.status ?? "unknown"}. \`${cavelonCommand("activate", "--harness", harness.slug)}\` puts it back through its readiness gate.`,
+      text: `Deactivated ${named(harness)}; status ${updated?.status ?? "unknown"}. ${
+        mayActivate(await accessFor(await ctx.client())) === false
+          ? "A person who may activate puts it back through its readiness gate, in the Admin; this credential may not activate."
+          : `\`${cavelonCommand("activate", "--harness", harness.slug)}\` puts it back through its readiness gate.`
+      }`,
     };
   },
 };

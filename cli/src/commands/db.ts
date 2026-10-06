@@ -352,6 +352,7 @@ export const dbTest: CommandSpec = {
   idempotent: true,
   mcpEffect: "Runs the connection test on the instance and stores its outcome as the connection's last test; changes no setting.",
   mcpTool: "db_test",
+  operations: ["POST /api/v1/database-connectors/connections/{connection_id}/test"],
   positionals: [{ name: "connection", description: "The connection's name or id.", required: true }],
   examples: ["cavelon db test shop-db", "cavelon db test shop-db --json"],
   async run(ctx, input) {
@@ -431,6 +432,7 @@ export const dbTestRun: CommandSpec = {
   idempotent: true,
   mcpEffect: "Runs the saved query once on the instance; it leaves a run record (counts only) and an audit entry, and changes no setting.",
   mcpTool: "db_test_run",
+  operations: ["POST /api/v1/database-connectors/queries/{query_id}/test-run"],
   positionals: [{ name: "query", description: "The query's tool slug or id.", required: true }],
   options: {
     value: { type: "string", multiple: true, value: "<name=value>", description: "One parameter's value, typed as the parameter's type." },

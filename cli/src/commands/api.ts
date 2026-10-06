@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { AGENT_VARIABLES, drivenByAgent, type DrivenBy } from "../agent-env.js";
 import {
+  boolOption,
   CURSOR_OPTION,
   intOption,
   listOption,
@@ -22,6 +23,7 @@ import { describeSchema, findOperation, jsonBodySchema, matchedLoosely, operatio
 import { harnessNotFoundError, lookupHarness } from "../harness-ref.js";
 import { CONFIRM_TOKEN, confirmToken, confirmTokenRequired, confirmWith } from "../confirm-token.js";
 import { actingTarget, targetLine } from "../acting.js";
+import { accessFor, operationAccess, type CredentialAccess, type OperationAccess } from "../access.js";
 import { cavelonCommand, fill } from "../printed.js";
 
 /** Said once when `--json` carried the body: the alias goes away in a later release. */
@@ -414,11 +416,13 @@ export const apiList: CommandSpec = {
     method: { type: "string", value: "<method>", description: "Only this HTTP method (GET, POST, …)." },
     tags: { type: "boolean", description: "List the tags with their operation counts instead." },
     limit: { type: "string", value: "<n>", description: "Return at most n operations (default 50, 0 for all)." },
+    usable: { type: "boolean", description: "Leave out the operations the instance says this credential may not send." },
     cursor: CURSOR_OPTION,
   },
   async run(ctx, input) {
     const doc = await (await ctx.contracts()).openapi();
     let ops = operations(doc);
+    const access = await listAccess(ctx);
     if (input.options.tags === true) {
       const counts = new Map<string, number>();
       for (const op of ops) for (const tag of op.tags.length ? op.tags : ["(none)"]) counts.set(tag, (counts.get(tag) ?? 0) + 1);
@@ -436,6 +440,9 @@ export const apiList: CommandSpec = {
     if (search) {
       ops = ops.filter((o) => [o.operationId, o.path, o.summary ?? ""].some((s) => s.toLowerCase().includes(search)));
     }
+    const usableOnly = boolOption(input, "usable");
+    const marks = new Map(ops.map((o) => [o, operationAccess(access, `${o.method} ${o.path}`)]));
+    if (usableOnly) ops = ops.filter((o) => marks.get(o)!.allowed !== false);
     // 0 lists them all, as `api --limit 0` shows a whole response.
     const wanted = intOption(input, "limit", { min: 0, max: 1000, fallback: 50 })!;
     const limit = wanted === 0 ? Math.max(ops.length, 1) : wanted;
@@ -448,20 +455,41 @@ export const apiList: CommandSpec = {
         summary: o.summary ?? null,
         tags: o.tags,
         read_only: o.readOnly,
+        ...accessFields(marks.get(o)!),
       })),
       limit,
       stringOption(input, "cursor"),
     );
-    const flags = [tag ? ["--tag", tag] : [], method ? ["--method", method] : [], search ? ["--search", search] : []].flat();
+    const flags = [tag ? ["--tag", tag] : [], method ? ["--method", method] : [], search ? ["--search", search] : [], usableOnly ? ["--usable"] : []].flat();
+    const marked = page.items.some((i) => i.may_send === false);
     return {
-      data: page,
+      data: { ...page, credential_published: Boolean(access) },
       text:
-        table(page.items, ["operation", "method", "path", "summary"]) +
+        table(
+          page.items.map((i) => ({ ...i, access: i.needs_a_person ? "a person" : i.needs?.length ? `needs ${i.needs.join(" and ")}` : "" })),
+          marked ? ["operation", "method", "path", "access", "summary"] : ["operation", "method", "path", "summary"],
+        ) +
         `\n${page.items.length} of ${page.total}` +
+        (marked ? `\nOperations with an access entry are ones this credential may not send, as the instance says; --usable leaves them out.` : "") +
         moreHint(page.next_cursor, cavelonCommand("api", "list", ...flags)),
     };
   },
 };
+
+/** What the credential may do, for marking operations; undefined without a token or an answer. */
+async function listAccess(ctx: Context): Promise<CredentialAccess | undefined> {
+  try {
+    const session = await ctx.session();
+    return session.token ? await accessFor(await ctx.client()) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** An operation's entry as the credential may send it: may_send null where the instance does not say. */
+function accessFields(mark: OperationAccess): { may_send: boolean | null; needs_a_person: string | null; needs: string[] | null } {
+  return { may_send: mark.allowed, needs_a_person: mark.person ?? null, needs: mark.missing ?? null };
+}
 
 export const apiDescribe: CommandSpec = {
   name: "api describe",

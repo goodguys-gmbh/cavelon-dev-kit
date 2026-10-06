@@ -53,7 +53,8 @@ import { readInventory, readInventoryKinds, writeInventory, type InventoryKind }
 import { checkedBy, MODEL_UNKNOWN_CODE, missingInventory, REFERENCE_UNKNOWN_CODE } from "../package-references.js";
 import { cavelonCommand, printedCommand, spoken } from "../printed.js";
 import { secretSetCommand, variableSetCommand } from "./values.js";
-import { maySetSecrets, SECRET_SETTER } from "../secret-access.js";
+import { maySetSecrets, SECRET_SETTER, VARIABLE_SETTER } from "../secret-access.js";
+import { ACTIVATOR, accessFor, accessOf, mayActivate, operationAccess, principalOf, type CredentialAccess } from "../access.js";
 
 /**
  * The repository loop (plan 04, "Working with a coding agent"): `pull` brings
@@ -671,7 +672,7 @@ function list(items: string[], max = 10): string {
 }
 
 /** What the target still needs, one line per kind, with the command or the Admin path that provides it. */
-function needsLines(needs: NonNullable<Preview["target_needs"]>): Array<[string, unknown]> {
+function needsLines(needs: NonNullable<Preview["target_needs"]>, access?: CredentialAccess): Array<[string, unknown]> {
   const lines: Array<[string, unknown]> = [];
   const secrets = valueNeeds(needs.secrets);
   if (secrets.length) {
@@ -679,7 +680,12 @@ function needsLines(needs: NonNullable<Preview["target_needs"]>): Array<[string,
     lines.push(["needs secrets", `${each}\n  (a person runs these in a terminal, or sets them in the Admin; never the agent)`]);
   }
   const variables = valueNeeds(needs.variables);
-  if (variables.length) lines.push(["needs variables", needLines(variables, (name) => variableSetCommand(name), cavelonCommand("variables", "list"))]);
+  if (variables.length) {
+    const each = needLines(variables, (name) => variableSetCommand(name), cavelonCommand("variables", "list"));
+    // A role that may not manage the tenant's settings (a Builder's) hears who sets them, as for secrets.
+    const who = operationAccess(access, "PUT /api/v1/variables/{name}").allowed === false ? `\n  (this credential may not set variables. ${VARIABLE_SETTER})` : "";
+    lines.push(["needs variables", each + who]);
+  }
   const grants = (needs.oauth_grants ?? []).map((g) => [g.kind, g.tool_slug, g.capability].filter(Boolean).join(" "));
   if (grants.length) lines.push(["needs grants", `${list(grants)} (a person connects them in the Admin)`]);
   const bindings = (needs.runtime_bindings ?? []).map((b) => `${b.key}${b.kind ? ` (${b.kind})` : ""}`);
@@ -693,6 +699,8 @@ function needsLines(needs: NonNullable<Preview["target_needs"]>): Array<[string,
 interface PreviewContext {
   disk?: PackageOnDisk;
   harness?: string;
+  /** What the credential may do, where the instance says: hints suggest only that. */
+  access?: CredentialAccess;
 }
 
 function emptyValue(value: unknown): boolean {
@@ -742,7 +750,7 @@ export function previewText(p: Preview, context: PreviewContext = {}): string {
   if (p.warnings?.length) lines.push(["warnings", p.warnings.slice(0, 10).map((w) => `\n  - ${clip(w, 300)}`).join("") + (p.warnings.length > 10 ? `\n  … ${p.warnings.length - 10} more` : "")]);
   const ignored = [...(p.ignored?.sections ?? []), ...(p.ignored?.fields ?? [])];
   if (ignored.length) lines.push(["ignored", list(ignored)]);
-  const skipped = notApplied(p.ignored?.not_applied, context.disk?.package, context.harness);
+  const skipped = notApplied(p.ignored?.not_applied, context.disk?.package, context.harness, mayActivate(context.access));
   if (skipped.length) lines.push(["not applied", notAppliedLines(skipped)]);
   const impact = p.impact ?? {};
   const active = (impact.active_harnesses ?? []).map((h) => {
@@ -755,7 +763,7 @@ export function previewText(p: Preview, context: PreviewContext = {}): string {
     const limits = Object.entries(budget.limits ?? {}).map(([k, v]) => `${k} ${v}`).join(", ");
     lines.push([`loop ${budget.node_slug}`, `${limits}${budget.worst_case_cost != null ? `; worst case ${JSON.stringify(budget.worst_case_cost)}` : ""}`]);
   }
-  lines.push(...needsLines(p.target_needs ?? {}));
+  lines.push(...needsLines(p.target_needs ?? {}, context.access));
   return keyValues(lines);
 }
 
@@ -766,7 +774,7 @@ function previewReport(p: Preview, context: PreviewContext): Record<string, unkn
   if (details.length) out.blocker_details = details;
   const changes = fieldChanges(p.changes);
   if (changes.length) out.field_changes = changes;
-  const skipped = notApplied(p.ignored?.not_applied, context.disk?.package, context.harness);
+  const skipped = notApplied(p.ignored?.not_applied, context.disk?.package, context.harness, mayActivate(context.access));
   if (skipped.length) out.not_applied = skipped;
   return out;
 }
@@ -1174,6 +1182,7 @@ export const apply: CommandSpec = {
   readOnly: false,
   destructive: true,
   mcpTool: "apply",
+  operations: ["POST /api/v1/agent-graph/import"],
   options: {
     env: ENV_OPTION,
     harness: HARNESS_OPTION,
@@ -1309,7 +1318,7 @@ export const apply: CommandSpec = {
           : undefined;
     const commands = setCommands(preview);
     if (commands.secrets.length || commands.variables.length) data.set_commands = commands;
-    const context: PreviewContext = { disk, harness: harness?.slug };
+    const context: PreviewContext = { disk, harness: harness?.slug, access: await accessFor(await ctx.client()) };
     Object.assign(data, previewReport(preview, context));
     // A blocked preview has no id on recent instances: its blockers come first, never a call to update the instance.
     if (!preview.ready) {
@@ -1668,6 +1677,8 @@ export interface SolutionState {
   default_route?: { is_default: boolean | null; current: { id: string; slug: string; name: string } | null };
   /** The secrets readiness names as not set, and whether this credential may set them (null: the instance does not say). */
   missing_secrets?: { names: string[]; may_set: boolean | null };
+  /** Whether this credential may activate it; null where the instance does not say. */
+  may_activate?: boolean | null;
   /** Why part of it could not be read; the rest stands. */
   unavailable?: string;
 }
@@ -1702,10 +1713,9 @@ export async function solutionState(ctx: Context, ref: string): Promise<Solution
     state.ready_to_activate = typeof readiness.ready_to_activate === "boolean" ? readiness.ready_to_activate : null;
     state.blockers = (readiness.blockers ?? []).map((b) => clip(String(b.label ?? b.key ?? b.detail ?? "?"), 80));
     const secrets = missingSecrets(readiness.blockers ?? []);
-    if (secrets.length) {
-      const principal = await readPrincipal(await ctx.client()).catch(() => undefined);
-      state.missing_secrets = { names: secrets, may_set: maySetSecrets(principal) };
-    }
+    const principal = await principalOf(await ctx.client());
+    if (secrets.length) state.missing_secrets = { names: secrets, may_set: maySetSecrets(principal) };
+    if (harness.status !== "active") state.may_activate = mayActivate(accessOf(principal));
     if ("latest_test_run" in readiness) {
       const run = readiness.latest_test_run;
       const summary = run?.summary ?? {};
@@ -1742,7 +1752,7 @@ export function solutionStateLines(state: SolutionState): Array<[string, unknown
   const lines: Array<[string, unknown]> = [["state", [state.harness.status, ready].filter(Boolean).join(", ")]];
   if (state.missing_secrets) lines.push(["secrets", missingSecretsLine(state.missing_secrets.names, state.missing_secrets.may_set)]);
   const route = state.default_route;
-  if (route) lines.push(["default route", defaultRouteText(state.harness, route)]);
+  if (route) lines.push(["default route", defaultRouteText(state.harness, route, state.may_activate ?? null)]);
   const run = state.latest_test_run;
   if (run === null) lines.push(["last test run", "none yet (`cavelon test run`)"]);
   else if (run) {
@@ -1754,10 +1764,11 @@ export function solutionStateLines(state: SolutionState): Array<[string, unknown
 }
 
 /** Whether the folder's solution answers the tenant's chat and widget, and if not, which one does and how to change it. */
-function defaultRouteText(harness: { slug: string; name: string; status: string }, route: NonNullable<SolutionState["default_route"]>): string {
+function defaultRouteText(harness: { slug: string; name: string; status: string }, route: NonNullable<SolutionState["default_route"]>, may: boolean | null): string {
   if (route.is_default === null) return "unknown (this instance does not say which solution is the default)";
   if (route.is_default) return "yes: the tenant's chat and widget answer with it where a conversation names no solution";
   const now = route.current ? named(route.current) : "no solution";
+  if (harness.status !== "active" && may === false) return `no: ${now} answers the tenant's chat and widget; only an active solution can be the default, and to activate it ${ACTIVATOR}`;
   const how = harness.status === "active" ? cavelonCommand("harness", "default", harness.slug) : cavelonCommand("activate", "--harness", harness.slug, "--make-default");
   return `no: ${now} answers the tenant's chat and widget; preview a change with ${how}`;
 }
@@ -1902,6 +1913,7 @@ export const activate: CommandSpec = {
   readOnly: false,
   idempotent: true,
   mcpTool: "activate",
+  operations: ["POST /api/v1/harnesses/{harness_id}/activate"],
   options: {
     harness: HARNESS_OPTION,
     env: ENV_OPTION,

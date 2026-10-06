@@ -1,5 +1,6 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListToolsRequestSchema, type Tool } from "@modelcontextprotocol/sdk/types.js";
+import { accessFor, allOf, credentialWords, operationAccess, whoInstead, type CredentialAccess } from "./access.js";
 import { formerlyWarning, ownsTenant, propertyName, type CommandSpec, type Input } from "./command.js";
 import { MCP_MAX_WAIT_MS } from "./commands/async.js";
 import { createContext, withWarnings } from "./context.js";
@@ -48,6 +49,9 @@ const INSTRUCTIONS =
   "(x-cavelon-person-only; its reason is in the error), or on an instance that marks none, one that changes a secret, " +
   "creates or revokes a credential (tokens, API keys, sign-in) or decides an approval; it also refuses a body that sets a field " +
   "the instance marks as a secret value (x-cavelon-secret): leave the field out and let a person enter the value. " +
+  "A tool whose description starts with \"Not for this credential\" is one the instance says this token or key may not use " +
+  "in this tenant (whoami lists its permissions, an API key's scopes and the operations a person runs): do not call it to " +
+  "find out; tell the person who does it. api_list marks such operations (may_send false) and leaves them out with usable. " +
   "Run from your shell, cavelon's api command applies the same guards, and sends a changing operation only with --confirm and the token " +
   "its preview printed. Tools read and write files only " +
   "inside the solution folder (the folder of cavelon.yaml, or the one the server started in), never in cavelon's own " +
@@ -58,7 +62,9 @@ const INSTRUCTIONS =
   "db_connections, db_queries and db_runs read the database connections, saved queries and their runs behind database query " +
   "tools; only a superadmin in the Admin creates or changes a connection or a query, so an apply that changes a query is " +
   "blocked for any token: tell the person, and apply the rest with the query left as the instance holds it. " +
-  "variables_list/variables_get/variables_set handle plain-text {{var:…}} values. secrets_list shows which {{secret:…}} " +
+  "variables_list/variables_get/variables_set handle plain-text {{var:…}} values; setting one needs a role that may manage " +
+  "the tenant's settings, as a secret does (a Builder's may not): where whoami says the credential may not, tell the person " +
+  "who sets it instead of calling variables_set. secrets_list shows which {{secret:…}} " +
   "values are set, never a value: a person sets a secret, so tell them the exact `cavelon secrets set <name>` command " +
   "to run in their terminal, and never ask for, read or pass a secret value. Never approve or decide an approval; " +
   "that stays with a person. Use docs_search before guessing, " +
@@ -74,6 +80,12 @@ export function mcpInstructions(commands: readonly CommandSpec[]): string {
 }
 
 type JsonSchema = Record<string, unknown>;
+
+/** How long the tool list waits for what the credential may do before it lists the tools unmarked. */
+const TOOL_LIST_ACCESS_MS = 5_000;
+
+/** The tools that choose this session's tenant. */
+const TENANT_CHOOSERS = new Set(["use_tenant", "tenant_create"]);
 
 /** What a `confirm` token option says over MCP, after what it does. */
 const TOKEN_DESCRIPTION =
@@ -132,12 +144,30 @@ export function inputSchema(spec: CommandSpec, commands: readonly CommandSpec[] 
   return { type: "object", properties, ...(required.length ? { required } : {}), additionalProperties: false };
 }
 
-export function toolFor(spec: CommandSpec, commands: readonly CommandSpec[] = []): Tool {
+/**
+ * What the tool's description says where the instance publishes that this
+ * credential may not send the operation the tool exists for: the agent reads
+ * it before it calls, instead of learning it from a 403. Undefined where it
+ * may, or the instance does not say.
+ */
+export function notForThisCredential(spec: CommandSpec, access: CredentialAccess | undefined): string | undefined {
+  if (!access) return undefined;
+  for (const operation of spec.operations ?? []) {
+    const refused = operationAccess(access, operation);
+    if (refused.allowed !== false) continue;
+    const why = refused.person ? "a person runs it" : `it needs ${allOf(refused.missing!)}, which it does not hold`;
+    return `Not for this credential: ${credentialWords(access)} may not send ${operation} (${why}). ${whoInstead(access, refused)} Do not call it to find out; tell the person.`;
+  }
+  return undefined;
+}
+
+export function toolFor(spec: CommandSpec, commands: readonly CommandSpec[] = [], access?: CredentialAccess): Tool {
   const marked =
     spec.mcpEffect ?? (spec.readOnly ? "Read-only." : spec.destructive ? "Changes the instance; may delete or overwrite." : "Changes the instance.");
+  const refused = notForThisCredential(spec, access);
   return {
     name: toolName(spec)!,
-    description: mcpSpelling([spec.summary, spec.description, marked].filter(Boolean).join("\n"), spec, commands),
+    description: mcpSpelling([refused, spec.summary, spec.description, marked].filter(Boolean).join("\n"), spec, commands),
     inputSchema: inputSchema(spec, commands) as Tool["inputSchema"],
     annotations: {
       title: spec.summary,
@@ -224,12 +254,39 @@ function mcpIo(io: Io): Io {
 export function createMcpServer(io: Io, commands: CommandSpec[], updates: SessionUpdateOptions = {}): Server {
   const tools = commands.filter((c) => c.mcpTool);
   const byName = new Map(tools.map((c) => [toolName(c)!, c]));
-  const server = new Server({ name: "cavelon", version: KIT_VERSION }, { capabilities: { tools: {} }, instructions: mcpInstructions(commands) });
+  const server = new Server({ name: "cavelon", version: KIT_VERSION }, { capabilities: { tools: { listChanged: true } }, instructions: mcpInstructions(commands) });
   const notice = startSessionUpdateCheck(io, updates);
   // The tenants use_tenant chose: this server's alone, never the person's stored choice.
   const sessionTenants = new Map<string, SessionTenant>();
 
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: tools.map((t) => toolFor(t, commands)) }));
+  /**
+   * What the credential may do in this session's tenant, so the tool list
+   * marks what it may not. Bounded: the list never waits long for it, and
+   * without an instance, a token or an answer the tools are listed as they are.
+   */
+  async function credentialAccess(): Promise<CredentialAccess | undefined> {
+    const read = (async () => {
+      const ctx = createContext(mcpIo(io), { json: true, sessionTenants }, "mcp");
+      const session = await ctx.session();
+      if (!session.url || !session.token) return undefined;
+      return accessFor(await ctx.client());
+    })().catch(() => undefined);
+    let timer: NodeJS.Timeout | undefined;
+    const late = new Promise<undefined>((resolve) => {
+      timer = setTimeout(() => resolve(undefined), TOOL_LIST_ACCESS_MS);
+      timer.unref?.();
+    });
+    try {
+      return await Promise.race([read, late]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  server.setRequestHandler(ListToolsRequestSchema, async () => {
+    const access = await credentialAccess();
+    return { tools: tools.map((t) => toolFor(t, commands, access)) };
+  });
 
   /** The tool's `--json` document, or its error. */
   async function call(name: string, given: Record<string, unknown>): Promise<{ body: unknown; isError?: true }> {
@@ -278,6 +335,8 @@ export function createMcpServer(io: Io, commands: CommandSpec[], updates: Sessio
     // The lookup runs beside the tool; only the session's first call waits for it, and briefly.
     const warning = notice.forCall(() => server.getClientVersion()?.name);
     const { body, isError } = await call(request.params.name, (request.params.arguments ?? {}) as Record<string, unknown>);
+    // Another tenant may let the credential do other things: the client lists the tools again.
+    if (!isError && TENANT_CHOOSERS.has(request.params.name)) void server.sendToolListChanged().catch(() => undefined);
     let out = body;
     const text = await warning;
     if (text) {

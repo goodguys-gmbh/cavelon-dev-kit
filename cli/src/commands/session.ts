@@ -3,7 +3,7 @@ import { boolOption, positional, type CommandSpec, type Context } from "../comma
 import { compareContracts, Contracts, type Capabilities } from "../contracts.js";
 import { deleteToken, saveToken } from "../credentials.js";
 import { CavelonError, ExitCode, usageError } from "../errors.js";
-import { keyValues } from "../format.js";
+import { clip, keyValues } from "../format.js";
 import { callStable } from "../invoke.js";
 import { formatQuota, formatValue, limitRef, readLimits, readQuotas, type Limit, type PublishedLimits, type Quota } from "../limits.js";
 import { ApiClient, tokensDisabledError } from "../http.js";
@@ -19,6 +19,7 @@ import { cavelonCommand, fill } from "../printed.js";
 import { choicesOf, chooseTenant, commandLines, describeTenant, listsTenants, type Reach, noTenantError, tenantOpenError, tenantRef, tenantTitle } from "../tenant-choice.js";
 import { loadUserConfig, saveUserConfig, tokenKind, updateInstance, withTenantRefs } from "../user-config.js";
 import { checkKeyTenant } from "../acting.js";
+import { accessFor, accessOf, mayActivate, operationAccess, type CredentialAccess } from "../access.js";
 
 interface Me {
   id?: string;
@@ -382,8 +383,10 @@ export const whoami: CommandSpec = {
     }
     const listed = reach?.tenants.find((t) => t.id === contextTenant);
     const stored = session.settings.tenant_id === contextTenant ? session.settings : undefined;
-    let tenantName = listed?.name ?? membership?.tenant_name ?? stored?.tenant_name ?? null;
-    let tenantSlug = listed?.slug ?? membership?.tenant_slug ?? stored?.tenant_slug ?? null;
+    // A recent instance names the tenant the request acts in, an API key's own included.
+    const acting = principal?.tenant?.id === contextTenant ? principal.tenant : undefined;
+    let tenantName = acting?.name ?? listed?.name ?? membership?.tenant_name ?? stored?.tenant_name ?? null;
+    let tenantSlug = acting?.slug ?? listed?.slug ?? membership?.tenant_slug ?? stored?.tenant_slug ?? null;
     // A tenant named by id in cavelon.yaml or --tenant that is none of the person's memberships (an operator's): ask for it.
     if (contextTenant && (!tenantName || !tenantSlug)) {
       const described = await describeTenant(client, contextTenant);
@@ -399,6 +402,7 @@ export const whoami: CommandSpec = {
     }
     const expiry = expiryOf(principal, ctx.io.now());
     if (expiry.warning) ctx.warn(expiry.warning);
+    const access = accessOf(principal);
     const data = {
       instance: {
         url: session.url,
@@ -415,12 +419,18 @@ export const whoami: CommandSpec = {
         prefix: principal?.token?.prefix ?? principal?.api_key?.prefix ?? null,
         expires_at: expiry.expires_at,
         expires_in_days: expiry.days_left,
-        may_activate: principal?.token ? principal.token.may_activate : null,
+        // Null where the instance does not say (an API key on an older instance).
+        may_activate: mayActivate(access),
         // Null where the instance does not publish the token's permissions in the tenant.
         may_set_secrets: maySetSecrets(principal),
+        may_set_variables: maySetVariables(access),
         ceiling_role: principal?.token?.ceiling_role ?? null,
         platform_mode_allowed: principal?.token?.platform_mode_allowed ?? null,
         scopes: principal?.api_key?.scopes ?? null,
+        // What the routes accept from it where it acts; null where the instance does not publish it for this credential.
+        permissions: access?.permissions ?? null,
+        // The operations those permissions would allow that a person still runs; null on an instance that does not say.
+        needs_a_person: access?.complete ? access.needsAPerson : null,
         // False only when the instance is too old to say who the credential is.
         published: Boolean(principal),
       },
@@ -465,8 +475,12 @@ export const whoami: CommandSpec = {
         ["role", data.role ?? undefined],
         ["credential", `${session.tokenKind === "api_key" ? "tenant API key" : session.tokenKind === "personal_access_token" ? "personal access token" : "token"}${tokenName} from ${credentialSource(session)}`],
         ["expires", expires],
-        ["may activate", principal?.token ? (principal.token.may_activate ? "yes" : "no (a person activates in the Admin)") : undefined],
+        ["may activate", activateText(data.credential.may_activate, access)],
         ["may set secrets", secretsText(data.credential.may_set_secrets)],
+        ["may set variables", variablesText(data.credential.may_set_variables)],
+        ["scopes", data.credential.scopes ? data.credential.scopes.join(", ") || "none" : undefined],
+        ["permissions", permissionsText(access)],
+        ["needs a person", needsAPersonText(access)],
         // An instance that does not say whether the token allows Platform mode gets no line.
         ["platform mode", typeof principal?.token?.platform_mode_allowed === "boolean" ? platformModeText(principal.token) : undefined],
         ["reaches", reach ? reachText(reach) : undefined],
@@ -475,6 +489,41 @@ export const whoami: CommandSpec = {
     };
   },
 };
+
+/** The most permissions or operations a text line names; --json lists them all. */
+const LISTED = 12;
+
+function activateText(may: boolean | null, access: CredentialAccess | undefined): string | undefined {
+  if (may === null) return undefined;
+  if (may) return "yes";
+  return access?.principal.token && !access.principal.token.may_activate
+    ? "no (the token was created without \"may activate\"; a person activates in the Admin)"
+    : "no (a person whose role may activate does it, in the Admin)";
+}
+
+/** Whether the credential may set the tenant's plain-text variables; null where the instance does not say. */
+export function maySetVariables(access: CredentialAccess | undefined): boolean | null {
+  return operationAccess(access, "PUT /api/v1/variables/{name}").allowed;
+}
+
+function variablesText(may: boolean | null): string | undefined {
+  if (may === null) return undefined;
+  return may ? "yes" : "no (a tenant Owner sets them, in the Admin or with their own token)";
+}
+
+function permissionsText(access: CredentialAccess | undefined): string | undefined {
+  if (!access?.permissions) return access ? "not published for this credential by this instance" : undefined;
+  const all = access.permissions;
+  if (!all.length) return "none";
+  return `${all.slice(0, LISTED).join(", ")}${all.length > LISTED ? `, … ${all.length - LISTED} more (--json)` : ""}`;
+}
+
+function needsAPersonText(access: CredentialAccess | undefined): string | undefined {
+  if (!access?.complete || !access.needsAPerson.length) return undefined;
+  const all = access.needsAPerson;
+  const shown = all.slice(0, LISTED).map((o) => `\n  ${o.method} ${o.path}${o.reason ? ` (${clip(o.reason, 80)})` : ""}`);
+  return `${all.length} operation${all.length === 1 ? "" : "s"} a person runs, not this credential:${shown.join("")}${all.length > LISTED ? `\n  … ${all.length - LISTED} more (--json)` : ""}`;
+}
 
 function secretsText(may: boolean | null): string | undefined {
   if (may === null) return undefined;
@@ -655,6 +704,7 @@ export const status: CommandSpec = {
     let published: PublishedLimits | undefined;
     let reachError: string | undefined;
     let client: ApiClient | undefined;
+    let access: CredentialAccess | undefined;
     if (offline && session.url) {
       // Offline, the version is the one cached last, and says so. The
       // capabilities are cached per tenant, so the client names the tenant it
@@ -680,6 +730,15 @@ export const status: CommandSpec = {
           const described = stored?.tenant_name && stored.tenant_slug ? {} : await describeTenant(client, tenantId);
           shown.name = stored?.tenant_name ?? described.name ?? null;
           shown.slug = stored?.tenant_slug ?? described.slug ?? null;
+        }
+        access = await accessFor(client);
+        if (access && data.credential) {
+          Object.assign(data.credential as Record<string, unknown>, {
+            scopes: access.scopes,
+            permissions: access.permissions,
+            may_activate: mayActivate(access),
+            needs_a_person: access.complete ? access.needsAPerson.length : null,
+          });
         }
         const contracts = await ctx.contracts();
         // Read now, never from the cache: status is where a person checks which version the instance runs.
@@ -735,6 +794,8 @@ export const status: CommandSpec = {
     const lines: Array<[string, unknown]> = [
       ["instance", session.url ? `${session.url} (${session.urlSource})` : `none (\`${cavelonCommand("login", "--instance", fill("url"))}\`)`],
       ["credential", session.token ? `${session.tokenKind} from ${credentialSource(session)}` : "none"],
+      ["scopes", access?.scopes ? access.scopes.join(", ") || "none" : undefined],
+      ["permissions", permissionsText(access)],
       ["tenant", tenantText],
       ["solution", session.project ? session.project.file : "none (no cavelon.yaml here or above)"],
     ];

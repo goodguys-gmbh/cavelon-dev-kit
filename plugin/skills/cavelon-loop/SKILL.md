@@ -18,7 +18,16 @@ use it when you parse the result.
   deactivate; whether it is ready to
   activate, its latest test run), the last pull and the open previews.
   `cavelon whoami` says who the token acts as, when it expires, whether it may
-  enter Platform mode and which tenants it reaches.
+  enter Platform mode, which tenants it reaches, and what it may do there: its
+  permissions (an API key's scopes too), whether it may activate and set
+  variables, and the operations a person runs instead.
+- **Offer only what the credential may do.** Over MCP, a tool whose
+  description starts with "Not for this credential" is one the instance says
+  this token or key may not use in this tenant; `api_list` marks such
+  operations (`may_send: false`). Do not call them to find out: tell the
+  person who does it (the description says who), as for a secret. Where the
+  instance does not say (an older one), try, and a refusal names what the
+  credential lacks.
 - **Never handle a token.** If a command exits 7 (not authorised) or says no
   token, ask the person to run `cavelon login --instance <url>` themselves (in a
   terminal, or with a `!` prefix where your client offers one). Never ask them
@@ -28,7 +37,11 @@ use it when you parse the result.
   their terminal, `cavelon secrets set <name>` (as `apply` prints it, with its
   `--env` and `--tenant`). Never ask for the value, never pipe or pass one yourself; there is
   no MCP tool for it. Plain-text variables you may set with `cavelon variables
-  set <name> <value>` when the value is not a credential.
+  set <name> <value>` when the value is not a credential and your role may
+  manage the tenant's settings, as for a secret: a Builder's may not, and
+  `cavelon whoami` then says "may set variables: no". Then tell the person
+  that a tenant Owner sets it, in the Admin under Settings › Variables or with
+  their own token.
 - **Pass on an update warning.** The first MCP result of a session may warn
   that `cavelon`, the Cavelon plugin or this folder's skills are behind the
   latest release (`… is out; this is …`, `The Cavelon plugin is …`), with the

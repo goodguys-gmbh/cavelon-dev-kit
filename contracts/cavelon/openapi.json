@@ -13297,7 +13297,14 @@
             "title": "Values"
           },
           "tenant_quotas": {
-            "$ref": "#/components/schemas/TenantQuotasLink"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TenantQuotasLink"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -13360,6 +13367,16 @@
             ],
             "title": "Tenant Id"
           },
+          "tenant": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PrincipalActingTenant"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "mode": {
             "type": "string",
             "enum": [
@@ -13375,6 +13392,13 @@
             },
             "type": "array",
             "title": "Permissions"
+          },
+          "needs_a_person": {
+            "items": {
+              "$ref": "#/components/schemas/OperationNeedingAPerson"
+            },
+            "type": "array",
+            "title": "Needs A Person"
           },
           "tenants": {
             "items": {
@@ -13406,8 +13430,10 @@
           "token",
           "api_key",
           "tenant_id",
+          "tenant",
           "mode",
           "permissions",
+          "needs_a_person",
           "tenants",
           "reaches_all_tenants",
           "next_cursor"
@@ -14048,6 +14074,41 @@
         ],
         "title": "OperationError"
       },
+      "OperationNeedingAPerson": {
+        "properties": {
+          "operation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operation"
+          },
+          "method": {
+            "type": "string",
+            "title": "Method"
+          },
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "operation",
+          "method",
+          "path",
+          "reason"
+        ],
+        "title": "OperationNeedingAPerson"
+      },
       "OperationPage": {
         "properties": {
           "items": {
@@ -14391,6 +14452,30 @@
           "enabled"
         ],
         "title": "PersonalAssistantOverdriveRequest"
+      },
+      "PrincipalActingTenant": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "slug"
+        ],
+        "title": "PrincipalActingTenant"
       },
       "PrincipalApiKey": {
         "properties": {

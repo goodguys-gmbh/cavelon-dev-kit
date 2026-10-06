@@ -143,6 +143,8 @@ export async function callOperation(ctx: Context, client: ApiClient, doc: OpenAp
     const pathname = new URL(client.resolve(target)).pathname;
     throw await client.refusal(response.status, data, `${op.method} ${pathname}`, response.headers, {
       platform: args.sendTenant === false || isPlatformRoute(pathname),
+      method: op.method,
+      path: pathname,
     });
   }
   return { status: response.status, contentType, data: isText ? (text ? data : null) : undefined, bytes: isText ? undefined : bytes };

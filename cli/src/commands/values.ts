@@ -17,7 +17,7 @@ import { callStable, workflowOperation } from "../invoke.js";
 import { readAll } from "../io.js";
 import { schemaErrors } from "../openapi.js";
 import { readPrincipal } from "../principal.js";
-import { permissionsNamed, SECRETS_PERMISSIONS, secretsPermissionMissing } from "../secret-access.js";
+import { permissionsNamed, SECRETS_PERMISSIONS, secretsPermissionMissing, variablesPermissionMissing } from "../secret-access.js";
 import { readHidden } from "../prompt.js";
 import { readPackage } from "../package-files.js";
 import { requireToken, type Session } from "../session.js";
@@ -176,6 +176,7 @@ export const variablesSet: CommandSpec = {
   readOnly: false,
   idempotent: true,
   mcpTool: "variables_set",
+  operations: ["PUT /api/v1/variables/{name}"],
   positionals: [
     { name: "name", description: "The variable's name, as {{var:<name>}} uses it.", required: true },
     { name: "value", description: "The value (plain text, not a credential)." },
@@ -225,6 +226,8 @@ export const variablesSet: CommandSpec = {
     const saved = await callStable<Variable>(ctx, "PUT", "/api/v1/variables/{name}", "setting tenant variables", {
       params: { name: [name] },
       body: { value },
+    }).catch((error: unknown) => {
+      throw variablesRefusedForRole(error, "set", name, fromStdin ? undefined : value);
     });
     const changed = previous?.value !== saved.value;
     let text = `Variable ${saved.name} already had this value.`;
@@ -261,7 +264,7 @@ export const variablesDelete: CommandSpec = {
     try {
       await callStable(ctx, "DELETE", "/api/v1/variables/{name}", "deleting tenant variables", { params: { name: [name] } });
     } catch (error) {
-      if (!notFound(error)) throw error;
+      if (!notFound(error)) throw variablesRefusedForRole(error, "delete", name);
       return { data: { name, deleted: false, existed: false }, text: `This tenant has no variable "${name}"; nothing to delete.` };
     }
     return { data: { name, deleted: true, existed: true, value: current.value }, text: `Deleted variable ${name}.` };
@@ -303,6 +306,18 @@ function refusedForRole(error: unknown, verb: "set" | "delete", name: string): u
   const named = permissionsNamed(error.message);
   if (!named.length && error.code !== "forbidden") return error;
   return secretsPermissionMissing(verb, name, named.length ? named : SECRETS_PERMISSIONS);
+}
+
+/**
+ * The instance's 403 for a role that may not manage the tenant's settings
+ * (a Builder's), as who sets the variable instead, the way a secret's
+ * refusal says it; any other error as it is.
+ */
+function variablesRefusedForRole(error: unknown, verb: "set" | "delete", name: string, value?: string): unknown {
+  if (!(error instanceof CavelonError) || error.status !== 403) return error;
+  const named = permissionsNamed(error.message);
+  if (!named.length && error.code !== "forbidden") return error;
+  return variablesPermissionMissing(verb, name, named.length ? named : SECRETS_PERMISSIONS, value);
 }
 
 function withoutLineEnd(text: string): string {

@@ -219,7 +219,8 @@ runs.
     `cavelon activate` reads the solution's readiness checks and activates only
     when they pass; it prints each check and every warning. With a token that
     may activate, the agent runs it after you agree; otherwise you activate in
-    the Admin. A solution that a channel or an active trigger already reaches
+    the Admin, and the kit's hints and the MCP tool list say so instead of
+    suggesting the command. A solution that a channel or an active trigger already reaches
     goes live for them at once, so there `activate` previews what reaches it
     and activates only with the confirm command it prints. When the solution is not the tenant's default route,
     `activate` says so, and the agent asks you whether it should become the

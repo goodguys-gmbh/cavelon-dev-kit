@@ -168,7 +168,10 @@ the target tenant has not set yet. Setting a secret takes a role allowed to
 manage secrets, such as the tenant's Owner: a Builder's token cannot, and
 `cavelon whoami` says whether yours may ("may set secrets"). When it may not,
 `secrets set`, `activate` and `status` name who sets it instead: a tenant Owner,
-in the Admin under Settings › Secrets or with their own token.
+in the Admin under Settings › Secrets or with their own token. Setting a
+variable takes the same permission ("may set variables"): with a Builder's
+token `variables set` is refused and names who sets it, and `apply` says so
+under "needs variables".
 
 ## Database query tools
 

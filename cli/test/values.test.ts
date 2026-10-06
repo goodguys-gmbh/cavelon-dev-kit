@@ -270,6 +270,32 @@ describe("cavelon secrets", () => {
     }
   });
 
+  it("tells a role that may not set variables (a Builder's) who sets them, as for a secret", async () => {
+    const builder = sandbox();
+    try {
+      await login(builder, server.url, server.addToken({ kind: "pat", tenantIds: [tenant], defaultTenant: tenant, permissions: ["agents.edit", "agents.view", "settings.view"] }));
+      type Refusal = { error: { code: string; message: string; hint: string; details: Record<string, unknown> } };
+      const refused = await cli(builder, ["variables", "set", "crm_base_url", "https://crm.example.com", "--json"]);
+      expect(refused.code).toBe(7);
+      const error = refused.json<Refusal>().error;
+      expect(error).toMatchObject({ code: "permission_missing", details: { sent: true, permissions: ["settings.manage", "settings.secrets.manage"] } });
+      expect(error.message).toMatch(/^This credential may not set tenant variables: the instance refused it, as that needs settings\.manage or settings\.secrets\.manage\. Variable crm_base_url is unchanged\.$/);
+      expect(error.hint).toBe(
+        "A tenant Owner (or another role allowed to manage the tenant's settings) sets it, in the Admin under Settings › Variables or with their own token: `cavelon variables set crm_base_url https://crm.example.com`.",
+      );
+      expect(server.state.values.get(tenant)?.variables.has("crm_base_url")).toBeFalsy();
+      // A deletion is refused the same way; a value the hint would not repeat stays a placeholder.
+      await cli(sb, ["variables", "set", "crm_base_url", "https://crm.example.com"]);
+      const deletion = (await cli(builder, ["variables", "delete", "crm_base_url", "--confirm", "--json"])).json<Refusal>().error;
+      expect(deletion.message).toMatch(/^This credential may not delete tenant variables/);
+      expect(deletion.hint).toMatch(/: `cavelon variables set crm_base_url <value>`\.$/);
+      expect((await cli(builder, ["whoami", "--json"])).json<{ credential: { may_set_variables: boolean } }>().credential.may_set_variables).toBe(false);
+      expect((await cli(sb, ["whoami", "--json"])).json<{ credential: { may_set_variables: boolean } }>().credential.may_set_variables).toBe(true);
+    } finally {
+      builder.cleanup();
+    }
+  });
+
   it("sets a secret for a role the instance allows under a permission name the kit does not know", async () => {
     const renamed = sandbox();
     server.state.secretsPermissions = ["secrets.write"];
@@ -368,6 +394,22 @@ describe("apply names the variables and secrets the target still needs", () => {
       expect.objectContaining({ name: "crm_api_token", status: "set", declared: true, description: "Token of the CRM integration user" }),
       expect.objectContaining({ name: "crm_token", status: "set", declared: false }),
     ]);
+  });
+
+  it("tells a credential that may not set variables who sets them", async () => {
+    const dir = await solution();
+    declare(dir);
+    const builder = sandbox();
+    try {
+      await login(builder, server.url, server.addToken({ kind: "pat", tenantIds: [tenant], defaultTenant: tenant, permissions: ["agents.edit", "agents.view", "settings.view"] }));
+      const text = await cli(builder, ["apply"], { cwd: dir });
+      expect(text.code, text.stderr).toBe(0);
+      expect(text.stdout).toMatch(/needs variables:\s+- crm_base_url \(Base URL of the CRM API\): cavelon variables set crm_base_url <value>\n {2}\(this credential may not set variables\. A tenant Owner \(or another role allowed to manage the tenant's settings\) sets it/);
+      // One that may hears the command alone.
+      expect((await cli(sb, ["apply"], { cwd: dir })).stdout).not.toMatch(/may not set variables/);
+    } finally {
+      builder.cleanup();
+    }
   });
 
   it("pull and apply keep the package's declarations in the solution files, unchanged", async () => {
