@@ -162,6 +162,9 @@ describe("contract snapshots", () => {
     // /meta/principal publishes a credential's permissions and an API key's scopes.
     expect(schemas.MetaPrincipal!.properties).toHaveProperty("permissions");
     expect(Object.keys((schemas.PrincipalApiKey as unknown as { properties: object }).properties)).toContain("scopes");
+    // And, on a recent instance, the acting tenant and the operations a person runs instead.
+    expect(Object.keys((schemas.MetaPrincipal as unknown as { properties: object }).properties)).toEqual(expect.arrayContaining(["permissions", "tenant", "needs_a_person"]));
+    expect(Object.keys((schemas.OperationNeedingAPerson as unknown as { properties: object }).properties)).toEqual(["operation", "method", "path", "reason"]);
   });
 
   it("publishes the Processing Step cap with its use, and branch concurrency", () => {

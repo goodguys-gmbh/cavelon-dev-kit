@@ -185,6 +185,7 @@ export const modelsSetLimit: CommandSpec = {
   destructive: true,
   idempotent: true,
   mcpTool: "models_set_limit",
+  operations: ["PATCH /api/v1/model-registry/{model_registry_id}"],
   positionals: [
     { name: "model", description: "The row's model_id, id or display name (`cavelon models list`).", required: true },
     { name: "limit", description: "Requests the endpoint serves at once (a whole number), or none to clear the limit.", required: true },

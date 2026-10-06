@@ -36,6 +36,13 @@ stay off as recorded there. The same build also publishes other changes since
 the last refresh (an agent's reasoning effort, knowledge base defaults, the
 knowledge outcomes in the error catalog), which the snapshot now carries.
 
+Later on 2026-10-06 the OpenAPI was generated again, the same way, from an
+instance build whose `/meta/principal` publishes what a credential may really
+do: the acting `tenant` (id, name, slug) and `needs_a_person` (the operations
+the credential's permissions would allow that a person runs instead). Trimmed,
+it differs from the snapshot only there and in `MetaLimits.tenant_quotas`,
+which that build may leave out (null).
+
 The tests switch features on in the fake server where a command needs them
 (personal access tokens, the operations API, Sandboxes, Masterloop, archive
 uploads, the database connector); the snapshot keeps the defaults.

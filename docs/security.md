@@ -24,7 +24,11 @@ instance's token dialog recommends:
 | operating the platform itself | **Platform mode**, for platform operators only |
 
 Keep **May activate** off unless the token should put solutions live; without
-it, `cavelon activate` is refused and a person activates in the Admin. The
+it, `cavelon activate` is refused and a person activates in the Admin.
+`cavelon whoami` lists what the token may do in the tenant (its permissions,
+an API key's scopes, and the operations a person runs instead), and the MCP
+server marks the tools it may not use, so your agent does not learn it from
+refusals. The
 instance's page on personal access tokens explains each ceiling:
 `/docs/administration/personal-access-tokens` on your instance, or
 `cavelon docs get administration/personal-access-tokens`.

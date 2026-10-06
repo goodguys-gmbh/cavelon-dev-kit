@@ -1633,6 +1633,7 @@ cavelon api list [options]
 | `--method <method>` | Only this HTTP method (GET, POST, …). | yes |
 | `--tags` | List the tags with their operation counts instead. | yes |
 | `--limit <n>` | Return at most n operations (default 50, 0 for all). | yes |
+| `--usable` | Leave out the operations the instance says this credential may not send. | yes |
 | `--cursor <cursor>` | Continue after the previous page (its next_cursor). | yes |
 
 ### cavelon api describe

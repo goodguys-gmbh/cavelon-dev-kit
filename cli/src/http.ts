@@ -1,3 +1,4 @@
+import { accessFor, forbiddenHint, type RefusedCredential } from "./access.js";
 import { capacityCodeIn, capacityHint } from "./capacity.js";
 import { ceilingRefusal, LIMIT_ABOVE_CEILING } from "./limits.js";
 import { CavelonError, ExitCode, type ExitCodeValue } from "./errors.js";
@@ -190,7 +191,7 @@ export class ApiClient {
       const tenantless = options.sendTenant !== false && !this.headers(options)["X-Tenant-Id"] && Boolean(this.target.token?.startsWith("cvpat_"));
       const pathname = new URL(response.url || this.resolve(path)).pathname;
       const platform = options.sendTenant === false || isPlatformRoute(pathname);
-      throw await this.refusal(response.status, data, `${method} ${pathname}`, response.headers, { tenantless, platform });
+      throw await this.refusal(response.status, data, `${method} ${pathname}`, response.headers, { tenantless, platform, method, path: pathname });
     }
     return { status: response.status, headers: response.headers, data: data as T, text };
   }
@@ -226,6 +227,12 @@ export class ApiClient {
   async refusal(status: number, body: unknown, what: string, headers?: Headers, sent: RefusalContext = {}): Promise<CavelonError> {
     if (status === 401 && this.target.token?.startsWith("cvpat_") && (await this.personalAccessTokensOff())) {
       return tokensDisabledError(this.url);
+    }
+    if (status === 403 && sent.method && sent.path && this.target.token && !sent.platform && !sent.tenantless) {
+      const kind = this.target.token.startsWith("cbp_") ? "api_key" : this.target.token.startsWith("cvpat_") ? "personal_access_token" : undefined;
+      // What the credential may do, for a hint that names what it lacks; asked once per client, and only on a refusal.
+      const access = await accessFor(this).catch(() => undefined);
+      sent = { ...sent, credential: { kind, access, method: sent.method, path: sent.path } };
     }
     return errorFromResponse(status, body, what, headers, sent);
   }
@@ -310,6 +317,11 @@ export interface RefusalContext {
   tenantless?: boolean;
   /** A platform route (sent without a tenant, or one that manages tenants or the platform): the tenant is not the problem there. */
   platform?: boolean;
+  method?: string;
+  /** The path the refused request went to. */
+  path?: string;
+  /** Who was refused, for a 403's hint. */
+  credential?: RefusedCredential;
 }
 
 /**
@@ -416,7 +428,14 @@ export function errorFromResponse(status: number, body: unknown, what: string, h
           ? PLATFORM_ROUTE_HINT
           : sent.tenantless
             ? `No tenant was named. ${TENANT_ID_HINT} Otherwise check the token's permission ceiling.`
-            : `The token does not reach this. Check the tenant (\`${cavelonCommand("whoami")}\`) and the token's permission ceiling.`;
+            : sent.credential
+              ? undefined
+              : `The token does not reach this. Check the tenant (\`${cavelonCommand("whoami")}\`) and the token's permission ceiling.`;
+    if (!hint && sent.credential) {
+      const forbidden = forbiddenHint(message ?? "", sent.credential);
+      hint = forbidden.hint;
+      if (details === undefined) details = forbidden.details;
+    }
   }
   return new CavelonError(exitCode, {
     code: code ?? defaultCode(status),

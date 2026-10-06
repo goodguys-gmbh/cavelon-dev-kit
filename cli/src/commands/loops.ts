@@ -324,6 +324,7 @@ export const loopStart: CommandSpec = {
     "`wait <operation>`; `loop cancel <run>` stops it.",
   readOnly: false,
   mcpTool: "loop_start",
+  operations: ["POST /api/v1/triggers/{trigger_id}/run"],
   positionals: [{ name: "trigger", description: "Trigger slug, name or id.", required: true }],
   options: {
     input: { type: "string", value: "<json|@file|->", description: "The run's payload: JSON, @file.json or - for stdin." },
@@ -421,6 +422,7 @@ export const loopCancel: CommandSpec = {
   destructive: true,
   idempotent: true,
   mcpTool: "loop_cancel",
+  operations: ["POST /api/v1/triggers/runs/{run_id}/cancel"],
   positionals: [{ name: "run", description: "The trigger run id (from `loop start`).", required: true }],
   options: {
     confirm: { type: "boolean", mcpToken: true, description: "Stop the run; without it nothing is stopped." },
@@ -877,6 +879,7 @@ function controlCommand(action: "pause" | "resume"): CommandSpec {
         "the command); any other pause resumes without it. A pause that cannot be resumed is refused with what to do instead.",
     readOnly: false,
     mcpTool: `loop_${action}`,
+    operations: [`POST /api/v1/triggers/runs/{run_id}/loops/{loop_id}/${action}`],
     positionals: [{ name: "run", description: "The trigger run id.", required: true }],
     options: {
       loop: LOOP_OPTION,
@@ -1080,6 +1083,7 @@ export const triggerIdentity: CommandSpec = {
   destructive: true,
   idempotent: true,
   mcpTool: "trigger_identity",
+  operations: ["PUT /api/v1/triggers/{trigger_id}/execution-identity"],
   positionals: [
     { name: "trigger", description: "Trigger slug, name or id.", required: true },
     { name: "key", description: "The API key's name or id (never its value)." },

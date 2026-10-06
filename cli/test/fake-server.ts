@@ -139,6 +139,12 @@ export interface TokenInfo {
    */
   permissions?: string[];
   /**
+   * The operations /meta/principal lists in `needs_a_person` on a recent
+   * instance. By default a key's: setting or deleting a secret, and the
+   * import, whose handler admits only a person; none for a token.
+   */
+  needsAPerson?: Array<{ method: string; path: string; reason: string }>;
+  /**
    * An operator's token without a tenant allowlist: with X-Tenant-Id it enters
    * any tenant, and without one /meta/principal says it reaches every tenant
    * and searches them. `tenantIds` are then the person's own memberships.
@@ -373,6 +379,14 @@ export interface FakeState {
   /** Whether /meta/principal lists `permissions`; off is an older instance. */
   servePermissions: boolean;
   /**
+   * Whether /meta/principal publishes what it accepts from every kind of
+   * credential: `needs_a_person`, the acting `tenant`, a key's permissions
+   * from its scopes and `harnesses.activate` for a token that may activate.
+   * Off is an older instance, whose key permissions are the tenant admin's
+   * settings ones alone and whose tokens never carry `harnesses.activate`.
+   */
+  serveCredentialAccess: boolean;
+  /**
    * Whether /meta/principal answers a personal access token without a tenant
    * and lists the tenants it reaches, and /auth/me memberships carry
    * tenant_slug; off is an older instance, which refuses such a token there.
@@ -511,16 +525,61 @@ function tenantDetailOf(tenant: FakeState["tenants"][number]) {
   };
 }
 
+/** What a tenant role grants in a solution's lifecycle beyond the settings a published change names. */
+const WORKFLOW_PERMISSIONS = [
+  "agents.edit",
+  "agents.manage_llm_config",
+  "harnesses.manage",
+  "harnesses.view",
+  "knowledge_bases.manage_documents",
+  "knowledge_bases.view",
+  "playground.use",
+  "sandboxes.manage",
+  "sandboxes.write",
+  "settings.secrets.manage",
+  "triggers.manage",
+];
+
+/** What a `knowledge_base` key's routes let it pass, on a recent instance. */
+const KNOWLEDGE_BASE_KEY_PERMISSIONS = ["knowledge_bases.manage", "knowledge_bases.manage_documents", "knowledge_bases.view"];
+
+/** A tenant owner's permissions as the fake knows them; a recent instance adds `harnesses.activate`. */
+function ownerPermissions(recent: boolean): string[] {
+  return [...new Set([...tenantPermissions(), ...WORKFLOW_PERMISSIONS, ...(recent ? ["harnesses.activate"] : [])])].sort();
+}
+
 /** What /meta/principal publishes as the request's permissions. */
-function permissionsOf(info: TokenInfo, tenantId: string | undefined): string[] {
-  if (info.kind === "key") return (info.scopes ?? ["admin"]).includes("admin") ? ["limits.inference_budget.manage", "settings.manage", "settings.uploads.manage", "settings.view"] : [];
+function permissionsOf(info: TokenInfo, tenantId: string | undefined, recent: boolean): string[] {
+  if (info.kind === "key") {
+    const scopes = info.scopes ?? ["admin"];
+    if (!recent) return scopes.includes("admin") ? ["limits.inference_budget.manage", "settings.manage", "settings.uploads.manage", "settings.view"] : [];
+    if (info.permissions) return [...info.permissions].sort();
+    if (scopes.includes("admin")) return ownerPermissions(true);
+    return [...new Set([...(scopes.includes("knowledge_base") ? KNOWLEDGE_BASE_KEY_PERMISSIONS : []), ...scopes.filter((s) => s.includes("."))])].sort();
+  }
   if (info.permissions) return [...info.permissions].sort();
   if (!tenantId) {
     // A Platform-mode token carries its global role's permissions.
     const role = effectiveRole(info);
     return role === "platform_support" ? ["platform.maintenance"] : role ? ["limits.manage", "platform.maintenance", "tenants.manage"] : [];
   }
-  return tenantPermissions();
+  // A recent instance's token carries activation only when it was issued with may_activate.
+  return ownerPermissions(false).concat(recent && info.mayActivate ? ["harnesses.activate"] : []).sort();
+}
+
+/** What a recent instance's /meta/principal lists as the operations a person runs, not this credential. */
+function needsAPersonOf(info: TokenInfo): Array<{ operation: string | null; method: string; path: string; reason: string }> {
+  const listed =
+    info.needsAPerson ??
+    (info.kind === "key"
+      ? [
+          { method: "POST", path: "/api/v1/agent-graph/import", reason: "Runs only for a person: a dashboard session or a personal access token" },
+          { method: "DELETE", path: "/api/v1/secrets/{name}", reason: "Sets or deletes a secret value" },
+          { method: "PUT", path: "/api/v1/secrets/{name}", reason: "Sets or deletes a secret value" },
+        ]
+      : []);
+  const doc = JSON.parse(readContract("openapi.json")) as { paths: Record<string, Record<string, { operationId?: string }>> };
+  return listed.map((o) => ({ operation: doc.paths[o.path]?.[o.method.toLowerCase()]?.operationId ?? null, ...o }));
 }
 
 const opId = (kind: string, record: string) => `op_${kind}_${record.replace(/-/g, "")}`;
@@ -623,6 +682,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     tenantLimits: new Map(),
     inferenceBudgets: new Map(),
     servePermissions: true,
+    serveCredentialAccess: true,
     serveTenantReach: true,
     processingStepCaps: new Map(),
     processingStepsUsed: 0,
@@ -808,7 +868,16 @@ export async function startFakeServer(): Promise<FakeServer> {
         tenant_id: tenantId ?? null,
         // A token whose ceiling holds no platform role is answered in no mode, with no permission, as the instance does.
         mode: tenantId ? "tenant" : info.kind === "key" || (info.platform && effectiveRole(info)) ? "platform" : "none",
-        ...(state.servePermissions ? { permissions: permissionsOf(info, tenantId) } : {}),
+        ...(state.servePermissions ? { permissions: permissionsOf(info, tenantId, state.serveCredentialAccess) } : {}),
+        ...(state.serveCredentialAccess
+          ? {
+              tenant: (() => {
+                const t = tenantId ? state.tenants.find((x) => x.id === tenantId) : undefined;
+                return t ? { id: t.id, name: t.name, slug: t.slug } : null;
+              })(),
+              needs_a_person: needsAPersonOf(info),
+            }
+          : {}),
         ...(info.kind === "pat" && state.serveTenantReach ? reachOf(info, url.searchParams) : {}),
       });
     }
@@ -863,7 +932,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     if (tenantDetail && method === "GET") {
       const tenant = state.tenants.find((t) => t.id === tenantDetail[1]);
       const platformRead = info.platform && !tenantId;
-      if (!platformRead && (tenantId !== tenantDetail[1] || !permissionsOf(info, tenantId).includes("settings.view"))) {
+      if (!platformRead && (tenantId !== tenantDetail[1] || !permissionsOf(info, tenantId, state.serveCredentialAccess).includes("settings.view"))) {
         return send(res, 403, { detail: "Insufficient permissions" });
       }
       if (!tenant) return send(res, 404, { detail: "Tenant not found" });
@@ -1114,7 +1183,7 @@ export async function startFakeServer(): Promise<FakeServer> {
       const rest = p.slice(base.length + 1);
       if (rest.includes("/")) return send(res, 404, { detail: "Not Found" });
       return kind === "variables"
-        ? handleVariable(res, method, tid, decodeURIComponent(rest), body.json)
+        ? handleVariable(res, method, tid, decodeURIComponent(rest), body.json, info)
         : handleSecret(res, method, tid, decodeURIComponent(rest), body.json, info);
     }
     const caps = capabilitiesFor(tid) as { features?: Record<string, boolean> };
@@ -1633,7 +1702,7 @@ export async function startFakeServer(): Promise<FakeServer> {
   const badName = (res: http.ServerResponse) =>
     send(res, 422, { detail: [{ type: "string_pattern_mismatch", loc: ["path", "name"], msg: String.raw`String should match pattern '^[\w.\-]+$'` }], code: "request_invalid" });
 
-  function handleVariable(res: http.ServerResponse, method: string, tid: string, name: string, json: unknown) {
+  function handleVariable(res: http.ServerResponse, method: string, tid: string, name: string, json: unknown, info: TokenInfo) {
     const values = valuesFor(tid);
     if (!name) {
       if (method !== "GET") return send(res, 405, { detail: "Method Not Allowed" });
@@ -1644,6 +1713,10 @@ export async function startFakeServer(): Promise<FakeServer> {
     if (method === "GET") {
       const value = values.variables.get(name);
       return value === undefined ? send(res, 404, { detail: `Variable '${name}' is not set` }) : send(res, 200, { name, value, source: null });
+    }
+    // Like the instance, a variable is changed with the permissions a secret is: a Builder's role holds neither.
+    if ((method === "PUT" || method === "DELETE") && !permissionsOf(info, tid, true).some((p) => state.secretsPermissions.includes(p))) {
+      return send(res, 403, { detail: `Missing one of permissions: ${state.secretsPermissions.join(", ")}` });
     }
     if (method === "PUT") {
       const value = (json as { value?: unknown } | undefined)?.value;
@@ -1681,7 +1754,7 @@ export async function startFakeServer(): Promise<FakeServer> {
       });
     }
     // Like the instance, a role without either permission is refused, naming them.
-    if (!permissionsOf(info, tid).some((p) => state.secretsPermissions.includes(p))) {
+    if (!permissionsOf(info, tid, state.serveCredentialAccess).some((p) => state.secretsPermissions.includes(p))) {
       return send(res, 403, { detail: `Missing one of permissions: ${state.secretsPermissions.join(", ")}` });
     }
     if (method === "PUT") {

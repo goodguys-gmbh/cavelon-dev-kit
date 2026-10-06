@@ -108,16 +108,26 @@ cavelon whoami
 ```
 
 ```text
-instance:     https://cavelon.example.com (login)
-acting as:    Ada Lovelace <ada@example.com>
-tenant:       Acme Support (acme-support, 4f6174cf-3060-4ff1-bd3c-8a8e7999256b)
-tenant from:  `cavelon use`, for every folder without a cavelon.yaml (--tenant chooses another for one command)
-role:         tenant_admin
-credential:   personal access token "laptop" from login (credential store)
-expires:      2026-12-02T15:40:26.342Z (in 60 days)
-may activate: yes
-version:      v1.42.0
+instance:          https://cavelon.example.com (login)
+acting as:         Ada Lovelace <ada@example.com>
+tenant:            Acme Support (acme-support, 4f6174cf-3060-4ff1-bd3c-8a8e7999256b)
+tenant from:       `cavelon use`, for every folder without a cavelon.yaml (--tenant chooses another for one command)
+role:              tenant_admin
+credential:        personal access token "laptop" from login (credential store)
+expires:           2026-12-02T15:40:26.342Z (in 60 days)
+may activate:      yes
+may set secrets:   yes
+may set variables: yes
+permissions:       agents.edit, agents.view, harnesses.activate, harnesses.manage, harnesses.view, knowledge_bases.manage_documents, knowledge_bases.view, limits.view, playground.use, settings.manage, settings.secrets.manage, settings.view, … 9 more (--json)
+version:           v1.42.0
 ```
+
+`permissions` is what the instance accepts from this token in the tenant: its
+role there, capped by the token's ceiling. A tenant API key shows its
+`scopes` too, and the operations a person runs instead ("needs a person"). The
+kit offers and suggests only what these allow. An older instance publishes the
+permissions of a person's token only; for an API key there the kit says
+nothing up front and behaves as before.
 
 To work in another tenant later, run `cavelon use`: it shows the same list.
 `cavelon tenant list` shows each tenant's name, slug and id.

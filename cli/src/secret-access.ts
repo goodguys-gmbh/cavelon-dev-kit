@@ -1,6 +1,6 @@
 import { CavelonError, ExitCode } from "./errors.js";
 import type { MetaPrincipal } from "./principal.js";
-import { cavelonCommand } from "./printed.js";
+import { cavelonCommand, fill } from "./printed.js";
 
 /**
  * Who may set a tenant's secrets. The instance names the permissions only in
@@ -28,10 +28,32 @@ export function maySetSecrets(principal: MetaPrincipal | undefined): boolean | n
   return SECRETS_PERMISSIONS.some((p) => principal.permissions!.includes(p));
 }
 
-/** The permissions a refusal names ("Missing one of permissions: a, b"); empty when it names none. */
-export function permissionsNamed(message: string): string[] {
-  const at = /permissions?:\s*([\w.]+(?:\s*,\s*[\w.]+)*)/i.exec(message);
-  return at ? at[1]!.split(",").map((p) => p.trim()).filter(Boolean) : [];
+export { permissionsNamed } from "./access.js";
+
+/**
+ * Who sets a tenant variable when this credential cannot. The instance checks
+ * the same settings permissions for a variable as for a secret, which a
+ * Builder's role does not hold.
+ */
+export const VARIABLE_SETTER = "A tenant Owner (or another role allowed to manage the tenant's settings) sets it, in the Admin under Settings › Variables or with their own token";
+
+/** What a person whose credential may not set a variable does: who sets it instead, and the command they run. */
+export function variableSetterHint(name: string, value?: string): string {
+  // A long value stays out of the hint; the person has it.
+  const shown = value !== undefined && value.length <= 120 && !value.includes("\n") ? value : fill("value");
+  return `${VARIABLE_SETTER}: \`${cavelonCommand("variables", "set", name, shown)}\`.`;
+}
+
+/** The instance's refusal of a credential that may not set or delete variables, with who sets it instead. */
+export function variablesPermissionMissing(verb: "set" | "delete", name: string, permissions: string[], value?: string): CavelonError {
+  const needs = permissions.length ? permissions.join(" or ") : "a permission to manage the tenant's settings";
+  return new CavelonError(ExitCode.unauthorized, {
+    code: "permission_missing",
+    status: 403,
+    message: `This credential may not ${verb} tenant variables: the instance refused it, as that needs ${needs}. Variable ${name} is unchanged.`,
+    hint: variableSetterHint(name, value),
+    details: { name, permissions, sent: true },
+  });
 }
 
 /** What a person whose credential may not set it does: who sets it instead, and the command they run. */

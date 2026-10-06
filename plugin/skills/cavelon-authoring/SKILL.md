@@ -296,7 +296,11 @@ schema has them: `cavelon validate` reports an unknown section):
 - **Variables** are plain text that anyone who may view the tenant's settings
   reads. You may set one with `cavelon variables set <name> <value>` (the
   `variables_set` tool) when the value is not a credential and you know it;
-  ask the person otherwise. `cavelon variables list` shows them. A variable
+  ask the person otherwise. Setting one needs the permission a secret needs: a
+  Builder's role may not (`cavelon whoami` says "may set variables: no", and
+  `apply` says so under "needs variables"); then tell the person that a tenant
+  Owner sets it, in the Admin under Settings › Variables or with their own
+  token. `cavelon variables list` shows them. A variable
   is tenant-wide: replacing a value previews the old and the new one and
   changes nothing without `--confirm` (the `confirm_token` over MCP); every
   solution of the tenant reads it, active ones too, so show the person that

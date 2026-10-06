@@ -195,7 +195,7 @@ function harnessSlugAt(path: string, pkg: Record<string, unknown> | undefined, f
  * the fields cavelon has a command for (a solution's default route and its
  * status), that command.
  */
-export function notApplied(raw: unknown, pkg?: Record<string, unknown>, harness?: string): NotApplied[] {
+export function notApplied(raw: unknown, pkg?: Record<string, unknown>, harness?: string, mayActivate: boolean | null = null): NotApplied[] {
   if (!Array.isArray(raw)) return [];
   return raw
     .map((entry): NotApplied | undefined => {
@@ -210,7 +210,8 @@ export function notApplied(raw: unknown, pkg?: Record<string, unknown>, harness?
       const field = n.path.split(/[./]/).pop();
       const slug = harnessSlugAt(n.path, pkg, harness);
       if (field === "is_default") return { ...n, command: cavelonCommand("harness", "default", slug ?? "<solution>") };
-      if (field === "status") return { ...n, command: slug ? cavelonCommand("activate", "--harness", slug) : cavelonCommand("activate") };
+      // Where the credential may not activate, the instance's own words say how, not a command it would refuse.
+      if (field === "status") return mayActivate === false ? n : { ...n, command: slug ? cavelonCommand("activate", "--harness", slug) : cavelonCommand("activate") };
       return n;
     });
 }
