@@ -1850,7 +1850,7 @@ export const activate: CommandSpec = {
     if (ctx.mode === "mcp" && input.options.confirm === true) throw confirmTokenRequired("activate");
     const driven = drivenByAgent(ctx);
     if (driven?.by === "agent" && input.options.confirm === true) {
-      throw shellTokenRequired(cavelonCommand("activate", "--harness", ref, "--make-default"), driven.variable);
+      throw shellTokenRequired(cavelonCommand("activate", "--harness", ref, "--make-default"));
     }
     const client = await ctx.client();
     const principal = await readPrincipal(client);

@@ -82,7 +82,7 @@ export async function confirmation(ctx: Context, input: Input, tool: string, cha
       confirmed: false,
       fields: { confirm_token: token, token_required: true },
       confirm,
-      mismatch: `--confirm alone does not confirm when a coding agent runs cavelon (${driven.variable} is set). Nothing was changed: show the person this preview, and with their yes run the command below, which carries this change's token.`,
+      mismatch: `--confirm alone does not confirm when a coding agent runs cavelon. Nothing was changed: show the person this preview, and with their yes run the command below, which carries this change's token.`,
       exitCode: ExitCode.needsAction,
     };
   }
@@ -101,10 +101,10 @@ export async function confirmation(ctx: Context, input: Input, tool: string, cha
  * A bare `--confirm` in a coding agent's shell, where a command must refuse
  * it before it does anything (activate, whose activation would go ahead).
  */
-export function shellTokenRequired(command: string, variable: string): CavelonError {
+export function shellTokenRequired(command: string): CavelonError {
   return new CavelonError(ExitCode.needsAction, {
     code: "confirm_token_required",
-    message: `--confirm alone does not confirm when a coding agent runs cavelon (${variable} is set); nothing was changed.`,
+    message: "--confirm alone does not confirm when a coding agent runs cavelon; nothing was changed.",
     hint: `Run \`${command}\` without --confirm, show the person the preview, and with their yes run the command it prints, which carries the change's token.`,
   });
 }

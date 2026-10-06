@@ -73,7 +73,7 @@ describe("--confirm when a coding agent runs cavelon in its shell", () => {
 
     const bare = await cli(sb, ["limits", "set", "agent_max_turns", "40", "--confirm"], { env: AGENT });
     expect(bare.code).toBe(5);
-    expect(bare.stdout).toMatch(/--confirm alone does not confirm when a coding agent runs cavelon \(CLAUDECODE is set\)/);
+    expect(bare.stdout).toMatch(/--confirm alone does not confirm when a coding agent runs cavelon\. Nothing was changed/);
     const other = await cli(sb, ["limits", "set", "agent_max_turns", "41", "--confirm", shown.confirm_token, "--json"], { env: AGENT });
     expect(other.code).toBe(4);
     expect(other.json()).toMatchObject({ changed: false, token_mismatch: true });

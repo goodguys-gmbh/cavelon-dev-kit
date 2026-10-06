@@ -154,30 +154,41 @@ guards as the `api` tool:
 
 `cavelon` runs under a coding agent when one of these variables, which the
 agents set for the commands their shell tool runs, is set (and is not empty,
-`0` or `false`):
+`0` or `false`; `TERM_PROGRAM` only with the value shown):
 
 | Variable | Set by |
 |---|---|
 | `CLAUDECODE` | Claude Code |
-| `CODEX_THREAD_ID`, `CODEX_SANDBOX` | Codex (`CODEX_SANDBOX` only inside its macOS sandbox) |
+| `CODEX_THREAD_ID`, `CODEX_CI`, `CODEX_SANDBOX` | Codex (`CODEX_SANDBOX` only inside its macOS sandbox) |
 | `CURSOR_AGENT` | Cursor's agent terminal and `cursor-agent` |
-| `GEMINI_CLI` | Gemini CLI's shell tool |
+| `GEMINI_CLI` | Gemini CLI's shell tool and its `!` commands |
 | `COPILOT_CLI` | GitHub Copilot CLI |
 | `COPILOT_AGENT` | GitHub Copilot's agent terminals in VS Code |
+| `AGENT_CONTEXT_OUT` | Kiro CLI, while its agent runs the command |
+| `TERM_PROGRAM=kiro` | the Kiro IDE, in every terminal it opens |
+| `OPENCODE` | OpenCode, in every command it starts |
+| `GROK_AGENT` | Grok Build |
 | `AI_AGENT` | the shared variable newer agents set |
 | `CAVELON_AGENT=1` | you, for an agent that sets none of the above |
 
-Kiro documents no such variable: set `CAVELON_AGENT=1` in the environment
-its commands run in, if you can. The Claude Code extensions for VS Code and
-JetBrains set `CLAUDECODE` in their integrated terminals too, so `cavelon api`
-typed there is guarded; run it in another terminal. A person in a plain
-terminal is unaffected: `cavelon api` sends at once, takes any path and sends
+So every agent `cavelon setup` sets up is recognised by what it sets itself;
+`setup` has nothing to add to your shell. The Kiro IDE marks no terminal as
+its agent's, so `cavelon` takes every terminal of the Kiro IDE for one, as it
+does the integrated terminals of VS Code and JetBrains with the Claude Code
+extension (they set `CLAUDECODE`) and OpenCode's own terminals: what is meant
+for a person, such as `secrets set`, you run there in another terminal. A
+command you type with `!` in Claude Code, Codex or Gemini CLI runs in the
+agent's environment too. The variables are what the agents' current versions
+set; for an agent not listed here, set `CAVELON_AGENT=1` in the environment
+its commands run in. The MCP server needs none of them: everything that
+reaches `cavelon` over MCP is guarded. A person in a plain terminal is
+unaffected: `cavelon api` sends at once, takes any path and sends
 any field.
 
 The commands with a `--confirm` flag are held to the same as their MCP tools:
 `limits set`, `models set-limit`, `loop cancel`, `sandbox seed`,
 `trigger identity`, `harness default`, `activate --make-default`,
-`deactivate`, `kb upload --replace`, `variables delete` and `secrets delete`.
+`deactivate`, `kb upload --replace` and `variables delete`.
 Run under a coding agent, each prints its preview with a confirm token and
 the command that confirms exactly that change (`--confirm <token>`, the same token the MCP
 tool returns). A bare `--confirm` changes nothing: it shows the preview and
@@ -187,6 +198,14 @@ the stop command of a running loop, a hint) names the token it needs:
 `--confirm <confirm_token of its preview>`.
 A token of another change exits 4. In your own terminal the plain flag
 confirms, as before; a token given there is checked too.
+
+`secrets set` and `secrets delete` are refused under a coding agent, with or
+without `--confirm`, before a value is read or anything is sent
+(`operation_for_a_person`, exit 5), as `cavelon api` refuses the same
+operations. You run them in your own terminal.
+
+A refusal says who runs the command instead, never which variable made
+`cavelon` take the shell for an agent's.
 
 These guards keep an agent from doing by mistake what is meant for a person;
 they are not a boundary. An agent that unsets the variable, or calls the API

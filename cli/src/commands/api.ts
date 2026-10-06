@@ -126,7 +126,7 @@ function parseParams(input: Input): Record<string, string[]> {
 const FOR_A_PERSON: Array<{ does: string; hint: string; match(word: string): boolean }> = [
   {
     does: "changes a secret",
-    hint: "A person sets a secret in their terminal with `cavelon secrets set <name>` (or deletes it with `cavelon secrets delete <name>`).",
+    hint: "A person sets a secret in their own terminal with `cavelon secrets set <name>` (or deletes it with `cavelon secrets delete <name>`).",
     match: (word) => word.includes("secret"),
   },
   {
@@ -163,7 +163,7 @@ export function keptForPerson(op: Operation, all: Operation[]): KeptForPerson | 
   if (all.some((o) => o.personOnly)) {
     if (!op.personOnly?.marked) return undefined;
     // The path's words only pick the most useful hint; the marker decided.
-    const hint = byPathWords(op)?.hint ?? `A person runs it: in Cavelon, or in their terminal with \`cavelon api ${op.alias}\`.`;
+    const hint = byPathWords(op)?.hint ?? `A person runs it: in Cavelon, or in their own terminal with \`cavelon api ${op.alias}\`.`;
     return { source: "instance", ...(op.personOnly.reason ? { reason: op.personOnly.reason } : {}), hint };
   }
   if (op.readOnly) return undefined;
@@ -171,16 +171,13 @@ export function keptForPerson(op: Operation, all: Operation[]): KeptForPerson | 
   return rule ? { source: "kit", reason: rule.does, hint: rule.hint } : undefined;
 }
 
-/** Who does not send it, for a refusal: no MCP tool, or `cavelon api` in an agent's shell. */
+/**
+ * Who does not send it, for a refusal: no MCP tool, or `cavelon api` in an
+ * agent's shell. It never names what tells an agent from a person, which
+ * would tell the agent how to get past the guard; the hint says who runs it.
+ */
 function notSentBy(driven: DrivenBy): string {
-  return driven.by === "mcp"
-    ? "no tool sends it, with or without confirm."
-    : `cavelon api does not send it when a coding agent runs it (${driven.variable} is set), with or without --confirm.`;
-}
-
-/** How a person runs it instead, after the refusal's own hint, in an agent's shell. */
-function personHint(hint: string, driven: DrivenBy): string {
-  return driven.by === "mcp" ? hint : `${hint} A person's own terminal is not guarded: it does not set ${driven.variable}.`;
+  return driven.by === "mcp" ? "no tool sends it, with or without confirm." : "cavelon api does not send it when a coding agent runs it, with or without --confirm.";
 }
 
 function refusal(op: Operation, kept: KeptForPerson, driven: DrivenBy): string {
@@ -211,10 +208,7 @@ function secretRefusal(op: Operation, fields: string[], driven: DrivenBy): Cavel
     message:
       `The request to ${op.alias} sets ${named}, which the instance marks as a secret value (x-cavelon-secret); ` +
       `a person enters secret values, so ${notSentBy(driven)}`,
-    hint: personHint(
-      `A person sets a secret value in their terminal with \`${cavelonCommand("secrets", "set", fill("name"))}\`, or enters it in the Admin. Leave the field out to send the rest.`,
-      driven,
-    ),
+    hint: `A person sets a secret value in their own terminal with \`${cavelonCommand("secrets", "set", fill("name"))}\`, or enters it in the Admin. Leave the field out to send the rest.`,
     details: { fields },
   });
 }
@@ -266,7 +260,7 @@ export const api: CommandSpec = {
     "--json <body> still works for now but is deprecated: --json alone prints JSON, as on every command.\n" +
     "The body is checked against the operation's schema before it is sent.\n" +
     "As an MCP tool, or run by a coding agent (" +
-    AGENT_VARIABLES.filter((v) => v.variable !== "CAVELON_AGENT").map((v) => v.variable).join(", ") +
+    AGENT_VARIABLES.filter((v) => v.variable !== "CAVELON_AGENT").map((v) => (v.value ? `${v.variable}=${v.value}` : v.variable)).join(", ") +
     "\nor CAVELON_AGENT=1 is set), an operation that changes something returns what it would send and a confirm token,\n" +
     "and sends it only with that token: --confirm <token>, or confirm: \"<token>\" as an MCP tool. A changed request\n" +
     "needs a new preview; confirm: true is refused.\n" +
@@ -331,8 +325,8 @@ export const api: CommandSpec = {
         throw new CavelonError(ExitCode.needsAction, {
           code: "operation_for_a_person",
           message: refusal(op, kept, driven),
-          hint: personHint(kept.hint, driven),
-          details: { source: kept.source, ...(kept.reason ? { reason: kept.reason } : {}), ...(driven.by === "agent" ? { agent_variable: driven.variable } : {}) },
+          hint: kept.hint,
+          details: { source: kept.source, ...(kept.reason ? { reason: kept.reason } : {}) },
         });
       }
       const secrets = secretsIn(doc, op, args);
@@ -392,7 +386,7 @@ async function previewUnlessConfirmed(
   const shown = { operation: op.alias, ...request, ...(files.length ? { files } : {}), sent: false };
   const lines = [`Would send ${request.method} ${request.path}. Nothing was sent.`];
   if (stale) lines.push("The confirm token is not this request's: the request changed since its preview, or the token is another one's.");
-  if (bare && driven.by === "agent") lines.push(`--confirm alone does not send it when a coding agent runs cavelon (${driven.variable} is set).`);
+  if (bare && driven.by === "agent") lines.push("--confirm alone does not send it when a coding agent runs cavelon.");
   if (Object.keys(request.query).length) lines.push(`Query: ${JSON.stringify(request.query)}`);
   if (Object.keys(request.headers).length) lines.push(`Headers: ${JSON.stringify(request.headers)}`);
   if (request.body !== null) lines.push("Body:", JSON.stringify(request.body, null, 2));

@@ -2,6 +2,7 @@ import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "n
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { parse } from "yaml";
+import { AGENT_VARIABLES } from "../src/agent-env.js";
 import { COMMANDS } from "../src/commands/index.js";
 import { startFakeServer, type FakeServer } from "./fake-server.js";
 import { cli, login, sandbox, type Sandbox } from "./helpers.js";
@@ -196,6 +197,45 @@ describe("cavelon secrets", () => {
     expect(server.state.requests.some((r) => r.method === "DELETE" || r.method === "PUT")).toBe(false);
     // `cavelon explain` knows the instance's code.
     expect((await cli(keySb, ["explain", "secret_needs_a_person"])).stdout).toMatch(/A tenant API key cannot set or delete a secret value/);
+  });
+
+  describe("run by a coding agent in its shell", () => {
+    type Refusal = { error: { code: string; message: string; hint: string; details: Record<string, unknown> } };
+
+    it.each(AGENT_VARIABLES.map((v) => [v.variable, v.agent, v.value]))("refuses set and delete under %s (%s) before reading or sending anything", async (variable, _agent, value) => {
+      await cli(sb, ["secrets", "set", "crm_api_token"], { stdin: SECRET });
+      server.state.requests.length = 0;
+      const env = { [variable]: value ?? "1" };
+      const set = await cli(sb, ["secrets", "set", "crm_api_token", "--json"], { stdin: "agent-value", env });
+      expect(set.code).toBe(5);
+      expect(set.json<Refusal>().error).toEqual({
+        code: "operation_for_a_person",
+        message: "Setting a secret's value stays with a person, so cavelon does not do it when a coding agent runs it; nothing was sent.",
+        hint: "A person runs this in their own terminal: `cavelon secrets set crm_api_token`, or does it in the Admin.",
+        details: { sent: false },
+        exit_code: 5,
+      });
+      for (const extra of [[], ["--confirm"], ["--confirm", "0123456789ab"]]) {
+        const deleted = await cli(sb, ["secrets", "delete", "crm_api_token", ...extra, "--json"], { env });
+        expect(deleted.code).toBe(5);
+        expect(deleted.json<Refusal>().error).toMatchObject({
+          code: "operation_for_a_person",
+          message: expect.stringMatching(/^Deleting a secret's value stays with a person/),
+          hint: "A person runs this in their own terminal: `cavelon secrets delete crm_api_token`, or does it in the Admin.",
+        });
+        // The refusal says who runs it, never what tells an agent from a person.
+        expect(deleted.stdout + deleted.stderr).not.toContain(variable);
+      }
+      expect(set.stdout + set.stderr).not.toContain(variable);
+      expect(secretRequests()).toEqual([]);
+      expect(stored("crm_api_token")).toBe(SECRET);
+    });
+
+    it("a variable set to 0 or false is a person's terminal", async () => {
+      const set = await cli(sb, ["secrets", "set", "crm_api_token"], { stdin: SECRET, env: { CAVELON_AGENT: "0", CLAUDECODE: "false" } });
+      expect(set.code, set.stderr).toBe(0);
+      expect(stored("crm_api_token")).toBe(SECRET);
+    });
   });
 
   it("tells a role the instance refuses who sets secrets, and leaves the decision to the instance", async () => {

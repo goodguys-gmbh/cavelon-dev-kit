@@ -9,6 +9,25 @@ CLI, the skills and the plugin.
 
 ### Fixed
 
+- `secrets set` and `secrets delete` had no agent check: in a coding agent's
+  shell, `echo v | cavelon secrets set NAME` sent the value, while
+  `cavelon api` refused the same call as for a person only. Both are now
+  refused there with `operation_for_a_person` (exit 5), with or without
+  `--confirm`, before a value is read or anything is sent (#135).
+- `cavelon` did not recognise Kiro's shell, although `cavelon setup` sets
+  Kiro up, so there a bare `--confirm` confirmed and `cavelon api` sent
+  operations kept for a person. It now recognises the Kiro CLI
+  (`AGENT_CONTEXT_OUT`, set only while its agent runs a command) and the Kiro
+  IDE (`TERM_PROGRAM=kiro`, which the IDE sets in every terminal it opens, so
+  each of them is guarded), as well as OpenCode (`OPENCODE`), Grok Build
+  (`GROK_AGENT`) and Codex's `CODEX_CI`. Every agent `setup` supports is now
+  recognised from what it sets itself, checked by a test for each (#135).
+- A refusal under a coding agent named the variable that made `cavelon` take
+  the shell for an agent's ("A person's own terminal is not guarded: it does
+  not set CLAUDECODE"), which told the agent how to get past the guard.
+  Refusals now say that a person runs the command in their own terminal, and
+  `operation_for_a_person` no longer carries `agent_variable` (#135).
+
 - The docs index the instance lists depends on who asks (a platform operator
   in Platform mode also gets the platform pages), but `cavelon` cached one copy
   per instance version for every token on the machine, so whichever token read
