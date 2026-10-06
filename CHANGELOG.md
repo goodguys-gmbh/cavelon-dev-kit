@@ -18,6 +18,19 @@ CLI, the skills and the plugin.
   operator's. The index is now cached per audience, as `llms.<hash>.txt`, the
   hash a SHA-256 prefix of the token and the tenant it is sent with, never the
   token itself (#130).
+- The capabilities carry one tenant's published limits, but `cavelon` cached
+  them once per instance version, so offline `validate` checked tenant B's
+  package against the limits of whichever tenant was read last (for example,
+  `branches_run_in_sequence` for a tenant whose fan-outs run in parallel).
+  They are now cached once per tenant, as `capabilities.<hash>.json`, the hash
+  a SHA-256 prefix of the tenant (of the token's audience for a token that
+  sends none), and `status --offline` reads the copy of its own tenant. The
+  OpenAPI, error catalog and package schema are the same for every tenant and
+  stay shared (#130).
+- The contracts cache was readable to every user on the machine (files `0644`,
+  folders `0755`) although it names the instance and its tenants and holds
+  their limits. Every file is now written `0600` in `0700` folders, and a
+  folder an earlier version left open is narrowed on the next write (#130).
 
 ## [0.1.10] - 2026-10-05
 

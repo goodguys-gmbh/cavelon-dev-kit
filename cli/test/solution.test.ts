@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { parse, stringify } from "yaml";
@@ -926,6 +926,39 @@ describe("validate", () => {
     const explained = await cli(sb, ["explain", "branches_run_in_sequence"], { cwd: dir });
     expect(explained.stdout).toMatch(/cavelon limits --key orchestration_parallel_branches/);
     server.state.tenantFlags.clear();
+  });
+
+  it("validates offline against its own tenant's limits, whichever tenant read them last", async () => {
+    const other = server.addTenant("initech", "Initech");
+    const env = { CAVELON_URL: server.url, CAVELON_TOKEN: server.addToken({ kind: "pat", tenantIds: [tenant, other], defaultTenant: tenant }) };
+    const dirA = await initSolution();
+    expect((await cli(sb, ["pull"], { cwd: dirA, env })).code).toBe(0);
+    writeFileSync(
+      path.join(dirA, "package", "registry_entities.yaml"),
+      ["orchestration_nodes:", "  - slug: review-sections", "    node_type: for_each_item", "    harness_slug: support", "    config:", "      source: $.sections", "      mode: map", "      max_concurrency: 4", ""].join("\n"),
+    );
+    // The same solution for a second tenant, which runs fan-outs in sequence.
+    const dirB = folder();
+    cpSync(dirA, dirB, { recursive: true });
+    writeFileSync(path.join(dirB, "cavelon.yaml"), read(path.join(dirB, "cavelon.yaml")).replace(/^tenant:.*/m, `tenant: ${other}`));
+    server.state.tenantFlags.set(other, new Map([["ORCHESTRATION_PARALLEL_FANOUT_ENABLED", false]]));
+    const sequential = async (dir: string) => {
+      const result = await cli(sb, ["validate", "--offline", "--json"], { cwd: dir, env });
+      expect(result.code, result.stdout).toBe(0);
+      return result.json<{ findings: Array<{ code: string }> }>().findings.some((f) => f.code === "branches_run_in_sequence");
+    };
+    try {
+      for (const last of [dirA, dirB]) {
+        const first = last === dirA ? dirB : dirA;
+        const readFirst = await cli(sb, ["limits"], { cwd: first, env });
+        expect(readFirst.code, readFirst.stderr).toBe(0);
+        expect((await cli(sb, ["limits"], { cwd: last, env })).code).toBe(0);
+        expect(await sequential(dirA), `tenant A after ${last === dirA ? "A" : "B"} read last`).toBe(false);
+        expect(await sequential(dirB), `tenant B after ${last === dirA ? "A" : "B"} read last`).toBe(true);
+      }
+    } finally {
+      server.state.tenantFlags.clear();
+    }
   });
 
   it("finds broken references, unknown fields and unknown models offline, one finding each with file and line", async () => {

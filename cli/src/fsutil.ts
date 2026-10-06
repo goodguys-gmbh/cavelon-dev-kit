@@ -49,3 +49,22 @@ export async function writeFileAtomic(file: string, content: string, mode = 0o64
   if (existing !== undefined) await fs.chmod(tmp, existing & mode).catch(() => undefined);
   await fs.rename(tmp, file);
 }
+
+/**
+ * Write a file only its owner may read (0600) in folders only its owner may
+ * enter (0700), from `base` down. `mkdir` gives its mode only to a folder it
+ * creates, so a folder an earlier version left 0755 is narrowed here, on the
+ * next write; owner bits stay as they are. Where the file system has no such
+ * modes (Windows), nothing changes.
+ */
+export async function writePrivateFile(base: string, file: string, content: string): Promise<void> {
+  await writeFileAtomic(file, content, 0o600, 0o700);
+  const root = path.resolve(base);
+  for (let dir = path.dirname(path.resolve(file)); ; dir = path.dirname(dir)) {
+    const rel = path.relative(root, dir);
+    if (rel === ".." || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) break;
+    const mode = await fs.stat(dir).then((st) => st.mode & 0o777, () => undefined);
+    if (mode !== undefined && mode & 0o077) await fs.chmod(dir, mode & 0o700).catch(() => undefined);
+    if (rel === "") break;
+  }
+}

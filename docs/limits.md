@@ -56,7 +56,8 @@ their requests and let the instance decide.
 - **`validate`** warns when a fan-out or Map loop asks for more parallel
   branches than the instance runs per node (`branch_width_capped`), or when the
   tenant runs branches one after another (`branches_run_in_sequence`). It reads
-  the limits cached by an earlier command, so it stays offline.
+  the limits an earlier command cached for the same tenant, so it stays
+  offline; each tenant's limits are cached apart.
 
 ## Who may change what
 

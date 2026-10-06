@@ -513,7 +513,7 @@ export const validate: CommandSpec = {
     "changes, so its copy is read again after a minute (CAVELON_CONTRACT_TTL_SECONDS), or checked with the ETag the instance\n" +
     "sent with it; --verbose says which copy was used.\n" +
     "Warns (never fails) when a fan-out or Map loop's max_concurrency is above the instance's branch width, and when the\n" +
-    "tenant runs fan-outs and Map loops in sequence, from the limits the instance last published.\n" +
+    "tenant runs fan-outs and Map loops in sequence, from the limits the instance last published for the tenant.\n" +
     "References to skills, tools, knowledge bases, solutions and models outside the package are checked against the tenant's\n" +
     "lists in .cavelon/inventory.json (pull, models list); a list no command has read yet is read now, unless --offline, and a\n" +
     "check that cannot be made is named (`skipped` in --json). A reference that is in neither is a warning, as it may be created\n" +

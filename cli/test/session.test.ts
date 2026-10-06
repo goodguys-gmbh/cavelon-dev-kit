@@ -1,4 +1,4 @@
-import { statSync, readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from "node:fs";
+import { chmodSync, statSync, readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { setKeyringFactoryForTests, type KeyringEntry } from "../src/credentials.js";
@@ -38,9 +38,31 @@ describe("login", () => {
     expect(readFileSync(credentials, "utf8")).toContain(token);
     expect(readFileSync(path.join(sb.env.CAVELON_CONFIG_DIR!, "config.json"), "utf8")).not.toContain(token);
     expect(result.stdout + result.stderr).not.toContain(token);
-    // The contracts were cached per instance and version.
+    // The contracts were cached per instance and version, the capabilities per tenant.
     const cached = readdirSync(path.join(sb.env.CAVELON_CACHE_DIR!, instanceKey(server.url), "v0.0.0-dev"));
-    expect(cached).toEqual(expect.arrayContaining(["capabilities.json", "openapi.json", "error-catalog.json"]));
+    expect(cached).toEqual(expect.arrayContaining(["openapi.json", "error-catalog.json"]));
+    expect(cached.filter((f) => /^capabilities\.[0-9a-f]{16}\.json$/.test(f))).toHaveLength(1);
+  });
+
+  it.skipIf(process.platform === "win32")("keeps the contracts cache for its owner only, and narrows the folders an earlier version left open", async () => {
+    const cache = sb.env.CAVELON_CACHE_DIR!;
+    const versionDir = path.join(cache, instanceKey(server.url), "v0.0.0-dev");
+    // What an earlier version left: folders 0755, files 0644.
+    mkdirSync(versionDir, { recursive: true, mode: 0o755 });
+    for (const dir of [cache, path.dirname(versionDir), versionDir]) chmodSync(dir, 0o755);
+    const state = path.join(path.dirname(versionDir), "state.json");
+    writeFileSync(state, JSON.stringify({ version: "v0.0.0-dev", checked_at: "2000-01-01T00:00:00.000Z" }), { mode: 0o644 });
+    writeFileSync(path.join(versionDir, "capabilities.json"), "{}", { mode: 0o644 });
+    const token = server.addToken({ kind: "pat", tenantIds: [tenantA], defaultTenant: tenantA });
+    expect((await cli(sb, ["login", "--instance", server.url, "--token-stdin"], { stdin: `${token}\n` })).code).toBe(0);
+    expect((await cli(sb, ["docs", "search", "capacity"])).code).toBe(0);
+
+    const entries = readdirSync(cache, { recursive: true }).map((f) => path.join(cache, String(f)));
+    const written = entries.filter((f) => statSync(f).isFile() && f !== path.join(versionDir, "capabilities.json"));
+    expect(written.map((f) => path.basename(f))).toEqual(expect.arrayContaining(["state.json", "openapi.json", "error-catalog.json"]));
+    expect(written.some((f) => /llms\.[0-9a-f]{16}\.txt$/.test(f))).toBe(true);
+    for (const file of written) expect({ file, mode: statSync(file).mode & 0o777 }).toEqual({ file, mode: 0o600 });
+    for (const dir of [cache, ...entries.filter((f) => statSync(f).isDirectory())]) expect({ dir, mode: statSync(dir).mode & 0o777 }).toEqual({ dir, mode: 0o700 });
   });
 
   it("says the token is refused, not that the tenant is unknown", async () => {
