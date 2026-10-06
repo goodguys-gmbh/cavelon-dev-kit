@@ -96,16 +96,19 @@ provider may process what the agent reads, under your agreement with it.
 activate** for day-to-day work, so the agent can build and test but a person
 activates. Over MCP, `cavelon` limits it further:
 
-- `apply` imports only with the id of a preview, and `limits_set`,
-  `models_set_limit`, `loop_cancel`, `sandbox_seed`, `trigger_identity`,
-  `harness_default`, `activate` with `make_default`, `kb_upload` where it
-  would deactivate documents, and `api` (for any operation that is not
-  read-only) change nothing without the `confirm_token` their preview
-  returned. The token is a hash of the change the preview showed, the tool,
+- `apply` imports only with the id of a preview, and `tenant_create`,
+  `variables_set` where it replaces another value, `loop_start`,
+  `limits_set`, `models_set_limit`, `loop_cancel`, `sandbox_seed`,
+  `trigger_identity`, `harness_default`, `activate` of a solution a channel
+  or an active trigger reaches or with `make_default`, `deactivate`,
+  `kb_upload` where it would deactivate documents, and `api` (for any
+  operation that is not read-only) change nothing without the
+  `confirm_token` their preview returned. The token is a hash of the change the preview showed, the tool,
   the tenant and the instance, so the agent cannot skip the preview or
   confirm another change than the one it showed; `confirm: true` is refused.
   The other changing tools act at once; the
-  [MCP page](mcp.md#how-agents-use-it) lists which they are. The Cavelon
+  [table below](#every-changing-command-and-its-guard) lists every changing
+  command and its guard. The Cavelon
   skills tell the agent to show you any preview that reaches an active
   solution or production first.
 - `api` refuses, even with `confirm`, an operation the instance keeps for a
@@ -186,13 +189,15 @@ unaffected: `cavelon api` sends at once, takes any path and sends
 any field.
 
 The commands with a `--confirm` flag are held to the same as their MCP tools:
+`tenant create`, `variables set` (replacing a value), `loop start`,
 `limits set`, `models set-limit`, `loop cancel`, `sandbox seed`,
-`trigger identity`, `harness default`, `activate --make-default`,
-`deactivate`, `kb upload --replace` and `variables delete`.
+`trigger identity`, `harness default`, `activate` (of a solution a channel
+or trigger reaches, or with `--make-default`), `deactivate`,
+`kb upload --replace` and `variables delete`.
 Run under a coding agent, each prints its preview with a confirm token and
 the command that confirms exactly that change (`--confirm <token>`, the same token the MCP
 tool returns). A bare `--confirm` changes nothing: it shows the preview and
-exits 5, and `activate --make-default --confirm` refuses before it activates.
+exits 5, and `activate --confirm` refuses before it activates.
 A confirm line printed before its preview exists (`activate`'s default route,
 the stop command of a running loop, a hint) names the token it needs:
 `--confirm <confirm_token of its preview>`.
@@ -212,6 +217,47 @@ they are not a boundary. An agent that unsets the variable, or calls the API
 some other way, has whatever your shell and the token allow it. Your agent
 client's permission settings decide what it may run, and the instance enforces
 the token's role and ceiling on every request.
+
+### Every changing command and its guard
+
+Every command that changes something, on the instance or on your machine, and
+what holds it back. **Preview** means: without `--confirm` the command shows
+what it would do and changes nothing; with `--confirm` it does it. Under a
+coding agent and over MCP, only the `confirm_token` of that very preview
+confirms (see above). The rule of the Cavelon skills stays: an agent confirms
+on its own only for a draft solution in a test environment, and shows you
+every other preview first.
+
+| Command | MCP tool | What it changes | Guard |
+|---|---|---|---|
+| `tenant create` | `tenant_create` | adds a tenant to the platform (Platform mode) | preview, always |
+| `variables set` | `variables_set` | a tenant-wide `{{var:…}}` value every solution reads | preview when it replaces another value; a new variable is created at once |
+| `variables delete` | none | removes a tenant variable | preview, always |
+| `secrets set` | none | a secret's value | a person only: refused under a coding agent; the value is read from a terminal or stdin |
+| `secrets delete` | none | removes a secret's value | a person only, and a preview |
+| `loop start` | `loop_start` | starts a run that acts as you and spends budget | preview, always (an agent may confirm a trigger of a draft solution in a test environment) |
+| `loop cancel` | `loop_cancel` | stops a run and its loops | preview, always |
+| `loop pause`, `loop resume` | `loop_pause`, `loop_resume` | asks a loop to pause at its next safe point, or resumes a paused one | at once |
+| `trigger identity` | `trigger_identity` | the API key a trigger's runs act as | preview, always |
+| `activate` | `activate` | puts a solution live, through the readiness gate | preview when a channel or an active trigger reaches it, or the instance does not say; with `--make-default`, also the default route. A draft nothing reaches activates at once |
+| `deactivate` | `deactivate` | takes a solution out of live traffic | preview, always; the default route is refused |
+| `harness default` | `harness_default` | which solution the tenant's chat and widget answer with | preview, always |
+| `harness new`, `harness clone` | `harness_new`, `harness_clone` | a new draft solution | at once (a draft answers no live traffic) |
+| `apply` | `apply` | imports the package into a solution | preview, always; confirmed with the preview's id |
+| `kb upload` | `kb_upload` | adds documents to a knowledge base | at once; with `--replace` on an instance that cannot replace a document itself, a preview of what it would deactivate |
+| `test run` | `test_run` | runs test suites, which spends budget | at once |
+| `chat` | `chat` | one turn of a conversation, which spends budget | at once |
+| `limits set` | `limits_set` | a limit of the tenant or the platform | preview, always |
+| `models set-limit` | `models_set_limit` | a model endpoint's concurrency limit | preview, always |
+| `sandbox seed` | `sandbox_seed` | replaces a Sandbox's workspace | preview, always |
+| `sandbox validate`, `sandbox refresh` | `sandbox_validate`, `sandbox_refresh` | runs a Sandbox's readiness checks, or accepts a customer VM's workspace as it is now | at once |
+| `artifacts export` | `artifacts_export` | takes files out of an isolated container as a tar archive | at once; never writes over an existing file |
+| `api` | `api` | any operation of the instance | preview for every operation that is not read-only under a coding agent and over MCP; operations kept for a person are refused |
+| `use` | `use_tenant` | the tenant your commands act in (over MCP: for the session only) | at once, on your machine |
+| `init`, `pull`, `fmt` | `init`, `pull`, `fmt` | files in the solution folder; `init` may create a draft solution from a shell | at once; `pull` refuses to replace a file that changed and is not committed, unless `--force` |
+| `login`, `logout` | none | the stored token | a person only: the token is read from a terminal or stdin |
+| `setup` | none | sets up your coding agents for Cavelon and logs in | on your machine, guided; changes only the blocks between its markers in a file it did not create |
+| `mcp` | none | starts the MCP server | nothing by itself |
 
 ## What is sent where
 

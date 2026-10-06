@@ -398,7 +398,11 @@ never forces. It prints each check with its result and every warning. A
 solution that is not ready exits 3 with its blockers. A
 personal access token must have been created with **May activate**; otherwise
 `activate` is refused before anything is sent (exit 7), and a person activates
-in the Admin.
+in the Admin. A solution that a channel or an active trigger already reaches
+goes live for them the moment it is active, so for one of those (or on an
+instance that does not say what reaches a solution) `activate` previews first
+and activates only with `--confirm`; a new draft that nothing reaches
+activates at once.
 
 ## Credentials
 
@@ -433,7 +437,8 @@ platform admin), and sent without a tenant.
 - `cavelon tenant create <slug>` creates a tenant (the role needs
   `tenants.manage`). It asks the instance first whether the token may enter
   Platform mode and, there, holds `tenants.manage`, and stops with exit 7
-  before sending anything when it does not. `--use` switches to the new tenant
+  before sending anything when it does not. It previews the tenant it would
+  create and creates it only with `--confirm`. `--use` switches to the new tenant
   only once the instance confirms the token acts in it;
 - `cavelon limits set <key> <value> --tenant <tenant>` sends an operator's
   limit change in Platform mode, after checking that the token's role is one

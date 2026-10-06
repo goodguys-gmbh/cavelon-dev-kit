@@ -119,12 +119,12 @@ Every command takes `--json` (one JSON document on stdout, errors included),
 | `limits set <key> <value> [--confirm]` | changing (destructive) | Change a limit through the operation the instance names: a tenant admin's, a quota of the Tenant Owner's (inference budget, Processing Step cap), or an operator's run cap with a Platform-mode token; without `--confirm`, shows the old and new value. |
 | `models list` | read-only | The tenant's Model Registry rows with their endpoint and `max_concurrent_requests`; never a key. |
 | `models set-limit <model> <n\|none> [--confirm]` | changing (destructive) | Set or clear a row's `max_concurrent_requests`; without `--confirm`, shows the old and new value. |
-| `tenant create <slug> [--name] [--use]` | changing | Create a tenant (personal token in Platform mode with `tenants.manage`); refused before sending when the token cannot. |
+| `tenant create <slug> [--name] [--use] [--confirm]` | changing | Create a tenant (personal token in Platform mode with `tenants.manage`); refused before sending when the token cannot; without `--confirm`, shows the tenant it would create. |
 | `tenant list [--search]` | read-only | Tenants the token can see, with name, slug, role and id. |
 | `harness list [--readiness]` | read-only | The tenant's solutions, with slug, name, status and id. |
 | `harness new <slug> [--name] [--description]` | changing | Create an empty draft solution. |
 | `harness clone <source> [--slug] [--name] [--no-tests] [--no-triggers]` | changing | Copy a solution into a new draft. |
-| `activate [--harness] [--env]` | changing | Activate through the readiness gate only, never by force. |
+| `activate [--harness] [--env] [--make-default] [--confirm [<token>]]` | changing | Activate through the readiness gate only, never by force; a solution a channel or trigger reaches previews first. |
 | `chat <message> [--harness] [--env] [--session <id>] [--timeout 90s]` | changing | Send one message to a solution and print its answer, with the session to continue and the conversation to trace; tries a draft or an active solution that is not the default route. |
 | `deactivate [--harness] [--env] [--confirm [<token>]]` | changing (destructive) | Take an active solution out of live traffic: its status becomes `inactive` (not `draft`); previews first. |
 | `init [--harness [--new]] [--agents <list>] [--hook] [--update] [--from <file> [--force]]` | changing (files) | Make this folder a solution: `cavelon.yaml`, `package/`, `tests/`, `env/`, `.cavelon/`; on a terminal it asks for the tenant and the solution (or a new one by name); a name close to an existing solution's is refused unless `--new`; `--from` writes a package file into it. |
@@ -135,7 +135,7 @@ Every command takes `--json` (one JSON document on stdout, errors included),
 | `apply --confirm <preview-id>` | changing | Import exactly that preview; a stale one, or one the import's own check refuses (it names the blockers), exits 4. |
 | `explain <code>` | read-only | Look a code up in the instance's error catalog. |
 | `variables list` / `variables get <name>` | read-only | The tenant's plain-text variables (`{{var:…}}`) with their values. |
-| `variables set <name> <value> [--stdin]` | changing | Create or replace a variable. Never a credential. |
+| `variables set <name> <value> [--stdin] [--confirm]` | changing | Create or replace a variable. Never a credential. Replacing another value needs `--confirm`; without it, shows the old and new value. |
 | `variables delete <name> [--confirm]` | changing (destructive) | Delete a variable; without `--confirm`, shows it. |
 | `secrets list [--missing]` | read-only | The tenant's secret names (`{{secret:…}}`): set or not, declared, changed when. Never a value. |
 | `secrets set <name>` | changing | Set a secret's value from the terminal or stdin. A person runs this. |
@@ -150,7 +150,7 @@ Every command takes `--json` (one JSON document on stdout, errors included),
 | `kb upload <dir> --kb <kb> [-r] [--ext pdf] [--replace] [--dry-run] [--wait]` | changing | Upload documents; returns operation ids. Names files that match an active document; `--replace` replaces those. `--dry-run` also names files identical to an active document. |
 | `test run [--suite <s>] [--harness <h>] [--wait]` | changing | Start test-suite runs; returns operation ids. |
 | `trace <run> [--trace <id>] [--span <id>]` | read-only | Summarise a run's traces (or a test run's results, with why a case did not pass), then one trace's spans, then one span. |
-| `loop start <trigger> [--input <json>] [--wait]` | changing | Start a loop through its trigger, as you; returns the run and operation ids. |
+| `loop start <trigger> [--input <json>] [--wait] [--confirm]` | changing | Start a loop through its trigger, as you; without `--confirm`, shows the trigger, its solution and the payload; with it, returns the run and operation ids. |
 | `loop cancel <run> [--confirm]` | changing (destructive) | Stop a trigger run and its loops; without `--confirm`, shows what would stop. |
 | `loop watch <run> [--loop] [--timeout 10m]` | read-only | One line per decided iteration and per state change, then the loop's outcome; returns when it ends or pauses. |
 | `loop iterations <run> [--loop] [--limit] [--cursor]` | read-only | A loop's state, budget and iterations. |
@@ -386,6 +386,9 @@ op read op://dev/crm/token | cavelon secrets set crm_api_token
 - A **variable** is plain text: anyone who may view the tenant's settings
   reads it, and the agent may set it (MCP: `variables_list`, `variables_get`,
   `variables_set`). `variables set` refuses a value that looks like a token.
+  A new variable is set at once; replacing another value shows the old and
+  the new one and changes it only with `--confirm`, because every solution of
+  the tenant reads it.
 - A **secret's** value is never an argument, never printed, never written to a
   file and never read back. `secrets set` reads it from the terminal without
   echo, or from standard input when that is piped (one trailing line break is
@@ -492,14 +495,17 @@ cavelon sandbox seed orders-test seeds/orders            # shows what it would s
 cavelon sandbox seed orders-test seeds/orders --confirm  # the archive becomes the workspace
 cavelon trigger identity orders loop-runner              # shows the change
 cavelon trigger identity orders loop-runner --confirm    # binds the API key
-cavelon loop start orders --input @request.json
+cavelon loop start orders --input @request.json             # shows what it would start
+cavelon loop start orders --input @request.json --confirm   # starts the run
 cavelon loop watch <run>
 cavelon sandbox cat orders-test output/summary.json
 cavelon artifacts export orders-test --path output --wait --out results.tar
 ```
 
 - **`loop start`** calls the trigger's run-now route; the run acts as you (with
-  a personal access token, the person). It returns the run id and the run's
+  a personal access token, the person) and spends the tenant's budget, so it
+  first shows the trigger, its solution and the payload, and starts only with
+  `--confirm`. It returns the run id and the run's
   operation id, so `wait` and `watch` follow it (and `trace <operation>` reads
   the run's traces); a paused loop makes `wait` exit 5. It sends an
   `Idempotency-Key` (`--idempotency-key`, a new UUID by default; `--json`:
@@ -692,7 +698,10 @@ cavelon activate --harness support
 - **`activate`** reads the readiness gate and activates only when it passes,
   never with `force`. A personal access token without "may activate" is refused
   before anything is sent (exit 7); a solution that is not ready exits 3 with its
-  blockers.
+  blockers. A solution a channel or an active trigger reaches (the solution's
+  `channel_count`, the active triggers bound to it) goes live for them at once,
+  so there it previews and activates only with `--confirm`; so it does where the
+  instance does not say what reaches a solution.
 - **A Masterloop parent and its iteration solution** activate without the
   override in one order: apply the iteration, apply the parent, run the
   parent's loop suite, activate the iteration, activate the parent.

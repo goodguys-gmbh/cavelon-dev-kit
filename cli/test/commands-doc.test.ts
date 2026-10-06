@@ -197,6 +197,17 @@ describe("docs/commands.md", () => {
     expect(atOnce.filter((t) => !bullet("What changes without `confirm`.").includes(`\`${t}\``))).toEqual([]);
   });
 
+  it("docs/security.md lists every changing command with its guard, and each with --confirm as previewing", () => {
+    const security = readFileSync(path.resolve(__dirname, "../../docs/security.md"), "utf8");
+    const table = security.split("### Every changing command and its guard")[1]!.split("\n## ")[0]!;
+    const rows = table.split("\n").filter((l) => l.startsWith("| `"));
+    const rowOf = (name: string) => rows.find((r) => r.split("|")[1]!.includes(`\`${name}\``));
+    const changing = COMMANDS.filter((c) => !c.readOnly);
+    expect(changing.filter((c) => !rowOf(c.name)).map((c) => c.name)).toEqual([]);
+    const previewing = changing.filter((c) => c.options?.confirm);
+    expect(previewing.filter((c) => !/preview/.test(rowOf(c.name)!.split("|")[4]!)).map((c) => c.name)).toEqual([]);
+  });
+
   it("is the commands' own help (npm run docs:commands rewrites it)", async () => {
     await expect(renderCommandsDoc(COMMANDS)).toMatchFileSnapshot(path.resolve(__dirname, "../../docs/commands.md"));
   });

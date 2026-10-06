@@ -10,7 +10,7 @@ import {
   type Context,
 } from "../command.js";
 import { CavelonError, ExitCode, usageError, type ExitCodeValue } from "../errors.js";
-import { confirmation } from "../confirm-token.js";
+import { confirmation, confirmTokenRequired } from "../confirm-token.js";
 import { idempotencyKey, requireFeature, UUID_KEY_OPTION, withRetryKey } from "../features.js";
 import { clip, keyValues, moreHint, table } from "../format.js";
 import type { ErrorCatalog } from "../contracts.js";
@@ -128,6 +128,15 @@ const RUN_TERMINAL = new Set(["completed", "failed", "blocked", "rejected", "ski
 // ---------------------------------------------------------------------------
 // Lookups
 // ---------------------------------------------------------------------------
+
+/** The solution a trigger starts runs of, for a preview: null when the trigger names none or it cannot be read. */
+async function triggerSolution(ctx: Context, trigger: Trigger): Promise<{ id: string; slug: string | null; name: string | null; status: string | null } | null> {
+  if (!trigger.harness_id) return null;
+  const harness = await callStable<{ id: string; slug?: string; name?: string; status?: string }>(ctx, "GET", "/api/v1/harnesses/{harness_id}", "reading solutions", {
+    params: { harness_id: [trigger.harness_id] },
+  }).catch(() => undefined);
+  return { id: trigger.harness_id, slug: harness?.slug ?? null, name: harness?.name ?? null, status: harness?.status ?? null };
+}
 
 export async function resolveTrigger(ctx: Context, ref: string): Promise<Trigger> {
   if (isUuid(ref)) {
@@ -306,10 +315,13 @@ function loopExitCode(state: string): ExitCodeValue {
 
 export const loopStart: CommandSpec = {
   name: "loop start",
-  summary: "Start a loop through its trigger, as you; returns the run and operation ids.",
+  summary: "Start a loop through its trigger, as you; previews first, --confirm starts it and returns the run and operation ids.",
   description:
     "Calls the trigger's run-now route. The run (and its loop) acts as the caller: with a personal access token, the person.\n" +
-    "Follow it with `loop watch <run>`, or `wait <operation>`; `loop cancel <run>` stops it.",
+    "It runs on its own and spends the tenant's model budget, so without --confirm nothing starts: the preview names the\n" +
+    "trigger, its solution and the payload. Show it to a person and confirm only with their yes; for a trigger of a draft\n" +
+    "solution in a test environment an agent may confirm on its own. Follow the run with `loop watch <run>`, or\n" +
+    "`wait <operation>`; `loop cancel <run>` stops it.",
   readOnly: false,
   mcpTool: "loop_start",
   positionals: [{ name: "trigger", description: "Trigger slug, name or id.", required: true }],
@@ -318,14 +330,53 @@ export const loopStart: CommandSpec = {
     wait: WAIT_OPTION,
     timeout: TIMEOUT_OPTION,
     "idempotency-key": UUID_KEY_OPTION,
+    confirm: { type: "boolean", mcpToken: true, description: "Start the run (after a person saw the preview)." },
   },
-  examples: ["cavelon loop start counter", "cavelon loop start orders --input @orders-request.json --json"],
+  examples: [
+    "cavelon loop start counter",
+    "cavelon loop start counter --confirm",
+    "cavelon loop start counter --confirm <token>",
+    "cavelon loop start orders --input @orders-request.json --confirm --json",
+  ],
   async run(ctx, input) {
+    // Refused before anything is read, as every confirming tool refuses true.
+    if (ctx.mode === "mcp" && input.options.confirm === true) throw confirmTokenRequired("loop_start");
     await requireFeature(ctx, "masterloop_enabled", "masterloop_feature_disabled", "Masterloop");
     const trigger = await resolveTrigger(ctx, positional(input, "trigger")!);
     const raw = stringOption(input, "input");
     const payload = raw === undefined ? {} : await readBody(ctx, raw);
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw usageError("--input must be a JSON object.");
+    const gate = await confirmation(ctx, input, "loop_start", { trigger: trigger.id, payload });
+    if (!gate.confirmed) {
+      const solution = await triggerSolution(ctx, trigger);
+      const given = stringOption(input, "idempotency-key");
+      const words = ["loop", "start", trigger.slug, ...(raw !== undefined ? ["--input", raw] : []), ...(given ? ["--idempotency-key", given] : [])];
+      const confirm = gate.confirm(cavelonCommand(...words, "--confirm"));
+      const payloadText = clip(JSON.stringify(payload), 500);
+      return {
+        data: {
+          started: false,
+          would: "start_run",
+          trigger: { id: trigger.id, slug: trigger.slug, name: trigger.name, type: trigger.trigger_type, is_active: trigger.is_active },
+          solution,
+          payload,
+          confirm,
+          ...gate.fields,
+        },
+        text: [
+          `Starting ${trigger.slug} (${trigger.trigger_type}) starts a run that acts as you, runs on its own and spends the tenant's model budget until it ends or is cancelled.`,
+          !solution
+            ? "Solution: none named by the trigger."
+            : solution.status
+              ? `Solution: ${solution.name ?? solution.id}${solution.slug ? ` (${solution.slug})` : ""}, ${solution.status}.`
+              : `Solution: ${solution.id} (not readable).`,
+          `Payload: ${payloadText}`,
+          gate.where, ...(gate.mismatch ? [gate.mismatch] : []),
+          `Nothing was started. Show this to a person; with their yes: ${confirm}`,
+        ].join("\n"),
+        ...(gate.exitCode ? { exitCode: gate.exitCode } : {}),
+      };
+    }
     // Always keyed: a start that timed out may have started the run, and a retry with the same key does not start another.
     const key = idempotencyKey(input);
     const run = await callStable<AgentRun>(ctx, "POST", "/api/v1/triggers/{trigger_id}/run", "starting triggers", {

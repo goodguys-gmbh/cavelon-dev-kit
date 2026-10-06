@@ -55,7 +55,7 @@ const resumes = () => server.state.requests.filter((r) => r.method === "POST" &&
 
 /** Starts the trigger's run and watches it to its pause. */
 async function pausedRun(slug: string): Promise<{ runId: string; loopId: string; outcome: Record<string, any>; text: string }> {
-  const started = await cli(sb, ["loop", "start", slug, "--json"]);
+  const started = await cli(sb, ["loop", "start", "--confirm", slug, "--json"]);
   expect(started.code, started.stdout).toBe(0);
   const runId = started.json<{ run_id: string }>().run_id;
   const watched = await cli(sb, ["loop", "watch", runId, "--json", "--timeout", "30s"]);

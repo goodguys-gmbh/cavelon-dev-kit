@@ -9,6 +9,28 @@ CLI, the skills and the plugin.
 
 ### Fixed
 
+- Some commands changed state without a preview, while `deactivate` and
+  `harness default` needed one. Now these preview what they would do, change
+  nothing without `--confirm`, and take the preview's confirm token over MCP
+  (`confirm`) and from a coding agent's shell (`--confirm <token>`), with the
+  same rules as the others: `tenant create` (`tenant_create`), which names the
+  tenant and plan it would create; `variables set` (`variables_set`) where it
+  replaces another value, showing the old and the new one (a new variable is
+  still set at once); `loop start` (`loop_start`), which names the trigger, its
+  solution and the payload, since a run acts as the caller and spends budget;
+  and `activate` of a solution that a channel or an active trigger already
+  reaches (the solution's `channel_count`, the triggers bound to it), which
+  names them. On an instance that does not publish `channel_count`, or whose
+  triggers the token cannot list, `activate` previews too and says what it
+  could not tell. A draft that nothing reaches activates at once, as before.
+  With `--make-default`, one preview and one token cover the activation and
+  the default route. `activate --confirm` is no longer refused without
+  `--make-default`. The skills and the MCP server's instructions say which of
+  these previews an agent shows the person: all of them, except a
+  `loop start` for a trigger of a draft solution in a test environment.
+  [Security](docs/security.md#every-changing-command-and-its-guard) now lists
+  every changing command and its guard (#137).
+
 - A tenant API key ignored the tenant a command named: with `CAVELON_TOKEN`
   holding a key for tenant A and `env/prod.yaml` naming tenant B,
   `cavelon apply --env prod` previewed and imported into A without a word,

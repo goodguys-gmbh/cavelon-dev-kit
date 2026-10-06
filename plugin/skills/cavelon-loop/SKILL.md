@@ -170,7 +170,8 @@ use it when you parse the result.
    were put on the VM (customer VM).
 7. **Test**: `cavelon test run --suite <suite>`, then `cavelon wait <operation>`.
    See the cavelon-testing skill. A solution with a Masterloop node is run with
-   `cavelon loop start <trigger>` and followed with `cavelon loop watch <run>`;
+   `cavelon loop start <trigger>` (it previews; run the confirm command it
+   prints) and followed with `cavelon loop watch <run>`;
    see the cavelon-long-running skill.
 8. **Fix** what the results and traces show, and go back to step 2. Commit
    when a step works.
@@ -227,13 +228,23 @@ only show what would happen. Show it to the person before `cavelon trigger
 identity <trigger> <key> --confirm` (it gives a trigger standing authority),
 before `cavelon harness default … --confirm`, `cavelon activate
 --make-default --confirm` or `cavelon deactivate --confirm` (they move live
-traffic), and
+traffic), before `cavelon activate --confirm` of a solution its preview says a
+channel or trigger reaches (it goes live for them at once), before
+`cavelon tenant create … --confirm` (a new tenant on the platform) and
+`cavelon variables set … --confirm` that replaces a value (every solution of
+the tenant reads it, active ones too), and
 before `cavelon sandbox seed … --confirm` or `cavelon loop cancel … --confirm` on
-anything but a test Sandbox or a run you started yourself.
+anything but a test Sandbox or a run you started yourself. `cavelon loop start
+<trigger>` previews too, because a run acts as the person and spends budget:
+confirm it on your own only for a trigger of a draft solution in a test
+environment, and show the person every other one. A new variable, and a draft
+solution no channel or trigger reaches, need no confirm.
 
-**Over MCP, confirm with the preview's token.** `api`, `limits_set`,
+**Over MCP, confirm with the preview's token.** `api`, `tenant_create`,
+`variables_set` where it replaces a value, `loop_start`, `limits_set`,
 `models_set_limit`, `loop_cancel`, `sandbox_seed`, `trigger_identity`,
-`harness_default`, `deactivate`, `activate` with `make_default`, and
+`harness_default`, `deactivate`, `activate` of a solution a channel or
+trigger reaches or with `make_default`, and
 `kb_upload` where it would deactivate documents return a `confirm_token` with
 their preview. Show
 the preview, then call the tool again with the same arguments and `confirm`
@@ -248,8 +259,10 @@ make the call as written, filling a value in angle brackets (a
 `confirm_token` comes from that tool's preview).
 
 **From your shell, `--confirm` takes the same token.** Run by a coding agent,
+`tenant create`, `variables set` (replacing a value), `loop start`,
 `limits set`, `models set-limit`, `loop cancel`, `sandbox seed`,
-`trigger identity`, `harness default`, `activate --make-default`,
+`trigger identity`, `harness default`, `activate` (of a solution a channel or
+trigger reaches, or with `--make-default`),
 `deactivate`, `kb upload --replace` and `variables delete`
 print their preview with a confirm token and the command that confirms it
 (`… --confirm <token>`). Show the preview, then run exactly that command. A

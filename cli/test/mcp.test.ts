@@ -317,7 +317,10 @@ describe("cavelon mcp", () => {
       required_solutions: [],
       loop: { iterations: 2 },
     });
-    const started = payload(await client.callTool({ name: "loop_start", arguments: { trigger: "counter" } }));
+    // A run spends budget on its own: the first call previews, the second starts it with the preview's token.
+    const shown = payload(await client.callTool({ name: "loop_start", arguments: { trigger: "counter" } }));
+    expect(shown).toMatchObject({ started: false, would: "start_run", confirm_token: expect.stringMatching(/^[0-9a-f]{12}$/) });
+    const started = payload(await client.callTool({ name: "loop_start", arguments: { trigger: "counter", confirm: shown.confirm_token } }));
     expect(started.operation_id).toMatch(/^op_trigger_run_/);
     const iterations = payload(await client.callTool({ name: "loop_iterations", arguments: { run: started.run_id } }));
     expect(iterations.loop.iteration).toBeGreaterThanOrEqual(1);

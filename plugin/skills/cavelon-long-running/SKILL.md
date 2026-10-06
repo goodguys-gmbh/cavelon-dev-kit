@@ -57,14 +57,20 @@ Do not work around it; use the other column.
 ## Run and follow
 
 ```bash
-cavelon loop start <trigger> --input @request.json   # prints the run id and an operation id
+cavelon loop start <trigger> --input @request.json   # previews: the trigger, its solution, the payload
+cavelon loop start <trigger> --input @request.json --confirm <token>   # starts it: the run id and an operation id
 cavelon loop watch <run> --timeout 5m                # each iteration's verdict, then the loop's outcome
 cavelon loop iterations <run>                        # state, budget, iterations (a page at a time)
 cavelon wait <operation-id> --timeout 90s            # exit 0 done, 1 failed, 5 needs a person, 6 still running
 ```
 
 A loop started from `cavelon` runs **as the person whose token it is**, checked
-again on every iteration. If `loop start` exits 8 (a timeout, a cut
+again on every iteration, and spends the tenant's budget. So `loop start`
+previews first and starts nothing without `--confirm`: run the confirm command
+it prints (from your shell it carries the preview's token; over MCP call
+`loop_start` again with `confirm` set to its `confirm_token`). Confirm on your
+own only for a trigger of a draft solution in a test environment; show the
+person the preview of any other. If `loop start` exits 8 (a timeout, a cut
 connection), the run may have started: retry only with the
 `--idempotency-key <key>` its error names, never without it, or a second run
 starts and spends the budget again. `cavelon trace <operation-id>` reads the

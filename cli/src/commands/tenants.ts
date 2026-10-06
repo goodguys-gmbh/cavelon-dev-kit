@@ -135,11 +135,13 @@ async function entersTenant(client: ApiClient, tenantId: string): Promise<{ ok: 
 export const tenantCreate: CommandSpec = {
   name: "tenant create",
   tenantless: true,
-  summary: "Create a tenant (personal access token in Platform mode with tenants.manage).",
+  summary: "Create a tenant (personal access token in Platform mode with tenants.manage); previews first, --confirm creates it.",
   description:
     "A tenant API key never can. Before sending, the token is checked: one that may not enter Platform mode, or enters it\n" +
-    "without tenants.manage, is refused with exit 7 and nothing is sent. With --use, the new tenant is chosen only once the\n" +
-    "instance confirms the token acts in it. Inviting people and assigning roles stay in the Admin.",
+    "without tenants.manage, is refused with exit 7 and nothing is sent. Without --confirm nothing is created: the preview\n" +
+    "names the tenant, its plan and the instance it would be created on. A tenant is a platform change, so show the preview\n" +
+    "to a person and confirm only with their yes. With --use, the new tenant is chosen only once the instance confirms the\n" +
+    "token acts in it. Inviting people and assigning roles stay in the Admin.",
   readOnly: false,
   mcpTool: "tenant_create",
   positionals: [{ name: "slug", description: "Lower-case letters, digits and dashes.", required: true }],
@@ -152,9 +154,13 @@ export const tenantCreate: CommandSpec = {
       mcpDescription: "Switch to the new tenant afterwards for this MCP session only (as use_tenant does), once the token is known to act in it.",
     },
     "idempotency-key": IDEMPOTENCY_OPTION,
+    confirm: { type: "boolean", mcpToken: true, description: "Create the tenant (after a person saw the preview)." },
   },
+  examples: ["cavelon tenant create newco --name NewCo", "cavelon tenant create newco --name NewCo --confirm", "cavelon tenant create newco --name NewCo --confirm <token>"],
   async run(ctx, input) {
     const session = await ctx.session();
+    // Refused before anything is read, as every confirming tool refuses true.
+    if (ctx.mode === "mcp" && input.options.confirm === true) throw confirmTokenRequired("tenant_create");
     if (session.tokenKind === "api_key") {
       throw new CavelonError(ExitCode.unauthorized, {
         code: "api_key_cannot_create_tenants",
@@ -168,6 +174,23 @@ export const tenantCreate: CommandSpec = {
     const body: Record<string, unknown> = { slug, name: stringOption(input, "name") ?? slug };
     const plan = stringOption(input, "plan");
     if (plan) body.plan = plan;
+    // A tenant is created outside any tenant, in Platform mode, so the preview names no tenant to act in.
+    const gate = await confirmation(ctx, input, "tenant_create", body, { platform: "outside" });
+    if (!gate.confirmed) {
+      const words = ["tenant", "create", slug, "--name", body.name as string, ...(plan ? ["--plan", plan] : []), ...(boolOption(input, "use") ? ["--use"] : [])];
+      const key = stringOption(input, "idempotency-key");
+      if (key) words.push("--idempotency-key", key);
+      const confirm = gate.confirm(cavelonCommand(...words, "--confirm"));
+      return {
+        data: { created: false, would: "create_tenant", tenant: { slug, name: body.name, plan: plan ?? null }, confirm, ...gate.fields },
+        text: [
+          `Creating tenant ${body.name as string} (${slug})${plan ? ` on plan ${plan}` : ""} adds a tenant to the platform: it holds its own solutions, people, limits and budget.`,
+          gate.where, ...(gate.mismatch ? [gate.mismatch] : []),
+          `Nothing was created. Show this to a person; with their yes: ${confirm}`,
+        ].join("\n"),
+        ...(gate.exitCode ? { exitCode: gate.exitCode } : {}),
+      };
+    }
     const tenant = await callStable<Tenant>(ctx, "POST", "/api/v1/tenants", "creating tenants", {
       body,
       sendTenant: false,

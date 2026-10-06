@@ -151,7 +151,7 @@ describe("api", () => {
 describe("tenant", () => {
   it("creates and lists tenants with a platform token, without a tenant header", async () => {
     server.state.requests.length = 0;
-    const created = await cli(platformSb, ["tenant", "create", "newco", "--name", "NewCo", "--use", "--json"]);
+    const created = await cli(platformSb, ["tenant", "create", "--confirm", "newco", "--name", "NewCo", "--use", "--json"]);
     expect(created.code, created.stderr + created.stdout).toBe(0);
     expect(created.json()).toMatchObject({ slug: "newco", name: "NewCo" });
     const post = server.state.requests.find((r) => r.method === "POST" && r.path === "/api/v1/tenants")!;
@@ -198,13 +198,13 @@ describe("tenant", () => {
 
   it("refuses tenant creation with a tenant API key (exit 7)", async () => {
     const key = server.addToken({ kind: "key", tenantIds: [tenant] });
-    const result = await cli(sb, ["tenant", "create", "nope", "--json"], { env: { CAVELON_URL: server.url, CAVELON_TOKEN: key } });
+    const result = await cli(sb, ["tenant", "create", "--confirm", "nope", "--json"], { env: { CAVELON_URL: server.url, CAVELON_TOKEN: key } });
     expect(result.code).toBe(7);
     expect(result.json<{ error: { code: string } }>().error.code).toBe("api_key_cannot_create_tenants");
   });
 
   it("reports the server's validation error (exit 3)", async () => {
-    const result = await cli(platformSb, ["tenant", "create", "Bad Slug!"]);
+    const result = await cli(platformSb, ["tenant", "create", "--confirm", "Bad Slug!"]);
     expect(result.code).toBe(3);
   });
 
@@ -216,7 +216,7 @@ describe("tenant", () => {
 
   it("refuses before sending when the token may not enter Platform mode, and names the remedy (exit 7)", async () => {
     server.state.requests.length = 0;
-    const result = await cli(sb, ["tenant", "create", "blocked", "--json"], { env: operatorEnv() });
+    const result = await cli(sb, ["tenant", "create", "--confirm", "blocked", "--json"], { env: operatorEnv() });
     expect(result.code).toBe(7);
     const error = result.json<{ error: { code: string; message: string; hint: string; details: { sent: boolean } } }>().error;
     expect(error.code).toBe("platform_mode_not_allowed");
@@ -231,7 +231,7 @@ describe("tenant", () => {
   it("refuses before sending when Platform mode lacks tenants.manage (exit 7)", async () => {
     const env = { CAVELON_URL: server.url, CAVELON_TOKEN: server.addToken({ kind: "pat", tenantIds: [], platform: true, permissions: ["platform.maintenance"] }) };
     server.state.requests.length = 0;
-    const result = await cli(sb, ["tenant", "create", "blocked", "--json"], { env });
+    const result = await cli(sb, ["tenant", "create", "--confirm", "blocked", "--json"], { env });
     expect(result.code).toBe(7);
     expect(result.json<{ error: { code: string } }>().error.code).toBe("permission_missing");
     expect(server.state.requests.some((r) => r.method === "POST" && r.path === "/api/v1/tenants")).toBe(false);
@@ -241,11 +241,11 @@ describe("tenant", () => {
     server.state.principalWithoutPlatformMode = true;
     try {
       server.state.requests.length = 0;
-      const result = await cli(sb, ["tenant", "create", "unsaid", "--json"], { env: operatorEnv() });
+      const result = await cli(sb, ["tenant", "create", "--confirm", "unsaid", "--json"], { env: operatorEnv() });
       expect(result.code).toBe(7);
       expect(result.json<{ error: { status: number } }>().error.status).toBe(403);
       expect(server.state.requests.some((r) => r.method === "POST" && r.path === "/api/v1/tenants")).toBe(true);
-      const created = await cli(platformSb, ["tenant", "create", "unsaid-ok", "--json"]);
+      const created = await cli(platformSb, ["tenant", "create", "--confirm", "unsaid-ok", "--json"]);
       expect(created.code, created.stdout).toBe(0);
     } finally {
       server.state.principalWithoutPlatformMode = undefined;
@@ -256,7 +256,7 @@ describe("tenant", () => {
     server.state.servePrincipal = false;
     try {
       const env = { CAVELON_URL: server.url, CAVELON_TOKEN: server.addToken({ kind: "pat", tenantIds: [tenant], defaultTenant: tenant }) };
-      const result = await cli(sb, ["tenant", "create", "blocked", "--json"], { env });
+      const result = await cli(sb, ["tenant", "create", "--confirm", "blocked", "--json"], { env });
       expect(result.code).toBe(7);
       const error = result.json<{ error: { status: number; hint: string } }>().error;
       expect(error.status).toBe(403);
@@ -270,7 +270,7 @@ describe("tenant", () => {
 
   it("--use switches only when the token acts in the new tenant", async () => {
     const env = { CAVELON_URL: server.url, CAVELON_TOKEN: server.addToken({ kind: "pat", tenantIds: [], platform: true, platformOnly: true }) };
-    const created = await cli(sb, ["tenant", "create", "kept-out", "--use", "--json"], { env });
+    const created = await cli(sb, ["tenant", "create", "--confirm", "kept-out", "--use", "--json"], { env });
     expect(created.code, created.stdout + created.stderr).toBe(0);
     const data = created.json<{ slug: string; used: boolean; warnings: string[] }>();
     expect(data).toMatchObject({ slug: "kept-out", used: false });
