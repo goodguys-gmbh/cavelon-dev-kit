@@ -607,6 +607,54 @@ describe("cavelon mcp", () => {
     expect(result.items.length).toBeLessThanOrEqual(3);
   });
 
+  it("marks a platform page in docs_search and docs_get for a token that cannot act in Platform mode", async () => {
+    server.state.docsAudience = true;
+    const own = sandbox();
+    const connect = async (token: string) => {
+      const io: Io = {
+        stdout: { write: () => true },
+        stderr: { write: () => true },
+        stdin: Readable.from([]) as unknown as InStream,
+        env: { ...own.env, CAVELON_URL: server.url, CAVELON_TOKEN: token },
+        cwd: own.home,
+        now: () => new Date(),
+        sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+      };
+      const mcp = createMcpServer(io, COMMANDS);
+      const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+      await mcp.connect(serverSide);
+      const other = new Client({ name: "test", version: "0" });
+      await other.connect(clientSide);
+      return other;
+    };
+    const page = "platform/operating-the-platform";
+    try {
+      for (const [who, token, marked] of [
+        ["platform role, no Platform mode", server.addToken({ kind: "pat", tenantIds: [tenant], defaultTenant: tenant, globalRole: "platform_support" }), true],
+        ["Platform mode", server.addToken({ kind: "pat", tenantIds: [], platform: true }), false],
+      ] as const) {
+        const other = await connect(token);
+        try {
+          const found = payload(await other.callTool({ name: "docs_search", arguments: { query: ["operating the platform"] } }));
+          const item = found.items.find((i: { page: string }) => i.page === page);
+          expect(item?.audience, who).toBe("platform");
+          expect(Boolean(item?.mark), who).toBe(marked);
+          const got = payload(await other.callTool({ name: "docs_get", arguments: { page } }));
+          expect(Boolean(got.mark), who).toBe(marked);
+          // The mark comes before the page, so an agent reads it first.
+          if (marked) expect(Object.keys(got).indexOf("mark")).toBeLessThan(Object.keys(got).indexOf("markdown"));
+          const tenantPage = payload(await other.callTool({ name: "docs_get", arguments: { page: "concepts/regression-testing" } }));
+          expect(tenantPage.mark, who).toBeUndefined();
+        } finally {
+          await other.close();
+        }
+      }
+    } finally {
+      server.state.docsAudience = false;
+      own.cleanup();
+    }
+  });
+
   it("writes nothing to stdout itself (stdout belongs to the protocol)", () => {
     expect(stdout).toBe("");
   });

@@ -305,7 +305,9 @@ repeat them:
   passes a secret value, and never decides an approval.
 - **Docs before guessing.** `docs_search` and `docs_get` read the instance's
   own documentation; `api_list`, `api_describe` and `api` reach any operation
-  without its own tool.
+  without its own tool. A platform page the token can read but not act on
+  carries a `mark` (before its `markdown`): reading it is not leave to take
+  the operator's actions it describes.
 
 [Building a solution with a coding agent](coding-agents.md) shows what these
 rules mean while you work with the agent.

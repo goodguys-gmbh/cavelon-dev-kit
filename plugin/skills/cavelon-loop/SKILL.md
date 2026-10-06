@@ -369,7 +369,9 @@ preview · 5 needs a person · 6 timed out (still running) · 7 not authorised �
 - `cavelon docs search <query>` and `cavelon docs get <page>`: the instance's
   own docs, for its version. They are in English; a German question works for
   the core concepts, English words for the rest. `cavelon docs get index`
-  lists every page.
+  lists every page. A page marked "Platform page" (`mark` in `--json`)
+  describes an operator's actions this token cannot take: tell the person who
+  can, never ask for a Platform-mode token.
 - `.cavelon/inventory.md`: the tenant's solutions, knowledge bases, tools,
   skills, models, test suites and sandboxes from the last pull; `cavelon sandbox list` for their
   current state and mode.

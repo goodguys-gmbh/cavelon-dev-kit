@@ -9,6 +9,18 @@ CLI, the skills and the plugin.
 
 ### Added
 
+- `docs search` and `docs get` (`docs_search`, `docs_get`) mark a platform
+  page that the token can read but not act on (#132). The instance lists the
+  platform operators' pages to a person with a platform role whatever their
+  token may do; where it says a page's audience (`(audience: platform)` at the
+  end of its line in `llms.txt`, or the page's `X-Docs-Audience` header), and
+  `/meta/principal` says the token cannot act in Platform mode (a tenant API
+  key, a personal access token without Platform mode, or one whose ceiling
+  leaves it no platform role), the page gets `audience` and a `mark` ("Platform
+  page: the actions it describes need a personal access token with Platform
+  mode; …"), in `--json` before the page's markdown and in the text under its
+  title. An instance that does not say a page's audience gets no mark.
+
 - Database query tools end to end (#140). A solution whose agents call saved
   database queries (`tool_type: database_query`) round-trips: `pull` writes
   each query into `package/tools.yaml`, and `fmt`, `validate` and `apply` keep

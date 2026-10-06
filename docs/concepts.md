@@ -34,6 +34,14 @@ search ranks pages by the words of the question in their titles and summaries,
 ignores stop words, looks German words for the core concepts up in English, and
 lists only pages that match well; `cavelon docs get index` lists them all.
 
+A person with a platform role reads the platform operators' pages with any of
+their tokens, but only a personal access token in Platform mode may take the
+actions those pages describe. Where the instance says a page is written for
+the platform, and the token cannot act in Platform mode, `docs search` and
+`docs get` mark the page: "Platform page: the actions it describes need a
+personal access token with Platform mode; this token can read the page but
+not act on it." An instance that does not say a page's audience gets no mark.
+
 ## Tenant
 
 A **tenant** is one organisation's workspace in an instance: its solutions,
