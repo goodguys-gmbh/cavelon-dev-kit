@@ -17,6 +17,11 @@ import type { PackageSchema } from "../src/contracts.js";
 
 export const CONTRACTS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../contracts/cavelon");
 
+/** The docs pages only a platform operator in Platform mode is listed; the snapshot is a tenant member's index. */
+export const PLATFORM_DOCS_SECTION =
+  "## Platform Operations\n\n" +
+  "- [Operating the Platform](https://cavelon.example.com/api/v1/docs/platform/operating-the-platform.md): Tenants, platform settings and model endpoints, for platform operators\n";
+
 let openapiText: string | undefined;
 export function openapiSnapshot(): string {
   openapiText ??= readFileSync(path.join(CONTRACTS, "openapi.json"), "utf8");
@@ -711,7 +716,11 @@ export async function startFakeServer(): Promise<FakeServer> {
     if (isDocs) {
       if (p === "/llms.txt" || p === "/api/v1/docs/llms.txt") {
         const host = `http://${req.headers.host}`;
-        return send(res, 200, readContract("docs/llms.txt").replaceAll("https://cavelon.example.com", host), "text/plain; charset=utf-8");
+        const index = readContract("docs/llms.txt").replaceAll("https://cavelon.example.com", host);
+        // The index lists only the pages the caller may read: a platform
+        // operator in Platform mode also gets the platform pages.
+        const platformPages = info.platform && !tenantId ? `\n${PLATFORM_DOCS_SECTION.replaceAll("https://cavelon.example.com", host)}` : "";
+        return send(res, 200, index + platformPages, "text/plain; charset=utf-8");
       }
       const m = /^\/api\/v1\/docs\/([^/]+)\/([^/]+)\.md$/.exec(p);
       // The pages the snapshot holds are served as the instance renders them.

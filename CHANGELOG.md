@@ -7,6 +7,18 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Fixed
+
+- The docs index the instance lists depends on who asks (a platform operator
+  in Platform mode also gets the platform pages), but `cavelon` cached one copy
+  per instance version for every token on the machine, so whichever token read
+  it first decided what `docs search` and `docs get` (over MCP `docs_search`
+  and `docs_get`) found: an operator missed the platform pages after a tenant
+  token filled the cache, and a tenant member's agent saw their titles after an
+  operator's. The index is now cached per audience, as `llms.<hash>.txt`, the
+  hash a SHA-256 prefix of the token and the tenant it is sent with, never the
+  token itself (#130).
+
 ## [0.1.10] - 2026-10-05
 
 Fixes from an agent test against a live instance: every command `cavelon`

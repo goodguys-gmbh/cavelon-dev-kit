@@ -353,10 +353,29 @@ export class Contracts {
     return `package-schema-${version.replace(/[^A-Za-z0-9._-]+/g, "_")}.json`;
   }
 
-  /** Cache any text document of this instance version (the docs index). */
+  /**
+   * Who a document that depends on the caller is cached for: the first 16 hex
+   * digits of a SHA-256 over the token and the tenant it is sent with, never
+   * the token itself. The instance lists different docs pages to a tenant
+   * member and to a platform operator in Platform mode, so one cache shared by
+   * every token on the machine showed whichever index was read first.
+   */
+  audience(): string {
+    const { token = "", tenantId = "" } = this.client.target;
+    const tenant = token.startsWith("cbp_") ? "" : tenantId;
+    return createHash("sha256").update(`cavelon-audience\0${token}\0${tenant}`).digest("hex").slice(0, 16);
+  }
+
+  /**
+   * Cache a text document of this instance version that the instance answers
+   * per caller (the docs index), once per audience: `llms.txt` is kept as
+   * `llms.<audience>.txt`.
+   */
   async text(file: string, load: () => Promise<string>, options: { refresh?: boolean } = {}): Promise<string> {
+    const dot = file.lastIndexOf(".");
+    const keyed = dot > 0 ? `${file.slice(0, dot)}.${this.audience()}${file.slice(dot)}` : `${file}.${this.audience()}`;
     return this.cached(
-      file,
+      keyed,
       async () => {
         const text = await load();
         return { value: text, serialized: text };

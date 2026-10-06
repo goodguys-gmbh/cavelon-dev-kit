@@ -240,7 +240,7 @@ the token's role and ceiling on every request.
 | `~/.config/cavelon/config.json` | `%APPDATA%\cavelon\config.json` | the current instance, the tenant chosen with `use`, which store holds the token; never a token |
 | `~/.config/cavelon/credentials.json` | `%APPDATA%\cavelon\credentials.json` | the token per instance (`0600`), only where there is no credential store |
 | `~/.config/cavelon/setup.json` | `%APPDATA%\cavelon\setup.json` | what `cavelon setup` changed in your coding agents' settings, so `setup --remove` undoes exactly that; never a token |
-| `~/.cache/cavelon/<instance>/<version>/` | `%LOCALAPPDATA%\cavelon\cache\…` | what the instance publishes: capabilities, OpenAPI, error catalog, package schema, docs index |
+| `~/.cache/cavelon/<instance>/<version>/` | `%LOCALAPPDATA%\cavelon\cache\…` | what the instance publishes: capabilities, OpenAPI, error catalog, package schema, and the docs index once per token and tenant (`llms.<hash>.txt`, named by a SHA-256 prefix of the two, never the token) |
 | `~/.cache/cavelon/update-check.json` | `%LOCALAPPDATA%\cavelon\cache\update-check.json` | when the latest release was last looked up, its number, and when `cavelon` last said so |
 
 `CAVELON_CONFIG_DIR` and `CAVELON_CACHE_DIR` move them; `XDG_CONFIG_HOME` and

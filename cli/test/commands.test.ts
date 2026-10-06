@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { splitJsonBody } from "../src/commands/api.js";
@@ -371,6 +371,41 @@ describe("docs", () => {
     expect(first.markdown).toHaveLength(1000);
     const rest = await cli(sb, ["docs", "get", "concepts/regression-testing", "--max-chars", "1000", "--cursor", first.next_cursor, "--json"]);
     expect(rest.json<{ markdown: string }>().markdown.slice(0, 20)).toBe(doc.markdown.slice(1000, 1020));
+  });
+
+  it("caches the docs index per token, so each sees its own pages whichever filled the cache", async () => {
+    const tenantToken = server.addToken({ kind: "pat", tenantIds: [tenant], defaultTenant: tenant });
+    const platformToken = server.addToken({ kind: "pat", tenantIds: [], platform: true });
+    const search = async (box: Sandbox, token: string) => {
+      const result = await cli(box, ["docs", "search", "operating", "the", "platform", "--json"], { env: { CAVELON_URL: server.url, CAVELON_TOKEN: token } });
+      expect(result.code, result.stderr).toBe(0);
+      return result.json<{ items: Array<{ page: string }> }>().items.map((i) => i.page);
+    };
+    const platformPage = "platform/operating-the-platform";
+    for (const order of [["tenant", "platform"], ["platform", "tenant"]] as const) {
+      const box = sandbox();
+      try {
+        for (const who of [...order, ...order]) {
+          const pages = await search(box, who === "tenant" ? tenantToken : platformToken);
+          if (who === "platform") expect(pages, `${order.join(" then ")}: ${who}`).toContain(platformPage);
+          else expect(pages, `${order.join(" then ")}: ${who}`).not.toContain(platformPage);
+        }
+        // The cache names each audience by a hash, never by the token. A
+        // platform token read first, before any version is known, keeps a copy
+        // under "unknown" too.
+        const cached = readdirSync(path.join(box.home, "cache"), { recursive: true }).map(String);
+        const audiences = new Set(cached.map((f) => /llms\.([0-9a-f]{16})\.txt$/.exec(f)?.[1]).filter(Boolean));
+        expect(audiences.size).toBe(2);
+        for (const file of cached) expect(file).not.toMatch(/cvpat_/);
+        const contents = cached.map((f) => path.join(box.home, "cache", f)).filter((f) => statSync(f).isFile()).map((f) => readFileSync(f, "utf8"));
+        for (const text of contents) {
+          expect(text).not.toContain(tenantToken);
+          expect(text).not.toContain(platformToken);
+        }
+      } finally {
+        box.cleanup();
+      }
+    }
   });
 
   it("finds the concept page first for beginner questions in German and English", async () => {

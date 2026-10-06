@@ -18,8 +18,10 @@ An **instance** is one Cavelon deployment, reached at a URL such as
 - its **docs** (`/llms.txt` and one Markdown file per page).
 
 `cavelon` reads these and caches them per instance and version, so it knows no
-entity type, field or error code of its own. A newer Cavelon on the server works
-with the `cavelon` you have; `login` warns when an instance's contracts are newer
+entity type, field or error code of its own. The docs index lists only the
+pages the caller may read, so it is cached once per token and tenant as well,
+named by a hash of the two, never by the token. A newer Cavelon on the server
+works with the `cavelon` you have; `login` warns when an instance's contracts are newer
 than your `cavelon` understands. `cavelon whoami` and `cavelon status` show the
 instance's version.
 
