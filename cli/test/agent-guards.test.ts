@@ -214,7 +214,7 @@ describe("cavelon api and the api tool, run by an agent and by a person", () => 
       });
       // The text shows the person the request.
       const text = await cli(sb, ["api", ...setVariable("eu")], { env: { ...fresh(), ...AGENT } });
-      expect(text.stdout).toMatch(/^Would send PUT \/api\/v1\/variables\/region\. Nothing was sent\.\nBody:\n\{\n {2}"value": "eu"\n\}\n/);
+      expect(text.stdout).toMatch(/^Would send PUT \/api\/v1\/variables\/region\. Nothing was sent\.\nacts on: http:\/\/127\.0\.0\.1:\d+, tenant .+, tenant mode\nBody:\n\{\n {2}"value": "eu"\n\}\n/);
       expect(text.stdout).toContain(`--confirm ${shown.confirm_token}`);
       expect(changes(before)).toEqual([]);
 

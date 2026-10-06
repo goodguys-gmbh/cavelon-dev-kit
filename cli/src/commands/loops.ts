@@ -392,6 +392,7 @@ export const loopCancel: CommandSpec = {
           `Run ${run.id} (${run.workflow_name}) is ${run.status}` +
           (loops.length ? `, with loops:\n${table(loops, ["loop_id", "node", "state", "iteration"])}\n` : ".\n") +
           (note ? `${noteLines(note).slice(1)}\n` : "") +
+          `${gate.where}\n` +
           (gate.mismatch ? `${gate.mismatch}\n` : "") +
           `Nothing was stopped. Stop it with: ${confirm}`,
         ...(gate.exitCode ? { exitCode: gate.exitCode } : {}),
@@ -1064,7 +1065,7 @@ export const triggerIdentity: CommandSpec = {
       const confirm = gate.confirm(cavelonCommand("trigger", "identity", trigger.slug, keyRef ?? "--clear", "--confirm"));
       return {
         data: { trigger: trigger.slug, changed: false, would: change, current: view, confirm, ...gate.fields },
-        text: `${identityText(trigger, view)}\n\n${gate.mismatch ? `${gate.mismatch}\n` : ""}Nothing changed. To ${change}: ${confirm}`,
+        text: `${identityText(trigger, view)}\n\n${gate.where}\n${gate.mismatch ? `${gate.mismatch}\n` : ""}Nothing changed. To ${change}: ${confirm}`,
         ...(gate.exitCode ? { exitCode: gate.exitCode } : {}),
       };
     }

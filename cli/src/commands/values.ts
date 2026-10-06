@@ -229,7 +229,7 @@ export const variablesDelete: CommandSpec = {
       const confirm = gate.confirm(cavelonCommand("variables", "delete", name, "--confirm"));
       return {
         data: { name, deleted: false, existed: true, value: current.value, confirm, ...gate.fields },
-        text: `Variable ${name} = ${JSON.stringify(clip(current.value, LIST_VALUE_CHARS))}.\n${gate.mismatch ? `${gate.mismatch}\n` : ""}Nothing was deleted. Delete it with: ${confirm}`,
+        text: `Variable ${name} = ${JSON.stringify(clip(current.value, LIST_VALUE_CHARS))}.\n${gate.where}\n${gate.mismatch ? `${gate.mismatch}\n` : ""}Nothing was deleted. Delete it with: ${confirm}`,
         ...(gate.exitCode ? { exitCode: gate.exitCode } : {}),
       };
     }
@@ -494,7 +494,7 @@ export const secretsDelete: CommandSpec = {
       const confirm = gate.confirm(cavelonCommand("secrets", "delete", name, "--confirm"));
       return {
         data: { ...current, deleted: false, confirm, ...gate.fields },
-        text: `Secret ${name} is set${changedNote(current.changed_at)}.\n${gate.mismatch ? `${gate.mismatch}\n` : ""}Nothing was deleted. Delete it with: ${confirm}`,
+        text: `Secret ${name} is set${changedNote(current.changed_at)}.\n${gate.where}\n${gate.mismatch ? `${gate.mismatch}\n` : ""}Nothing was deleted. Delete it with: ${confirm}`,
         ...(gate.exitCode ? { exitCode: gate.exitCode } : {}),
       };
     }

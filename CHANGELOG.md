@@ -9,6 +9,39 @@ CLI, the skills and the plugin.
 
 ### Fixed
 
+- A tenant API key ignored the tenant a command named: with `CAVELON_TOKEN`
+  holding a key for tenant A and `env/prod.yaml` naming tenant B,
+  `cavelon apply --env prod` previewed and imported into A without a word,
+  and `apply --confirm` skipped its other-tenant check for keys. The kit now
+  asks the instance which tenant the key is in and refuses a command whose
+  `--tenant`, `CAVELON_TENANT`, env file or `cavelon.yaml` names another, with
+  `tenant_mismatch` (exit 2), naming both, before anything is sent there;
+  `login` with a key checks `--tenant` the same way, and a confirm with a key
+  of another tenant is refused with `preview_other_tenant`. Where the instance
+  does not tell a key its tenant's slug or name, a tenant named by slug is not
+  checked and the command warns; a tenant named by id always is (#136).
+- Previews did not say where they act. Every preview (`apply`, `api`,
+  `limits set`, `models set-limit`, `harness default`, `activate
+  --make-default`, `deactivate`, `loop cancel`, `trigger identity`,
+  `sandbox seed`, `kb upload --replace`, `variables delete`, `secrets delete`)
+  now has an `acts on:` line and a `target` field: the instance, the tenant by
+  name, slug and id, where the tenant was named, and the mode (in the tenant,
+  or Platform mode outside any tenant, or no tenant at all). An agent's
+  `tenant` argument, or a Platform-mode token with no tenant chosen, is now
+  visible to the person who approves. `apply --confirm` names it too (#136).
+- `use_tenant` over MCP rewrote the tenant stored for the person, so an
+  agent's call moved where their later terminal commands went. It now chooses
+  the tenant for that MCP session only and never writes the person's config;
+  `clear` resets the session's choice, and `tenant_create` with `use` switches
+  the session the same way. Commands printed for the person in that session
+  carry the session's tenant (#136).
+- The cache of resolved tenant slugs never expired: a renamed or reused slug
+  kept pointing at the old tenant's id, also after a login with another token.
+  Each cached slug now holds for the token that resolved it (stored as a
+  fingerprint, never the token) and for a day. When the instance refuses a
+  request in a cached tenant with 403 or 404, the slug is resolved again: a
+  read goes to the tenant it names now, and a change is not sent again but
+  refused with `tenant_moved` (exit 4). The old cache is no longer read (#136).
 - `secrets set` and `secrets delete` had no agent check: in a coding agent's
   shell, `echo v | cavelon secrets set NAME` sent the value, while
   `cavelon api` refused the same call as for a person only. Both are now

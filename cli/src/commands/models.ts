@@ -228,7 +228,7 @@ export const modelsSetLimit: CommandSpec = {
       const confirm = gate.confirm(cavelonCommand("models", "set-limit", row.model_id, limitText(limit), "--confirm"));
       return {
         data: { ...base, changed: false, sent: false, confirm, ...gate.fields },
-        text: `${label}: max_concurrent_requests ${limitText(previous)} → ${limitText(limit)}.${sharing}\n${gate.mismatch ? `${gate.mismatch}\n` : ""}Nothing was changed. Change it with: ${confirm}`,
+        text: `${label}: max_concurrent_requests ${limitText(previous)} → ${limitText(limit)}.${sharing}\n${gate.where}\n${gate.mismatch ? `${gate.mismatch}\n` : ""}Nothing was changed. Change it with: ${confirm}`,
         ...(gate.exitCode ? { exitCode: gate.exitCode } : {}),
       };
     }

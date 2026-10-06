@@ -146,7 +146,11 @@ export const tenantCreate: CommandSpec = {
   options: {
     name: { type: "string", value: "<name>", description: "Display name (default: the slug)." },
     plan: { type: "string", value: "<plan>", description: "Licence plan, when the instance knows several." },
-    use: { type: "boolean", description: "Switch to the new tenant afterwards (`cavelon use`), once the token is known to act in it." },
+    use: {
+      type: "boolean",
+      description: "Switch to the new tenant afterwards (`cavelon use`), once the token is known to act in it.",
+      mcpDescription: "Switch to the new tenant afterwards for this MCP session only (as use_tenant does), once the token is known to act in it.",
+    },
     "idempotency-key": IDEMPOTENCY_OPTION,
   },
   async run(ctx, input) {
@@ -181,8 +185,11 @@ export const tenantCreate: CommandSpec = {
       );
       return { data: { ...tenant, used: false }, text: `${created} Not switched: this token does not act in it.` };
     }
-    await rememberTenant(ctx, requireInstance(session), { ref: tenant.slug, id: tenant.id, name: tenant.name });
-    return { data: { ...tenant, used: true }, text: `${created} Now using it.` };
+    const scope = await rememberTenant(ctx, requireInstance(session), { ref: tenant.slug, id: tenant.id, name: tenant.name, slug: tenant.slug });
+    return {
+      data: { ...tenant, used: true, ...(scope === "session" ? { used_in: "session" } : {}) },
+      text: scope === "session" ? `${created} Now using it in this MCP session; the tenant stored for your user is unchanged.` : `${created} Now using it.`,
+    };
   },
 };
 
@@ -369,7 +376,7 @@ export const harnessDefault: CommandSpec = {
         },
         text: [
           defaultChangeLine(harness, route),
-          ...(gate.mismatch ? [gate.mismatch] : []),
+          gate.where, ...(gate.mismatch ? [gate.mismatch] : []),
           `Show this to a person; with their yes: ${gate.confirm(commands.confirm)}`,
         ].join("\n"),
         ...(gate.exitCode ? { exitCode: gate.exitCode } : {}),

@@ -108,6 +108,7 @@ describe("models set-limit", () => {
     expect(result.code, result.stderr).toBe(0);
     expect(result.stdout).toBe(
       "Model llama-70b (http://vllm.internal:8000/v1): max_concurrent_requests 4 → 8. It shares the count with llama-8b (same endpoint).\n" +
+        `acts on: ${server.url}, tenant Acme (acme, ${tenant}) from \`cavelon use\`, tenant mode\n` +
         "Nothing was changed. Change it with: cavelon models set-limit llama-70b 8 --confirm\n",
     );
     expect(patches()).toEqual([]);

@@ -7,6 +7,7 @@ import { Contracts, type CachedContract, type ErrorCatalog, type PackageSchema }
 import { CavelonError, ExitCode, usageError, type ExitCodeValue } from "../errors.js";
 import { drivenByAgent } from "../agent-env.js";
 import { confirmation, confirmGiven, confirmTokenRequired, shellTokenRequired } from "../confirm-token.js";
+import { actingTarget, targetLine, targetText } from "../acting.js";
 import { clip, keyValues } from "../format.js";
 import { readTextFile, writeFileAtomic } from "../fsutil.js";
 import { uncommitted } from "../git.js";
@@ -929,14 +930,18 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
     });
   }
   const client = await ctx.client();
-  if (stored.tenant_id && session.tokenKind !== "api_key" && client.target.tenantId && client.target.tenantId !== stored.tenant_id) {
+  // A tenant API key acts in its own tenant, which the instance names: a key of another tenant never confirms this preview.
+  const keyTenant = session.tokenKind === "api_key" ? (await actingTarget(ctx)).tenant?.id : undefined;
+  const actsIn = client.target.tenantId ?? keyTenant;
+  if (stored.tenant_id && actsIn && actsIn !== stored.tenant_id) {
     throw new CavelonError(ExitCode.conflict, {
       code: "preview_other_tenant",
-      message: `Preview ${previewId} was made for tenant ${stored.tenant_id}, but this command acts in ${client.target.tenantId}.`,
+      message: `Preview ${previewId} was made for tenant ${stored.tenant_id}, but this command acts in ${actsIn}.`,
       hint: "Run the confirm command the preview printed; it names the preview's --env and --tenant. Or preview again here.",
     });
   }
   if (stored.tenant_id && session.tokenKind !== "api_key") client.target.tenantId = stored.tenant_id;
+  const acting = await actingTarget(ctx);
   const disk = await readPackage(project.root, project.layout);
   const changed = await filesChangedSince(project, stored, disk);
   if (digest(disk.package) !== stored.package_digest) {
@@ -983,6 +988,7 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
         : undefined;
     const text = keyValues([
       ["applied", `preview ${stored.preview_id}${stored.harness ? ` to ${stored.harness.slug}` : ""}${stored.env ? ` (env ${stored.env})` : ""}`],
+      ["acted on", targetText(acting)],
       ["tenant-wide", sharedText],
       ["created", counts(summary?.creates) || undefined],
       ["updated", counts(summary?.updates) || undefined],
@@ -991,7 +997,7 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
       ["set secrets", still.secrets.length ? indented(still.secrets) + "\n  (a person runs these; never the agent)" : undefined],
       ["set variables", still.variables.length ? indented(still.variables) : undefined],
     ]);
-    const data: Record<string, unknown> = { applied: true, preview_id: stored.preview_id, env: stored.env, harness: stored.harness, result };
+    const data: Record<string, unknown> = { applied: true, preview_id: stored.preview_id, env: stored.env, harness: stored.harness, target: acting, result };
     if (sharedSent || sharedImported.length) {
       data.tenant_wide = {
         applied: resultReport ? resultReport.applied : true,
@@ -1242,7 +1248,9 @@ export const apply: CommandSpec = {
       timeoutMs: 120_000,
     });
     const target = harness ? { id: harness.id, slug: harness.slug } : null;
-    const data: Record<string, unknown> = { previewed: true, ...preview, env: envFile?.name ?? null, harness: target };
+    // Where the import would go, also for a tenant API key, whose tenant only the instance knows.
+    const acting = await actingTarget(ctx);
+    const data: Record<string, unknown> = { previewed: true, ...preview, env: envFile?.name ?? null, harness: target, target: acting };
     // The instance's own report wins where it sends one: it decides what it leaves out, and knows the active solutions it reaches.
     const reported = solutionImport ? tenantWideReport(preview.tenant_wide) : undefined;
     const sections = reported?.sections ?? shared;
@@ -1339,7 +1347,7 @@ export const apply: CommandSpec = {
         preview_id: preview.preview_id,
         created_at: ctx.io.now().toISOString(),
         instance: url,
-        tenant_id: client.target.tenantId ?? null,
+        tenant_id: client.target.tenantId ?? acting.tenant?.id ?? null,
         env: envFile?.name ?? null,
         harness: target,
         package_digest: digest(disk.package),
@@ -1361,6 +1369,7 @@ export const apply: CommandSpec = {
       previewText(preview, context),
       ...(sharedLine ? [sharedLine] : []),
       "",
+      targetLine(acting),
       ...(preview.preview_id ? [`preview id: ${preview.preview_id}`] : []),
       ...(reason ? [`This ${reason}: show this preview to a person before confirming.`] : []),
       ...(confirmLine ? [`Import exactly this: ${confirmLine}`] : []),
@@ -1808,7 +1817,7 @@ async function defaultRouteAfterActivation(
     const confirm = cavelonCommand("activate", "--harness", harness.slug, "--make-default", "--confirm");
     return {
       data: { default_route: { is_default: false, known: route.known, current, preview: commands.preview, confirm: gate.confirm(confirm), ...gate.fields } },
-      lines: [defaultChangeLine(harness, route), ...(gate.mismatch ? [gate.mismatch] : []), `Show this to a person; with their yes: ${gate.confirm(confirm)}`],
+      lines: [defaultChangeLine(harness, route), gate.where, ...(gate.mismatch ? [gate.mismatch] : []), `Show this to a person; with their yes: ${gate.confirm(confirm)}`],
       ...(gate.exitCode ? { exitCode: gate.exitCode } : {}),
     };
   }

@@ -627,6 +627,7 @@ export const sandboxSeed: CommandSpec = {
         data: { ...summary, seeded: false, confirm, ...gate.fields },
         text:
           `Would replace the workspace of "${sandbox.name}" (${revision}) with ${what}, ${archive.bytes.length} bytes, sha256 ${archive.sha256}.\n` +
+          `${gate.where}\n` +
           (gate.mismatch ? `${gate.mismatch}\n` : "") +
           `Nothing was sent. Seed it with: ${confirm}`,
         ...(gate.exitCode ? { exitCode: gate.exitCode } : {}),
