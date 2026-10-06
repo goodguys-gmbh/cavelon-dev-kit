@@ -41,6 +41,12 @@ own to try it: `claude mcp add cavelon-dev -- cavelon mcp`.
 CI runs the same steps on Linux (Node.js 20, 22 and 24), macOS and Windows, and
 checks that the packed package carries the skills and the license.
 
+A test that compares a printed command with a string pins the shell, since
+`cavelon` quotes words for the shell it runs in (`'…'` for POSIX, `"…"` on
+Windows): set `SHELL=/bin/sh` in the test sandbox's environment, or call
+`useShell("posix")` around an in-process check and restore it afterwards.
+Otherwise the test passes on Linux and macOS and fails only on Windows.
+
 ### The standalone executable
 
 The releases also carry `cavelon` as one executable per platform, built with

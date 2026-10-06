@@ -7,6 +7,20 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+## [0.1.11] - 2026-10-06
+
+Permissions and safeguards from a review of what a restricted credential may
+do, and database query tools end to end:
+- the kit offers, suggests and marks only what the credential may do;
+- every changing command previews and asks for `--confirm` where it reaches
+  live traffic or the whole tenant;
+- an API key refuses another tenant than its own, and previews name the
+  tenant, instance and mode;
+- secrets are refused under every coding agent the kit sets up;
+- caches are per token and tenant, and private;
+- platform docs pages are marked when the token can read but not act on them;
+- solutions can declare, validate, apply, test and trace saved database queries.
+
 ### Added
 
 - The kit offers and suggests only what the credential may do (#133). It
