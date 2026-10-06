@@ -131,7 +131,7 @@ Choose the tenant this instance's commands act in.
 cavelon use [tenant] [options]
 ```
 
-Stored per instance for your user. CAVELON_TENANT, --tenant and a cavelon.yaml tenant take precedence over it. Without a tenant, it lists the tenants the token reaches: a person chooses one on a terminal by number or part of its name; without a terminal it prints one `cavelon use` line per tenant, and as an MCP tool it returns them as choices and changes nothing.
+Stored per instance for your user. CAVELON_TENANT, --tenant and a cavelon.yaml tenant take precedence over it. Without a tenant, it lists the tenants the token reaches: a person chooses one on a terminal by number or part of its name; without a terminal it prints one `cavelon use` line per tenant, and as an MCP tool it returns them as choices and changes nothing. As an MCP tool it never changes the tenant stored for your user: it chooses the tenant for that MCP session only, until the session ends or it is cleared, so an agent's choice never moves where your own commands go.
 
 | Argument | Description |
 |---|---|

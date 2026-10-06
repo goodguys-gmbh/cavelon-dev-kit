@@ -71,6 +71,7 @@ describe("limits set without --confirm", () => {
       "kb_upload_max_file_size_mb: 25 MB → 50 MB (source now: platform).\n" +
         'Sends: PATCH /api/v1/tenants/current/upload-defaults {"max_file_size_mb":50}\n' +
         "Allowed: a credential with settings.uploads.manage or settings.manage (a session, a personal access token, or an admin API key of the tenant).\n" +
+        `acts on: ${server.url}, tenant Acme (acme, ${tenant}) from \`cavelon use\`, tenant mode\n` +
         "Nothing was changed. Change it with: cavelon limits set kb_upload_max_file_size_mb 50 --confirm\n",
     );
     expect(patches()).toEqual([]);
@@ -285,6 +286,7 @@ describe("the monthly Processing Step cap", () => {
       "monthly_processing_step_cap: none (no cap) → 40000.\n" +
         'Sends: PATCH /api/v1/tenants/current/processing-step-cap {"monthly_processing_step_cap":40000}\n' +
         "Allowed: a credential with settings.manage (a session, a personal access token, or an admin API key of the tenant).\n" +
+        `acts on: ${server.url}, tenant Acme (acme, ${tenant}) from \`cavelon use\`, tenant mode\n` +
         "Nothing was changed. Change it with: cavelon limits set monthly_processing_step_cap 40000 --confirm\n",
     );
     expect(patches()).toEqual([]);
@@ -379,6 +381,8 @@ describe("an operator's change in Platform mode", () => {
         "max_concurrent_agent_runs_global: 200 → 150 (source now: platform, origin: default).\n" +
           'Sends: PATCH /api/v1/platform-settings/runs/capacity {"global":150} (Platform mode, no X-Tenant-Id)\n' +
           "Allowed: a personal access token in Platform mode of a superadmin.\n" +
+          // The platform's cap, for every tenant: the --tenant given names no tenant it changes.
+          `acts on: ${server.url}, Platform mode, outside any tenant\n` +
           "Nothing was changed. Change it with: cavelon limits set max_concurrent_agent_runs_global 150 --tenant acme --confirm\n",
       );
       expect(sentTo("/api/v1/platform-settings/runs/capacity")).toEqual([]);

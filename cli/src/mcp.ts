@@ -7,6 +7,7 @@ import { asCavelonError, CavelonError, ExitCode, usageError } from "./errors.js"
 import type { Io } from "./io.js";
 import { closest } from "./package-references.js";
 import { printingFor, spoken, spokenError, spokenHints } from "./printed.js";
+import type { SessionTenant } from "./session.js";
 import { startSessionUpdateCheck, type SessionUpdateOptions } from "./update-check.js";
 import { KIT_VERSION } from "./version.js";
 
@@ -56,6 +57,8 @@ const INSTRUCTIONS =
   "to run in their terminal, and never ask for, read or pass a secret value. Never approve or decide an approval; " +
   "that stays with a person. Use docs_search before guessing, " +
   "and api_list/api_describe/api for anything without its own tool. " +
+  "use_tenant chooses the tenant for this MCP session only and never changes the tenant stored for the person; every preview " +
+  "names the instance, the tenant and the mode it acts on (its target): show that to the person with the change. " +
   "The first result of a session may carry a warning that cavelon, the Cavelon plugin or this folder's skills are behind " +
   "the latest release, with the commands that update them: pass it on to the person, who runs them; do not run them yourself.";
 
@@ -115,7 +118,10 @@ export function inputSchema(spec: CommandSpec, commands: readonly CommandSpec[] 
           : { type: ["string", "number"], description };
   }
   if (!ownsTenant(spec)) {
-    properties.tenant = { type: "string", description: "Tenant slug or id, when not the one chosen for this directory." };
+    properties.tenant = {
+      type: "string",
+      description: "Tenant slug or id, when not the one chosen for this directory or with use_tenant in this session. A preview names the tenant it acts on.",
+    };
   }
   return { type: "object", properties, ...(required.length ? { required } : {}), additionalProperties: false };
 }
@@ -214,6 +220,8 @@ export function createMcpServer(io: Io, commands: CommandSpec[], updates: Sessio
   const byName = new Map(tools.map((c) => [toolName(c)!, c]));
   const server = new Server({ name: "cavelon", version: KIT_VERSION }, { capabilities: { tools: {} }, instructions: mcpInstructions(commands) });
   const notice = startSessionUpdateCheck(io, updates);
+  // The tenants use_tenant chose: this server's alone, never the person's stored choice.
+  const sessionTenants = new Map<string, SessionTenant>();
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: tools.map((t) => toolFor(t, commands)) }));
 
@@ -235,11 +243,13 @@ export function createMcpServer(io: Io, commands: CommandSpec[], updates: Sessio
     }
     const tenant = !ownsTenant(spec) && typeof args.tenant === "string" ? args.tenant : undefined;
     const solutionEnv = spec.options?.env && typeof args.env === "string" ? args.env : undefined;
-    const ctx = createContext(mcpIo(io), { json: true, tenant, solutionEnv }, "mcp");
+    const ctx = createContext(mcpIo(io), { json: true, tenant, solutionEnv, sessionTenants }, "mcp");
     for (const message of renamed) ctx.warn(message);
     try {
+      // A command a person runs in a terminal knows nothing of this session's tenant, so the lines printed for one name it.
+      const chosen = tenant ?? (await ctx.session().then((s) => (s.tenantSource === "session" ? s.tenant : undefined), () => undefined));
       // The answer's hints, warnings and a refusal's hint name tool calls, as the commands it prints do.
-      const { result, warnings } = await printingFor({ mode: "mcp", commands, ...(spec.storesTarget ? {} : { tenant, env: solutionEnv }) }, async () => {
+      const { result, warnings } = await printingFor({ mode: "mcp", commands, ...(spec.storesTarget ? {} : { tenant: chosen, env: solutionEnv }) }, async () => {
         try {
           const done = await spec.run(ctx, inputFrom(spec, args));
           return { result: { ...done, data: spokenHints(done.data) }, warnings: ctx.warnings.map(spoken) };

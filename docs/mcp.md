@@ -218,12 +218,27 @@ repeat them:
   `tenant_wide.imported` says what the import took along. The preview it
   stores keeps the flag, so the confirm sends the same request. `pull` takes
   `include_tenant_wide` too, to write those sections into the folder.
+- **Where a change goes.** Every preview carries `target`: the instance, the
+  tenant (id, name and slug) and the mode it acts in (`tenant`, `platform` for
+  Platform mode, `none` when no tenant is chosen and the instance places the
+  token in none), and where the tenant was named (`tenant_from`: the `tenant`
+  argument, `use_tenant` in this session, `cavelon.yaml`, …). Its text says the
+  same in an `acts on:` line. The agent shows it to you with the change, so a
+  tenant it passed, or a Platform-mode token with no tenant chosen, is
+  visible before you say yes.
+- **`use_tenant` is for the session.** Over MCP, `use_tenant` chooses the
+  tenant for that MCP session only, until the session ends or `clear` resets
+  it: it never changes the tenant you stored with `cavelon use`, so an
+  agent's choice never moves where your own terminal commands go. A
+  `tenant` argument, `CAVELON_TENANT` and the folder's `cavelon.yaml` still
+  take precedence over it, as they do over `cavelon use`. `tenant_create`
+  with `use` switches the session in the same way.
 - **What changes without `confirm`.** `init`, `pull` and `fmt` change nothing
   on the instance; they write files in the solution folder (`pull` refuses to
   replace a package file that is neither committed nor as the last pull or
   apply left it, unless `force`), and the other tools marked changing act at
   once:
-  `use_tenant`, `tenant_create`, `harness_new`, `harness_clone`, `activate`
+  `use_tenant` (for the session only), `tenant_create`, `harness_new`, `harness_clone`, `activate`
   (through the readiness gate), `chat` (one turn of a conversation with the
   solution it names, the way to try one that is not the default route),
   `variables_set`, `kb_upload` (without

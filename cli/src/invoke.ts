@@ -139,6 +139,7 @@ export async function callOperation(ctx: Context, client: ApiClient, doc: OpenAp
     }
   }
   if (!response.ok) {
+    if (await client.tenantMoved(op.method, target, response.status, { sendTenant: args.sendTenant })) return callOperation(ctx, client, doc, op, args);
     const pathname = new URL(client.resolve(target)).pathname;
     throw await client.refusal(response.status, data, `${op.method} ${pathname}`, response.headers, {
       platform: args.sendTenant === false || isPlatformRoute(pathname),

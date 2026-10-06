@@ -696,7 +696,10 @@ export const limitsSet: CommandSpec = {
     const allowed = operator
       ? `a personal access token in Platform mode of a ${anyOf(change.requires_role ?? [], "platform role")}`
       : `a credential with ${anyOf(change.permissions)} (a session, a personal access token, or an admin API key of the tenant)`;
-    const gate = await confirmation(ctx, input, "limits_set", { key, value, previous: previous ?? null, operation });
+    const gate = await confirmation(ctx, input, "limits_set", { key, value, previous: previous ?? null, operation }, {
+      // An operator's change goes out in Platform mode: for the one tenant it names, or for every tenant.
+      platform: operator ? (target.scope === "one_tenant" ? "tenant" : "outside") : undefined,
+    });
     if (!gate.confirmed) {
       const confirm = gate.confirm(cavelonCommand("limits", "set", key, argText(value), "--confirm"));
       const source = target.limit && target.kind === "limit" ? ` (source now: ${target.limit.source}${target.limit.origin ? `, origin: ${target.limit.origin}` : ""})` : "";
@@ -708,7 +711,7 @@ export const limitsSet: CommandSpec = {
             : [];
       return {
         data: { ...base, changed: false, sent: false, confirm, ...gate.fields },
-        text: [`${key}: ${from} → ${to}${source}.`, ...what, `Sends: ${sends}`, `Allowed: ${allowed}.`, ...(gate.mismatch ? [gate.mismatch] : []), `Nothing was changed. Change it with: ${confirm}`].join("\n"),
+        text: [`${key}: ${from} → ${to}${source}.`, ...what, `Sends: ${sends}`, `Allowed: ${allowed}.`, gate.where, ...(gate.mismatch ? [gate.mismatch] : []), `Nothing was changed. Change it with: ${confirm}`].join("\n"),
         ...(gate.exitCode ? { exitCode: gate.exitCode } : {}),
       };
     }

@@ -85,6 +85,12 @@ function leading(text: string, slashes: boolean): number {
 export class ApiClient {
   /** Whether the instance has personal access tokens turned off, asked once. */
   private tokensOff?: Promise<boolean>;
+  /**
+   * Set where the tenant id came from the slug cache: resolves the slug
+   * again, once, and says whether the id changed. The first 403 or 404 of a
+   * request in that tenant calls it.
+   */
+  revalidateTenant?: () => Promise<boolean>;
 
   constructor(
     readonly target: Target,
@@ -179,6 +185,7 @@ export class ApiClient {
       });
     }
     if (!response.ok && !options.allow?.includes(response.status)) {
+      if (await this.tenantMoved(method, path, response.status, options)) return this.request<T>(method, path, options);
       // A tenant call sent without a tenant, because none is chosen: a token without Platform mode is refused for that alone.
       const tenantless = options.sendTenant !== false && !this.headers(options)["X-Tenant-Id"] && Boolean(this.target.token?.startsWith("cvpat_"));
       const pathname = new URL(response.url || this.resolve(path)).pathname;
@@ -186,6 +193,28 @@ export class ApiClient {
       throw await this.refusal(response.status, data, `${method} ${pathname}`, response.headers, { tenantless, platform });
     }
     return { status: response.status, headers: response.headers, data: data as T, text };
+  }
+
+  /**
+   * Whether a request refused with 403 or 404 in a tenant that a cached slug
+   * named is asked again: the slug is resolved again, once, and a read goes
+   * to the tenant it names now. A change is not sent again, as its preview
+   * named the other tenant: it is refused with tenant_moved. False where the
+   * tenant did not come from the cache, or the slug still names it.
+   */
+  async tenantMoved(method: string, path: string, status: number, options: RequestOptions = {}): Promise<boolean> {
+    const sentTenant = this.headers(options)["X-Tenant-Id"];
+    if ((status !== 403 && status !== 404) || !sentTenant || !this.revalidateTenant) return false;
+    const revalidate = this.revalidateTenant;
+    this.revalidateTenant = undefined;
+    if (!(await revalidate())) return false;
+    if (method === "GET" || method === "HEAD") return true;
+    throw new CavelonError(ExitCode.conflict, {
+      code: "tenant_moved",
+      status,
+      message: `${method} ${path} was refused in tenant ${sentTenant}, which a cached slug named; the slug now names tenant ${this.target.tenantId}. Nothing was changed.`,
+      hint: "Run the command again: it now acts in the tenant the slug names, and a change previews there first.",
+    });
   }
 
   /**
