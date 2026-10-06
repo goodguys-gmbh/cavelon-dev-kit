@@ -10,6 +10,7 @@ import { Ajv2020 } from "ajv/dist/2020.js";
 import { buildArchive } from "../src/tar.js";
 import { CAPACITY_PAGES } from "../src/capacity.js";
 import { CONTRACTS, modelRow, openapiSnapshot, samplePackage, startFakeServer, traceFixture, type FakeServer } from "./fake-server.js";
+import { seedQueryTool } from "./fake-database.js";
 
 /**
  * The fake server must answer in the shapes the instance publishes, or the
@@ -549,6 +550,29 @@ describe("the fake server answers in the published shapes", () => {
     check("GET", "/api/v1/triggers/runs/{run_id}/traces", 200, traces.data);
     const detail = await call("GET", "/api/v1/triggers/runs/7aace000-0000-4000-8000-0000000000bb/traces/7aace000-0000-4000-8000-0000000000cc");
     check("GET", "/api/v1/triggers/runs/{run_id}/traces/{trace_id}", 200, detail.data);
+  });
+
+  it("database connections, queries, runs, connection tests and test runs", async () => {
+    const { connection, query } = seedQueryTool(server.state.db, tenant);
+    server.state.features.database_connector_enabled = true;
+    try {
+      check("GET", "/api/v1/meta/capabilities", 200, (await call("GET", "/api/v1/meta/capabilities")).data);
+      check("GET", "/api/v1/database-connectors/connections", 200, (await call("GET", "/api/v1/database-connectors/connections")).data);
+      check("GET", "/api/v1/database-connectors/connections/{connection_id}", 200, (await call("GET", `/api/v1/database-connectors/connections/${connection.id}`)).data);
+      check("POST", "/api/v1/database-connectors/connections/{connection_id}/test", 200, (await call("POST", `/api/v1/database-connectors/connections/${connection.id}/test`)).data);
+      check("GET", "/api/v1/database-connectors/queries", 200, (await call("GET", `/api/v1/database-connectors/queries?connection_id=${connection.id}`)).data);
+      check("GET", "/api/v1/database-connectors/queries/{query_id}", 200, (await call("GET", `/api/v1/database-connectors/queries/${query.id}`)).data);
+      const body = { values: { order_no: "A-10023", email: "ada@example.com" } };
+      const requestSchema = operationAt(doc, "POST", "/api/v1/database-connectors/queries/{query_id}/test-run")!.requestBody!.content!["application/json"]!.schema!;
+      expect(schemaErrors(doc, requestSchema, body)).toEqual([]);
+      check("POST", "/api/v1/database-connectors/queries/{query_id}/test-run", 200, (await call("POST", `/api/v1/database-connectors/queries/${query.id}/test-run`, body)).data);
+      check("GET", "/api/v1/database-connectors/queries/{query_id}/runs", 200, (await call("GET", `/api/v1/database-connectors/queries/${query.id}/runs?limit=5`)).data);
+      // Off, the connector's routes are not there, as on the instance.
+      server.state.features.database_connector_enabled = false;
+      expect((await call("GET", "/api/v1/database-connectors/connections")).status).toBe(404);
+    } finally {
+      delete server.state.features.database_connector_enabled;
+    }
   });
 
   it("triggers, runs, loops, identities, Sandboxes and archive jobs", async () => {

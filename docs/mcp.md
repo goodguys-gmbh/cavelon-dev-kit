@@ -105,6 +105,11 @@ only reads it).
 | `kb_upload` | `cavelon kb upload` | changing |
 | `test_run` | `cavelon test run` | changing |
 | `trace` | `cavelon trace` | read-only |
+| `db_connections` | `cavelon db connections` | read-only |
+| `db_queries` | `cavelon db queries` | read-only |
+| `db_runs` | `cavelon db runs` | read-only |
+| `db_test` | `cavelon db test` | changing |
+| `db_test_run` | `cavelon db test-run` | changing |
 | `loop_start` | `cavelon loop start` | changing |
 | `loop_cancel` | `cavelon loop cancel` | destructive |
 | `loop_iterations` | `cavelon loop iterations` | read-only |
@@ -244,7 +249,10 @@ repeat them:
   `variables_set`, `kb_upload` (without
   `replace`, or where the instance replaces itself), `test_run`,
   `loop_start`, `loop_pause`, `loop_resume`, `sandbox_validate`,
-  `sandbox_refresh` and `artifacts_export`.
+  `sandbox_refresh`, `artifacts_export`, and the tenant Owner's two database
+  checks, `db_test` (a connection test, stored as the connection's last test)
+  and `db_test_run` (one run of a saved query with the values given; the rows
+  come back once, and the instance keeps counts only).
 - **What no tool does, even with `confirm`.** `api` refuses an operation the
   instance keeps for a person (`operation_for_a_person`); a person does those
   in Cavelon or in their terminal. An instance marks them in its OpenAPI

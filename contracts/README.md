@@ -21,10 +21,24 @@ snapshot does not have yet, and then the package schema's `x-cavelon-scope:
 tenant` on the six sections that instance marks tenant-wide (`tenant_settings`,
 `model_registry`, `model_role_defaults`, `realtime_config`,
 `telephony_config`, `kb_orders`); the rest of that schema matches the
-snapshot. The tests switch features
-on in the fake server where a command needs them (personal access tokens, the
-operations API, Sandboxes, Masterloop, archive uploads); the snapshot keeps
-the defaults.
+snapshot.
+
+Refreshed on 2026-10-06 from an instance build whose database connector was
+not deployed anywhere yet, so its contracts were generated from that build's
+code without running it: the package schema, the error catalog and the
+capabilities from the functions its `/api/v1/meta` routes return, the OpenAPI
+from its generator, and the docs index (with the new Database Connectors page)
+from its docs corpus, all at default settings (the connector off,
+`may_write_queries` false), then trimmed and scrubbed as below. The
+capabilities' `limits` need a database to compute, so they stay as recorded on
+2026-10-04, and `personal_access_tokens_enabled` and `operations_api_enabled`
+stay off as recorded there. The same build also publishes other changes since
+the last refresh (an agent's reasoning effort, knowledge base defaults, the
+knowledge outcomes in the error catalog), which the snapshot now carries.
+
+The tests switch features on in the fake server where a command needs them
+(personal access tokens, the operations API, Sandboxes, Masterloop, archive
+uploads, the database connector); the snapshot keeps the defaults.
 
 | File | Source |
 |---|---|

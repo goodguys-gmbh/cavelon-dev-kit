@@ -34,6 +34,12 @@ const GROUPS: Array<{ title: string; intro: string; names: string[] }> = [
     names: ["kb upload", "test run", "wait", "watch", "trace"],
   },
   {
+    title: "Database connections and queries",
+    intro:
+      "Read the connections, saved queries and query runs behind a solution's database query tools; the tenant Owner also tests a connection and test-runs a query. A superadmin creates and changes them in the Admin.",
+    names: ["db connections", "db queries", "db runs", "db test", "db test-run"],
+  },
+  {
     title: "Variables and secrets",
     intro: "Tenant values a package refers to as `{{var:…}}` and `{{secret:…}}`. A secret's value is set by a person, never by the agent.",
     names: ["variables list", "variables get", "variables set", "variables delete", "secrets list", "secrets set", "secrets delete"],

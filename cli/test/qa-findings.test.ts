@@ -258,27 +258,23 @@ describe("test results and traces", () => {
   });
 
   it("explain reads a knowledge outcome from the instance's catalog, and knows the documented values where it lists none", async () => {
-    const fallback = await cli(sb, ["explain", "unusable_hits", "--json"]);
-    expect(fallback.code).toBe(0);
-    expect(fallback.json()).toMatchObject({ code: "unusable_hits", kind: "knowledge_outcome", recorded_as: "no_usable_evidence" });
-    expect((await cli(sb, ["explain", "no_usable_evidence"])).stdout).toMatch(/content_gap \(no hits\), unusable_hits \(hits, none usable\) or retrieval_fault/);
-
-    server.state.catalogCodes.push({
-      code: "unusable_hits",
-      area: "knowledge_outcome",
-      message: "The instance's own words for unusable_hits.",
-      hint: "Read the hits.",
-      docs: "/docs/concepts/regression-testing#knowledge-outcomes-in-the-trace",
-    });
+    // An older instance's catalog lists no knowledge outcome.
+    server.state.catalogWithout = ["content_gap", "unusable_hits", "retrieval_fault", "no_usable_evidence", "usable_evidence"];
     try {
-      const fresh = { CAVELON_CACHE_DIR: path.join(sb.home, `cache-${randomUUID()}`) };
-      const listed = await cli(sb, ["explain", "unusable_hits"], { env: fresh });
-      expect(listed.stdout).toMatch(/^kind:\s+knowledge outcome/m);
-      expect(listed.stdout).toMatch(/^meaning:\s+The instance's own words for unusable_hits\.$/m);
-      expect((await cli(sb, ["explain", "unusable_hits", "--json"], { env: fresh })).json()).toMatchObject({ kind: "knowledge_outcome", area: "knowledge_outcome" });
+      const older = { CAVELON_CACHE_DIR: path.join(sb.home, `cache-${randomUUID()}`) };
+      const fallback = await cli(sb, ["explain", "unusable_hits", "--json"], { env: older });
+      expect(fallback.code).toBe(0);
+      expect(fallback.json()).toMatchObject({ code: "unusable_hits", kind: "knowledge_outcome", recorded_as: "no_usable_evidence" });
+      expect((await cli(sb, ["explain", "no_usable_evidence"], { env: older })).stdout).toMatch(/content_gap \(no hits\), unusable_hits \(hits, none usable\) or retrieval_fault/);
     } finally {
-      server.state.catalogCodes = [];
+      server.state.catalogWithout = [];
     }
+
+    const fresh = { CAVELON_CACHE_DIR: path.join(sb.home, `cache-${randomUUID()}`) };
+    const listed = await cli(sb, ["explain", "unusable_hits"], { env: fresh });
+    expect(listed.stdout).toMatch(/^kind:\s+knowledge outcome/m);
+    expect(listed.stdout).toMatch(/^meaning:\s+The agent recorded no_usable_evidence although the search returned hits/m);
+    expect((await cli(sb, ["explain", "unusable_hits", "--json"], { env: fresh })).json()).toMatchObject({ kind: "knowledge_outcome", area: "knowledge_outcome" });
   });
 });
 

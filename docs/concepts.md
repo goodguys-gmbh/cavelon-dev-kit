@@ -162,6 +162,72 @@ manage secrets, such as the tenant's Owner: a Builder's token cannot, and
 `secrets set`, `activate` and `status` name who sets it instead: a tenant Owner,
 in the Admin under Settings › Secrets or with their own token.
 
+## Database query tools
+
+A **database query tool** lets an agent answer from a customer's live
+database: the status of an order, the stock of an article. The agent never
+writes SQL. A saved, read-only query becomes one tool (`tool_type:
+database_query`); the model calls it and fills only the parameters it is
+given. A parameter whose `source` is `end_user.id`,
+`end_user.external_subject` or `end_user.email` is filled by the instance from
+the signed-in visitor, never by the model, so a visitor only reads their own
+rows. A query without such a parameter answers visitors who are not signed in
+only when it sets `allows_anonymous: true`.
+
+The query travels in the package, on its tool in `package/tools.yaml`; its
+connection travels by name and dialect only, never its host, user or password:
+
+```yaml
+- slug: order_status
+  name: Order status
+  description: Status and shipping date of one of the signed-in visitor's orders, by order number.
+  tool_type: database_query
+  scope: tenant_local
+  database_query:
+    connection: { name: shop-db, dialect: postgresql }
+    sql_text: SELECT number, status, shipped_at FROM orders WHERE number = :order_no AND email = :email LIMIT 5
+    parameters:
+      - { name: order_no, type: string, description: Order number as printed on the confirmation, e.g. A-10023, max_length: 20 }
+      - { name: email, source: end_user.email, type: string }
+    max_rows: 5
+```
+
+**Who changes what.** A superadmin of the instance creates and tests the
+connection and writes or changes a query, in the Admin. A personal access
+token never does: an `apply` whose package would create or change a query
+(its SQL, parameters, limits, or the tool's own `name` and `description`) is
+blocked with `database_query_needs_superadmin`, and that one blocker stops
+the whole import. An agent's or skill's override of the tool's name,
+description or `max_calls` (`config_overrides` on the assignment) is no query
+change. An apply whose queries match the instance's passes. So:
+
+- `cavelon pull` writes the queries into the package; `validate` checks each
+  one where the schema allows (every `:name` placeholder against the declared
+  parameters, each parameter's type and constraints) and warns
+  (`database_query_changed`) for each query tool that differs from the last
+  pull or apply, and when a query tool's `params_json_schema` or
+  `default_config` changed, which the instance derives from the query and
+  ignores (`database_query_fields_ignored`).
+- `apply` reads the instance's capabilities first and says, before it sends
+  anything, when this credential may not write queries
+  (`database_connector.may_write_queries`), when the connector is switched off,
+  or when the instance does not run the query's dialect. A blocked preview
+  names each query blocker with its file, line and next step.
+- To apply the other changes first, leave the query as the instance holds it:
+  restore the tool's entry as the last pull wrote it, or remove its
+  `database_query` block (a query tool without one keeps the instance's
+  query, name and description). Then a superadmin imports the package in the
+  Admin (the solution's Agents page, Import JSON), and `apply` passes again.
+
+`cavelon db connections`, `db queries` and `db runs` read the connections, the
+saved queries and each query's runs (outcome, error code and row count; never
+a value or a row). The tenant Owner may also run `cavelon db test <connection>`
+and `cavelon db test-run <query> --value name=value`, which fills the identity
+parameters by hand to check what one customer would get. `trace` shows the
+code a failed query call answered the model with, such as `identity_required`;
+`cavelon explain <code>` says what it means. The instance's page
+`cavelon docs get administration/database-connectors` describes the screens.
+
 ## The solution folder
 
 A solution lives in a folder with a `cavelon.yaml`, usually a git repository

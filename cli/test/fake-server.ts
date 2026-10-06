@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AddressInfo } from "node:net";
 import { handleLongRunning, longRunningState, type LiveView, type LongRunningState } from "./fake-long-running.js";
+import { databaseState, exportQueries, handleDatabase, queryBlockers, type DatabaseState } from "./fake-database.js";
 import { tenantWideSections } from "../src/package-files.js";
 import type { PackageSchema } from "../src/contracts.js";
 
@@ -351,6 +352,8 @@ export interface FakeState {
   packageSchemaEtag: boolean;
   /** Triggers, runs, loops, Sandboxes, archive jobs, API keys. */
   lr: LongRunningState;
+  /** Database connections, saved queries and their runs. */
+  db: DatabaseState;
   /** Each tenant's variables and secrets. */
   values: Map<string, TenantValues>;
   /** Every tenant's Model Registry rows. */
@@ -600,6 +603,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     packageSchemaEdit: null,
     packageSchemaEtag: false,
     lr: longRunningState(),
+    db: databaseState(),
     values: new Map(),
     models: [],
     tenantLimits: new Map(),
@@ -1095,6 +1099,8 @@ export async function startFakeServer(): Promise<FakeServer> {
         ? handleVariable(res, method, tid, decodeURIComponent(rest), body.json)
         : handleSecret(res, method, tid, decodeURIComponent(rest), body.json, info);
     }
+    const caps = capabilitiesFor(tid) as { features?: Record<string, boolean> };
+    if (handleDatabase(state.db, { method, path: p, url, json: body.json, tenantId: tid, enabled: caps.features?.database_connector_enabled === true, send: (status, payload) => send(res, status, payload) })) return;
     const handled = handleLongRunning(state.lr, {
       method,
       path: p,
@@ -1121,6 +1127,8 @@ export async function startFakeServer(): Promise<FakeServer> {
       const config = configFor(tid);
       const pkg = state.exportFillsDefaults ? withSchemaDefaults(packageSchema(), config.pkg) : structuredClone(config.pkg);
       pkg.manifest = { ...(pkg.manifest as object), exported_at: now(), scope };
+      // A query tool's definition comes from the query, which only a superadmin writes.
+      exportQueries(state.db, tid, pkg);
       // A recent instance's solution export leaves what the whole tenant shares out unless asked.
       if (state.tenantWideFlag && scope === "agent_graph" && url.searchParams.get("include_tenant_wide") !== "true") {
         for (const section of tenantWideSections(packageSchema() as PackageSchema)) delete pkg[section];
@@ -1164,11 +1172,17 @@ export async function startFakeServer(): Promise<FakeServer> {
           : {};
       const previewId = `pv_${createHash("sha256").update(`${tid}:${config.version}:${canonical(request)}`).digest("hex").slice(0, 32)}`;
       const ignored = Object.keys(b.package).filter((k) => !(k in schema.properties));
+      // The query gate: what a credential that may not write queries cannot import, coded as the instance codes it.
+      const offer = (capabilitiesFor(tid) as { database_connector?: { may_write_queries?: boolean } }).database_connector;
+      const catalogHint = (code: string) =>
+        (JSON.parse(readContract("meta-error-catalog.json")) as { api_error_codes: Array<{ code: string; hint: string }> }).api_error_codes.find((e) => e.code === code)?.hint ?? "";
+      const queryBlocked = queryBlockers(state.db, tid, b.package, offer?.may_write_queries === true, catalogHint);
+      const blockers = [...state.previewBlockers, ...queryBlocked.map((q) => q.message)];
       const preview = {
-        ready: state.previewBlockers.length === 0,
+        ready: blockers.length === 0,
         text_blocks: [],
         mode: request.mode,
-        summary: { creates: { agents: 1 }, updates: { knowledge_bases: 1 }, deletes: {}, references: {}, warnings: 0, blockers: state.previewBlockers.length },
+        summary: { creates: { agents: 1 }, updates: { knowledge_bases: 1 }, deletes: {}, references: {}, warnings: 0, blockers: blockers.length },
         warnings: [
           ...sharedKept.map(
             (section) => `This solution import leaves ${section} out: they hold what the whole tenant shares, so every solution would see the change. Import with include_tenant_wide to apply them.`,
@@ -1177,7 +1191,8 @@ export async function startFakeServer(): Promise<FakeServer> {
             ? [`This import changes ${shared.join(", ")} for every solution of the tenant (include_tenant_wide).`]
             : []),
         ],
-        blockers: state.previewBlockers,
+        blockers,
+        ...(queryBlocked.length ? { blocker_details: queryBlocked } : {}),
         ignored: { sections: ignored, fields: [], count: ignored.length },
         impact: { changed_tools: [], changed_knowledge_bases: [], active_harnesses: [], sandbox_writers: [] },
         loop_budgets: [],
@@ -1187,7 +1202,7 @@ export async function startFakeServer(): Promise<FakeServer> {
       };
       if (p.endsWith("/preview")) return send(res, 200, { ...preview, preview_id: previewId });
       if (info.kind === "key") return send(res, 403, { detail: "Agent graph import requires admin authentication (JWT), not API key" });
-      if (state.previewBlockers.length) return send(res, 422, { detail: preview });
+      if (blockers.length) return send(res, 422, { detail: preview });
       if (b.preview_id && b.preview_id !== previewId) {
         // A recent instance answers at the top level and names what changed where it still knows.
         if (state.staleChanged) {

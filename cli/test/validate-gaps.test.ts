@@ -142,11 +142,11 @@ describe("lines", () => {
   it("a required field under another name points at the misspelt field's line", async () => {
     const dir = await pulled();
     const agents = path.join(dir, "package", "agents.yaml");
-    writeFileSync(agents, read(agents).replace(/^ {2}temperature:/m, "  temprature:"));
+    writeFileSync(agents, read(agents).replace(/^ {2}llm_provider:/m, "  llm_provide:"));
     const findings = (await cli(sb, ["validate", "--offline", "--json"], { cwd: dir })).json<Validated>().findings;
     const renamed = findings.find((f) => f.code === "package_schema_invalid")!;
-    expect(renamed.message).toMatch(/^missing required field "temperature" \("temprature" is set/);
-    expect(lineOf(dir, renamed)).toMatch(/^ {2}temprature:/);
+    expect(renamed.message).toMatch(/^missing required field "llm_provider" \("llm_provide" is set/);
+    expect(lineOf(dir, renamed)).toMatch(/^ {2}llm_provide:/);
     expect(renamed.hint).toBe("Fix the field the finding names; `cavelon schema agents` lists the fields there (type, required, allowed values) with a minimal entry.");
   });
 

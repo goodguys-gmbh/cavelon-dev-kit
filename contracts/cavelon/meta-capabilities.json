@@ -19,8 +19,15 @@
     "sandbox_outbound_enrollment_enabled": false,
     "sandbox_isolated_container_enabled": false,
     "masterloop_enabled": false,
+    "database_connector_enabled": false,
     "personal_access_tokens_enabled": false,
     "operations_api_enabled": false
+  },
+  "database_connector": {
+    "setting": "DATABASE_CONNECTOR_ENABLED",
+    "dialects": [],
+    "may_write_queries": false,
+    "queries_written_by": "A superadmin in Tenant mode, signed in to the Admin: under Settings → Databases, or by importing a package from the solution's Agents page (Import JSON). A personal access token or an API key never creates or changes a database query; its import passes while the package's queries match the tenant's."
   },
   "sandbox": {
     "execution_modes": []

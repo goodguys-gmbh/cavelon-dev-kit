@@ -3,6 +3,7 @@ import { BRANCH_WIDTH_KEY, branchConcurrency, offText } from "./branches.js";
 import type { CatalogEntry, ErrorCatalog, PackageSchema } from "./contracts.js";
 import type { PublishedLimits } from "./limits.js";
 import type { TenantInventory } from "./commands/inventory.js";
+import { checkQueryTools, QUERY_CHANGED_CODE, QUERY_FIELDS_IGNORED_CODE, type QueryBaseline } from "./database-queries.js";
 import { locate, schemaSections, tenantWideSections, type Finding, type PackageOnDisk } from "./package-files.js";
 import { MANIFEST_SECTION, PERSONA_SECTION, sectionFields } from "./package-format.js";
 import { kitErrorEntry } from "./kit-codes.js";
@@ -66,6 +67,9 @@ const TENANT_WIDE_CODE = "tenant_wide_section";
 /** A test step's criterion with a `type`, on an instance whose schema does not describe a step's criteria. */
 const ASSERTION_UNCHECKED_CODE = "test_assertion_unchecked";
 const TESTING_DOCS = "/docs/concepts/regression-testing";
+
+/** The instance's page on database connections and query tools that a tenant's credential reads. */
+const DATABASE_DOCS = "/docs/administration/database-connectors";
 
 /**
  * The codes `validate` reports itself. The instance's catalog wins where it
@@ -210,6 +214,24 @@ export const KIT_CODES: CatalogEntry[] = [
     docs: PACKAGE_DOCS,
   },
   {
+    code: QUERY_CHANGED_CODE,
+    area: "package",
+    message:
+      "A database query tool's query (database_query), name or description differs from the last pull or apply, or the tool is new. Only a superadmin in the Admin creates or changes a query; a personal access token's import preview blocks it.",
+    hint:
+      "Hand the change to a superadmin, who imports the package in the Admin (`cavelon explain database_query_needs_superadmin` names the step); then apply passes while the queries match. " +
+      "To apply the rest first, leave the query as the instance holds it: restore the tool's entry as the last pull wrote it, or remove its database_query block (a query tool without one keeps the instance's query, name and description). " +
+      "Rename the tool for one agent with the assignment's config_overrides instead: an override of name, description or max_calls is no query change.",
+    docs: DATABASE_DOCS,
+  },
+  {
+    code: QUERY_FIELDS_IGNORED_CODE,
+    area: "package",
+    message: "A database query tool's params_json_schema or default_config differs from the last pull or apply; the instance derives both from the query and ignores the package's.",
+    hint: "Change the query's parameters instead (database_query.parameters), or put the field back as pulled.",
+    docs: DATABASE_DOCS,
+  },
+  {
     code: "package_file_duplicate",
     area: "package",
     message: "One section is in two files.",
@@ -336,6 +358,8 @@ export interface CheckOptions {
   inventory?: TenantInventory;
   /** The solution cavelon.yaml names (slug or id), to check the package names the same. */
   solution?: string;
+  /** The query tools as the last pull or apply left them, to name the ones the package changes; none names none. */
+  queryBaseline?: QueryBaseline;
 }
 
 export function checkPackage(disk: PackageOnDisk, options: CheckOptions): Finding[] {
@@ -408,6 +432,7 @@ export function checkPackage(disk: PackageOnDisk, options: CheckOptions): Findin
   findings.push(...checkUncheckedAssertions(disk, options.schema));
   findings.push(...checkSolutionSlug(disk, options.solution));
   findings.push(...checkTenantWide(disk, options.schema, options.solution));
+  findings.push(...checkQueryTools(disk, options.schema, options.queryBaseline));
   noteTenantWide(findings, options.schema, options.solution);
 
   for (const finding of findings) {

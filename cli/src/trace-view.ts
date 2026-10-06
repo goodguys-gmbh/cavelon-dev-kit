@@ -1,3 +1,4 @@
+import { QUERY_TOOL_TYPE } from "./database-queries.js";
 import { clip } from "./format.js";
 
 /**
@@ -187,6 +188,21 @@ export function retrievalRows(view: RetrievalView): Array<Record<string, unknown
     cited: h.cited === false ? "no" : null,
     document_id: h.document_id,
   }));
+}
+
+/**
+ * The code a database query tool answered the model with when its call failed
+ * (`{"error": "identity_required", …}` as the output preview); null for a
+ * call that answered rows, and for every other span. The tool's span ends as
+ * completed either way, since the tool itself returned.
+ */
+export function queryErrorCode(s: { tool_type?: string | null; output_json?: unknown }): string | null {
+  if (s.tool_type !== QUERY_TOOL_TYPE) return null;
+  const output = spanAttributes(s.output_json);
+  const preview = typeof output?.output_preview === "string" ? output.output_preview : typeof s.output_json === "string" ? s.output_json : undefined;
+  const answer = (preview !== undefined ? spanAttributes(preview) : undefined) ?? output;
+  const code = answer?.error;
+  return typeof code === "string" && /^[a-z][a-z0-9_]{0,63}$/.test(code) ? code : null;
 }
 
 /** The fields of a span the kit chooses by. */
