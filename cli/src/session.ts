@@ -315,14 +315,23 @@ async function findTenant(client: ApiClient, ref: string): Promise<{ found?: Fou
   return { known: memberships };
 }
 
-/** The tenant id to send, resolving and remembering a slug once per instance. */
-export async function resolveTenantId(env: Env, session: Session, client: ApiClient): Promise<string | undefined> {
+/** The tenant id to send as far as it is known without asking the instance; undefined also for a slug not resolved yet. */
+export function knownTenantId(session: Session): string | undefined {
   if (!session.tenant || !session.url) return undefined;
   if (session.tokenKind === "api_key") return undefined;
   if (isUuid(session.tenant)) return session.tenant;
   const cached = session.settings.tenant_ids?.[session.tenant];
   if (cached) return cached;
   if (session.tenantSource === "use" && session.settings.tenant_id) return session.settings.tenant_id;
+  return undefined;
+}
+
+/** The tenant id to send, resolving and remembering a slug once per instance. */
+export async function resolveTenantId(env: Env, session: Session, client: ApiClient): Promise<string | undefined> {
+  if (!session.tenant || !session.url) return undefined;
+  if (session.tokenKind === "api_key") return undefined;
+  const known = knownTenantId(session);
+  if (known) return known;
   const found = await lookupTenantId(client, session.tenant, session.tenantSource);
   const url = session.url;
   const slug = session.tenant;

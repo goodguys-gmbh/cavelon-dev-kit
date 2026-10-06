@@ -4,7 +4,7 @@ import { SKILL_ROOTS } from "./agents.js";
 import type { Install } from "./install.js";
 import { currentInstall, NPM_PACKAGE, REPOSITORY } from "./install.js";
 import type { Io } from "./io.js";
-import { readJsonFile, readTextFile, writeFileAtomic } from "./fsutil.js";
+import { readJsonFile, readTextFile, writePrivateFile } from "./fsutil.js";
 import { isGenerated } from "./markers.js";
 import { cacheDir } from "./paths.js";
 import { findProject } from "./project.js";
@@ -121,7 +121,7 @@ async function withState<T>(io: Io, source: "github" | "npm", version: string, f
     if (latest) state.latest = latest;
   }
   const result = use(state, now);
-  if (JSON.stringify(state) !== before) await writeFileAtomic(file, `${JSON.stringify(state, null, 2)}\n`, 0o600, 0o700);
+  if (JSON.stringify(state) !== before) await writePrivateFile(cacheDir(io.env), file, `${JSON.stringify(state, null, 2)}\n`);
   return result;
 }
 

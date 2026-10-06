@@ -68,7 +68,8 @@ deletes it. The coding agent never sees the token: it calls `cavelon`, and
 
 `login` reads the instance's capabilities and warns when its contract versions
 are newer than this `cavelon` understands. It also caches the OpenAPI and the
-error catalog under `~/.cache/cavelon/<instance>/<version>/`.
+error catalog under `~/.cache/cavelon/<instance>/<version>/`, which only you
+can read.
 
 ### CI, scripts and cloud agents
 
@@ -779,7 +780,7 @@ an agent only with a new plugin or `init --update`. With `cavelon` installed,
 | `~/.config/cavelon/config.json` | the current instance, the tenant chosen with `use`, which store holds the token. Never a token. |
 | `~/.config/cavelon/credentials.json` | the token per instance (0600), only where there is no OS credential store |
 | `~/.config/cavelon/setup.json` | what `cavelon setup` changed in your coding agents, so `setup --remove` undoes exactly that (0600) |
-| `~/.cache/cavelon/<instance>/<version>/` | the instance's capabilities, OpenAPI, error catalog, package schema and docs index |
+| `~/.cache/cavelon/<instance>/<version>/` | the instance's OpenAPI, error catalog and package schema, its capabilities once per tenant (they carry the tenant's limits) and its docs index once per token and tenant; files 0600, folders 0700 |
 | `~/.cache/cavelon/update-check.json` | when the latest release was last looked up and announced; `CAVELON_NO_UPDATE_CHECK=1` turns the check off |
 
 `CAVELON_CONFIG_DIR` and `CAVELON_CACHE_DIR` move them; `XDG_CONFIG_HOME` and

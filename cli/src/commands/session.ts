@@ -14,7 +14,7 @@ import { solutionState, solutionStateLines, type SolutionState } from "./solutio
 import { expiryOf, readPrincipal, readTenantless, type Tenantless } from "../principal.js";
 import { maySetSecrets } from "../secret-access.js";
 import { readHidden } from "../prompt.js";
-import { isUuid, lookupTenantId, requireInstance, requireToken, tenantRequiredError, type FoundTenant, type Session } from "../session.js";
+import { isUuid, knownTenantId, lookupTenantId, requireInstance, requireToken, tenantRequiredError, type FoundTenant, type Session } from "../session.js";
 import { cavelonCommand, fill } from "../printed.js";
 import { choicesOf, chooseTenant, commandLines, describeTenant, listsTenants, type Reach, noTenantError, tenantOpenError, tenantRef, tenantTitle } from "../tenant-choice.js";
 import { loadUserConfig, saveUserConfig, tokenKind, updateInstance } from "../user-config.js";
@@ -633,8 +633,11 @@ export const status: CommandSpec = {
     let reachError: string | undefined;
     let client: ApiClient | undefined;
     if (offline && session.url) {
-      // Offline, the version is the one cached last, and says so.
-      const cached = await new Contracts(new ApiClient({ url: session.url }, ctx.io.env), ctx.io.env, ctx.io.now)
+      // Offline, the version is the one cached last, and says so. The
+      // capabilities are cached per tenant, so the client names the tenant it
+      // would send, without asking the instance for a slug's id.
+      const target = { url: session.url, token: session.token, tenantId: knownTenantId(session) };
+      const cached = await new Contracts(new ApiClient(target, ctx.io.env), ctx.io.env, ctx.io.now)
         .cachedOnly<Capabilities>("capabilities.json")
         .catch(() => undefined);
       if (cached?.value?.instance?.version) {

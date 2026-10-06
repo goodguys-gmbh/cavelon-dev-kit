@@ -42,7 +42,8 @@ the defaults.
    (`openapi.json` anywhere outside the repository, as it is the whole API).
    `cavelon` caches the first four under
    `<cache>/<instance>/<version>/` whenever a command reads them (`<cache>` is
-   `~/.cache/cavelon` by default, or `CAVELON_CACHE_DIR`).
+   `~/.cache/cavelon` by default, or `CAVELON_CACHE_DIR`), the capabilities as
+   `capabilities.<hash>.json`, once per tenant.
 2. Trim the OpenAPI and clean the texts:
 
    ```bash

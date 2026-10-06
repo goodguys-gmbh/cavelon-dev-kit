@@ -4,7 +4,7 @@ import { CavelonError, ExitCode } from "./errors.js";
 import { NOT_HERE, type ApiClient } from "./http.js";
 import { cacheDir, instanceKey } from "./paths.js";
 import { cavelonCommand } from "./printed.js";
-import { readJsonFile, readTextFile, writeFileAtomic } from "./fsutil.js";
+import { readJsonFile, readTextFile, writePrivateFile } from "./fsutil.js";
 import { SUPPORTED_CONTRACTS } from "./version.js";
 
 /**
@@ -14,6 +14,11 @@ import { SUPPORTED_CONTRACTS } from "./version.js";
  * A development build keeps one version string while its contracts change, so
  * its copies are read again after a short time, and a copy the instance gave
  * an ETag for is checked with it instead of read again.
+ *
+ * Most contracts are the same for every caller of an instance version. The
+ * capabilities are not: their `limits` are one tenant's, so they are kept once
+ * per tenant (`capabilities.<tenant key>.json`), and the docs index once per
+ * audience (`llms.<audience>.txt`). Every file is written for its owner only.
  */
 
 export interface Capabilities {
@@ -128,6 +133,11 @@ export class Contracts {
     return version === "unknown" || /dev|snapshot|local/i.test(version);
   }
 
+  /** Every cache file is 0600 in 0700 folders: it names the instance and its tenants, and holds a tenant's limits. */
+  private async write(file: string, content: string): Promise<void> {
+    await writePrivateFile(cacheDir(this.env), file, content);
+  }
+
   private versionDir(version: string): string {
     return path.join(this.root, version.replace(/[^A-Za-z0-9._-]+/g, "_"));
   }
@@ -141,12 +151,17 @@ export class Contracts {
   async capabilities(options: { refresh?: boolean } = {}): Promise<Capabilities | null> {
     if (this.caps !== undefined && !options.refresh) return this.caps;
     const state = await readJsonFile<CacheState>(path.join(this.root, "state.json"));
-    if (!options.refresh && state && this.fresh(state.checked_at, state.version)) {
-      const cached = await readJsonFile<Capabilities>(path.join(this.versionDir(state.version), "capabilities.json"));
+    if (!options.refresh && state) {
+      // The version is the instance's, the capabilities this tenant's: a copy
+      // another tenant read, or one this tenant read for an older version, is
+      // not used.
+      const file = path.join(this.versionDir(state.version), this.cacheName("capabilities.json"));
+      const meta = await readJsonFile<CacheMeta>(`${file}.meta.json`);
+      const cached = this.fresh(meta?.fetched_at, state.version) ? await readJsonFile<Capabilities>(file) : undefined;
       if (cached) {
         this.caps = cached;
         this.versionValue = state.version;
-        this.cachedAt = state.checked_at;
+        this.cachedAt = meta?.fetched_at;
         return cached;
       }
     }
@@ -169,12 +184,11 @@ export class Contracts {
     } else {
       this.caps = response.data;
       this.versionValue = response.data.instance.version || "unknown";
-      await writeFileAtomic(
-        path.join(this.versionDir(this.versionValue), "capabilities.json"),
-        JSON.stringify(response.data, null, 2),
-      );
+      const file = path.join(this.versionDir(this.versionValue), this.cacheName("capabilities.json"));
+      await this.write(file, JSON.stringify(response.data, null, 2));
+      await this.write(`${file}.meta.json`, JSON.stringify({ fetched_at: now } satisfies CacheMeta));
     }
-    await writeFileAtomic(
+    await this.write(
       path.join(this.root, "state.json"),
       JSON.stringify({ version: this.versionValue, checked_at: now } satisfies CacheState, null, 2),
     );
@@ -183,8 +197,8 @@ export class Contracts {
 
   /**
    * The capabilities as the instance answers them now, read at most once per
-   * command. The cache is per instance, but `limits` is per tenant: a tenant
-   * may lower or raise some of its own.
+   * command: a tenant may lower or raise some of its own `limits` at any time,
+   * which its cached copy does not know yet.
    */
   async liveCapabilities(): Promise<Capabilities | null> {
     if (this.live && this.caps !== undefined) return this.caps;
@@ -220,11 +234,11 @@ export class Contracts {
     const fetchedAt = this.now().toISOString();
     if (loaded === NOT_MODIFIED) {
       if (!cached) throw new Error(`${file}: the instance answered 304 Not Modified without being sent an ETag.`);
-      await writeFileAtomic(metaFile, JSON.stringify({ ...meta, fetched_at: fetchedAt } satisfies CacheMeta));
+      await this.write(metaFile, JSON.stringify({ ...meta, fetched_at: fetchedAt } satisfies CacheMeta));
       return cached.value;
     }
-    await writeFileAtomic(target, loaded.serialized);
-    await writeFileAtomic(metaFile, JSON.stringify({ fetched_at: fetchedAt, ...(loaded.etag ? { etag: loaded.etag } : {}) } satisfies CacheMeta));
+    await this.write(target, loaded.serialized);
+    await this.write(metaFile, JSON.stringify({ fetched_at: fetchedAt, ...(loaded.etag ? { etag: loaded.etag } : {}) } satisfies CacheMeta));
     return loaded.value;
   }
 
@@ -322,13 +336,14 @@ export class Contracts {
 
   /**
    * A contract file from the cache only, never from the network: the newest
-   * cached copy for the instance version seen last, and whether a development
-   * build's copy is past its time-to-live. For `validate`, which runs offline.
+   * cached copy for the instance version seen last (for the capabilities, this
+   * tenant's copy), and whether a development build's copy is past its
+   * time-to-live. For `validate`, which runs offline.
    */
   async cachedOnly<T>(file: string): Promise<CachedContract<T> | undefined> {
     const state = await readJsonFile<CacheState>(path.join(this.root, "state.json"));
     if (!state) return undefined;
-    const target = path.join(this.versionDir(state.version), file);
+    const target = path.join(this.versionDir(state.version), this.cacheName(file));
     const text = await readTextFile(target);
     if (text === undefined) return undefined;
     let value: T;
@@ -337,8 +352,7 @@ export class Contracts {
     } catch {
       return undefined;
     }
-    // The capabilities are checked with the state, the other files each with their own meta.
-    const meta = file === "capabilities.json" ? { fetched_at: state.checked_at } : await readJsonFile<CacheMeta>(`${target}.meta.json`);
+    const meta = await readJsonFile<CacheMeta>(`${target}.meta.json`);
     return {
       value,
       version: state.version,
@@ -353,10 +367,51 @@ export class Contracts {
     return `package-schema-${version.replace(/[^A-Za-z0-9._-]+/g, "_")}.json`;
   }
 
-  /** Cache any text document of this instance version (the docs index). */
+  /**
+   * Who a document that depends on the caller is cached for: the first 16 hex
+   * digits of a SHA-256 over the token and the tenant it is sent with, never
+   * the token itself. The instance lists different docs pages to a tenant
+   * member and to a platform operator in Platform mode, so one cache shared by
+   * every token on the machine showed whichever index was read first.
+   */
+  audience(): string {
+    const { token = "", tenantId = "" } = this.client.target;
+    const tenant = token.startsWith("cbp_") ? "" : tenantId;
+    return createHash("sha256").update(`cavelon-audience\0${token}\0${tenant}`).digest("hex").slice(0, 16);
+  }
+
+  /**
+   * Whose limits a capabilities copy holds: the first 16 hex digits of a
+   * SHA-256 over the tenant the token is sent with. Without one (a tenant API
+   * key, bound to its own tenant, or a token that reads its default tenant),
+   * the token decides the tenant, so its audience keys the copy. Keyed by the
+   * tenant rather than the token, a copy survives a new login, so `validate
+   * --offline` still checks against the tenant's own limits.
+   */
+  tenantKey(): string {
+    const { token = "", tenantId = "" } = this.client.target;
+    if (!tenantId || token.startsWith("cbp_")) return this.audience();
+    return createHash("sha256").update(`cavelon-tenant\0${tenantId}`).digest("hex").slice(0, 16);
+  }
+
+  /** The name a contract is cached under: the capabilities once per tenant, every other file once per instance version. */
+  private cacheName(file: string): string {
+    return file === "capabilities.json" ? Contracts.keyedName(file, this.tenantKey()) : file;
+  }
+
+  private static keyedName(file: string, key: string): string {
+    const dot = file.lastIndexOf(".");
+    return dot > 0 ? `${file.slice(0, dot)}.${key}${file.slice(dot)}` : `${file}.${key}`;
+  }
+
+  /**
+   * Cache a text document of this instance version that the instance answers
+   * per caller (the docs index), once per audience: `llms.txt` is kept as
+   * `llms.<audience>.txt`.
+   */
   async text(file: string, load: () => Promise<string>, options: { refresh?: boolean } = {}): Promise<string> {
     return this.cached(
-      file,
+      Contracts.keyedName(file, this.audience()),
       async () => {
         const text = await load();
         return { value: text, serialized: text };

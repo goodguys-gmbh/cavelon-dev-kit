@@ -240,11 +240,15 @@ the token's role and ceiling on every request.
 | `~/.config/cavelon/config.json` | `%APPDATA%\cavelon\config.json` | the current instance, the tenant chosen with `use`, which store holds the token; never a token |
 | `~/.config/cavelon/credentials.json` | `%APPDATA%\cavelon\credentials.json` | the token per instance (`0600`), only where there is no credential store |
 | `~/.config/cavelon/setup.json` | `%APPDATA%\cavelon\setup.json` | what `cavelon setup` changed in your coding agents' settings, so `setup --remove` undoes exactly that; never a token |
-| `~/.cache/cavelon/<instance>/<version>/` | `%LOCALAPPDATA%\cavelon\cache\…` | what the instance publishes: capabilities, OpenAPI, error catalog, package schema, docs index |
+| `~/.cache/cavelon/<instance>/<version>/` | `%LOCALAPPDATA%\cavelon\cache\…` | what the instance publishes: OpenAPI, error catalog and package schema; the capabilities once per tenant, as they carry its limits (`capabilities.<hash>.json`, named by a SHA-256 prefix of the tenant); and the docs index once per token and tenant (`llms.<hash>.txt`, named by a SHA-256 prefix of the two, never the token). Files `0600`, folders `0700` |
 | `~/.cache/cavelon/update-check.json` | `%LOCALAPPDATA%\cavelon\cache\update-check.json` | when the latest release was last looked up, its number, and when `cavelon` last said so |
 
 `CAVELON_CONFIG_DIR` and `CAVELON_CACHE_DIR` move them; `XDG_CONFIG_HOME` and
 `XDG_CACHE_HOME` are honoured.
+The cache names the instance and its tenants and holds their limits, so only
+you may read it: every file `cavelon` writes there is `0600`, in folders that
+are `0700` from the cache folder down. A folder an earlier version left
+readable to others is narrowed the next time `cavelon` writes into it.
 A development build of the instance keeps one version while what it publishes
 changes, so `cavelon` reads its copies again after a minute
 (`CAVELON_CONTRACT_TTL_SECONDS`), or checks them with the ETag the instance sent.
