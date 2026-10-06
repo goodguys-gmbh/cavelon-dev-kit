@@ -197,7 +197,9 @@ describe("the default route", () => {
     const json = await cli(sb, ["activate", "--json"], { cwd: dir });
     expect(json.json()).toMatchObject({ already_active: true, default_route: { is_default: false, current: { slug: "default" }, confirm: "cavelon harness default support --confirm" } });
 
-    expect((await cli(sb, ["activate", "--confirm"], { cwd: dir })).code).toBe(2);
+    // --confirm without --make-default confirms no default route: an active solution stays as it is.
+    expect((await cli(sb, ["activate", "--confirm"], { cwd: dir })).code).toBe(0);
+    expect(server.state.harnesses.find((h) => h.slug === "support")!.is_default).toBe(false);
     const previewed = await cli(sb, ["activate", "--make-default"], { cwd: dir });
     expect(previewed.stdout).toMatch(/default → Default \(default\) now; would become Support \(support\)/);
     expect(previewed.stdout).toMatch(/cavelon activate --harness support --make-default --confirm/);

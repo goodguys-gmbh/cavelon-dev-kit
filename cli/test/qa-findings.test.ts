@@ -339,7 +339,7 @@ describe("status, whoami and the tenant", () => {
   it("tenant create refuses a token whose ceiling holds no platform role before sending", async () => {
     const builder = server.addToken({ kind: "pat", tenantIds: [tenant], platform: true, ceilingRole: "tenant_builder", tokenName: "builder" });
     const before = server.state.requests.length;
-    const result = await cli(sb, ["tenant", "create", "newco", "--json"], { env: { CAVELON_URL: server.url, CAVELON_TOKEN: builder } });
+    const result = await cli(sb, ["tenant", "create", "--confirm", "newco", "--json"], { env: { CAVELON_URL: server.url, CAVELON_TOKEN: builder } });
     expect(result.code).toBe(7);
     expect(result.json<{ error: Record<string, unknown> }>().error).toMatchObject({
       code: "permission_missing",

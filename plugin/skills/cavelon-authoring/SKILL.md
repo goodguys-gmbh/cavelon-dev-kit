@@ -295,7 +295,11 @@ schema has them: `cavelon validate` reports an unknown section):
 - **Variables** are plain text that anyone who may view the tenant's settings
   reads. You may set one with `cavelon variables set <name> <value>` (the
   `variables_set` tool) when the value is not a credential and you know it;
-  ask the person otherwise. `cavelon variables list` shows them.
+  ask the person otherwise. `cavelon variables list` shows them. A variable
+  is tenant-wide: replacing a value previews the old and the new one and
+  changes nothing without `--confirm` (the `confirm_token` over MCP); every
+  solution of the tenant reads it, active ones too, so show the person that
+  preview and confirm only with their yes. A new variable is set at once.
 - **Secrets are set by a person, never by you.** Tell the person the exact
   command `apply` printed, `cavelon secrets set <name>` (with the `--env` and
   `--tenant` it printed), to run in their own terminal; it asks for the value

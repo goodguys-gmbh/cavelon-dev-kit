@@ -6,7 +6,7 @@ import type { WarningEntry } from "../context.js";
 import { Contracts, type CachedContract, type ErrorCatalog, type PackageSchema } from "../contracts.js";
 import { CavelonError, ExitCode, usageError, type ExitCodeValue } from "../errors.js";
 import { drivenByAgent } from "../agent-env.js";
-import { confirmation, confirmGiven, confirmTokenRequired, shellTokenRequired } from "../confirm-token.js";
+import { confirmation, confirmTokenRequired, shellTokenRequired } from "../confirm-token.js";
 import { actingTarget, targetLine, targetText } from "../acting.js";
 import { clip, keyValues } from "../format.js";
 import { readTextFile, writeFileAtomic } from "../fsutil.js";
@@ -1801,6 +1801,7 @@ async function defaultRouteAfterActivation(
   ctx: Context,
   harness: Harness,
   input: Parameters<CommandSpec["run"]>[1],
+  defaultConfirmed = false,
 ): Promise<{ data: Record<string, unknown>; lines: string[]; failed?: boolean; exitCode?: ExitCodeValue }> {
   const make = boolOption(input, "make-default");
   let route;
@@ -1813,8 +1814,9 @@ async function defaultRouteAfterActivation(
   const current = route.current ? { id: route.current.id, slug: route.current.slug, name: route.current.name } : null;
   if (route.current?.id === harness.id) return { data: { default_route: { is_default: true, current } }, lines: [`${named(harness)} is the tenant's default route.`] };
   const commands = defaultCommands(harness.slug);
-  const gate = make ? await confirmation(ctx, input, "activate", { harness: harness.id, from: current?.id ?? null }) : undefined;
-  if (gate?.confirmed) {
+  // An activation whose preview named the default route too was confirmed with it, by one token.
+  const gate = make && !defaultConfirmed ? await confirmation(ctx, input, "activate", { harness: harness.id, from: current?.id ?? null }) : undefined;
+  if (gate?.confirmed || (make && defaultConfirmed)) {
     try {
       await setDefaultRoute(ctx, harness.id);
     } catch (error) {
@@ -1849,12 +1851,50 @@ async function defaultRouteAfterActivation(
   return { data: { default_route: { is_default: false, known: route.known, current, preview: commands.preview, confirm: commands.confirm } }, lines };
 }
 
+/** What already answers to a solution once it is active: its channels and the active triggers that start its runs. */
+interface Reach {
+  /** The solution's channels, or null where the instance does not publish `channel_count`. */
+  channels: number | null;
+  /** The active triggers bound to it, or null where the instance does not let the token list them. */
+  triggers: Array<{ id: string; slug: string; name: string; type: string }> | null;
+}
+
+async function reachOf(ctx: Context, harness: Harness & { channel_count?: number | null }): Promise<Reach> {
+  const channels = typeof harness.channel_count === "number" ? harness.channel_count : null;
+  type Trigger = { id: string; slug: string; name: string; trigger_type: string; harness_id?: string | null; is_active: boolean };
+  const triggers = await callStable<Trigger[]>(ctx, "GET", "/api/v1/triggers", "listing triggers", { params: { harness_id: [harness.id] } })
+    // An instance that ignores the filter lists every trigger; only this solution's active ones start its runs.
+    .then((list) => list.filter((t) => t.harness_id === harness.id && t.is_active).map((t) => ({ id: t.id, slug: t.slug, name: t.name, type: t.trigger_type })))
+    .catch(() => null);
+  return { channels, triggers };
+}
+
+function reachText(harness: Harness, reach: Reach): string {
+  const parts: string[] = [];
+  if (reach.channels) parts.push(`${reach.channels} channel${reach.channels === 1 ? "" : "s"}`);
+  if (reach.triggers?.length) parts.push(`the active trigger${reach.triggers.length === 1 ? "" : "s"} ${reach.triggers.map((t) => `${t.slug} (${t.type})`).join(", ")}`);
+  const unknown = [
+    ...(reach.channels === null ? ["whether a channel reaches it (no channel_count)"] : []),
+    ...(reach.triggers === null ? ["which triggers start its runs (the trigger list could not be read)"] : []),
+  ];
+  const lines = [
+    parts.length
+      ? `Activating ${named(harness)} puts it live for what reaches it: ${parts.join("; ")}. From then on it answers them.`
+      : `Activating ${named(harness)} puts it live.`,
+  ];
+  if (unknown.length) lines.push(`This instance does not say ${unknown.join(", or ")}, so the activation waits for a confirm.`);
+  return lines.join("\n");
+}
+
 export const activate: CommandSpec = {
   name: "activate",
   summary: "Activate a solution through the readiness gate (never by force); says whether it is the tenant's default route.",
   description:
     "Only when every readiness check passes, and with a personal access token only when it was created with \"may activate\".\n" +
     "Activating without the evidence stays a person's decision in the Admin.\n" +
+    "A solution that a channel or an active trigger reaches goes live for them at once, so its activation previews first\n" +
+    "and only --confirm activates it; so does one on an instance that does not say what reaches it. Show the preview to a\n" +
+    "person and confirm only with their yes. A draft that nothing reaches activates without --confirm.\n" +
     "Afterwards it says whether the solution is the tenant's default route (the one the tenant's chat and widget answer with\n" +
     "where no solution is named). --make-default previews making it the default; with --confirm as well, it changes it. That\n" +
     "changes live traffic: show the preview to a person and confirm only with their yes. `cavelon harness default` does the\n" +
@@ -1866,21 +1906,29 @@ export const activate: CommandSpec = {
     harness: HARNESS_OPTION,
     env: ENV_OPTION,
     "make-default": { type: "boolean", description: "Also make it the tenant's default route: previews the change; with --confirm, makes it." },
-    confirm: { type: "boolean", mcpToken: true, description: "With --make-default: change the default route (after a person saw the preview)." },
+    confirm: {
+      type: "boolean",
+      mcpToken: true,
+      description: "With --make-default: change the default route; for a solution a channel or trigger reaches: activate it (after a person saw the preview).",
+    },
   },
-  examples: ["cavelon activate", "cavelon activate --make-default", "cavelon activate --make-default --confirm", "cavelon activate --make-default --confirm <token>"],
+  examples: [
+    "cavelon activate",
+    "cavelon activate --confirm",
+    "cavelon activate --make-default",
+    "cavelon activate --make-default --confirm",
+    "cavelon activate --make-default --confirm <token>",
+  ],
   async run(ctx, input) {
     const session = await ctx.session();
     const { ref, source } = harnessRef(session, input);
     if (!ref) throw usageError("Which solution?", "Pass --harness <name or slug> (`cavelon harness list` shows them), or set harness in cavelon.yaml or the env file.");
-    if (confirmGiven(input) && !boolOption(input, "make-default")) {
-      throw usageError("--confirm only applies to --make-default.", "Activation itself needs no confirmation; the default route does.");
-    }
+    const make = boolOption(input, "make-default");
     // Refused before the activation, so a refused confirm never leaves half of the call done.
     if (ctx.mode === "mcp" && input.options.confirm === true) throw confirmTokenRequired("activate");
     const driven = drivenByAgent(ctx);
     if (driven?.by === "agent" && input.options.confirm === true) {
-      throw shellTokenRequired(cavelonCommand("activate", "--harness", ref, "--make-default"));
+      throw shellTokenRequired(cavelonCommand("activate", "--harness", ref, ...(make ? ["--make-default"] : [])));
     }
     const client = await ctx.client();
     const principal = await readPrincipal(client);
@@ -1934,13 +1982,56 @@ export const activate: CommandSpec = {
         exitCode: ExitCode.validation,
       };
     }
+    const reach = await reachOf(ctx, harness);
+    const live = Boolean(reach.channels) || Boolean(reach.triggers?.length) || reach.channels === null || reach.triggers === null;
+    let defaultConfirmed = false;
+    if (live) {
+      // With --make-default, one preview and one token cover the activation and the default route.
+      const route = make ? await readDefaultRoute(ctx).catch(() => undefined) : undefined;
+      const change = {
+        harness: harness.id,
+        activate: true,
+        channels: reach.channels,
+        triggers: reach.triggers?.map((t) => t.id) ?? null,
+        ...(make ? { make_default: true, from: route?.current?.id ?? null } : {}),
+      };
+      const gate = await confirmation(ctx, input, "activate", change);
+      if (!gate.confirmed) {
+        const confirm = gate.confirm(cavelonCommand("activate", "--harness", harness.slug, ...(make ? ["--make-default"] : []), "--confirm"));
+        const routeLine = make && route && route.current?.id !== harness.id ? [defaultChangeLine(harness, route)] : [];
+        return {
+          data: {
+            activated: false,
+            would: "activate",
+            harness,
+            reach: { channels: reach.channels, triggers: reach.triggers },
+            checks,
+            warnings,
+            readiness,
+            ...(make ? { default_route: { current: route?.current ? { id: route.current.id, slug: route.current.slug, name: route.current.name } : null, known: route?.known ?? false } } : {}),
+            confirm,
+            ...gate.fields,
+          },
+          text: [
+            reachText(harness, reach),
+            ...routeLine,
+            ...readinessText(checks, warnings),
+            gate.where,
+            ...(gate.mismatch ? [gate.mismatch] : []),
+            `Nothing was activated. Show this to a person; with their yes: ${confirm}`,
+          ].join("\n"),
+          ...(gate.exitCode ? { exitCode: gate.exitCode } : {}),
+        };
+      }
+      defaultConfirmed = make;
+    }
     const activated = await callStable<Harness>(ctx, "POST", "/api/v1/harnesses/{harness_id}/activate", "activating solutions", {
       params: { harness_id: [harness.id] },
       body: { force: false },
     });
-    const route = await defaultRouteAfterActivation(ctx, activated, input);
+    const route = await defaultRouteAfterActivation(ctx, activated, input, defaultConfirmed);
     return {
-      data: { activated: true, harness: activated, checks, warnings, readiness, ...route.data },
+      data: { activated: true, harness: activated, ...(live ? { reach } : {}), checks, warnings, readiness, ...route.data },
       text: [`Activated ${activated.name} (${activated.slug}); status ${activated.status}.`, ...readinessText(checks, warnings), ...route.lines].join("\n"),
       // Activated, but the default route the person asked for did not change.
       ...(route.failed ? { exitCode: ExitCode.failure } : route.exitCode ? { exitCode: route.exitCode } : {}),

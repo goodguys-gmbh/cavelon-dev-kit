@@ -27,7 +27,8 @@ const INSTRUCTIONS =
   "loop_start, sandbox_seed, artifacts_export) return operation ids at once; read them with operation_status, which returns " +
   `the state at once, or waits up to its timeout (at most ${MCP_MAX_WAIT_MS / 1000} s) when given one, and reports waited_ms, ` +
   "and follow a loop with loop_iterations. What needs confirmation: apply imports only with confirm set to a preview's id; " +
-  "limits_set, models_set_limit, loop_cancel, sandbox_seed, trigger_identity, harness_default, activate with make_default, deactivate, " +
+  "tenant_create, variables_set where it replaces another value, loop_start, limits_set, models_set_limit, loop_cancel, sandbox_seed, " +
+  "trigger_identity, harness_default, activate of a solution a channel or trigger reaches or with make_default, deactivate, " +
   "and api for an operation that is not read-only, " +
   "return what they would do and a confirm_token, and change nothing until called again with the same arguments and " +
   "confirm set to that token: show the person the preview first. The token confirms exactly the change the preview showed; " +
@@ -35,7 +36,9 @@ const INSTRUCTIONS =
   "(harness_default, activate's make_default) decides which solution the tenant's chat and widget answer with: live traffic, " +
   "so ask the person, and confirm only with their yes; the same goes for deactivate, which takes a solution out of live traffic " +
   "(its status becomes inactive), and for apply with include_tenant_wide, which imports the tenant-wide sections (tenant_settings, " +
-  "model_registry, …) for every solution of the tenant. " +
+  "model_registry, …) for every solution of the tenant. A new tenant, a replaced variable (every solution of the tenant reads it) and " +
+  "the activation of a solution a channel or trigger reaches are the person's to confirm too; confirm a loop_start on your own " +
+  "only for a trigger of a draft solution in a test environment (a run acts as the person and spends budget). " +
   "chat sends one message to a solution and returns its answer: the way to try one that is not the default route. " +
   "kb_upload names files that match an active document of the knowledge base; with replace it replaces them, and where the " +
   "instance's upload cannot, it returns what it would deactivate and uploads nothing without its confirm_token. " +

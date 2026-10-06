@@ -536,6 +536,13 @@ and every warning under `Warnings:`; a warning does not block activation
 (`--json`: `checks` and `warnings`). A solution that is not ready exits 3 and lists its
 blockers. A token without **May activate** is refused before anything is sent
 (exit 7): a person then activates in the Admin, or creates a token that may.
+A new draft that nothing reaches yet activates at once, as above. A solution
+that a channel or an active trigger already reaches goes live for them the
+moment it is active, so there `activate` previews first: it names the
+channels and triggers (on an instance that does not say what reaches a
+solution, it says so), activates nothing, and prints the command that does,
+`cavelon activate --harness support-faq --confirm` (from a coding agent's
+shell, with the preview's token).
 
 `activate` also says whether the solution is the tenant's **default route**,
 the one the tenant's chat and widget answer with where no solution is named:

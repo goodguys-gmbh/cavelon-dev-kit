@@ -252,4 +252,7 @@ the body does the same, but needs the id and a confirm. `cavelon deactivate
 previews first and is the person's decision, so show the preview and confirm
 only with their yes. When every suite passes,
 `cavelon activate --harness <name or slug>` goes through the readiness gate; if the
-token may not activate, a person activates in the Admin.
+token may not activate, a person activates in the Admin. A solution that a
+channel or an active trigger reaches goes live for them at once, so its
+activation previews first and needs the confirm it prints: show it to the
+person and confirm only with their yes.

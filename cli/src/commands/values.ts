@@ -166,10 +166,13 @@ export const variablesGet: CommandSpec = {
 
 export const variablesSet: CommandSpec = {
   name: "variables set",
-  summary: "Create or replace a tenant variable.",
+  summary: "Create a tenant variable, or replace one (previews first, --confirm replaces it).",
   description:
     "The value is plain text that anyone who may view the tenant's settings reads; never put a credential into a variable,\n" +
-    "use `cavelon secrets set` (a person runs it). --stdin reads the value from standard input instead of the argument.",
+    "use `cavelon secrets set` (a person runs it). --stdin reads the value from standard input instead of the argument.\n" +
+    "A new variable is created at once. Replacing another value needs --confirm: without it nothing changes, and the preview\n" +
+    "shows the old and the new value. A variable is tenant-wide, so every solution that names it, active ones included, reads\n" +
+    "the new value: show the preview to a person and confirm only with their yes.",
   readOnly: false,
   idempotent: true,
   mcpTool: "variables_set",
@@ -180,8 +183,14 @@ export const variablesSet: CommandSpec = {
   options: {
     stdin: { type: "boolean", description: "Read the value from standard input.", cliOnly: true },
     env: ENV_OPTION,
+    confirm: { type: "boolean", mcpToken: true, description: "Replace an existing value (after a person saw the preview); a new variable needs none." },
   },
-  examples: ["cavelon variables set crm_base_url https://crm.example.com", "cavelon variables set greeting --stdin < greeting.txt"],
+  examples: [
+    "cavelon variables set crm_base_url https://crm.example.com",
+    "cavelon variables set greeting --stdin < greeting.txt",
+    "cavelon variables set crm_base_url https://crm2.example.com --confirm",
+    "cavelon variables set crm_base_url https://crm2.example.com --confirm <token>",
+  ],
   async run(ctx, input) {
     const name = positional(input, "name")!;
     const argument = positional(input, "value");
@@ -197,6 +206,22 @@ export const variablesSet: CommandSpec = {
     }
     await checkName(ctx, "PUT", "/api/v1/variables/{name}", "setting tenant variables", name);
     const previous = await readVariable(ctx, name);
+    if (previous && previous.value !== value) {
+      const gate = await confirmation(ctx, input, "variables_set", { name, previous: previous.value, value });
+      if (!gate.confirmed) {
+        const confirm = gate.confirm(cavelonCommand("variables", "set", name, ...(fromStdin ? ["--stdin"] : [value]), "--confirm"));
+        return {
+          data: { name, changed: false, created: false, would: "replace", previous: previous.value, value, confirm, ...gate.fields },
+          text: [
+            `Variable ${name}: ${JSON.stringify(clip(previous.value, LIST_VALUE_CHARS))} → ${JSON.stringify(clip(value, LIST_VALUE_CHARS))}.`,
+            "It is tenant-wide: every solution of the tenant that names {{var:" + name + "}}, active ones included, reads the new value.",
+            gate.where, ...(gate.mismatch ? [gate.mismatch] : []),
+            `Nothing was changed. Show this to a person; with their yes: ${confirm}${fromStdin ? " (with the same value on standard input)" : ""}`,
+          ].join("\n"),
+          ...(gate.exitCode ? { exitCode: gate.exitCode } : {}),
+        };
+      }
+    }
     const saved = await callStable<Variable>(ctx, "PUT", "/api/v1/variables/{name}", "setting tenant variables", {
       params: { name: [name] },
       body: { value },

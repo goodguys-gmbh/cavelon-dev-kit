@@ -63,7 +63,7 @@ describe("cavelon variables", () => {
     const created = await cli(sb, ["variables", "set", "crm_base_url", "https://crm.example.com", "--json"]);
     expect(created.code, created.stdout).toBe(0);
     expect(created.json()).toMatchObject({ name: "crm_base_url", value: "https://crm.example.com", created: true, previous: null });
-    const replaced = await cli(sb, ["variables", "set", "crm_base_url", "https://crm2.example.com"]);
+    const replaced = await cli(sb, ["variables", "set", "crm_base_url", "https://crm2.example.com", "--confirm"]);
     expect(replaced.stdout).toMatch(/Replaced variable crm_base_url \(it was "https:\/\/crm\.example\.com"\)/);
     expect(server.state.values.get(tenant)!.variables.get("crm_base_url")).toBe("https://crm2.example.com");
 

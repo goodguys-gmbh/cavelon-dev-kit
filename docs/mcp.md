@@ -195,9 +195,12 @@ repeat them:
   50 seconds (a longer timeout is cut there, with a warning). Its answer says
   `waited_ms`, and `timed_out` is true only when it waited the whole timeout.
 - **What needs `confirm`.** `apply` returns a preview and imports only with
-  `confirm` set to that preview's id. `limits_set`, `models_set_limit`,
+  `confirm` set to that preview's id. `tenant_create`, `variables_set` where
+  it replaces another value, `loop_start`, `limits_set`, `models_set_limit`,
   `loop_cancel`, `sandbox_seed`, `trigger_identity`, `harness_default`,
-  `activate` with `make_default`, `deactivate`, and `api` for any operation that is not
+  `activate` of a solution a channel or an active trigger reaches (or on an
+  instance that does not say) or with `make_default`, `deactivate`, and `api`
+  for any operation that is not
   read-only (anything but GET, HEAD and OPTIONS), return what they would do
   (for `api`: the method, path, parameters and body) and a `confirm_token`,
   and act only when called again with the same arguments and `confirm` set to
@@ -212,7 +215,11 @@ repeat them:
   preview that reaches an active solution or production. Making a solution
   the tenant's default route changes which solution the tenant's chat and
   widget answer with, and deactivating one takes it out of live traffic, so
-  the agent asks you before it confirms either. The same goes for `apply` with
+  the agent asks you before it confirms either; so it does before it confirms
+  a new tenant, a replaced variable (every solution of the tenant reads it),
+  or the activation of a solution a channel or trigger reaches. It confirms a
+  `loop_start` on its own only for a trigger of a draft solution in a test
+  environment: a run acts as you and spends budget. The same goes for `apply` with
   `include_tenant_wide`: it imports the package's tenant-wide sections
   (`tenant_settings`, `model_registry`, …) for every solution of the tenant,
   and its preview's `tenant_wide` names the sections the confirm would import
@@ -243,16 +250,19 @@ repeat them:
   replace a package file that is neither committed nor as the last pull or
   apply left it, unless `force`), and the other tools marked changing act at
   once:
-  `use_tenant` (for the session only), `tenant_create`, `harness_new`, `harness_clone`, `activate`
-  (through the readiness gate), `chat` (one turn of a conversation with the
+  `use_tenant` (for the session only), `harness_new`, `harness_clone`, `activate`
+  of a draft that no channel or trigger reaches (through the readiness gate),
+  `chat` (one turn of a conversation with the
   solution it names, the way to try one that is not the default route),
-  `variables_set`, `kb_upload` (without
+  `variables_set` of a new variable (or the same value), `kb_upload` (without
   `replace`, or where the instance replaces itself), `test_run`,
-  `loop_start`, `loop_pause`, `loop_resume`, `sandbox_validate`,
+  `loop_pause`, `loop_resume`, `sandbox_validate`,
   `sandbox_refresh`, `artifacts_export`, and the tenant Owner's two database
   checks, `db_test` (a connection test, stored as the connection's last test)
   and `db_test_run` (one run of a saved query with the values given; the rows
   come back once, and the instance keeps counts only).
+  [Security](security.md#every-changing-command-and-its-guard) lists every
+  changing command and its guard.
 - **What no tool does, even with `confirm`.** `api` refuses an operation the
   instance keeps for a person (`operation_for_a_person`); a person does those
   in Cavelon or in their terminal. An instance marks them in its OpenAPI

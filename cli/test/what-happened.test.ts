@@ -71,7 +71,7 @@ const jsonLines = (result: CliResult) =>
     .map((l) => JSON.parse(l) as Record<string, any>);
 
 async function startRun(trigger: string): Promise<string> {
-  const started = await cli(sb, ["loop", "start", trigger, "--json"]);
+  const started = await cli(sb, ["loop", "start", "--confirm", trigger, "--json"]);
   expect(started.code, started.stdout).toBe(0);
   return started.json<{ run_id: string }>().run_id;
 }
@@ -266,7 +266,7 @@ describe("a run that ends without a loop, and an iteration's child run", () => {
   });
 
   it("loop start --wait says why, and exits 1 although the run completed", async () => {
-    const result = await cli(sb, ["loop", "start", "no-authority", "--wait"]);
+    const result = await cli(sb, ["loop", "start", "--confirm", "no-authority", "--wait"]);
     expect(result.code).toBe(1);
     expect(result.stdout).toMatch(/succeeded/);
     expect(result.stdout).toContain(`The run ended (completed) without a loop. Stage 2 (node:count) completed_with_error: ${authority}`);

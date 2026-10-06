@@ -136,7 +136,7 @@ describe("the counter loop (no Sandbox)", () => {
   });
 
   it("starts the loop through its trigger, as the caller", async () => {
-    const started = await cli(sb, ["loop", "start", "counter", "--input", '{"start": 0}', "--json"]);
+    const started = await cli(sb, ["loop", "start", "--confirm", "counter", "--input", '{"start": 0}', "--json"]);
     expect(started.code).toBe(0);
     const data = started.json<{ run_id: string; operation_id: string; acting_as: string }>();
     expect(data.acting_as).toBe("ada@example.com");
@@ -182,7 +182,7 @@ describe("the counter loop (no Sandbox)", () => {
   });
 
   it("cancels only with --confirm, and an ended run has nothing to cancel", async () => {
-    const run = (await cli(sb, ["loop", "start", "counter", "--json"])).json<{ run_id: string }>().run_id;
+    const run = (await cli(sb, ["loop", "start", "--confirm", "counter", "--json"])).json<{ run_id: string }>().run_id;
     const preview = await cli(sb, ["loop", "cancel", run, "--json"]);
     expect(preview.json()).toMatchObject({ cancelled: false, confirm: `cavelon loop cancel ${run} --confirm` });
     expect(requestsTo("POST", `/runs/${run}/cancel`)).toHaveLength(0);
@@ -202,7 +202,7 @@ describe("loop start's Idempotency-Key", () => {
   });
 
   it("always sends one, and says which in --json", async () => {
-    const started = await cli(sb, ["loop", "start", "keyed", "--json"]);
+    const started = await cli(sb, ["loop", "start", "--confirm", "keyed", "--json"]);
     expect(started.code, started.stdout).toBe(0);
     const key = started.json<{ idempotency_key: string }>().idempotency_key;
     expect(key).toMatch(/^[0-9a-f-]{36}$/);
@@ -212,8 +212,8 @@ describe("loop start's Idempotency-Key", () => {
   it("two starts with the same key create one run", async () => {
     const key = randomUUID();
     const before = runsOf().length;
-    const first = await cli(sb, ["loop", "start", "keyed", "--idempotency-key", key, "--json"]);
-    const second = await cli(sb, ["loop", "start", "keyed", "--idempotency-key", key, "--json"]);
+    const first = await cli(sb, ["loop", "start", "--confirm", "keyed", "--idempotency-key", key, "--json"]);
+    const second = await cli(sb, ["loop", "start", "--confirm", "keyed", "--idempotency-key", key, "--json"]);
     expect([first.code, second.code]).toEqual([0, 0]);
     expect(second.json<{ run_id: string }>().run_id).toBe(first.json<{ run_id: string }>().run_id);
     expect(runsOf().length).toBe(before + 1);
@@ -224,7 +224,7 @@ describe("loop start's Idempotency-Key", () => {
     server.state.interruptions = [{ method: "POST", path: new RegExp(`/api/v1/triggers/${trigger.id}/run$`), mode: "stall" }];
     let timedOut: CliResult;
     try {
-      timedOut = await cli(sb, ["loop", "start", "keyed", "--json"], { env: { CAVELON_HTTP_TIMEOUT_MS: "500" } });
+      timedOut = await cli(sb, ["loop", "start", "--confirm", "keyed", "--json"], { env: { CAVELON_HTTP_TIMEOUT_MS: "500" } });
     } finally {
       server.state.interruptions = [];
     }
@@ -236,7 +236,7 @@ describe("loop start's Idempotency-Key", () => {
     // The instance got the start.
     expect(runsOf().length).toBe(before + 1);
 
-    const retried = await cli(sb, ["loop", "start", "keyed", "--idempotency-key", key, "--json"]);
+    const retried = await cli(sb, ["loop", "start", "--confirm", "keyed", "--idempotency-key", key, "--json"]);
     expect(retried.code, retried.stdout).toBe(0);
     expect(runsOf().length).toBe(before + 1);
   });
@@ -322,7 +322,7 @@ describe("the orders loop (isolated container)", () => {
   });
 
   it("runs the loop: start, pause (wait exits 5), resume, watch to the end", async () => {
-    const started = await cli(sb, ["loop", "start", "orders", "--input", '{"orders": "input/orders.csv"}', "--json"]);
+    const started = await cli(sb, ["loop", "start", "--confirm", "orders", "--input", '{"orders": "input/orders.csv"}', "--json"]);
     runId = started.json<{ run_id: string }>().run_id;
     const opId = started.json<{ operation_id: string }>().operation_id;
     const paused = await cli(sb, ["loop", "pause", runId, "--json"]);
@@ -486,7 +486,7 @@ describe("an instance that does not serve its OpenAPI", () => {
   });
 
   it("pauses and resumes a loop with the key as a header", async () => {
-    const started = await cli(plain, ["loop", "start", "plain-loop", "--json"]);
+    const started = await cli(plain, ["loop", "start", "--confirm", "plain-loop", "--json"]);
     expect(started.code, started.stdout).toBe(0);
     const runId = started.json<{ run_id: string }>().run_id;
     const paused = await cli(plain, ["loop", "pause", runId, "--json"]);
@@ -513,7 +513,7 @@ describe("refusals", () => {
         const list = await cli(off, ["sandbox", "list", "--json"], { env });
         expect(list.code).toBe(1);
         expect(list.json<{ error: { code: string } }>().error.code).toBe("sandbox_feature_disabled");
-        const start = await cli(off, ["loop", "start", "counter", "--json"], { env });
+        const start = await cli(off, ["loop", "start", "--confirm", "counter", "--json"], { env });
         expect(start.json<{ error: { code: string } }>().error.code).toBe("masterloop_feature_disabled");
       } finally {
         server.state.features = saved;
@@ -584,7 +584,7 @@ describe("status in a solution folder", () => {
     addTrigger("status-mine-loop", mine, { iterations: 50 });
     addTrigger("status-theirs-loop", addHarness("status-theirs"), { iterations: 50 });
     const start = async (trigger: string) => {
-      const started = await cli(sb, ["loop", "start", trigger, "--json"]);
+      const started = await cli(sb, ["loop", "start", "--confirm", trigger, "--json"]);
       expect(started.code, started.stdout).toBe(0);
       return started.json<{ run_id: string; operation_id: string }>();
     };

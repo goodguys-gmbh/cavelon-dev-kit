@@ -343,19 +343,20 @@ Activate a solution through the readiness gate (never by force); says whether it
 cavelon activate [options]
 ```
 
-Only when every readiness check passes, and with a personal access token only when it was created with "may activate". Activating without the evidence stays a person's decision in the Admin. Afterwards it says whether the solution is the tenant's default route (the one the tenant's chat and widget answer with where no solution is named). --make-default previews making it the default; with --confirm as well, it changes it. That changes live traffic: show the preview to a person and confirm only with their yes. `cavelon harness default` does the same for an active solution.
+Only when every readiness check passes, and with a personal access token only when it was created with "may activate". Activating without the evidence stays a person's decision in the Admin. A solution that a channel or an active trigger reaches goes live for them at once, so its activation previews first and only --confirm activates it; so does one on an instance that does not say what reaches it. Show the preview to a person and confirm only with their yes. A draft that nothing reaches activates without --confirm. Afterwards it says whether the solution is the tenant's default route (the one the tenant's chat and widget answer with where no solution is named). --make-default previews making it the default; with --confirm as well, it changes it. That changes live traffic: show the preview to a person and confirm only with their yes. `cavelon harness default` does the same for an active solution.
 
 | Option | Description | MCP |
 |---|---|---|
 | `--harness <harness>` | The solution (harness): its name, slug or id; default: env file, then cavelon.yaml. | yes |
 | `--env <name>` | Use env/&lt;name&gt;.yaml: its tenant, solution and runtime bindings. | yes |
 | `--make-default` | Also make it the tenant's default route: previews the change; with --confirm, makes it. | yes |
-| `--confirm [<token>]` | With --make-default: change the default route (after a person saw the preview). In a person's terminal the flag alone confirms; run by a coding agent, `--confirm <token>` with the token its preview printed (the bare flag only shows the preview there, exit 5). | yes |
+| `--confirm [<token>]` | With --make-default: change the default route; for a solution a channel or trigger reaches: activate it (after a person saw the preview). In a person's terminal the flag alone confirms; run by a coding agent, `--confirm <token>` with the token its preview printed (the bare flag only shows the preview there, exit 5). | yes |
 
 Examples:
 
 ```bash
 cavelon activate
+cavelon activate --confirm
 cavelon activate --make-default
 cavelon activate --make-default --confirm
 cavelon activate --make-default --confirm <token>
@@ -383,7 +384,7 @@ Create and list tenants and solutions (harnesses).
 
 ### cavelon tenant create
 
-Create a tenant (personal access token in Platform mode with tenants.manage).
+Create a tenant (personal access token in Platform mode with tenants.manage); previews first, --confirm creates it.
 
 **changing** · MCP tool: `tenant_create`
 
@@ -391,7 +392,7 @@ Create a tenant (personal access token in Platform mode with tenants.manage).
 cavelon tenant create <slug> [options]
 ```
 
-A tenant API key never can. Before sending, the token is checked: one that may not enter Platform mode, or enters it without tenants.manage, is refused with exit 7 and nothing is sent. With --use, the new tenant is chosen only once the instance confirms the token acts in it. Inviting people and assigning roles stay in the Admin.
+A tenant API key never can. Before sending, the token is checked: one that may not enter Platform mode, or enters it without tenants.manage, is refused with exit 7 and nothing is sent. Without --confirm nothing is created: the preview names the tenant, its plan and the instance it would be created on. A tenant is a platform change, so show the preview to a person and confirm only with their yes. With --use, the new tenant is chosen only once the instance confirms the token acts in it. Inviting people and assigning roles stay in the Admin.
 
 | Argument | Description |
 |---|---|
@@ -403,6 +404,15 @@ A tenant API key never can. Before sending, the token is checked: one that may n
 | `--plan <plan>` | Licence plan, when the instance knows several. | yes |
 | `--use` | Switch to the new tenant afterwards (`cavelon use`), once the token is known to act in it. | yes |
 | `--idempotency-key <key>` | Send an Idempotency-Key, so a retry does not create a second one. | yes |
+| `--confirm [<token>]` | Create the tenant (after a person saw the preview). In a person's terminal the flag alone confirms; run by a coding agent, `--confirm <token>` with the token its preview printed (the bare flag only shows the preview there, exit 5). | yes |
+
+Examples:
+
+```bash
+cavelon tenant create newco --name NewCo
+cavelon tenant create newco --name NewCo --confirm
+cavelon tenant create newco --name NewCo --confirm <token>
+```
 
 ### cavelon tenant list
 
@@ -845,7 +855,7 @@ cavelon variables get <name> [options]
 
 ### cavelon variables set
 
-Create or replace a tenant variable.
+Create a tenant variable, or replace one (previews first, --confirm replaces it).
 
 **changing** · MCP tool: `variables_set`
 
@@ -853,7 +863,7 @@ Create or replace a tenant variable.
 cavelon variables set <name> [value] [options]
 ```
 
-The value is plain text that anyone who may view the tenant's settings reads; never put a credential into a variable, use `cavelon secrets set` (a person runs it). --stdin reads the value from standard input instead of the argument.
+The value is plain text that anyone who may view the tenant's settings reads; never put a credential into a variable, use `cavelon secrets set` (a person runs it). --stdin reads the value from standard input instead of the argument. A new variable is created at once. Replacing another value needs --confirm: without it nothing changes, and the preview shows the old and the new value. A variable is tenant-wide, so every solution that names it, active ones included, reads the new value: show the preview to a person and confirm only with their yes.
 
 | Argument | Description |
 |---|---|
@@ -864,12 +874,15 @@ The value is plain text that anyone who may view the tenant's settings reads; ne
 |---|---|---|
 | `--stdin` | Read the value from standard input. | CLI only |
 | `--env <name>` | Act in the tenant that env/&lt;name&gt;.yaml names. | yes |
+| `--confirm [<token>]` | Replace an existing value (after a person saw the preview); a new variable needs none. In a person's terminal the flag alone confirms; run by a coding agent, `--confirm <token>` with the token its preview printed (the bare flag only shows the preview there, exit 5). | yes |
 
 Examples:
 
 ```bash
 cavelon variables set crm_base_url https://crm.example.com
 cavelon variables set greeting --stdin < greeting.txt
+cavelon variables set crm_base_url https://crm2.example.com --confirm
+cavelon variables set crm_base_url https://crm2.example.com --confirm <token>
 ```
 
 ### cavelon variables delete
@@ -1109,7 +1122,7 @@ Start, follow and control long-running loops, and the identity a trigger's unatt
 
 ### cavelon loop start
 
-Start a loop through its trigger, as you; returns the run and operation ids.
+Start a loop through its trigger, as you; previews first, --confirm starts it and returns the run and operation ids.
 
 **changing** · MCP tool: `loop_start`
 
@@ -1117,7 +1130,7 @@ Start a loop through its trigger, as you; returns the run and operation ids.
 cavelon loop start <trigger> [options]
 ```
 
-Calls the trigger's run-now route. The run (and its loop) acts as the caller: with a personal access token, the person. Follow it with `loop watch <run>`, or `wait <operation>`; `loop cancel <run>` stops it.
+Calls the trigger's run-now route. The run (and its loop) acts as the caller: with a personal access token, the person. It runs on its own and spends the tenant's model budget, so without --confirm nothing starts: the preview names the trigger, its solution and the payload. Show it to a person and confirm only with their yes; for a trigger of a draft solution in a test environment an agent may confirm on its own. Follow the run with `loop watch <run>`, or `wait <operation>`; `loop cancel <run>` stops it.
 
 | Argument | Description |
 |---|---|
@@ -1129,12 +1142,15 @@ Calls the trigger's run-now route. The run (and its loop) acts as the caller: wi
 | `--wait` | Wait for the run to finish (see `cavelon wait`). | CLI only |
 | `--timeout <duration>` | Stop waiting after this long (90s, 5m; default 90s). The work goes on; run wait again to resume. | yes |
 | `--idempotency-key <uuid>` | The Idempotency-Key to send (a UUID), so a retry of the same call does nothing twice. | yes |
+| `--confirm [<token>]` | Start the run (after a person saw the preview). In a person's terminal the flag alone confirms; run by a coding agent, `--confirm <token>` with the token its preview printed (the bare flag only shows the preview there, exit 5). | yes |
 
 Examples:
 
 ```bash
 cavelon loop start counter
-cavelon loop start orders --input @orders-request.json --json
+cavelon loop start counter --confirm
+cavelon loop start counter --confirm <token>
+cavelon loop start orders --input @orders-request.json --confirm --json
 ```
 
 ### cavelon loop watch
