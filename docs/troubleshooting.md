@@ -215,6 +215,26 @@ used: cached or read now, when, and its hash.
 | `package_file_outside` | 4 | `pull` or `init --from` would write a package file that is a symlink to a file outside the solution folder. Nothing was written. Move the file into the solution folder, or replace the link with the file. |
 | `package_files_differ` | 4 | `init --from` would change or remove package files that hold something else. The files are listed; `--force` replaces them. |
 
+**A database query blocks the apply.** `database_query_needs_superadmin` means
+the package would create or change a saved query (its SQL, parameters or
+limits, or the query tool's own name or description), which only a superadmin
+does, in the Admin; a personal access token never does, and one such blocker
+stops the whole import. `validate` names those tools beforehand
+(`database_query_changed`). Hand the change to a superadmin, who imports the
+package from the solution's Agents page; to apply the rest now, restore the
+tool's entry as the last pull wrote it, or remove its `database_query` block.
+`database_connection_missing` or `database_connection_untested` mean the
+target tenant has no tested connection of the name the query gives: a
+superadmin creates it, and the tenant Owner tests it with
+`cavelon db test <connection>`. `database_connector_disabled` means the
+instance's operator has not switched the connector on.
+
+**A query tool answers `identity_required` in a test.** The query reads a
+signed-in visitor's identity (`end_user.*`), or does not allow anonymous
+callers, and a test run has no signed-in visitor. Check the query for one
+customer with `cavelon db test-run <query> --value email=<address>`; see the
+testing skill.
+
 **My active solution does not answer in the chat or widget.** The tenant's
 chat and widget answer only with its default route. `cavelon harness list`
 shows which solution that is (DEFAULT). Try yours by name with

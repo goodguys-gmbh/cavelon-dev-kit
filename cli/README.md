@@ -149,7 +149,10 @@ Every command takes `--json` (one JSON document on stdout, errors included),
 | `watch <operation> [--timeout 10m]` | read-only | Stream an operation's changes (server-sent events). |
 | `kb upload <dir> --kb <kb> [-r] [--ext pdf] [--replace] [--dry-run] [--wait]` | changing | Upload documents; returns operation ids. Names files that match an active document; `--replace` replaces those. `--dry-run` also names files identical to an active document. |
 | `test run [--suite <s>] [--harness <h>] [--wait]` | changing | Start test-suite runs; returns operation ids. |
-| `trace <run> [--trace <id>] [--span <id>]` | read-only | Summarise a run's traces (or a test run's results, with why a case did not pass), then one trace's spans, then one span. |
+| `trace <run> [--trace <id>] [--span <id>]` | read-only | Summarise a run's traces (or a test run's results, with why a case did not pass), then one trace's spans, then one span. A database query call that failed shows its code. |
+| `db connections` / `db queries [<query>] [--connection]` / `db runs <query>` | read-only | The tenant's database connections, saved queries (one in full with its SQL and parameters) and a query's runs (no values, no rows). |
+| `db test <connection>` | changing | The tenant Owner tests a connection step by step; exit 3 when a step fails. |
+| `db test-run <query> [--value name=value…]` | changing | The tenant Owner runs a saved query once, identity parameters included, and sees what the model would; exit 3 when it fails. |
 | `loop start <trigger> [--input <json>] [--wait]` | changing | Start a loop through its trigger, as you; returns the run and operation ids. |
 | `loop cancel <run> [--confirm]` | changing (destructive) | Stop a trigger run and its loops; without `--confirm`, shows what would stop. |
 | `loop watch <run> [--loop] [--timeout 10m]` | read-only | One line per decided iteration and per state change, then the loop's outcome; returns when it ends or pauses. |

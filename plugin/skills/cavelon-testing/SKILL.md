@@ -133,6 +133,30 @@ no verdict; `cavelon explain <status>` says what it means and what to do next:
 The case's own reason (which knowledge base, which value) is in the output of
 `test run --wait`, `wait` and `cavelon trace <run>`.
 
+## Database query tools
+
+Test a solution with database query tools against a test database, never the
+customer's live one: the test tenant (`--env test`) has a connection of the
+same name pointing at a test database with known rows, set up by a person in
+the Admin. Then:
+
+- A step can assert the agent calls the query (`tool_called` with the tool's
+  slug), and the judge checks the answer against the known rows.
+- A test run has no signed-in visitor. A query with an identity parameter
+  (`end_user.*`), or one without `allows_anonymous`, answers
+  `identity_required` there and runs nothing: such a step checks that the
+  agent asks the visitor to sign in, not the rows. The instance does not yet
+  let a suite name a test Chat User whose identity its queries use (a suite's
+  `as_chat_user` reader reads knowledge as that person, nothing more).
+- To check what an identity-scoped query returns for one customer, the tenant
+  Owner runs it once with `cavelon db test-run <query> --value <name>=<value>`,
+  identity parameters included; it shows what the model would see. Never put
+  a real customer's data into a test file.
+- `cavelon db runs <query>` lists each run's outcome and error code (never a
+  value or a row), and `cavelon trace` shows the code a failed call answered
+  the model with on the tool's span (`error_code`); `cavelon explain <code>`
+  says how to fix it.
+
 ## Reading what happened
 
 ```bash

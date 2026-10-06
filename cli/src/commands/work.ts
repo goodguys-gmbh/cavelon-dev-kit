@@ -14,7 +14,7 @@ import {
   type Context,
 } from "../command.js";
 import { capacityCodeIn, capacityHint, noteLines, runCapacityNote, type CapacityNote, type RunState } from "../capacity.js";
-import { assertionCount, assertionLine, retrievalRows, retrievalView, spanAttributes, stepAssertions, suggestedSpan, type RetrievalView } from "../trace-view.js";
+import { assertionCount, assertionLine, queryErrorCode, retrievalRows, retrievalView, spanAttributes, stepAssertions, suggestedSpan, type RetrievalView } from "../trace-view.js";
 import { CavelonError, ExitCode, usageError, type ExitCodeValue } from "../errors.js";
 import { confirmation } from "../confirm-token.js";
 import { confinedPath } from "../paths.js";
@@ -977,6 +977,7 @@ interface Span {
   name?: string;
   agent_slug?: string | null;
   tool_name?: string | null;
+  tool_type?: string | null;
   model?: string | null;
   status?: string;
   sequence?: number;
@@ -1067,6 +1068,7 @@ function knowledgeOutcomes(spans: Span[]): Map<string, string> {
 
 function summarizeSpan(s: Span, outcomes?: Map<string, string>) {
   const error = s.error_json ? clip(typeof s.error_json === "string" ? s.error_json : JSON.stringify(s.error_json), 200) : null;
+  const code = queryErrorCode(s);
   return {
     span_id: s.id,
     seq: s.sequence ?? null,
@@ -1076,6 +1078,8 @@ function summarizeSpan(s: Span, outcomes?: Map<string, string>) {
     status: s.status ?? null,
     duration_ms: s.duration_ms ?? null,
     knowledge_outcome: outcomeOf(s) ?? outcomes?.get(s.id) ?? null,
+    ...(s.tool_type ? { tool_type: s.tool_type } : {}),
+    ...(code ? { error_code: code } : {}),
     error,
   };
 }
@@ -1332,7 +1336,9 @@ export const trace: CommandSpec = {
           tokens: span.token_usage_json ?? null,
           error: span.error_json ?? null,
         };
-        return { data, text: retrieval ? retrievalText(data, retrieval) : JSON.stringify(data, null, 2) };
+        const code = queryErrorCode(span);
+        const meaning = code ? `\n\nThe query answered the model with ${code}. What it means: ${cavelonCommand("explain", code)}` : "";
+        return { data, text: retrieval ? retrievalText(data, retrieval) : JSON.stringify(data, null, 2) + meaning };
       }
       const page = pageOf(
         spans.map((s) => summarizeSpan(s, outcomes)),
@@ -1341,12 +1347,14 @@ export const trace: CommandSpec = {
       );
       const words = ["trace", id, ...(kind ? ["--kind", kind] : []), "--trace", traceId];
       const base = cavelonCommand(...words);
-      const open = suggestedSpan(spans);
+      // A query call that answered with an error code is the one that failed, though its span completed.
+      const open = suggestedSpan(spans.map((s) => (queryErrorCode(s) ? { ...s, status: "error" } : s)));
+      const codes = page.items.some((s) => "error_code" in s);
       return {
         data: { trace: summarizeTrace(detail), spans: page },
         text:
           `${keyValues(Object.entries(summarizeTrace(detail)))}\n\n` +
-          table(page.items, ["seq", "type", "name", "status", ...(outcomes.size ? ["knowledge_outcome"] : []), "duration_ms", "span_id"]) +
+          table(page.items, ["seq", "type", "name", "status", ...(outcomes.size ? ["knowledge_outcome"] : []), ...(codes ? ["error_code"] : []), "duration_ms", "span_id"]) +
           moreHint(page.next_cursor, base) +
           (open ? `\n\nOne span in full (${spanPick(open)}), by the span_id in its row: ${cavelonCommand(...words, "--span", open.id)}` : ""),
       };

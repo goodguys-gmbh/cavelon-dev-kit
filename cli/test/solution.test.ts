@@ -1874,7 +1874,7 @@ describe("activate shows the readiness it went through", () => {
 
 describe("a confirmed import its own check refuses", () => {
   const catalog = JSON.parse(read(path.join(CONTRACTS, "meta-error-catalog.json"))) as {
-    api_error_codes: Array<{ code: string; message: string; hint: string }>;
+    api_error_codes: Array<{ code: string; message: string; hint: string; docs: string }>;
   };
   const entry = (code: string) => catalog.api_error_codes.find((e) => e.code === code)!;
   const RUNTIME = "Select valid destination runtime resources and preview again.";
@@ -1903,7 +1903,7 @@ describe("a confirmed import its own check refuses", () => {
     expect(error.message).toBe(`The import's requirements changed since preview ${previewId}; nothing was imported; preview again.`);
     expect(error.hint).toMatch(new RegExp(`^${code}: .* Step 2 binds a draft iteration only into a draft parent`));
     expect(error.hint).toMatch(/`cavelon activate` never forces\. Run `cavelon apply --harness support` again, show the new preview, and confirm its id\.$/);
-    expect(error.docs).toMatch(/\/docs\/reference\/api-endpoints#errors-and-retries$/);
+    expect(error.docs.endsWith(entry("package_requirements_changed").docs)).toBe(true);
     expect(server.state.configs.get(tenant)!.version).toBe(1);
     expect(existsSync(path.join(dir, ".cavelon", "previews", `${previewId}.json`))).toBe(false);
   });

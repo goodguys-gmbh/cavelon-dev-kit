@@ -36,6 +36,7 @@ import {
   type StoredPreview,
 } from "../local-state.js";
 import { catalogEntry, checkPackage, KIT_CODES, packageVersionOf } from "../package-check.js";
+import { applyQueryNotes, connectorOffer, NEEDS_SUPERADMIN_CODE, queryBlockedHint, queryChanges, readQueryBaseline, rememberQueries } from "../database-queries.js";
 import { cliFix, similarCodes } from "../code-hints.js";
 import { KIT_ERROR_CODES } from "../kit-codes.js";
 import { pairOrderHint, pairOrderPointer } from "../pair-order.js";
@@ -365,6 +366,7 @@ export const pull: CommandSpec = {
     }
     const report = await writePackage(project.root, project.layout, exported, schema, options);
     await writePulledFiles(project.root, [...report.written, ...report.unchanged], placed);
+    await rememberQueries(project.root, exported, schema, "pull", ctx.io.now());
 
     if (harness && !project.harness) await setProjectKey(project, "harness", harness.slug);
     if (version && project.packageVersion !== version) await setProjectKey(project, "package_version", version);
@@ -485,6 +487,7 @@ async function validatePackage(
     limits: await limitsFor(ctx, offline),
     inventory,
     solution: project.harness,
+    queryBaseline: await readQueryBaseline(project.root),
   });
   return { disk, findings, schema, schemaVersion: schema["x-package-version"] ?? version ?? null, used, skipped };
 }
@@ -967,6 +970,8 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
       ...others.map((p) => ({ preview_id: p.preview_id, reason: "superseded" as const, at: now, by: stored.preview_id })),
     ]);
     await rememberImported(ctx, project, stored, disk, changed);
+    // The instance now holds the package's queries: an import that would have changed one was refused.
+    await rememberQueries(project.root, stored.request.package, (await schemaFor(ctx, packageVersionOf(stored.request.package), false)).schema, "apply", ctx.io.now());
     const summary = (result.summary ?? {}) as Preview["summary"];
     const still = setCommands(stored.preview as Preview, stored.env ?? undefined);
     // The tenant-wide sections this import took along: as its result says on a recent instance, else as its preview reported them.
@@ -1045,6 +1050,7 @@ function requirementsChanged(error: CavelonError, stored: StoredPreview, session
     const pair = pairOrderHint(catalog, [blocker]);
     if (pair && !known.has(pair.code)) known.set(pair.code, pair.hint);
   }
+  if (details.some((b) => b.code === NEEDS_SUPERADMIN_CODE)) known.set(NEEDS_SUPERADMIN_CODE, queryBlockedHint(sectionFiles(disk, ["tools"])));
   return new CavelonError(ExitCode.conflict, {
     code: error.code,
     status: error.status,
@@ -1236,6 +1242,15 @@ export const apply: CommandSpec = {
     if (tenantWide && takes) request[INCLUDE_TENANT_WIDE] = true;
     if (tenantWide && solutionImport && !shared.length) ctx.warn("--include-tenant-wide: the package holds no tenant-wide section, so this import changes nothing the whole tenant shares.");
 
+    // Query tools: what the instance offers this credential, said before the preview blocks on it.
+    const baseline = await readQueryBaseline(project.root);
+    const queries = applyQueryNotes(
+      disk.package,
+      baseline ? queryChanges(disk.package, schema, baseline) : [],
+      connectorOffer((await (await ctx.contracts()).capabilities()) as Record<string, unknown> | null),
+    );
+    for (const warning of queries.warnings) ctx.warn(warning);
+
     const client = await ctx.client();
     const preview = await callStable<Preview>(ctx, "POST", "/api/v1/agent-graph/import/preview", "previewing imports", {
       body: request,
@@ -1243,6 +1258,7 @@ export const apply: CommandSpec = {
     });
     const target = harness ? { id: harness.id, slug: harness.slug } : null;
     const data: Record<string, unknown> = { previewed: true, ...preview, env: envFile?.name ?? null, harness: target };
+    if (queries.data) data.database_queries = queries.data;
     // The instance's own report wins where it sends one: it decides what it leaves out, and knows the active solutions it reaches.
     const reported = solutionImport ? tenantWideReport(preview.tenant_wide) : undefined;
     const sections = reported?.sections ?? shared;
@@ -1303,6 +1319,10 @@ export const apply: CommandSpec = {
         ? `A blocker is in ${sectionFiles(disk, blockedShared).join(", ")}, which this import leaves out (tenant-wide); the instance checks it anyway: remove the file, or fix it.`
         : undefined;
       if (sharedHint) data.tenant_wide_hint = sharedHint;
+      // A query only a superadmin may write: the whole import waits for it, unless the query is left as the instance holds it.
+      const queryBlocked = blockerDetails(preview.blocker_details).some((b) => b.code === NEEDS_SUPERADMIN_CODE);
+      const queryHint = queryBlocked ? queryBlockedHint(sectionFiles(disk, ["tools"])) : undefined;
+      if (queryHint) data.database_query_hint = queryHint;
       return {
         data,
         text: [
@@ -1311,6 +1331,7 @@ export const apply: CommandSpec = {
           "",
           ...(pair ? [`hint: ${pair.hint}`] : []),
           ...(sharedHint ? [`hint: ${sharedHint}`] : []),
+          ...(queryHint ? [`hint: ${queryHint}`] : []),
           `The preview has blockers; fix them and run \`${cavelonCommand("apply")}\` again.`,
         ].join("\n"),
         exitCode: ExitCode.validation,

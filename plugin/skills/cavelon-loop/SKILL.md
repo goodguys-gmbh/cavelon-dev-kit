@@ -71,6 +71,18 @@ use it when you parse the result.
   In their own terminal, a plain `cavelon init` asks them. Ask for the instance
   URL if you do not know it.
 
+- **Database connections are set up by a person.** A database query tool
+  needs a connection of the name and dialect its package names, tested
+  successfully, in every tenant it is applied to. A superadmin creates it in
+  the Admin (Settings › Security & access › Databases), and the tenant Owner tests it
+  (`cavelon db test <connection>`); you never handle its host, user or
+  password. Use the same connection name in every tenant and environment
+  (`env/test.yaml`, `env/prod.yaml`), each pointing at that environment's
+  database, so one package serves them all. `cavelon db connections` shows
+  which exist and whether their last test passed. A pull writes each query's
+  SQL into `package/tools.yaml`, so the repository holds it: review it like
+  code.
+
 ## The loop
 
 1. **Pull** what is live: `cavelon pull`. It refuses when `package/` has
@@ -119,6 +131,13 @@ use it when you parse the result.
    code, package file and path, and hint; `cavelon explain <code>` says more.
    A preview that changes nothing says "Nothing to import" and stores no
    preview: there is nothing to confirm.
+   **A database query your package creates or changes stops the whole
+   apply** (`database_query_needs_superadmin`): only a superadmin writes a
+   query, in the Admin, and `apply` says so before it sends. Tell the person;
+   to apply the other changes now, leave the query as the instance holds it
+   (restore the tool's entry as the last pull wrote it, or remove its
+   `database_query` block) and preview again. Once a superadmin has imported
+   the package in the Admin, `apply` passes while the queries match.
 5. **Confirm** exactly that preview: `cavelon apply --confirm <preview-id>`
    (the line `apply` printed, with the same `--env` and `--tenant`). Exit 4
    means the preview is stale and nothing was imported: the target changed on
