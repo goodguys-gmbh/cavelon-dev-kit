@@ -17,7 +17,8 @@ import { readHidden } from "../prompt.js";
 import { isUuid, knownTenantId, lookupTenantId, requireInstance, requireToken, tenantRequiredError, type FoundTenant, type Session } from "../session.js";
 import { cavelonCommand, fill } from "../printed.js";
 import { choicesOf, chooseTenant, commandLines, describeTenant, listsTenants, type Reach, noTenantError, tenantOpenError, tenantRef, tenantTitle } from "../tenant-choice.js";
-import { loadUserConfig, saveUserConfig, tokenKind, updateInstance } from "../user-config.js";
+import { loadUserConfig, saveUserConfig, tokenKind, updateInstance, withTenantRefs } from "../user-config.js";
+import { checkKeyTenant } from "../acting.js";
 
 interface Me {
   id?: string;
@@ -116,6 +117,8 @@ export const login: CommandSpec = {
 
     const client = new ApiClient({ url, token }, ctx.io.env);
     const contracts = new Contracts(client, ctx.io.env, ctx.io.now);
+    // A key acts only in its own tenant: one that --tenant (or the folder) names otherwise is refused before the key is stored.
+    if (kind === "api_key") await checkKeyTenant(client, { ...session, token, tokenKind: kind }, (m) => ctx.warn(m));
     let tenant: (FoundTenant & { ref: string }) | undefined;
     /** How the tenant was decided: an option, the only one the token reaches, or a person's pick. */
     let chosen: "option" | "only" | "picked" | undefined;
@@ -180,7 +183,8 @@ export const login: CommandSpec = {
       ctx.io.env,
       url,
       (current) => ({
-        ...current,
+        // Names and slugs resolved with an earlier login's token hold for that token only, so they are never reused for this one.
+        ...withTenantRefs(current, remember ? [tenant!.ref, tenant!.slug] : [], tenant?.id ?? "", token, ctx.io.now()),
         credential_store: store.kind,
         token_kind: kind,
         logged_in_at: ctx.io.now().toISOString(),
@@ -191,7 +195,6 @@ export const login: CommandSpec = {
               tenant_id: tenant!.id,
               tenant_name: tenant!.name,
               tenant_slug: tenant!.slug,
-              tenant_ids: { ...current.tenant_ids, [tenant!.ref]: tenant!.id, ...(tenant!.slug ? { [tenant!.slug]: tenant!.id } : {}) },
             }
           : {}),
       }),
@@ -311,6 +314,8 @@ function tenantSourceText(session: Session): string | undefined {
       return session.project
         ? "`cavelon use` (this folder's cavelon.yaml names no tenant for this instance)"
         : "`cavelon use`, for every folder without a cavelon.yaml (--tenant chooses another for one command)";
+    case "session":
+      return "use_tenant, for this MCP session only (the tenant stored for your user is unchanged)";
     default:
       return session.tenantSource;
   }
@@ -482,7 +487,9 @@ export const use: CommandSpec = {
   description:
     "Stored per instance for your user. CAVELON_TENANT, --tenant and a cavelon.yaml tenant take precedence over it.\n" +
     "Without a tenant, it lists the tenants the token reaches: a person chooses one on a terminal by number or part of its name; " +
-    "without a terminal it prints one `cavelon use` line per tenant, and as an MCP tool it returns them as choices and changes nothing.",
+    "without a terminal it prints one `cavelon use` line per tenant, and as an MCP tool it returns them as choices and changes nothing.\n" +
+    "As an MCP tool it never changes the tenant stored for your user: it chooses the tenant for that MCP session only, " +
+    "until the session ends or it is cleared, so an agent's choice never moves where your own commands go.",
   readOnly: false,
   idempotent: true,
   mcpTool: "use_tenant",
@@ -493,7 +500,16 @@ export const use: CommandSpec = {
     const session = await ctx.session();
     const url = requireInstance(session);
     requireToken(session);
+    const inSession = ctx.mode === "mcp";
+    if (inSession && !ctx.globals.sessionTenants) throw usageError("This MCP server keeps no session, so use_tenant cannot choose a tenant; pass tenant to each tool instead.");
     if (boolOption(input, "clear")) {
+      if (inSession) {
+        ctx.globals.sessionTenants!.delete(url);
+        return {
+          data: { instance: url, tenant: null, scope: "session" },
+          text: `No tenant chosen for ${url} in this MCP session; tools act in the tenant chosen for this folder or with \`cavelon use\` again.`,
+        };
+      }
       await updateInstance(ctx.io.env, url, (c) => ({ ...c, tenant: undefined, tenant_id: undefined, tenant_name: undefined, tenant_slug: undefined }));
       return { data: { instance: url, tenant: null }, text: `No tenant chosen for ${url}.` };
     }
@@ -535,21 +551,28 @@ export const use: CommandSpec = {
     await probe.get("/api/v1/meta/capabilities", { allow: [404] });
     // A slug reads better than a name or an id wherever the choice is shown again.
     const stored = found.slug ?? ref;
+    const title = tenantTitle({ id: found.id, name: found.name, slug: found.slug ?? (isUuid(ref!) ? undefined : ref) });
+    if (session.tenantSource && session.tenantSource !== "use" && session.tenantSource !== "session") {
+      ctx.warn(`${session.tenantSource} names tenant "${session.tenant}" and takes precedence over \`use\` here.`);
+    }
+    const shown = { ref: stored, id: found.id, name: found.name ?? null, slug: found.slug ?? null };
+    if (inSession) {
+      // The person's stored tenant stays as it is: only this server's later tool calls act here.
+      ctx.globals.sessionTenants!.set(url, { ref: stored, id: found.id, ...(found.name ? { name: found.name } : {}), ...(found.slug ? { slug: found.slug } : {}) });
+      return {
+        data: { instance: url, tenant: shown, scope: "session" },
+        text: `Using tenant ${title} on ${url} for this MCP session; the tenant stored for your user (\`cavelon use\` in a terminal) is unchanged.`,
+      };
+    }
+    const token = requireToken(session);
     await updateInstance(ctx.io.env, url, (c) => ({
-      ...c,
+      ...withTenantRefs(c, [ref, stored], found.id, token, ctx.io.now()),
       tenant: stored,
       tenant_id: found.id,
       tenant_name: found.name ?? (c.tenant_id === found.id ? c.tenant_name : undefined),
       tenant_slug: found.slug ?? (c.tenant_id === found.id ? c.tenant_slug : undefined),
-      tenant_ids: { ...c.tenant_ids, [ref!]: found.id, [stored]: found.id },
     }));
-    if (session.tenantSource && session.tenantSource !== "use") {
-      ctx.warn(`${session.tenantSource} names tenant "${session.tenant}" and takes precedence over \`use\` here.`);
-    }
-    return {
-      data: { instance: url, tenant: { ref: stored, id: found.id, name: found.name ?? null, slug: found.slug ?? null } },
-      text: `Using tenant ${tenantTitle({ id: found.id, name: found.name, slug: found.slug ?? (isUuid(ref!) ? undefined : ref) })} on ${url}.`,
-    };
+    return { data: { instance: url, tenant: shown }, text: `Using tenant ${title} on ${url}.` };
   },
 };
 
@@ -636,7 +659,7 @@ export const status: CommandSpec = {
       // Offline, the version is the one cached last, and says so. The
       // capabilities are cached per tenant, so the client names the tenant it
       // would send, without asking the instance for a slug's id.
-      const target = { url: session.url, token: session.token, tenantId: knownTenantId(session) };
+      const target = { url: session.url, token: session.token, tenantId: knownTenantId(session, ctx.io.now()) };
       const cached = await new Contracts(new ApiClient(target, ctx.io.env), ctx.io.env, ctx.io.now)
         .cachedOnly<Capabilities>("capabilities.json")
         .catch(() => undefined);
@@ -816,14 +839,24 @@ async function operationSolutions(ctx: Context, operations: OperationPage["items
   return owners;
 }
 
-/** Exposed for `tenant create --use`. */
-export async function rememberTenant(ctx: Context, url: string, tenant: { ref: string; id: string; name?: string; slug?: string }): Promise<void> {
+/**
+ * Exposed for `tenant create --use`. Over MCP the tenant is chosen for the
+ * session only, as `use_tenant` does: the person's stored tenant stays.
+ * Says which.
+ */
+export async function rememberTenant(ctx: Context, url: string, tenant: { ref: string; id: string; name?: string; slug?: string }): Promise<"session" | "user"> {
+  if (ctx.mode === "mcp") {
+    if (!ctx.globals.sessionTenants) throw usageError("This MCP server keeps no session to choose the new tenant in; pass tenant to each tool instead.");
+    ctx.globals.sessionTenants.set(url, tenant);
+    return "session";
+  }
+  const token = requireToken(await ctx.session());
   await updateInstance(ctx.io.env, url, (c) => ({
-    ...c,
+    ...withTenantRefs(c, [tenant.ref], tenant.id, token, ctx.io.now()),
     tenant: tenant.ref,
     tenant_id: tenant.id,
     tenant_name: tenant.name,
     tenant_slug: tenant.slug,
-    tenant_ids: { ...c.tenant_ids, [tenant.ref]: tenant.id },
   }));
+  return "user";
 }

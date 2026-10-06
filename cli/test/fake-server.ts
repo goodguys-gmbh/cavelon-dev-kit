@@ -499,7 +499,7 @@ function tenantDetailOf(tenant: FakeState["tenants"][number]) {
 
 /** What /meta/principal publishes as the request's permissions. */
 function permissionsOf(info: TokenInfo, tenantId: string | undefined): string[] {
-  if (info.kind === "key") return (info.scopes ?? ["admin"]).includes("admin") ? ["limits.inference_budget.manage", "settings.manage", "settings.uploads.manage"] : [];
+  if (info.kind === "key") return (info.scopes ?? ["admin"]).includes("admin") ? ["limits.inference_budget.manage", "settings.manage", "settings.uploads.manage", "settings.view"] : [];
   if (info.permissions) return [...info.permissions].sort();
   if (!tenantId) {
     // A Platform-mode token carries its global role's permissions.

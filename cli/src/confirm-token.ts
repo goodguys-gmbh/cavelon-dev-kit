@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { actingTarget, targetLine, type ActingTarget, type PlatformTarget } from "./acting.js";
 import { drivenByAgent } from "./agent-env.js";
 import type { Context, Input } from "./command.js";
 import { CavelonError, ExitCode, type ExitCodeValue } from "./errors.js";
@@ -29,8 +30,13 @@ export function confirmGiven(input: Input): boolean {
 
 export interface Confirmation {
   confirmed: boolean;
-  /** What a preview adds for an agent: the token, and whether the confirm given was not this change's. */
-  fields: { confirm_token?: string; token_mismatch?: true; token_required?: true };
+  /**
+   * What a preview adds: where the change would go (`target`), and for an
+   * agent the token and whether the confirm given was not this change's.
+   */
+  fields: { target?: ActingTarget; confirm_token?: string; token_mismatch?: true; token_required?: true };
+  /** The preview's line naming the instance, tenant and mode the change acts on; empty once confirmed. */
+  where: string;
   /** The line a preview's text adds when a confirm was given but did not confirm: another change's token, or a bare flag. */
   mismatch?: string;
   /** Set when a confirm was given but did not confirm: exit 4 for another change's token, 5 for a bare flag. */
@@ -66,9 +72,19 @@ export function withToken(printed: string, token: string): string {
  *
  * `tool` names the kind of change, so a token of one tool confirms nothing
  * else; `change` is what the preview shows would happen, without what varies
- * between two calls for the same change (timestamps, progress).
+ * between two calls for the same change (timestamps, progress). A preview
+ * also names the instance, tenant and mode it acts on (`target`, `where`);
+ * `platform` marks a change sent in Platform mode.
  */
-export async function confirmation(ctx: Context, input: Input, tool: string, change: unknown): Promise<Confirmation> {
+export async function confirmation(ctx: Context, input: Input, tool: string, change: unknown, options: PlatformTarget = {}): Promise<Confirmation> {
+  const gate = await gateOf(ctx, input, tool, change);
+  if (gate.confirmed) return { ...gate, where: "" };
+  // A preview names where the change goes, so the person who approves sees the tenant an agent passed, or that none is chosen.
+  const target = await actingTarget(ctx, options);
+  return { ...gate, fields: { target, ...gate.fields }, where: targetLine(target) };
+}
+
+async function gateOf(ctx: Context, input: Input, tool: string, change: unknown): Promise<Omit<Confirmation, "where">> {
   const given = input.options.confirm;
   const driven = drivenByAgent(ctx);
   const tokenGiven = typeof given === "string" && given !== "";

@@ -5,7 +5,16 @@ import { exactMatch } from "./choose.js";
 import { readTenantless, type ReachableTenant } from "./principal.js";
 import { listsTenants, searchTenants, tenantMissError, type Reach } from "./tenant-choice.js";
 import { findProject, readEnvFile, type EnvFile, type ProjectConfig } from "./project.js";
-import { loadUserConfig, tokenKind, updateInstance, type InstanceSettings, type TokenKind } from "./user-config.js";
+import {
+  cachedTenantRef,
+  loadUserConfig,
+  tokenKind,
+  updateInstance,
+  withoutTenantRef,
+  withTenantRefs,
+  type InstanceSettings,
+  type TokenKind,
+} from "./user-config.js";
 import { cavelonCommand, fill } from "./printed.js";
 
 /**
@@ -13,7 +22,8 @@ import { cavelonCommand, fill } from "./printed.js";
  *
  * Precedence, highest first (plan 04, "Login"): command-line options, the
  * CAVELON_* variables, `cavelon.yaml` (instance URL and tenant, never a
- * token), the stored login. There is deliberately no option for the token.
+ * token), the tenant `use_tenant` chose for an MCP session, the stored
+ * login. There is deliberately no option for the token.
  */
 
 export type Source =
@@ -24,7 +34,20 @@ export type Source =
   | `env/${string}.yaml`
   | "cavelon.yaml"
   | "login"
-  | "use";
+  | "use"
+  | "session";
+
+/**
+ * A tenant `use_tenant` chose in one MCP session. It lives as long as the
+ * server process and is never written to the person's config, so an agent's
+ * choice never moves where the person's own commands go.
+ */
+export interface SessionTenant {
+  ref: string;
+  id: string;
+  name?: string;
+  slug?: string;
+}
 
 export interface GlobalOptions {
   json: boolean;
@@ -32,6 +55,8 @@ export interface GlobalOptions {
   tenant?: string;
   /** `--env <name>`: env/<name>.yaml names the tenant, between CAVELON_TENANT and cavelon.yaml. */
   solutionEnv?: string;
+  /** The MCP server's tenants chosen with `use_tenant`, per instance URL; never set in a terminal. */
+  sessionTenants?: Map<string, SessionTenant>;
 }
 
 export interface Session {
@@ -43,6 +68,8 @@ export interface Session {
   tokenKind?: TokenKind;
   tenant?: string;
   tenantSource?: Source;
+  /** The MCP session's choice, when the tenant came from it. */
+  sessionTenant?: SessionTenant;
   project?: ProjectConfig;
   /** The env file `--env` named, read once. */
   envFile?: EnvFile;
@@ -146,7 +173,10 @@ export async function resolveSession(env: Env, cwd: string, globals: GlobalOptio
   else if (env.CAVELON_TENANT) [session.tenant, session.tenantSource] = [env.CAVELON_TENANT.trim(), "CAVELON_TENANT"];
   else if (projectMatches && envFile?.tenant) [session.tenant, session.tenantSource] = [envFile.tenant, `env/${envFile.name}.yaml`];
   else if (projectMatches && project?.tenant) [session.tenant, session.tenantSource] = [project.tenant, "cavelon.yaml"];
-  else if (settings.tenant) [session.tenant, session.tenantSource] = [settings.tenant, "use"];
+  else if (globals.sessionTenants?.get(url)) {
+    session.sessionTenant = globals.sessionTenants.get(url)!;
+    [session.tenant, session.tenantSource] = [session.sessionTenant.ref, "session"];
+  } else if (settings.tenant) [session.tenant, session.tenantSource] = [settings.tenant, "use"];
   return session;
 }
 
@@ -316,27 +346,45 @@ async function findTenant(client: ApiClient, ref: string): Promise<{ found?: Fou
 }
 
 /** The tenant id to send as far as it is known without asking the instance; undefined also for a slug not resolved yet. */
-export function knownTenantId(session: Session): string | undefined {
+export function knownTenantId(session: Session, now: Date = new Date()): string | undefined {
   if (!session.tenant || !session.url) return undefined;
   if (session.tokenKind === "api_key") return undefined;
   if (isUuid(session.tenant)) return session.tenant;
-  const cached = session.settings.tenant_ids?.[session.tenant];
-  if (cached) return cached;
+  if (session.tenantSource === "session" && session.sessionTenant) return session.sessionTenant.id;
   if (session.tenantSource === "use" && session.settings.tenant_id) return session.settings.tenant_id;
-  return undefined;
+  return cachedTenantRef(session.settings, session.tenant, session.token, now);
 }
 
-/** The tenant id to send, resolving and remembering a slug once per instance. */
-export async function resolveTenantId(env: Env, session: Session, client: ApiClient): Promise<string | undefined> {
+/**
+ * The tenant id to send. A name or slug is resolved once per credential and
+ * day, and remembered; one taken from that cache is resolved again when the
+ * instance refuses a request in it with 403 or 404 (ApiClient.revalidateTenant),
+ * so a renamed or reused slug never keeps sending the old tenant's id.
+ */
+export async function resolveTenantId(env: Env, session: Session, client: ApiClient, now: Date = new Date()): Promise<string | undefined> {
   if (!session.tenant || !session.url) return undefined;
   if (session.tokenKind === "api_key") return undefined;
-  const known = knownTenantId(session);
-  if (known) return known;
-  const found = await lookupTenantId(client, session.tenant, session.tenantSource);
+  const known = knownTenantId(session, now);
   const url = session.url;
   const slug = session.tenant;
-  await updateInstance(env, url, (current) => ({ ...current, tenant_ids: { ...current.tenant_ids, [slug]: found.id } }));
-  return found.id;
+  const fromCache = known !== undefined && !isUuid(slug) && session.tenantSource !== "use" && session.tenantSource !== "session";
+  const resolve = async (): Promise<string> => {
+    const found = await lookupTenantId(client, slug, session.tenantSource);
+    if (client.target.token) {
+      const token = client.target.token;
+      await updateInstance(env, url, (current) => withTenantRefs(current, [slug], found.id, token, now));
+    }
+    return found.id;
+  };
+  if (!fromCache) return known ?? resolve();
+  client.revalidateTenant = async () => {
+    await updateInstance(env, url, (current) => withoutTenantRef(current, slug));
+    const fresh = await resolve().catch(() => undefined);
+    if (!fresh || fresh === client.target.tenantId) return false;
+    client.target.tenantId = fresh;
+    return true;
+  };
+  return known;
 }
 
 /** Load the stored settings again, for commands that changed them. */

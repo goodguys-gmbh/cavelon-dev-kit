@@ -58,7 +58,13 @@ use it when you parse the result.
   pass `--tenant` (and `--instance`) to every command, `harness new` and
   `pull` included: without it a command acts in the tenant `cavelon use`
   chose, which may be another one. The commands `cavelon` prints carry the
-  `--tenant` (and `--env`) you gave, confirm lines included; run them as printed. `apply` never creates a solution: when the one an env file names
+  `--tenant` (and `--env`) you gave, confirm lines included; run them as printed.
+  Every preview names where it acts (`acts on:`, `target` in `--json`): the
+  instance, the tenant and the mode; show it to the person with the change.
+  Over MCP, `use_tenant` chooses the tenant for this session only and never
+  changes the person's stored tenant. A tenant API key in `CAVELON_TOKEN` acts
+  only in its own tenant: a command that names another is refused with
+  `tenant_mismatch`; never work around it, tell the person which key fits. `apply` never creates a solution: when the one an env file names
   is missing it stops with `solution_not_found` and names that command. To start from a package file (a blueprint, an
   export from another instance), run
   `cavelon init --instance <url> --tenant <tenant> --from <file>` instead of

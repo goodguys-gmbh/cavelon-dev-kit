@@ -183,7 +183,7 @@ export const deactivate: CommandSpec = {
         data: { changed: false, harness: target, would: "deactivate", confirm: gate.confirm(confirmCommand), ...gate.fields },
         text: [
           `Deactivating ${named(harness)} sets it inactive and takes it out of live traffic: the conversations, channels and API keys that name it are no longer answered by it until it is activated again${known}.`,
-          ...(gate.mismatch ? [gate.mismatch] : []),
+          gate.where, ...(gate.mismatch ? [gate.mismatch] : []),
           `Show this to a person; with their yes: ${gate.confirm(confirmCommand)}`,
         ].join("\n"),
         ...(gate.exitCode ? { exitCode: gate.exitCode } : {}),

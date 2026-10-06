@@ -47,14 +47,24 @@ highest first:
 2. the environment variables `CAVELON_URL` and `CAVELON_TENANT`;
 3. the environment file of `--env <name>` (`env/<name>.yaml`, tenant only);
 4. the nearest `cavelon.yaml`, from the working directory upwards;
-5. your login, and the tenant you chose with `cavelon use`.
+5. over MCP, the tenant `use_tenant` chose for that MCP session;
+6. your login, and the tenant you chose with `cavelon use`.
 
 `cavelon login` finds the tenants your token reaches: it uses the only one, or
 lets you choose from a numbered list by number or part of a name. `cavelon use`
 offers the same list later. Without a terminal, both print one ready
 `cavelon use <tenant>` line per tenant instead of asking, and as an MCP tool
-`use_tenant` returns the tenants as choices. `cavelon whoami` says which tenant
-a command would use and why.
+`use_tenant` returns the tenants as choices. Over MCP, `use_tenant` chooses
+the tenant for that session only and never changes the one you stored, so an
+agent never moves where your own commands go. `cavelon whoami` says which
+tenant a command would use and why.
+
+`cavelon` resolves a tenant's name or slug to its id once and remembers it for
+a day, for the token that resolved it: another token, or a day later, resolves
+it again. When the instance refuses a request in the remembered tenant (403 or
+404), `cavelon` resolves the slug again; a read then goes to the tenant the
+slug names now, and a change is not sent again but refused with
+`tenant_moved`, so you run it again and its preview names the new tenant.
 
 A tenant and a solution can be named by name, slug or id wherever `cavelon`
 asks for one. `cavelon tenant list` and `cavelon harness list` show all three.
@@ -300,6 +310,11 @@ Changing a solution always takes two steps:
    `.cavelon/previews/`.
 2. **`cavelon apply --confirm <id>`** imports exactly that preview.
 
+Every preview, this one and those of the other changing commands, names where
+it acts in an `acts on:` line (`target` with `--json`): the instance, the
+tenant by name, slug and id, where the tenant was named, and the mode (in the
+tenant, or Platform mode outside any tenant). Check it before you confirm.
+
 A recent instance's preview also lists each field it would change
 (`object.field: old → new`), the fields an import does not apply (such as a
 solution's `status` or `is_default`, each with the command that sets it), and,
@@ -461,7 +476,12 @@ in the Admin.
   one.
 - a **tenant API key** (`cbp_…`), created by a tenant admin for one tenant. It
   suits automation inside that tenant; it cannot import packages, set or delete
-  secrets, or create tenants.
+  secrets, or create tenants. It always acts in its own tenant, so where
+  `--tenant`, `CAVELON_TENANT`, an env file or `cavelon.yaml` names another,
+  `cavelon` refuses with `tenant_mismatch` and names both, before anything is
+  sent there. Where the instance does not tell the key its tenant's slug or
+  name, a tenant named by slug cannot be checked and `cavelon` warns; name it
+  by id to have it checked.
 
 A person stores either with `cavelon login`. In CI, set `CAVELON_URL` and
 `CAVELON_TOKEN` instead. See [Security](security.md).

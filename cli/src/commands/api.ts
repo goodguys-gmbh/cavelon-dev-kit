@@ -21,6 +21,7 @@ import { confinedPath } from "../paths.js";
 import { describeSchema, findOperation, jsonBodySchema, matchedLoosely, operations, schemaTypes, secretFields, secretPaths, type Operation } from "../openapi.js";
 import { harnessNotFoundError, lookupHarness } from "../harness-ref.js";
 import { CONFIRM_TOKEN, confirmToken, confirmTokenRequired, confirmWith } from "../confirm-token.js";
+import { actingTarget, targetLine } from "../acting.js";
 import { cavelonCommand, fill } from "../printed.js";
 
 /** Said once when `--json` carried the body: the alias goes away in a later release. */
@@ -383,8 +384,10 @@ async function previewUnlessConfirmed(
     driven.by === "mcp"
       ? confirmWith("api", token)
       : `Show the person this request, then run the same command again with --confirm ${token} to send exactly it.`;
-  const shown = { operation: op.alias, ...request, ...(files.length ? { files } : {}), sent: false };
-  const lines = [`Would send ${request.method} ${request.path}. Nothing was sent.`];
+  // Where it would go: the person who approves sees the tenant an agent passed, or that none is chosen.
+  const target = await actingTarget(ctx);
+  const shown = { operation: op.alias, ...request, ...(files.length ? { files } : {}), target, sent: false };
+  const lines = [`Would send ${request.method} ${request.path}. Nothing was sent.`, targetLine(target)];
   if (stale) lines.push("The confirm token is not this request's: the request changed since its preview, or the token is another one's.");
   if (bare && driven.by === "agent") lines.push("--confirm alone does not send it when a coding agent runs cavelon.");
   if (Object.keys(request.query).length) lines.push(`Query: ${JSON.stringify(request.query)}`);

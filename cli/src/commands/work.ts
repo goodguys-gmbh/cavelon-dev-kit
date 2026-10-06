@@ -689,7 +689,7 @@ export const kbUpload: CommandSpec = {
         text: [
           `--replace uploads ${fileCount(rel.length)} and then deactivates ${deactivations.length} document${deactivations.length === 1 ? "" : "s"} the instance's upload does not replace itself:`,
           ...matches.map(plannedLine),
-          ...(gate.mismatch ? [gate.mismatch] : []),
+          gate.where, ...(gate.mismatch ? [gate.mismatch] : []),
           `Nothing was sent. Upload and deactivate with: ${confirm}`,
         ].join("\n"),
         ...(gate.exitCode ? { exitCode: gate.exitCode } : {}),
