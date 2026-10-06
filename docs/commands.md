@@ -799,7 +799,7 @@ Set a secret's value (a person runs this, never the agent).
 cavelon secrets set <name> [options]
 ```
 
-Asks for the value without echoing it, or reads it from standard input when that is piped (one trailing line break is dropped). The value is never an argument, never printed and never read back. A tenant API key cannot set a secret, nor can a role the instance does not allow to manage secrets (a Builder): its refusal then names who can, a tenant Owner.
+Asks for the value without echoing it, or reads it from standard input when that is piped (one trailing line break is dropped). The value is never an argument, never printed and never read back. A tenant API key cannot set a secret, nor can a role the instance does not allow to manage secrets (a Builder): its refusal then names who can, a tenant Owner. Run by a coding agent in its shell, it is refused before it reads a value (operation_for_a_person).
 
 | Argument | Description |
 |---|---|
@@ -826,7 +826,7 @@ Delete a secret's value (needs --confirm; a person runs this).
 cavelon secrets delete <name> [options]
 ```
 
-Without --confirm, shows the secret's status and deletes nothing. A tool or prompt that names it fails until a person sets it again. A tenant API key cannot delete a secret.
+Without --confirm, shows the secret's status and deletes nothing. A tool or prompt that names it fails until a person sets it again. A tenant API key cannot delete a secret. Run by a coding agent in its shell, it is refused, with or without --confirm (operation_for_a_person).
 
 | Argument | Description |
 |---|---|
@@ -1505,7 +1505,7 @@ Call any operation the instance publishes in its OpenAPI.
 cavelon api <operation> [params...] [options]
 ```
 
-The operation is its operationId or the short name before FastAPI's path suffix (list_harnesses). Parameters: -p name=value or name=value (not --name). Body: --body '&lt;json&gt;', --body @file.json or --body - (stdin); --json &lt;body&gt; still works for now but is deprecated: --json alone prints JSON, as on every command. The body is checked against the operation's schema before it is sent. As an MCP tool, or run by a coding agent (CLAUDECODE, CODEX_THREAD_ID, CODEX_SANDBOX, CURSOR_AGENT, GEMINI_CLI, COPILOT_CLI, COPILOT_AGENT, AI_AGENT or CAVELON_AGENT=1 is set), an operation that changes something returns what it would send and a confirm token, and sends it only with that token: --confirm &lt;token&gt;, or confirm: "&lt;token&gt;" as an MCP tool. A changed request needs a new preview; confirm: true is refused. Run by an agent, one the instance marks for a person only (x-cavelon-person-only) is refused, as is a body that sets a field the instance marks as a secret value (x-cavelon-secret) and a file outside the solution folder. On an instance that marks no operation, one that changes a secret, creates or revokes a credential or decides an approval is refused. A person's own terminal sends at once. In a solution folder, the persona operations (get_bot_persona, upsert_bot_persona, …) get the folder's solution as harness_id when none is passed, since without it they reach the tenant's default route.
+The operation is its operationId or the short name before FastAPI's path suffix (list_harnesses). Parameters: -p name=value or name=value (not --name). Body: --body '&lt;json&gt;', --body @file.json or --body - (stdin); --json &lt;body&gt; still works for now but is deprecated: --json alone prints JSON, as on every command. The body is checked against the operation's schema before it is sent. As an MCP tool, or run by a coding agent (CLAUDECODE, CODEX_THREAD_ID, CODEX_CI, CODEX_SANDBOX, CURSOR_AGENT, GEMINI_CLI, COPILOT_CLI, COPILOT_AGENT, AGENT_CONTEXT_OUT, TERM_PROGRAM=kiro, OPENCODE, GROK_AGENT, AI_AGENT or CAVELON_AGENT=1 is set), an operation that changes something returns what it would send and a confirm token, and sends it only with that token: --confirm &lt;token&gt;, or confirm: "&lt;token&gt;" as an MCP tool. A changed request needs a new preview; confirm: true is refused. Run by an agent, one the instance marks for a person only (x-cavelon-person-only) is refused, as is a body that sets a field the instance marks as a secret value (x-cavelon-secret) and a file outside the solution folder. On an instance that marks no operation, one that changes a secret, creates or revokes a credential or decides an approval is refused. A person's own terminal sends at once. In a solution folder, the persona operations (get_bot_persona, upsert_bot_persona, …) get the folder's solution as harness_id when none is passed, since without it they reach the tenant's default route.
 
 | Argument | Description |
 |---|---|

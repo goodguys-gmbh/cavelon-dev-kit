@@ -250,9 +250,7 @@ repeat them:
   OpenAPI marks no field is checked as before. A secret typed into a free-form
   map, such as a headers or settings object, cannot be detected.
 - **The same guards in the agent's shell.** When a coding agent runs
-  `cavelon api` in its shell (`CLAUDECODE`, `CODEX_THREAD_ID`, `CODEX_SANDBOX`, `CURSOR_AGENT`,
-  `GEMINI_CLI`, `COPILOT_CLI`, `COPILOT_AGENT`, `AI_AGENT` or
-  `CAVELON_AGENT=1` is set), the rules of the `api` tool hold there too: it
+  `cavelon api` in its shell, the rules of the `api` tool hold there too: it
   refuses what the tool refuses, keeps its files in the solution folder, and
   for an operation that is not read-only prints the request and a token and
   sends it only when run again with `--confirm <token>`.

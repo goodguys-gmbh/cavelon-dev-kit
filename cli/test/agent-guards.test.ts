@@ -12,6 +12,7 @@ import type { OpenApiDoc } from "../src/contracts.js";
 import type { InStream, Io } from "../src/io.js";
 import { createMcpServer } from "../src/mcp.js";
 import { secretFields } from "../src/openapi.js";
+import { setupAgents } from "../src/setup-agents.js";
 import { modelRow, startFakeServer, type FakeServer } from "./fake-server.js";
 import { cli, login, sandbox, type Sandbox } from "./helpers.js";
 
@@ -74,8 +75,14 @@ describe("the fields of a body the instance marks as a secret value", () => {
 });
 
 describe("whether a coding agent runs cavelon", () => {
-  it.each(AGENT_VARIABLES.map((v) => [v.variable, v.agent]))("%s (%s) says so", (variable) => {
-    expect(agentVariable({ PATH: "/usr/bin", [variable]: "1" })).toBe(variable);
+  it.each(AGENT_VARIABLES.map((v) => [v.variable, v.agent, v.value]))("%s (%s) says so", (variable, _agent, value) => {
+    expect(agentVariable({ PATH: "/usr/bin", [variable]: value ?? "1" })).toBe(variable);
+  });
+
+  it("takes a variable with a value only with that value", () => {
+    expect(agentVariable({ TERM_PROGRAM: "Kiro" })).toBe("TERM_PROGRAM");
+    expect(agentVariable({ TERM_PROGRAM: "vscode" })).toBeUndefined();
+    expect(agentVariable({ TERM_PROGRAM: "iTerm.app" })).toBeUndefined();
   });
 
   it("not in a person's terminal, nor when a variable is empty, 0 or false", () => {
@@ -171,10 +178,12 @@ describe("cavelon api and the api tool, run by an agent and by a person", () => 
         expect(result.code).toBe(5);
         expect(result.json<{ error: Record<string, unknown> }>().error).toMatchObject({
           code: "operation_for_a_person",
-          message: expect.stringMatching(/is for a person only, as the instance marks it .*cavelon api does not send it when a coding agent runs it \(CLAUDECODE is set\)/),
-          hint: expect.stringMatching(/cavelon secrets set <name>.*A person's own terminal is not guarded: it does not set CLAUDECODE\./),
-          details: { source: "instance", agent_variable: "CLAUDECODE" },
+          message: expect.stringMatching(/is for a person only, as the instance marks it .*cavelon api does not send it when a coding agent runs it, with or without --confirm\.$/),
+          hint: expect.stringMatching(/^A person sets a secret in their own terminal with `cavelon secrets set <name>`/),
+          details: { source: "instance" },
         });
+        // What tells an agent from a person stays unsaid, so the refusal does not say how to get past it.
+        expect(result.stdout + result.stderr).not.toMatch(/CLAUDECODE|not guarded|is set\)/);
       }
       expect(changes(before)).toEqual([]);
     });
@@ -338,8 +347,10 @@ describe("cavelon api and the api tool, run by an agent and by a person", () => 
       expect(refused.code).toBe(5);
       expect(refused.json<{ error: Record<string, unknown> }>().error).toMatchObject({
         code: "secret_field_for_a_person",
-        message: expect.stringMatching(/cavelon api does not send it when a coding agent runs it \(CLAUDECODE is set\)/),
+        message: expect.stringMatching(/cavelon api does not send it when a coding agent runs it, with or without --confirm\.$/),
+        hint: expect.stringMatching(/^A person sets a secret value in their own terminal with `cavelon secrets set <name>`/),
       });
+      expect(refused.stdout + refused.stderr).not.toMatch(/CLAUDECODE/);
       expect(changes(before)).toEqual([]);
       expect((await api(updateModel({ api_key: "sk-person" }))).code).toBe(0);
       expect(changes(before)).toEqual([expect.objectContaining({ method: "PATCH", body: { api_key: "sk-person" } })]);
@@ -352,6 +363,51 @@ describe("cavelon api and the api tool, run by an agent and by a person", () => 
       const preview = await tool(client, { operation: "update_model", params: [`model_registry_id=${server.state.models[0]!.id}`], body: '{"api_key":"sk"}' });
       expect(preview.isError).toBe(false);
       expect(preview.body).toMatchObject({ sent: false, body: { api_key: "sk" } });
+    });
+  });
+
+  describe("the shell of every agent cavelon setup sets up, and of others", () => {
+    /**
+     * What each agent's shell tool puts into the environment of the commands
+     * it runs, as far as the kit can tell them: seen in a run where noted,
+     * otherwise from the agent's source, shipped bundle or documentation.
+     */
+    const SHELLS: Record<string, Record<string, string>> = {
+      // Seen in a run (2.1): CLAUDECODE=1, also in the MCP servers it starts.
+      claude: { CLAUDECODE: "1", CLAUDE_CODE_ENTRYPOINT: "cli" },
+      // Seen in a run on Linux (0.159); CODEX_SANDBOX only in its macOS sandbox.
+      codex: { CODEX_THREAD_ID: "01a10fc6-4bf5-77b0-b816-64282689162c", CODEX_SESSION_ID: "01a10fc6-4bf5-77b0-b816-64282689162c", CODEX_CI: "1" },
+      // cursor.com/docs/agent/terminal; the Cursor IDE and cursor-agent.
+      cursor: { CURSOR_AGENT: "1" },
+      // VS Code's run_in_terminal tool (toolTerminalCreator.ts).
+      copilot: { AI_AGENT: "github_copilot_vscode_agent", COPILOT_AGENT: "1", TERM_PROGRAM: "vscode" },
+      // Gemini CLI's run_shell_command (docs/tools/shell.md).
+      gemini: { GEMINI_CLI: "1" },
+      // The Kiro IDE's agent terminal: no agent marker, TERM_PROGRAM in every terminal it opens.
+      kiro: { TERM_PROGRAM: "kiro", Q_TERM_DISABLED: "1" },
+      // kiro-cli: "only set when the agent is driving the command" (kiro.dev/docs/reference/built-in-tools).
+      "kiro-cli": { AGENT_CONTEXT_OUT: "/tmp/kiro-ctx.fifo", AGENT_DISPLAY_OUT: "/tmp/kiro-out.fifo" },
+      // Seen in a run (1.18).
+      opencode: { OPENCODE: "1", AGENT: "1" },
+      // Grok Build, seen in a run (1.0).
+      grok: { GROK_AGENT: "1", CI: "true" },
+    };
+
+    it("knows the shell of each agent setup supports", () => {
+      for (const agent of setupAgents({ HOME: sb.home }, "linux")) expect(Object.keys(SHELLS), agent.label).toContain(agent.name);
+    });
+
+    it.each(Object.entries(SHELLS))("guards %s: a person-only operation, a bare --confirm and setting a secret change nothing", async (_name, shell) => {
+      const before = server.state.requests.length;
+      const refused = await api(["set_secret", "name=smtp_password", "--body", '{"value":"chosen"}'], shell);
+      expect(refused.code).toBe(5);
+      expect(refused.json<{ error: { code: string } }>().error.code).toBe("operation_for_a_person");
+      const bare = await api(["set_variable", "--confirm", "name=region", "--body", '{"value":"eu"}'], shell);
+      expect(bare.json()).toMatchObject({ sent: false });
+      const secret = await cli(sb, ["secrets", "set", "smtp_password", "--json"], { stdin: "typed-by-the-agent", env: { ...fresh(), ...shell } });
+      expect(secret.code).toBe(5);
+      expect(secret.json<{ error: { code: string } }>().error.code).toBe("operation_for_a_person");
+      expect(changes(before)).toEqual([]);
     });
   });
 });

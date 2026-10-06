@@ -9,6 +9,7 @@ import {
   type CommandSpec,
   type Context,
 } from "../command.js";
+import { refuseForAgent } from "../agent-env.js";
 import { confirmation } from "../confirm-token.js";
 import { CavelonError, ExitCode, usageError, validationError } from "../errors.js";
 import { clip, keyValues, moreHint, table } from "../format.js";
@@ -439,7 +440,8 @@ export const secretsSet: CommandSpec = {
   description:
     "Asks for the value without echoing it, or reads it from standard input when that is piped (one trailing line break is\n" +
     "dropped). The value is never an argument, never printed and never read back. A tenant API key cannot set a secret,\n" +
-    "nor can a role the instance does not allow to manage secrets (a Builder): its refusal then names who can, a tenant Owner.",
+    "nor can a role the instance does not allow to manage secrets (a Builder): its refusal then names who can, a tenant Owner.\n" +
+    "Run by a coding agent in its shell, it is refused before it reads a value (operation_for_a_person).",
   readOnly: false,
   idempotent: true,
   mcpTool: false,
@@ -449,6 +451,7 @@ export const secretsSet: CommandSpec = {
   preprocess: refuseValueArgument,
   async run(ctx, input) {
     const name = positional(input, "name")!;
+    refuseForAgent(ctx, "Setting a secret's value", secretSetCommand(name));
     await requirePerson(ctx, "set", name);
     await checkName(ctx, "PUT", "/api/v1/secrets/{name}", "setting secrets", name);
     const value = await readSecretValue(ctx, name);
@@ -468,7 +471,8 @@ export const secretsDelete: CommandSpec = {
   summary: "Delete a secret's value (needs --confirm; a person runs this).",
   description:
     "Without --confirm, shows the secret's status and deletes nothing. A tool or prompt that names it fails until a person\n" +
-    "sets it again. A tenant API key cannot delete a secret.",
+    "sets it again. A tenant API key cannot delete a secret. Run by a coding agent in its shell, it is refused, with or without\n" +
+    "--confirm (operation_for_a_person).",
   readOnly: false,
   destructive: true,
   idempotent: true,
@@ -478,6 +482,7 @@ export const secretsDelete: CommandSpec = {
   examples: ["cavelon secrets delete old_token", "cavelon secrets delete old_token --confirm", "cavelon secrets delete old_token --confirm <token>"],
   async run(ctx, input) {
     const name = positional(input, "name")!;
+    refuseForAgent(ctx, "Deleting a secret's value", cavelonCommand("secrets", "delete", name));
     await requirePerson(ctx, "delete", name);
     const current = secretView(
       await callStable<SecretStatus>(ctx, "GET", "/api/v1/secrets/{name}", "tenant secrets", { params: { name: [name] } }),

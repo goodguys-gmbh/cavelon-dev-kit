@@ -294,6 +294,14 @@ its settings folder (`setup.json`), so a second run changes nothing and
 
 `setup` is for people; it is not an MCP tool.
 
+Each of these agents is recognised when it runs `cavelon` in its own shell,
+from what the agent sets itself, so `cavelon api`, the `--confirm` commands
+and `secrets set` hold it to the guards of the MCP tools without anything
+`setup` would add. The Kiro IDE marks no terminal as its agent's, so every
+terminal of the Kiro IDE is guarded;
+[Security](security.md#when-the-agent-runs-cavelon-in-its-shell) lists how
+each agent is recognised.
+
 ## Install the plugin
 
 To install it by hand instead of `cavelon setup`, or for a project instead of

@@ -244,7 +244,7 @@ make the call as written, filling a value in angle brackets (a
 **From your shell, `--confirm` takes the same token.** Run by a coding agent,
 `limits set`, `models set-limit`, `loop cancel`, `sandbox seed`,
 `trigger identity`, `harness default`, `activate --make-default`,
-`deactivate`, `kb upload --replace`, `variables delete` and `secrets delete`
+`deactivate`, `kb upload --replace` and `variables delete`
 print their preview with a confirm token and the command that confirms it
 (`… --confirm <token>`). Show the preview, then run exactly that command. A
 bare `--confirm`, as the docs show it for a person's terminal, changes nothing
@@ -254,9 +254,7 @@ preview. A line printed before its preview exists ends in
 `--confirm` first for the preview and its token.
 
 **`cavelon api` from your shell has the guards of the MCP `api` tool**, since
-`cavelon` sees that a coding agent runs it (`CLAUDECODE`, `CODEX_THREAD_ID`, `CODEX_SANDBOX`,
-`CURSOR_AGENT`, `GEMINI_CLI`, `COPILOT_CLI`, `COPILOT_AGENT`, `AI_AGENT` or
-`CAVELON_AGENT=1`):
+`cavelon` sees that a coding agent runs it:
 
 - For an operation that is not read-only, it prints the request and a confirm
   token and sends nothing. Show the request to the person when the rules above
@@ -269,9 +267,13 @@ preview. A line printed before its preview exists ends in
   both marks up front.
   Tell the person what the error's hint says; for a secret field, send the rest
   without it and let the person enter the value (`cavelon secrets set <name>`
-  or the Admin). Never work around a refusal, by unsetting the variable or by
-  any other way.
+  or the Admin). Never work around a refusal in any way.
 - Its `@file` body, `--file` and `--output` stay inside the solution folder.
+
+`cavelon secrets set` and `cavelon secrets delete` are refused from your shell
+(`operation_for_a_person`, exit 5), with or without `--confirm`, before a value
+is read or anything is sent: give the person the command from the error's hint
+to run in their own terminal.
 
 `activate` goes through the readiness gate only, and only with a token that
 may activate. It never forces: activating without the evidence stays a person's
