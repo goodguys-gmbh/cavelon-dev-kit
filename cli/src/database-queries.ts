@@ -181,13 +181,13 @@ export function queryProblems(query: Json, schema: PackageSchema): Problem[] {
   const parameters = Array.isArray(query.parameters) ? query.parameters.filter(isObject) : [];
   const problems: Problem[] = [];
   const names = parameters.map((p) => p.name).filter((n): n is string => typeof n === "string");
-  const repeated = [...new Set(names.filter((n, i) => names.indexOf(n) !== i))].sort();
+  const repeated = [...new Set(names.filter((n, i) => names.indexOf(n) !== i))].sort((a, b) => a.localeCompare(b, "en"));
   if (repeated.length) problems.push(problem("parameter_names_repeat", `parameter names repeat: ${repeated.join(", ")}`, "parameters"));
   parameters.forEach((p, index) => problems.push(...parameterProblems(p, index, defaults)));
   if (typeof query.sql_text === "string" && query.sql_text.trim()) {
     const found = bindNames(query.sql_text);
-    const missing = found.filter((n) => !names.includes(n)).sort();
-    const unused = [...new Set(names)].filter((n) => !found.includes(n)).sort();
+    const missing = found.filter((n) => !names.includes(n)).sort((a, b) => a.localeCompare(b, "en"));
+    const unused = [...new Set(names)].filter((n) => !found.includes(n)).sort((a, b) => a.localeCompare(b, "en"));
     if (missing.length || unused.length) {
       const parts = [
         ...(missing.length ? [`placeholders without a declared parameter: ${missing.map((n) => `:${n}`).join(", ")}`] : []),
