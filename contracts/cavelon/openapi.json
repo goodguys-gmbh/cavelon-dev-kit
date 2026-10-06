@@ -165,6 +165,15 @@
               }
             }
           },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportConflictResponse"
+                }
+              }
+            }
+          },
           "422": {}
         }
       }
@@ -437,6 +446,335 @@
               }
             }
           }
+        }
+      }
+    },
+    "/api/v1/database-connectors/connections": {
+      "get": {
+        "tags": [
+          "database-connectors"
+        ],
+        "summary": "List Database Connections",
+        "operationId": "list_database_connections_api_v1_database_connectors_connections_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DatabaseConnectionResponse"
+                  },
+                  "type": "array",
+                  "title": "Response List Database Connections Api V1 Database Connectors Connections Get"
+                }
+              }
+            }
+          },
+          "400": {},
+          "403": {},
+          "404": {}
+        }
+      }
+    },
+    "/api/v1/database-connectors/connections/{connection_id}": {
+      "get": {
+        "tags": [
+          "database-connectors"
+        ],
+        "summary": "Get Database Connection",
+        "operationId": "get_database_connection_api_v1_database_connectors_connections__connection_id__get",
+        "parameters": [
+          {
+            "name": "connection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Connection Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseConnectionResponse"
+                }
+              }
+            }
+          },
+          "400": {},
+          "403": {},
+          "404": {},
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/database-connectors/connections/{connection_id}/test": {
+      "post": {
+        "tags": [
+          "database-connectors"
+        ],
+        "summary": "Test Database Connection",
+        "operationId": "test_database_connection_api_v1_database_connectors_connections__connection_id__test_post",
+        "parameters": [
+          {
+            "name": "connection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Connection Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseConnectionTestResponse"
+                }
+              }
+            }
+          },
+          "400": {},
+          "403": {},
+          "404": {},
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/database-connectors/queries": {
+      "get": {
+        "tags": [
+          "database-connectors"
+        ],
+        "summary": "List Database Queries",
+        "operationId": "list_database_queries_api_v1_database_connectors_queries_get",
+        "parameters": [
+          {
+            "name": "connection_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Connection Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DatabaseQueryResponse"
+                  },
+                  "title": "Response List Database Queries Api V1 Database Connectors Queries Get"
+                }
+              }
+            }
+          },
+          "400": {},
+          "403": {},
+          "404": {},
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/database-connectors/queries/{query_id}": {
+      "get": {
+        "tags": [
+          "database-connectors"
+        ],
+        "summary": "Get Database Query",
+        "operationId": "get_database_query_api_v1_database_connectors_queries__query_id__get",
+        "parameters": [
+          {
+            "name": "query_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Query Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseQueryResponse"
+                }
+              }
+            }
+          },
+          "400": {},
+          "403": {},
+          "404": {},
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/database-connectors/queries/{query_id}/runs": {
+      "get": {
+        "tags": [
+          "database-connectors"
+        ],
+        "summary": "List Database Query Runs",
+        "operationId": "list_database_query_runs_api_v1_database_connectors_queries__query_id__runs_get",
+        "parameters": [
+          {
+            "name": "query_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Query Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100000,
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseQueryRunPage"
+                }
+              }
+            }
+          },
+          "400": {},
+          "403": {},
+          "404": {},
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/database-connectors/queries/{query_id}/test-run": {
+      "post": {
+        "tags": [
+          "database-connectors"
+        ],
+        "summary": "Test Run Database Query",
+        "operationId": "test_run_database_query_api_v1_database_connectors_queries__query_id__test_run_post",
+        "parameters": [
+          {
+            "name": "query_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Query Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DatabaseQueryTestRunRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseQueryTestRunResponse"
+                }
+              }
+            }
+          },
+          "400": {},
+          "403": {},
+          "404": {},
+          "409": {},
+          "422": {}
         }
       }
     },
@@ -6727,6 +7065,65 @@
           "attributes_json": {
             "anyOf": [
               {
+                "properties": {
+                  "knowledge_outcome": {
+                    "type": "string",
+                    "enum": [
+                      "usable_evidence",
+                      "content_gap",
+                      "unusable_hits",
+                      "retrieval_fault",
+                      "deliberately_unanswerable"
+                    ]
+                  },
+                  "no_usable_evidence": {
+                    "type": "boolean"
+                  },
+                  "knowledge_sufficient": {
+                    "type": "boolean"
+                  },
+                  "source_count": {
+                    "type": "integer"
+                  },
+                  "sources": {
+                    "items": {
+                      "properties": {
+                        "document_id": {
+                          "type": "string"
+                        },
+                        "knowledge_base_id": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "rank": {
+                          "type": "integer"
+                        },
+                        "score": {
+                          "type": "number"
+                        },
+                        "citation_state": {
+                          "type": "string",
+                          "enum": [
+                            "citable",
+                            "not_citable"
+                          ]
+                        },
+                        "cited": {
+                          "type": "boolean",
+                          "const": false
+                        }
+                      },
+                      "additionalProperties": true,
+                      "type": "object"
+                    },
+                    "type": "array"
+                  }
+                },
                 "additionalProperties": true,
                 "type": "object"
               },
@@ -7587,6 +7984,18 @@
             "title": "User Confirmed",
             "default": false
           },
+          "confirmed_harness_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmed Harness Id"
+          },
           "session_id": {
             "anyOf": [
               {
@@ -7770,6 +8179,17 @@
             "type": "string",
             "title": "Response"
           },
+          "greeting": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Greeting"
+          },
           "session_id": {
             "type": "string",
             "title": "Session Id"
@@ -7777,6 +8197,39 @@
           "conversation_id": {
             "type": "string",
             "title": "Conversation Id"
+          },
+          "harness_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness Id"
+          },
+          "harness_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness Status"
+          },
+          "is_default": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Default"
           },
           "agent_run_id": {
             "anyOf": [
@@ -8701,6 +9154,65 @@
           "attributes_json": {
             "anyOf": [
               {
+                "properties": {
+                  "knowledge_outcome": {
+                    "type": "string",
+                    "enum": [
+                      "usable_evidence",
+                      "content_gap",
+                      "unusable_hits",
+                      "retrieval_fault",
+                      "deliberately_unanswerable"
+                    ]
+                  },
+                  "no_usable_evidence": {
+                    "type": "boolean"
+                  },
+                  "knowledge_sufficient": {
+                    "type": "boolean"
+                  },
+                  "source_count": {
+                    "type": "integer"
+                  },
+                  "sources": {
+                    "items": {
+                      "properties": {
+                        "document_id": {
+                          "type": "string"
+                        },
+                        "knowledge_base_id": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "rank": {
+                          "type": "integer"
+                        },
+                        "score": {
+                          "type": "number"
+                        },
+                        "citation_state": {
+                          "type": "string",
+                          "enum": [
+                            "citable",
+                            "not_citable"
+                          ]
+                        },
+                        "cited": {
+                          "type": "boolean",
+                          "const": false
+                        }
+                      },
+                      "additionalProperties": true,
+                      "type": "object"
+                    },
+                    "type": "array"
+                  }
+                },
                 "additionalProperties": true,
                 "type": "object"
               },
@@ -8761,6 +9273,738 @@
           "error_json"
         ],
         "title": "ConversationTraceSpanResponse"
+      },
+      "DatabaseConnectionResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "dialect": {
+            "type": "string",
+            "title": "Dialect"
+          },
+          "host": {
+            "type": "string",
+            "title": "Host"
+          },
+          "port": {
+            "type": "integer",
+            "title": "Port"
+          },
+          "database_name": {
+            "type": "string",
+            "title": "Database Name"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "password_set": {
+            "type": "boolean",
+            "title": "Password Set"
+          },
+          "password_changed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Password Changed At"
+          },
+          "tls_mode": {
+            "type": "string",
+            "title": "Tls Mode"
+          },
+          "ca_certificate_pem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ca Certificate Pem"
+          },
+          "ca_certificate_sha256": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Ca Certificate Sha256"
+          },
+          "statement_timeout_ms": {
+            "type": "integer",
+            "title": "Statement Timeout Ms"
+          },
+          "is_enabled": {
+            "type": "boolean",
+            "title": "Is Enabled"
+          },
+          "config_version": {
+            "type": "integer",
+            "title": "Config Version"
+          },
+          "last_test_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Test At"
+          },
+          "last_test_outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Test Outcome"
+          },
+          "last_test_detail": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Test Detail"
+          },
+          "query_count": {
+            "type": "integer",
+            "title": "Query Count",
+            "default": 0
+          },
+          "created_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By User Id"
+          },
+          "updated_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated By User Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "dialect",
+          "host",
+          "port",
+          "database_name",
+          "username",
+          "password_set",
+          "password_changed_at",
+          "tls_mode",
+          "statement_timeout_ms",
+          "is_enabled",
+          "config_version",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "DatabaseConnectionResponse"
+      },
+      "DatabaseConnectionTestResponse": {
+        "properties": {
+          "outcome": {
+            "type": "string",
+            "title": "Outcome"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/DatabaseConnectionTestStep"
+            },
+            "type": "array",
+            "title": "Steps"
+          },
+          "server_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Server Version"
+          },
+          "write_privileges": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Write Privileges"
+          },
+          "config_version": {
+            "type": "integer",
+            "title": "Config Version"
+          },
+          "duration_ms": {
+            "type": "integer",
+            "title": "Duration Ms"
+          },
+          "tested_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Tested At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "outcome",
+          "steps",
+          "config_version",
+          "duration_ms",
+          "tested_at"
+        ],
+        "title": "DatabaseConnectionTestResponse"
+      },
+      "DatabaseConnectionTestStep": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "detail": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Detail"
+          },
+          "driver_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Driver Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "status"
+        ],
+        "title": "DatabaseConnectionTestStep"
+      },
+      "DatabaseConnectorOffer": {
+        "properties": {
+          "setting": {
+            "type": "string",
+            "title": "Setting"
+          },
+          "dialects": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Dialects"
+          },
+          "may_write_queries": {
+            "type": "boolean",
+            "title": "May Write Queries"
+          },
+          "queries_written_by": {
+            "type": "string",
+            "title": "Queries Written By"
+          }
+        },
+        "type": "object",
+        "required": [
+          "setting",
+          "dialects",
+          "may_write_queries",
+          "queries_written_by"
+        ],
+        "title": "DatabaseConnectorOffer"
+      },
+      "DatabaseQueryResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "connection_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Connection Id"
+          },
+          "connection_name": {
+            "type": "string",
+            "title": "Connection Name"
+          },
+          "tool_definition_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Tool Definition Id"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "sql_text": {
+            "type": "string",
+            "title": "Sql Text"
+          },
+          "parameters": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Parameters"
+          },
+          "params_json_schema": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Params Json Schema"
+          },
+          "max_rows": {
+            "type": "integer",
+            "title": "Max Rows"
+          },
+          "max_result_chars": {
+            "type": "integer",
+            "title": "Max Result Chars"
+          },
+          "allows_anonymous": {
+            "type": "boolean",
+            "title": "Allows Anonymous"
+          },
+          "is_enabled": {
+            "type": "boolean",
+            "title": "Is Enabled"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "created_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By User Id"
+          },
+          "updated_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated By User Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "connection_id",
+          "connection_name",
+          "tool_definition_id",
+          "slug",
+          "name",
+          "sql_text",
+          "parameters",
+          "max_rows",
+          "max_result_chars",
+          "allows_anonymous",
+          "is_enabled",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "DatabaseQueryResponse"
+      },
+      "DatabaseQueryRunPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DatabaseQueryRunResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "next_offset": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "DatabaseQueryRunPage"
+      },
+      "DatabaseQueryRunResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "query_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Query Id"
+          },
+          "connection_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Connection Id"
+          },
+          "query_version": {
+            "type": "integer",
+            "title": "Query Version"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "agent_run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Run Id"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "end_user_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End User Id"
+          },
+          "actor_user_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor User Id"
+          },
+          "outcome": {
+            "type": "string",
+            "title": "Outcome"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "row_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row Count"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated"
+          },
+          "result_chars": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Chars"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "query_id",
+          "connection_id",
+          "query_version",
+          "source",
+          "outcome",
+          "truncated",
+          "created_at"
+        ],
+        "title": "DatabaseQueryRunResponse"
+      },
+      "DatabaseQueryTestRunRequest": {
+        "properties": {
+          "values": {
+            "additionalProperties": true,
+            "type": "object",
+            "maxProperties": 64,
+            "title": "Values"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "DatabaseQueryTestRunRequest"
+      },
+      "DatabaseQueryTestRunResponse": {
+        "properties": {
+          "outcome": {
+            "type": "string",
+            "title": "Outcome"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "sqlstate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sqlstate"
+          },
+          "model_text": {
+            "type": "string",
+            "title": "Model Text"
+          },
+          "columns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Columns"
+          },
+          "rows": {
+            "items": {
+              "items": {},
+              "type": "array"
+            },
+            "type": "array",
+            "title": "Rows"
+          },
+          "row_count": {
+            "type": "integer",
+            "title": "Row Count",
+            "default": 0
+          },
+          "returned_rows": {
+            "type": "integer",
+            "title": "Returned Rows",
+            "default": 0
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated",
+            "default": false
+          },
+          "result_chars": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Chars"
+          },
+          "duration_ms": {
+            "type": "integer",
+            "title": "Duration Ms"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "params_json_schema": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Params Json Schema"
+          }
+        },
+        "type": "object",
+        "required": [
+          "outcome",
+          "model_text",
+          "duration_ms",
+          "params_json_schema"
+        ],
+        "title": "DatabaseQueryTestRunResponse"
       },
       "DocumentActiveUpdate": {
         "properties": {
@@ -9194,6 +10438,17 @@
             ],
             "title": "File Size Bytes"
           },
+          "file_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Sha256"
+          },
           "status": {
             "type": "string",
             "title": "Status"
@@ -9333,6 +10588,22 @@
               }
             ],
             "title": "Replaced Document Ids"
+          },
+          "upload_outcome": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "created",
+                  "replaced",
+                  "deduplicated"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upload Outcome"
           },
           "has_original": {
             "type": "boolean",
@@ -9742,7 +11013,14 @@
             "title": "Status"
           },
           "ready_to_activate": {
-            "type": "boolean",
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Ready To Activate"
           },
           "checks": {
@@ -9801,7 +11079,14 @@
       "HarnessReadinessSummaryResponse": {
         "properties": {
           "ready_to_activate": {
-            "type": "boolean",
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Ready To Activate"
           },
           "blockers": {
@@ -10056,6 +11341,137 @@
           "reason"
         ],
         "title": "ImageEnrichmentSummary"
+      },
+      "ImportBlockerDetail": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hint"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "path",
+          "hint"
+        ],
+        "title": "ImportBlockerDetail"
+      },
+      "ImportConflictResponse": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "import_preview_stale",
+              "package_requirements_changed"
+            ],
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hint"
+          },
+          "docs": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Docs"
+          },
+          "detail": {
+            "title": "Detail"
+          },
+          "changed": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changed"
+          },
+          "blockers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blockers"
+          },
+          "blocker_details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ImportBlockerDetail"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocker Details"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ImportConflictResponse"
       },
       "KBListResponse": {
         "properties": {
@@ -11739,6 +13155,9 @@
           "sandbox": {
             "$ref": "#/components/schemas/SandboxOffer"
           },
+          "database_connector": {
+            "$ref": "#/components/schemas/DatabaseConnectorOffer"
+          },
           "masterloop": {
             "$ref": "#/components/schemas/MasterloopLimits"
           },
@@ -11759,6 +13178,7 @@
           "contracts",
           "features",
           "sandbox",
+          "database_connector",
           "masterloop",
           "experimental_tools",
           "limits"
@@ -11824,6 +13244,10 @@
             "type": "boolean",
             "title": "Masterloop Enabled"
           },
+          "database_connector_enabled": {
+            "type": "boolean",
+            "title": "Database Connector Enabled"
+          },
           "personal_access_tokens_enabled": {
             "type": "boolean",
             "title": "Personal Access Tokens Enabled"
@@ -11839,6 +13263,7 @@
           "sandbox_outbound_enrollment_enabled",
           "sandbox_isolated_container_enabled",
           "masterloop_enabled",
+          "database_connector_enabled",
           "personal_access_tokens_enabled",
           "operations_api_enabled"
         ],
@@ -12931,6 +14356,11 @@
           "platform_mode_available": {
             "type": "boolean",
             "title": "Platform Mode Available"
+          },
+          "code_required": {
+            "type": "boolean",
+            "title": "Code Required",
+            "default": false
           }
         },
         "type": "object",
@@ -13486,6 +14916,30 @@
               }
             ],
             "title": "Widget Per Visitor"
+          },
+          "channel_per_sender": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Per Sender"
+          },
+          "channel_per_binding": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Per Binding"
           }
         },
         "additionalProperties": false,
@@ -16293,6 +17747,17 @@
               }
             ],
             "title": "Judge Skipped"
+          },
+          "judge_skipped_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Judge Skipped Reason"
           },
           "deterministic_criteria": {
             "anyOf": [

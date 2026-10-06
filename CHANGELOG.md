@@ -7,6 +7,37 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Added
+
+- Database query tools end to end (#140). A solution whose agents call saved
+  database queries (`tool_type: database_query`) round-trips: `pull` writes
+  each query into `package/tools.yaml`, and `fmt`, `validate` and `apply` keep
+  it. `validate` checks a query's `:name` placeholders against its parameters
+  and each parameter's type and constraints, with the instance's codes
+  (`bind_mismatch`, `parameter_context_not_string`, …), and warns
+  (`database_query_changed`) for each query tool whose query, name or
+  description differs from the last pull or apply, which only a superadmin
+  may change, and (`database_query_fields_ignored`) when a query tool's
+  `params_json_schema` or `default_config` changed, which the instance
+  ignores. `apply` reads `database_connector_enabled`, the dialects and
+  `may_write_queries` from the capabilities and says before the preview that
+  a token's query change stops the whole import and how to apply the rest; a
+  blocked preview adds that hint under its blockers.
+- `cavelon db connections`, `db queries [<query>]` and `db runs <query>` read
+  the tenant's database connections, saved queries and a query's runs (no
+  values, no rows); `db test <connection>` and `db test-run <query> --value
+  name=value` run the tenant Owner's connection test and test run. Over MCP:
+  `db_connections`, `db_queries`, `db_runs`, `db_test`, `db_test_run`.
+- `trace` shows the code a failed database query call answered the model with
+  (`error_code`, such as `identity_required`), suggests that span, and points
+  to `cavelon explain`.
+- The skills say how to declare a query tool and its identity parameters, the
+  connection a person sets up in the Admin first, and how to test against a
+  test database.
+- The contract snapshot carries the database connector: the package schema's
+  query tool, the connector's error codes, its capabilities and the routes the
+  `db` commands call.
+
 ### Fixed
 
 - Some commands changed state without a preview, while `deactivate` and

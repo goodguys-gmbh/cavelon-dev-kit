@@ -80,9 +80,12 @@
             }
           ],
           "default": null,
+          "description": "Ignored. An agent keeps no API key; configure model credentials in the model registry.",
           "title": "Llm Api Key"
         },
         "temperature": {
+          "default": 0.4,
+          "description": "Sampling temperature for a model that takes one; omitted, the platform default 0.4. A reasoning model (OpenAI, Azure, Anthropic) receives none. Set the reasoning level instead: `model_settings_extra.reasoning_effort`, `low`, `medium` or `high` (or another level the model's registry entry declares). It is the agent's Reasoning effort in the editor.",
           "title": "Temperature",
           "type": "number"
         },
@@ -105,15 +108,27 @@
         "model_settings_extra": {
           "anyOf": [
             {
-              "additionalProperties": true,
-              "type": "object"
+              "type": "object",
+              "properties": {
+                "reasoning_effort": {
+                  "type": "string",
+                  "examples": [
+                    "low",
+                    "medium",
+                    "high"
+                  ],
+                  "description": "The reasoning level of a reasoning model: `low`, `medium` or `high`, or another level the model's registry entry declares. It is the agent's Reasoning effort in the editor."
+                }
+              },
+              "additionalProperties": true
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "title": "Model Settings Extra"
+          "title": "Model Settings Extra",
+          "description": "Further settings of the agent's model calls. A reasoning model receives no temperature. Set the reasoning level instead: `model_settings_extra.reasoning_effort`, `low`, `medium` or `high` (or another level the model's registry entry declares). It is the agent's Reasoning effort in the editor."
         },
         "system_prompt": {
           "anyOf": [
@@ -326,7 +341,6 @@
         "name",
         "llm_model",
         "llm_provider",
-        "temperature",
         "parallel_tool_calls"
       ],
       "title": "PackageAgent",
@@ -589,6 +603,92 @@
         }
       },
       "title": "PackageCanvasNote",
+      "type": "object"
+    },
+    "PackageDatabaseConnectionRef": {
+      "description": "The connection a query needs, by name and dialect: nothing that reaches it.\n\nThe target tenant must hold a connection of this name and dialect whose last\ntest passed. Host, database, user, password and CA never travel: a\nsuperadmin sets them up per tenant under Settings → Databases.",
+      "properties": {
+        "name": {
+          "description": "The name of the target tenant's database connection, as shown under Settings → Databases.",
+          "examples": [
+            "shop-db"
+          ],
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "dialect": {
+          "description": "The connection's dialect: postgresql, mysql or mssql. /meta/capabilities lists under database_connector.dialects the ones this instance runs.",
+          "examples": [
+            "postgresql"
+          ],
+          "maxLength": 20,
+          "minLength": 1,
+          "title": "Dialect",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "dialect"
+      ],
+      "title": "PackageDatabaseConnectionRef",
+      "type": "object"
+    },
+    "PackageDatabaseQuery": {
+      "description": "A query's definition as a package carries it on its ``database_query`` tool.\n\nThe tool's ``slug`` is the function name the model calls, its ``name`` the\nlabel in the Admin, and its ``description`` what the model reads to decide\nwhen to call it: say what the query returns and for which question. The\ntool's ``params_json_schema`` and ``default_config`` are derived from this\ndefinition on import; the package's copies are ignored. Creating or\nchanging a query on import needs a superadmin in the Admin; a personal\naccess token's import passes only while the queries already match.",
+      "properties": {
+        "connection": {
+          "$ref": "#/$defs/PackageDatabaseConnectionRef",
+          "description": "The connection the query runs on, by name and dialect."
+        },
+        "sql_text": {
+          "description": "One read-only statement starting with SELECT or WITH, at most 20,000 characters. Each value is a :name placeholder with a parameter of that name; a literal colon is written \\:. No INSERT, INTO, UPDATE, DELETE, EXEC, locking clause or second statement. Always bound the rows with LIMIT, TOP or FETCH FIRST.",
+          "examples": [
+            "SELECT number, status, shipped_at FROM orders WHERE number = :order_no AND email = :email LIMIT 5"
+          ],
+          "maxLength": 20000,
+          "minLength": 1,
+          "title": "Sql Text",
+          "type": "string"
+        },
+        "parameters": {
+          "description": "Exactly one entry per :name placeholder, at most 20. A parameter with source 'model' becomes a property of the tool's schema; one with source end_user.* is filled by the platform from the signed-in visitor and never appears in the schema.",
+          "items": {
+            "$ref": "#/$defs/QueryParameter"
+          },
+          "title": "Parameters",
+          "type": "array"
+        },
+        "max_rows": {
+          "default": 50,
+          "description": "The most rows the model receives; with more, the result says it was cut. 1 up to DATABASE_CONNECTOR_MAX_ROWS_MAX of the instance.",
+          "maximum": 500,
+          "minimum": 1,
+          "title": "Max Rows",
+          "type": "integer"
+        },
+        "max_result_chars": {
+          "default": 8000,
+          "description": "The most characters of the result JSON the model receives; whole rows are dropped from the end to fit, and the result says how many. 500 up to DATABASE_CONNECTOR_MAX_RESULT_CHARS_MAX of the instance.",
+          "maximum": 20000,
+          "minimum": 500,
+          "title": "Max Result Chars",
+          "type": "integer"
+        },
+        "allows_anonymous": {
+          "default": false,
+          "description": "'Visitors may call this without signing in'. Only for a query without an end_user.* parameter, for public data such as stock, prices or opening hours. False: an anonymous visitor's call answers identity_required and the query does not run.",
+          "title": "Allows Anonymous",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "connection",
+        "sql_text"
+      ],
+      "title": "PackageDatabaseQuery",
       "type": "object"
     },
     "PackageGuardrail": {
@@ -874,6 +974,32 @@
           "title": "Name",
           "type": "string"
         },
+        "ref": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z0-9][a-z0-9_-]{0,99}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ref"
+        },
+        "harness_slug": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Harness Slug"
+        },
         "description": {
           "anyOf": [
             {
@@ -982,8 +1108,9 @@
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Metadata Schema"
+          "default": {},
+          "title": "Metadata Schema",
+          "description": "Left out, a new knowledge base gets {} and an existing one keeps its value."
         },
         "metadata_schema_version": {
           "anyOf": [
@@ -994,8 +1121,9 @@
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Metadata Schema Version"
+          "default": 0,
+          "title": "Metadata Schema Version",
+          "description": "Left out, a new knowledge base gets 0 and an existing one keeps its value."
         },
         "extractor_harness_slug": {
           "anyOf": [
@@ -1023,8 +1151,9 @@
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Default Acl Groups"
+          "default": [],
+          "title": "Default Acl Groups",
+          "description": "Left out, a new knowledge base gets [] and an existing one keeps its value."
         },
         "accepts_email_attachments": {
           "anyOf": [
@@ -1035,8 +1164,9 @@
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Accepts Email Attachments"
+          "default": false,
+          "title": "Accepts Email Attachments",
+          "description": "Left out, a new knowledge base gets false and an existing one keeps its value."
         },
         "filing_access": {
           "anyOf": [
@@ -1051,8 +1181,9 @@
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Filing Access"
+          "default": "default_groups",
+          "title": "Filing Access",
+          "description": "Left out, a new knowledge base gets \"default_groups\" and an existing one keeps its value, unless default_acl_groups is set: then it means \"default_groups\"."
         }
       },
       "required": [
@@ -2693,7 +2824,8 @@
         },
         "tool_type": {
           "title": "Tool Type",
-          "type": "string"
+          "type": "string",
+          "description": "builtin, webhook, mcp, structured_kb, … or database_query: a saved, read-only SQL query whose definition is in database_query."
         },
         "builtin_key": {
           "anyOf": [
@@ -2787,6 +2919,18 @@
           "default": 0,
           "title": "Display Order",
           "type": "integer"
+        },
+        "database_query": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PackageDatabaseQuery"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Only on a tool with tool_type 'database_query': the saved query behind it. Its connection travels by name and dialect only. Left out, the tool refers to the target's query of the same slug as it is."
         }
       },
       "required": [
@@ -2796,7 +2940,78 @@
         "scope"
       ],
       "title": "PackageTool",
-      "type": "object"
+      "type": "object",
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "tool_type": {
+                "const": "database_query"
+              }
+            },
+            "required": [
+              "tool_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "slug": {
+                "pattern": "^[a-z0-9_-]+$",
+                "maxLength": 64,
+                "description": "The function name the model calls: lower-case letters, digits, - and _."
+              },
+              "name": {
+                "minLength": 1,
+                "maxLength": 255,
+                "description": "The query's name in the Admin."
+              },
+              "description": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4000,
+                "description": "What the model reads to decide when to call the query: what it returns and for which question."
+              },
+              "scope": {
+                "const": "tenant_local"
+              }
+            }
+          }
+        }
+      ],
+      "examples": [
+        {
+          "slug": "order_status",
+          "name": "Order status",
+          "description": "Status and shipping date of one of the signed-in visitor's orders, by order number.",
+          "tool_type": "database_query",
+          "scope": "tenant_local",
+          "database_query": {
+            "connection": {
+              "name": "shop-db",
+              "dialect": "postgresql"
+            },
+            "sql_text": "SELECT number, status, shipped_at FROM orders WHERE number = :order_no AND email = :email LIMIT 5",
+            "parameters": [
+              {
+                "name": "order_no",
+                "source": "model",
+                "type": "string",
+                "description": "Order number as printed on the confirmation, e.g. A-10023",
+                "max_length": 20,
+                "pattern": "^[A-Z]-[0-9]{4,8}$"
+              },
+              {
+                "name": "email",
+                "source": "end_user.email",
+                "type": "string"
+              }
+            ],
+            "max_rows": 5,
+            "max_result_chars": 4000,
+            "allows_anonymous": false
+          }
+        }
+      ]
     },
     "PackageToolBinding": {
       "properties": {
@@ -2896,6 +3111,176 @@
         "source_type"
       ],
       "title": "PackageWebSource",
+      "type": "object"
+    },
+    "QueryParameter": {
+      "additionalProperties": false,
+      "description": "One parameter of a database query, as stored and as the API accepts it.\n\nThe SQL names it as ``:name``. A ``model`` parameter is a property of the\ntool's schema with its constraints; an ``end_user.*`` parameter is filled by\nthe platform, is always a required string and takes no constraint.",
+      "examples": [
+        {
+          "description": "Order number as printed on the confirmation, e.g. A-10023",
+          "max_length": 20,
+          "name": "order_no",
+          "pattern": "^[A-Z]-[0-9]{4,8}$",
+          "source": "model",
+          "type": "string"
+        },
+        {
+          "name": "email",
+          "source": "end_user.email",
+          "type": "string"
+        },
+        {
+          "description": "How many days back",
+          "maximum": 90,
+          "minimum": 1,
+          "name": "days",
+          "type": "integer"
+        }
+      ],
+      "properties": {
+        "name": {
+          "description": "The :name placeholder in the SQL: letters, digits and underscores, not starting with a digit.",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,62}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "source": {
+          "default": "model",
+          "description": "Who fills the value. 'model': the model, from the conversation. 'end_user.id', 'end_user.external_subject', 'end_user.email': the platform, from the signed-in visitor's verified identity, so a visitor only ever reads their own rows; end_user.email only once the address is verified. Without a signed-in visitor such a query answers identity_required.",
+          "enum": [
+            "model",
+            "end_user.id",
+            "end_user.external_subject",
+            "end_user.email"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "type": {
+          "default": "string",
+          "description": "The value's type, bound typed: string, integer, number, boolean, date (YYYY-MM-DD) or datetime (ISO 8601). A context parameter is a string.",
+          "enum": [
+            "string",
+            "integer",
+            "number",
+            "boolean",
+            "date",
+            "datetime"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "description": "What the model fills in and how it looks. Required for a model parameter.",
+          "maxLength": 500,
+          "title": "Description",
+          "type": "string"
+        },
+        "required": {
+          "default": true,
+          "description": "Whether the model must fill it; a missing optional value binds NULL. A context parameter is always required.",
+          "title": "Required",
+          "type": "boolean"
+        },
+        "max_length": {
+          "anyOf": [
+            {
+              "maximum": 2000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A string's longest value; 200 when left out, at most 2000. Strings only.",
+          "title": "Max Length"
+        },
+        "pattern": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A regular expression a string must match (searched, so anchor it with ^ and $). Strings only.",
+          "title": "Pattern"
+        },
+        "enum": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "maxItems": 100,
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The only values allowed, at most 100, each of the parameter's type. String, integer or number.",
+          "title": "Enum"
+        },
+        "minimum": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The smallest value allowed. Integer or number only.",
+          "title": "Minimum"
+        },
+        "maximum": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The largest value allowed. Integer or number only.",
+          "title": "Maximum"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "QueryParameter",
       "type": "object"
     },
     "RuntimeRequirement": {

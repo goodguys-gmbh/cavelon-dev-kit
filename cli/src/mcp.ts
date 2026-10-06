@@ -55,6 +55,9 @@ const INSTRUCTIONS =
   "instance allows this tenant (upload sizes and types, run and tool limits, timeouts, quotas) and who changes each. " +
   "Never change a limit on your own: propose the old and new value (limits_set for a limit a tenant admin changes, " +
   "models_set_limit for an endpoint's max_concurrent_requests) and let the person decide; an operator's limit goes to the operator. " +
+  "db_connections, db_queries and db_runs read the database connections, saved queries and their runs behind database query " +
+  "tools; only a superadmin in the Admin creates or changes a connection or a query, so an apply that changes a query is " +
+  "blocked for any token: tell the person, and apply the rest with the query left as the instance holds it. " +
   "variables_list/variables_get/variables_set handle plain-text {{var:…}} values. secrets_list shows which {{secret:…}} " +
   "values are set, never a value: a person sets a secret, so tell them the exact `cavelon secrets set <name>` command " +
   "to run in their terminal, and never ask for, read or pass a secret value. Never approve or decide an approval; " +

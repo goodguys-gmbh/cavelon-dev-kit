@@ -313,6 +313,74 @@ schema has them: `cavelon validate` reports an unknown section):
   Admin under Settings › Secrets or with their own token; do not suggest the
   command to someone whose role cannot run it.
 
+## Database query tools
+
+A database query tool lets an agent answer from a customer's live database. A
+saved, read-only query is one tool (`tool_type: database_query` in
+`package/tools.yaml`); the model only calls it and fills the parameters it is
+given, and never writes SQL. `cavelon schema tools.database_query` lists the
+fields this instance takes; `cavelon docs get administration/database-connectors`
+says who does what on the instance.
+
+```yaml
+- slug: order_status          # the function name the model calls: a-z, 0-9, - and _
+  name: Order status          # the label in the Admin
+  description: Status and shipping date of one of the signed-in visitor's orders, by order number.
+  tool_type: database_query
+  scope: tenant_local
+  database_query:
+    connection: { name: shop-db, dialect: postgresql }   # by name only: never a host, user or password
+    sql_text: SELECT number, status, shipped_at FROM orders WHERE number = :order_no AND email = :email LIMIT 5
+    parameters:
+      - name: order_no
+        type: string
+        description: Order number as printed on the confirmation, e.g. A-10023
+        pattern: "^[A-Z]-[0-9]{4,8}$"
+        max_length: 20
+      - name: email
+        source: end_user.email   # filled by the instance from the signed-in visitor
+        type: string
+    max_rows: 5
+    allows_anonymous: false
+```
+
+- **Who writes a query.** Only a superadmin of the instance creates or changes
+  a query, in the Admin; your token never does. The query's SQL, parameters,
+  limits and `allows_anonymous`, and the tool's own `slug`, `name` and
+  `description`, are all part of the query. `cavelon validate` warns
+  (`database_query_changed`) for each query tool that differs from the last
+  pull or apply, and the import preview blocks it
+  (`database_query_needs_superadmin`), which stops the whole apply. Propose a
+  query change to the person as a diff of `package/tools.yaml`; they hand it
+  to a superadmin, who imports the package in the Admin. What you may change
+  freely is how agents and skills use the tool: the assignment
+  (`tool_assignments` with `config_overrides` `name`, `description` or
+  `max_calls`) is no query change. `params_json_schema` and `default_config`
+  of a query tool are derived from the query, and the instance ignores the
+  package's (`database_query_fields_ignored`).
+- **Identity parameters.** A parameter with `source: end_user.id`,
+  `end_user.external_subject` or `end_user.email` is filled by the instance
+  from the signed-in visitor's verified identity (an email only once
+  verified), never by the model: it is a required string without
+  constraints. Scope every query that returns a person's data by such a
+  parameter, so a visitor only reads their own rows. Without a signed-in
+  visitor the call answers `identity_required` and the query does not run.
+- **`allows_anonymous`.** Set it to true only for public data (stock, prices,
+  opening hours) and only on a query without an identity parameter; the
+  instance refuses it otherwise (`anonymous_with_context_parameter`).
+- **Safe query design.** One `SELECT` or `WITH` statement; select only the
+  columns the answer needs (never `SELECT *`); always bound the rows (`LIMIT`,
+  `TOP`, `FETCH FIRST`) and keep `max_rows` small; constrain every model
+  parameter (`pattern`, `max_length`, `enum`, `minimum`/`maximum`) and
+  describe it, since the model fills it from the conversation; where a lookup
+  has no identity parameter, ask for a second factor (an order number and its
+  postal code) rather than one guessable key. Each `:name` in the SQL needs
+  exactly one parameter of that name (a literal colon is `\:`); validate checks
+  this (`bind_mismatch`) and each parameter's type and constraints.
+- `cavelon explain <code>` explains every code the connector uses: what
+  `validate` and the preview name, the codes of a failed call (`timeout`,
+  `identity_required`, …) and of a connection test.
+
 ## After each edit
 
 1. `cavelon validate` until it reports no errors (`--strict` before an apply

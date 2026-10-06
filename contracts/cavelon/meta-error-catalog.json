@@ -1862,8 +1862,8 @@
     {
       "code": "permission_denied",
       "area": "masterloop",
-      "message": "The identity this run executes as no longer holds a permission the loop needs.",
-      "hint": "Restore the permission of the trigger's execution identity, then resume.",
+      "message": "The identity this run executes as no longer holds a permission the loop needs. From a database query: The database user may not read a table, view or function the query names.",
+      "hint": "Restore the permission of the trigger's execution identity, then resume. From a database query: Grant the read-only user SELECT on it, or change the query to read what the user may.",
       "docs": "/docs/reference/nodes-and-edges#masterloop"
     },
     {
@@ -1934,182 +1934,182 @@
       "area": "package",
       "message": "A config value at the path is one its own editor would refuse.",
       "hint": "Correct the value at the path; the message names what is wrong with it.",
-      "docs": "/docs/reference/api-endpoints"
+      "docs": "/docs/concepts/harnesses#import-export-and-backup"
     },
     {
       "code": "duplicate_in_package",
       "area": "package",
       "message": "The package declares the same key, or binds the same pair, more than once.",
       "hint": "Rename or remove the entry at the path; the first one stays.",
-      "docs": "/docs/reference/api-endpoints"
+      "docs": "/docs/concepts/harnesses#import-export-and-backup"
     },
     {
       "code": "handoff_target_inactive",
       "area": "package",
       "message": "An active agent hands off to an inactive agent, which the graph leaves out.",
       "hint": "Activate the target agent, or remove or deactivate the handoff at the path.",
-      "docs": "/docs/reference/api-endpoints"
+      "docs": "/docs/concepts/harnesses#import-export-and-backup"
     },
     {
       "code": "import_blocked",
       "area": "package",
       "message": "The import cannot apply this package as it is.",
       "hint": "Correct what the message names in the package or the target, and preview again.",
-      "docs": "/docs/reference/api-endpoints"
+      "docs": "/docs/concepts/harnesses#import-export-and-backup"
     },
     {
       "code": "model_not_in_registry",
       "area": "package",
       "message": "An agent names a model that is not an active model in the target tenant's model registry.",
       "hint": "Use a model `cavelon models list` shows, add the model under Settings > Models, or declare it in the package's model_registry.",
-      "docs": "/docs/reference/api-endpoints"
+      "docs": "/docs/administration/model-registry#registered-models"
     },
     {
       "code": "package_limit_exceeded",
       "area": "package",
       "message": "The package exceeds a size limit of this instance.",
       "hint": "Split the package, or shorten the field at the path.",
-      "docs": "/docs/reference/api-endpoints"
+      "docs": "/docs/concepts/harnesses#import-export-and-backup"
     },
     {
       "code": "reference_missing",
       "area": "package",
       "message": "The package references something that is neither in the package nor in the target.",
       "hint": "Add it to the package or create it in the target first, or remove the reference at the path.",
-      "docs": "/docs/reference/api-endpoints"
+      "docs": "/docs/concepts/harnesses#import-export-and-backup"
     },
     {
       "code": "package_version_unsupported",
       "area": "package",
       "message": "This instance does not accept that package version.",
       "hint": "Read contracts.package_versions.accepted from /meta/capabilities and ask for one of those.",
-      "docs": "/docs/reference/api-endpoints"
+      "docs": "/docs/concepts/harnesses#import-export-and-backup"
     },
     {
       "code": "import_preview_stale",
       "area": "package",
       "message": "The target changed since the preview whose id this import names; nothing was imported.",
       "hint": "Preview again, show the new result, and import with the new preview_id.",
-      "docs": "/docs/reference/api-endpoints"
+      "docs": "/docs/concepts/harnesses#import-export-and-backup"
     },
     {
       "code": "runtime_binding_check_limit",
       "area": "package",
       "message": "The package binds more loop and Sandbox pairs than one check may compare (100).",
       "hint": "Split the package.",
-      "docs": "/docs/reference/api-endpoints"
+      "docs": "/docs/concepts/harnesses#import-export-and-backup"
     },
     {
       "code": "runtime_binding_requires_repeatable_read",
       "area": "package",
       "message": "The binding check needs a repeatable-read transaction.",
       "hint": "Retry the preview; this is a server fault if it repeats.",
-      "docs": "/docs/reference/api-endpoints"
+      "docs": "/docs/concepts/harnesses#import-export-and-backup"
     },
     {
       "code": "runtime_draft_iteration_needs_draft_parent",
       "area": "package",
       "message": "The bound iteration solution is a draft, and the parent this import writes is active or paused.",
       "hint": "Activate the iteration solution first, or import into a draft parent.",
-      "docs": "/docs/reference/api-endpoints"
+      "docs": "/docs/concepts/harnesses#import-export-and-backup"
     },
     {
       "code": "runtime_external_iteration_harness_unavailable",
       "area": "package",
       "message": "The bound iteration solution is not a draft or active solution of this tenant, or it is a solution this import writes.",
       "hint": "Apply the iteration solution first, then bind its id; a draft is enough while the parent is a draft.",
-      "docs": "/docs/reference/api-endpoints"
+      "docs": "/docs/concepts/harnesses#import-export-and-backup"
     },
     {
       "code": "runtime_import_target_unavailable",
       "area": "package",
       "message": "The solution this import targets is not a solution of this tenant.",
       "hint": "Target an existing solution, or import without a target.",
-      "docs": "/docs/reference/api-endpoints"
+      "docs": "/docs/concepts/harnesses#import-export-and-backup"
     },
     {
       "code": "runtime_native_completion_policy_required",
       "area": "package",
       "message": "A loop with a Sandbox needs the runner_validation or agent_reported completion policy.",
       "hint": "Set the loop's completion policy to fit its Sandbox.",
-      "docs": "/docs/reference/api-endpoints"
+      "docs": "/docs/concepts/harnesses#import-export-and-backup"
     },
     {
       "code": "runtime_pure_completion_policy_required",
       "area": "package",
       "message": "A loop without a Sandbox needs the structured_contract completion policy.",
       "hint": "Set the loop's completion policy to structured_contract, or bind a Sandbox.",
-      "docs": "/docs/reference/api-endpoints"
+      "docs": "/docs/concepts/harnesses#import-export-and-backup"
     },
     {
       "code": "runtime_requirement_unavailable",
       "area": "package",
       "message": "The package declares no runtime requirement with that key.",
       "hint": "Use a key from the package's runtime_requirements.",
-      "docs": "/docs/reference/api-endpoints"
+      "docs": "/docs/concepts/harnesses#import-export-and-backup"
     },
     {
       "code": "runtime_runner_binding_unavailable",
       "area": "package",
       "message": "This tenant has not enabled the bound Sandbox's runner tool.",
       "hint": "Enable the runner tool for this tenant, or choose another Sandbox.",
-      "docs": "/docs/reference/api-endpoints"
+      "docs": "/docs/concepts/harnesses#import-export-and-backup"
     },
     {
       "code": "runtime_runner_connection_unavailable",
       "area": "package",
       "message": "The bound Sandbox's runner connection is missing or inactive.",
       "hint": "Repair the Sandbox's runner connection, or choose another Sandbox.",
-      "docs": "/docs/reference/api-endpoints"
+      "docs": "/docs/concepts/harnesses#import-export-and-backup"
     },
     {
       "code": "runtime_runner_identity_mismatch",
       "area": "package",
       "message": "The bound Sandbox's runner connection names another runner.",
       "hint": "Refresh the Sandbox's runner connection, or choose another Sandbox.",
-      "docs": "/docs/reference/api-endpoints"
+      "docs": "/docs/concepts/harnesses#import-export-and-backup"
     },
     {
       "code": "runtime_sandbox_capability_unavailable",
       "area": "package",
       "message": "The bound Sandbox does not allow every action the loop needs (read, write, execute, and export on an isolated container).",
       "hint": "Allow those actions on the Sandbox, or choose another Sandbox.",
-      "docs": "/docs/reference/api-endpoints"
+      "docs": "/docs/concepts/harnesses#import-export-and-backup"
     },
     {
       "code": "runtime_sandbox_mode_mismatch",
       "area": "package",
       "message": "The bound Sandbox's mode does not fit the loop's completion policy: runner_validation needs an isolated container, agent_reported a customer VM.",
       "hint": "Choose a Sandbox in the mode the completion policy needs.",
-      "docs": "/docs/reference/api-endpoints"
+      "docs": "/docs/concepts/harnesses#import-export-and-backup"
     },
     {
       "code": "runtime_sandbox_unavailable",
       "area": "package",
       "message": "The bound Sandbox is not a ready Sandbox of this tenant with the profile the package needs.",
       "hint": "Choose a ready Sandbox with that profile.",
-      "docs": "/docs/reference/api-endpoints"
+      "docs": "/docs/concepts/harnesses#import-export-and-backup"
     },
     {
       "code": "runtime_selection_invalid",
       "area": "package",
       "message": "A runtime binding is not a resource id.",
       "hint": "Map each requirement key to the UUID of a solution or Sandbox of this tenant.",
-      "docs": "/docs/reference/api-endpoints"
+      "docs": "/docs/concepts/harnesses#import-export-and-backup"
     },
     {
       "code": "runtime_selections_incomplete_or_unknown",
       "area": "package",
       "message": "Bind every runtime requirement of the package, and only those.",
       "hint": "Map each key of runtime_requirements to a resource id (runtime_bindings).",
-      "docs": "/docs/reference/api-endpoints"
+      "docs": "/docs/concepts/harnesses#import-export-and-backup"
     },
     {
       "code": "runtime_validation_profile_unavailable",
       "area": "package",
       "message": "The bound Sandbox does not allow the validation profile the package needs.",
       "hint": "Allow that validation profile on the Sandbox, or choose another Sandbox.",
-      "docs": "/docs/reference/api-endpoints"
+      "docs": "/docs/concepts/harnesses#import-export-and-backup"
     },
     {
       "code": "INGESTION_BUDGET_EXCEEDED",
@@ -2200,7 +2200,7 @@
       "area": "package",
       "message": "Applying the import failed; the transaction was rolled back.",
       "hint": "Nothing was written; fix what the message names and import again.",
-      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+      "docs": "/docs/concepts/harnesses#import-export-and-backup"
     },
     {
       "code": "knowledge_base_cleanup_in_progress",
@@ -2242,7 +2242,7 @@
       "area": "capacity",
       "message": "The model endpoint was at its limit of concurrent requests and no slot freed in time.",
       "hint": "Retry later, or raise the model's Max concurrent requests if the endpoint can serve more. The wait is MODEL_ENDPOINT_SLOT_WAIT_SECONDS.",
-      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+      "docs": "/docs/administration/model-registry#limiting-concurrent-requests-to-an-endpoint"
     },
     {
       "code": "not_found",
@@ -2256,28 +2256,28 @@
       "area": "package",
       "message": "The import preview has blockers.",
       "hint": "Resolve every entry of `detail.blockers` (secrets, bindings, rules) and import again.",
-      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+      "docs": "/docs/concepts/harnesses#import-export-and-backup"
     },
     {
       "code": "package_rejected",
       "area": "package",
       "message": "A rule refused the package.",
       "hint": "Read the message, which names the rule, and fix the package.",
-      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+      "docs": "/docs/concepts/harnesses#import-export-and-backup"
     },
     {
       "code": "package_requirements_changed",
       "area": "package",
       "message": "The import's requirements changed since the preview; nothing was saved.",
       "hint": "Preview the import again, then apply it. `blockers` names what changed since the preview.",
-      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+      "docs": "/docs/concepts/harnesses#import-export-and-backup"
     },
     {
       "code": "package_schema_invalid",
       "area": "package",
       "message": "The package fails schema validation.",
       "hint": "Fix the fields `detail.errors` names; GET /api/v1/meta/package-schema has the schema.",
-      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+      "docs": "/docs/concepts/harnesses#import-export-and-backup"
     },
     {
       "code": "payload_too_large",
@@ -2367,7 +2367,7 @@
       "code": "solution_not_found",
       "area": "solution",
       "message": "No solution with this id exists in the selected tenant.",
-      "hint": "List the solutions (`cavelon solutions`) and use one of their ids.",
+      "hint": "List the solutions (`cavelon harness list`) and use one of their ids.",
       "docs": "/docs/reference/api-endpoints#errors-and-retries"
     },
     {
@@ -2399,10 +2399,24 @@
       "docs": "/docs/reference/api-endpoints#errors-and-retries"
     },
     {
+      "code": "tenant_inactive",
+      "area": "auth",
+      "message": "The tenant is inactive: its data can be read, but not changed.",
+      "hint": "Ask a platform administrator to reactivate the tenant.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
       "code": "tenant_not_selected",
       "area": "auth",
       "message": "The request names no tenant.",
       "hint": "Choose a tenant with `cavelon use <tenant>`, --tenant or CAVELON_TENANT (the X-Tenant-Id header).",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "tenant_suspended",
+      "area": "auth",
+      "message": "The tenant is suspended: its data can be read, but not changed.",
+      "hint": "Ask a platform administrator to reactivate the tenant.",
       "docs": "/docs/reference/api-endpoints#errors-and-retries"
     },
     {
@@ -2467,6 +2481,377 @@
       "message": "Every URL belongs to a removed web source and was skipped.",
       "hint": "Import the URLs into a web source again to take the pages over.",
       "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "usable_evidence",
+      "area": "knowledge_outcome",
+      "message": "The agent recorded usable_evidence: what this search returned supports the answer.",
+      "hint": "Nothing to fix. The answer lists the hits the agent named in used_results as its sources, or all this search's hits when it named none.",
+      "docs": "/docs/concepts/regression-testing#knowledge-outcomes-in-the-trace"
+    },
+    {
+      "code": "content_gap",
+      "area": "knowledge_outcome",
+      "message": "The agent recorded no_usable_evidence and the search returned no hits at all.",
+      "hint": "Add a document that answers the question, or check that the knowledge base the agent searches holds it.",
+      "docs": "/docs/concepts/regression-testing#knowledge-outcomes-in-the-trace"
+    },
+    {
+      "code": "unusable_hits",
+      "area": "knowledge_outcome",
+      "message": "The agent recorded no_usable_evidence although the search returned hits: none of them answers the question. A question the knowledge base does not cover usually shows here, not as content_gap, because a search almost always returns its closest passages.",
+      "hint": "Read the hits on the retrieval span. Add the missing content, or improve the document whose passage should have answered it.",
+      "docs": "/docs/concepts/regression-testing#knowledge-outcomes-in-the-trace"
+    },
+    {
+      "code": "retrieval_fault",
+      "area": "knowledge_outcome",
+      "message": "The search failed technically: the agent recorded retrieval_fault, or it recorded no_usable_evidence for a search that reported an error, a partial or unavailable result, or no knowledge base it may read.",
+      "hint": "Read the retrieval span's pipeline_metadata and retrieval_status, fix the binding or the service, and ask again.",
+      "docs": "/docs/concepts/regression-testing#knowledge-outcomes-in-the-trace"
+    },
+    {
+      "code": "deliberately_unanswerable",
+      "area": "knowledge_outcome",
+      "message": "The agent recorded deliberately_unanswerable: policy or the nature of the request, not missing content, made it decline.",
+      "hint": "Nothing to add to the knowledge base. Change the agent's instructions if it should answer.",
+      "docs": "/docs/concepts/regression-testing#knowledge-outcomes-in-the-trace"
+    },
+    {
+      "code": "no_usable_evidence",
+      "area": "knowledge_outcome",
+      "message": "What the agent records when a search's result cannot support the answer. The trace shows it as content_gap (no hits), unusable_hits (hits, none usable) or retrieval_fault (the search failed).",
+      "hint": "Look up the trace value on the search's retrieval span: `cavelon explain <value>`.",
+      "docs": "/docs/concepts/regression-testing#knowledge-outcomes-in-the-trace"
+    },
+    {
+      "code": "auth_failed",
+      "area": "database_connector",
+      "message": "The database refused the login, or the stored password could not be read.",
+      "hint": "Replace the connection's password (the tenant Owner may) and run the connection test.",
+      "docs": "/docs/troubleshooting/database-connections#error-codes"
+    },
+    {
+      "code": "busy",
+      "area": "database_connector",
+      "message": "No database connection or worker thread was free within 2 seconds; the query did not run.",
+      "hint": "Retry. If it recurs, lower how many queries one answer calls (max_calls), make the slow queries faster, or ask the operator about DATABASE_CONNECTOR_POOL_SIZE and DATABASE_CONNECTOR_MAX_THREADS.",
+      "docs": "/docs/troubleshooting/database-connections#error-codes"
+    },
+    {
+      "code": "identity_required",
+      "area": "database_connector",
+      "message": "A database query needs a signed-in visitor: a context parameter (end_user.*) has no value, end_user.email is not verified, or the query does not allow anonymous visitors. It did not run.",
+      "hint": "Test it as a signed-in Chat User. For public data such as stock or opening hours, a superadmin sets 'Visitors may call this without signing in' (allows_anonymous) on a query without a context parameter under Settings → Databases.",
+      "docs": "/docs/troubleshooting/database-connections#error-codes"
+    },
+    {
+      "code": "invalid_arguments",
+      "area": "database_connector",
+      "message": "A database query tool's arguments did not fit its parameters (type, enum, bounds, max_length, pattern, or a name it does not take); the query did not run.",
+      "hint": "Read the parameter named in the result. Sharpen that parameter's description so the model fills it as the SQL expects, or loosen the constraint.",
+      "docs": "/docs/troubleshooting/database-connections#error-codes"
+    },
+    {
+      "code": "invalid_parameter_value",
+      "area": "database_connector",
+      "message": "The database rejected a bound value, for example text that does not convert to the column's type.",
+      "hint": "Give the parameter the column's type, or a pattern that admits only values the column takes.",
+      "docs": "/docs/troubleshooting/database-connections#error-codes"
+    },
+    {
+      "code": "query_failed",
+      "area": "database_connector",
+      "message": "The database refused the query for another reason (a missing column, a syntax error the save check cannot see).",
+      "hint": "Run the SQL with the same values directly against the database as the read-only user to see its message, then correct the query under Settings → Databases.",
+      "docs": "/docs/troubleshooting/database-connections#error-codes"
+    },
+    {
+      "code": "target_refused",
+      "area": "database_connector",
+      "message": "The platform's egress policy refused the connection's host or port; nothing was sent to it.",
+      "hint": "Run the connection test: its policy step names the reason (host_syntax, port_range, non_public_address, mixed_answers).",
+      "docs": "/docs/troubleshooting/database-connections#error-codes"
+    },
+    {
+      "code": "timeout",
+      "area": "database_connector",
+      "message": "The statement ran longer than the connection's statement timeout and was stopped.",
+      "hint": "Make the query cheaper (an index, a narrower WHERE, a LIMIT), or have a superadmin raise the connection's statement timeout within DATABASE_CONNECTOR_STATEMENT_TIMEOUT_MS_MAX.",
+      "docs": "/docs/troubleshooting/database-connections#error-codes"
+    },
+    {
+      "code": "tls_failed",
+      "area": "database_connector",
+      "message": "The TLS handshake or the server certificate's verification failed.",
+      "hint": "Run the connection test. The server must offer TLS 1.2 or later with a certificate for the connection's host name; upload the CA, or a self-signed server certificate, on the connection.",
+      "docs": "/docs/troubleshooting/database-connections#error-codes"
+    },
+    {
+      "code": "unavailable",
+      "area": "database_connector",
+      "message": "The database connector, the connection or the query is switched off, or the instance does not run this connection's dialect.",
+      "hint": "Check DATABASE_CONNECTOR_ENABLED and database_connector.dialects in /meta/capabilities, and that the connection and the query are enabled under Settings → Databases.",
+      "docs": "/docs/troubleshooting/database-connections#error-codes"
+    },
+    {
+      "code": "unreachable",
+      "area": "database_connector",
+      "message": "The database server could not be reached: its name did not resolve or the TCP connection failed.",
+      "hint": "Run the connection test. Check host and port, and that the database's firewall allowlists the platform's outbound address (DATABASE_CONNECTOR_EGRESS_IPS).",
+      "docs": "/docs/troubleshooting/database-connections#error-codes"
+    },
+    {
+      "code": "bind_in_literal",
+      "area": "database_connector",
+      "message": "A :name placeholder sits inside a string, quoted identifier or comment, where it would still be bound.",
+      "hint": "Move the placeholder out of the literal, or write a literal colon as \\:.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
+      "code": "bind_mismatch",
+      "area": "database_connector",
+      "message": "The SQL's :name placeholders and the declared parameters differ.",
+      "hint": "Declare exactly one parameter per placeholder, and no parameter the SQL does not use.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
+      "code": "empty",
+      "area": "database_connector",
+      "message": "The query has no SQL, or only comments.",
+      "hint": "Write one SELECT or WITH statement.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
+      "code": "executable_comment",
+      "area": "database_connector",
+      "message": "The SQL holds a MySQL executable comment (/*! … */), which the server runs as SQL.",
+      "hint": "Remove the comment, or write it as a plain /* … */ comment.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
+      "code": "forbidden_keyword",
+      "area": "database_connector",
+      "message": "The SQL names a keyword that writes, creates or calls something (INSERT, INTO, DELETE, EXEC, …).",
+      "hint": "Remove the keyword; a query only reads. A column or table of that name is written as a quoted identifier.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
+      "code": "locking_clause",
+      "area": "database_connector",
+      "message": "The SQL locks rows (FOR UPDATE, FOR SHARE, LOCK IN SHARE MODE).",
+      "hint": "Remove the locking clause; a query reads without locking.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
+      "code": "multiple_statements",
+      "area": "database_connector",
+      "message": "The SQL holds more than one statement.",
+      "hint": "Keep one statement; a single trailing semicolon is allowed.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
+      "code": "not_select",
+      "area": "database_connector",
+      "message": "The SQL does not start with SELECT or WITH.",
+      "hint": "A database query only reads: write one SELECT, or a WITH … SELECT.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
+      "code": "too_long",
+      "area": "database_connector",
+      "message": "The SQL is longer than 20,000 characters.",
+      "hint": "Shorten the statement; move logic the database can hold into a view the read-only user may select from.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
+      "code": "unterminated",
+      "area": "database_connector",
+      "message": "A string literal, quoted identifier, dollar quote or /* comment is never closed.",
+      "hint": "Close the quote or comment the message names.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
+      "code": "anonymous_with_context_parameter",
+      "area": "database_connector",
+      "message": "A query with an end_user.* parameter cannot allow anonymous visitors: it needs a signed-in visitor anyway.",
+      "hint": "Set allows_anonymous to false, or remove the context parameter for a query on public data.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
+      "code": "parameter_bounds_inverted",
+      "area": "database_connector",
+      "message": "A parameter's minimum is greater than its maximum.",
+      "hint": "Swap or correct the two bounds.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
+      "code": "parameter_bounds_not_integer",
+      "area": "database_connector",
+      "message": "An integer parameter has a bound that is not a whole number.",
+      "hint": "Give an integer parameter whole-number bounds, or make it a number.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
+      "code": "parameter_constraint_not_applicable",
+      "area": "database_connector",
+      "message": "A parameter sets a constraint its type does not take.",
+      "hint": "max_length and pattern belong to a string, minimum and maximum to an integer or number, enum to a string, integer or number. Remove the constraint or change the type.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
+      "code": "parameter_context_constrained",
+      "area": "database_connector",
+      "message": "A context parameter (source end_user.*) sets max_length, pattern, enum, minimum or maximum.",
+      "hint": "Remove the constraint; the platform fills the value from the verified identity, not the model.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
+      "code": "parameter_context_not_string",
+      "area": "database_connector",
+      "message": "A context parameter (source end_user.*) has a type other than string.",
+      "hint": "Set its type to string; the platform binds the visitor's id, subject or email as text.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
+      "code": "parameter_context_optional",
+      "area": "database_connector",
+      "message": "A context parameter (source end_user.*) is marked optional.",
+      "hint": "Remove required: false. A context parameter is always required: without a signed-in visitor the call answers identity_required and the query does not run.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
+      "code": "parameter_description_missing",
+      "area": "database_connector",
+      "message": "A parameter the model fills has no description, so the model cannot know what to put in it.",
+      "hint": "Describe what the value is and how it looks, e.g. 'Order number as printed on the confirmation, e.g. A-10023'.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
+      "code": "parameter_enum_invalid",
+      "area": "database_connector",
+      "message": "A parameter's enum holds a value that does not fit its type or its max_length.",
+      "hint": "Every enum value has the parameter's type, and a string value is at most max_length long.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
+      "code": "parameter_enum_repeats",
+      "area": "database_connector",
+      "message": "A parameter's enum lists the same value twice.",
+      "hint": "List each allowed value once.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
+      "code": "parameter_names_repeat",
+      "area": "database_connector",
+      "message": "Two parameters of a query have the same name.",
+      "hint": "Give each :name placeholder exactly one parameter.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
+      "code": "parameter_pattern_invalid",
+      "area": "database_connector",
+      "message": "A parameter's pattern is not a valid regular expression.",
+      "hint": "Fix the pattern; it is a JSON Schema pattern, matched anywhere in the value unless anchored with ^ and $.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
+      "code": "parameters_too_many",
+      "area": "database_connector",
+      "message": "A query declares more than 20 parameters.",
+      "hint": "Keep a query to at most 20 parameters; split a wide lookup into several queries.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
+      "code": "dns_failed",
+      "area": "database_connector",
+      "message": "The connection's host name does not resolve.",
+      "hint": "Check the spelling, and that the name resolves on the public internet, not only inside the customer's network.",
+      "docs": "/docs/troubleshooting/database-connections#connection-test"
+    },
+    {
+      "code": "host_syntax",
+      "area": "database_connector",
+      "message": "The connection's host is not one DNS name or one IP address (a list, a socket path, a user, an option, whitespace or localhost).",
+      "hint": "Enter only the database server's name or address, without port, path, user or a second host.",
+      "docs": "/docs/troubleshooting/database-connections#connection-test"
+    },
+    {
+      "code": "mixed_answers",
+      "area": "database_connector",
+      "message": "The host resolves to public and non-public addresses at once, which is refused as a DNS rebinding signal.",
+      "hint": "Point the name only at the database's public address, or use a name that does.",
+      "docs": "/docs/troubleshooting/database-connections#connection-test"
+    },
+    {
+      "code": "non_public_address",
+      "area": "database_connector",
+      "message": "The host resolves to a private, loopback, link-local or otherwise non-public address, which the platform does not connect to.",
+      "hint": "Use the database's public endpoint and allowlist the platform's outbound address. A database inside a private network is reached only through a VPN and a private target an operator sets for this tenant (DATABASE_CONNECTOR_PRIVATE_TARGETS).",
+      "docs": "/docs/troubleshooting/database-connections#connection-test"
+    },
+    {
+      "code": "port_range",
+      "area": "database_connector",
+      "message": "The connection's port is outside 1024-65535.",
+      "hint": "Use the port the database listens on; every standard database port is within 1024-65535.",
+      "docs": "/docs/troubleshooting/database-connections#connection-test"
+    },
+    {
+      "code": "database_connection_dialect_mismatch",
+      "area": "package",
+      "message": "The target tenant's connection of that name has another dialect than the package's query.",
+      "hint": "Name a connection of the query's dialect in the package, or have a superadmin create one under Settings → Databases.",
+      "docs": "/docs/concepts/database-connections#solution-packages"
+    },
+    {
+      "code": "database_connection_missing",
+      "area": "package",
+      "message": "A database query in the package needs a connection of that name, which the target tenant does not have.",
+      "hint": "A superadmin creates the connection with that name and dialect under Settings → Databases and runs its test, then preview again.",
+      "docs": "/docs/concepts/database-connections#solution-packages"
+    },
+    {
+      "code": "database_connection_untested",
+      "area": "package",
+      "message": "The target tenant's connection exists, but its last test did not pass.",
+      "hint": "Run the connection test under Settings → Databases (a superadmin or the tenant Owner) and fix what its failed step names, then preview again.",
+      "docs": "/docs/concepts/database-connections#solution-packages"
+    },
+    {
+      "code": "database_query_definition_missing",
+      "area": "package",
+      "message": "A database query tool in the package carries no query definition, and the target has no query of that slug.",
+      "hint": "Export the package again from a Cavelon version that carries database queries.",
+      "docs": "/docs/concepts/database-connections#solution-packages"
+    },
+    {
+      "code": "database_query_invalid",
+      "area": "package",
+      "message": "A database query in the package fails the checks a query passes when it is saved.",
+      "hint": "Fix the SQL or the parameter the message names; the code in brackets explains it.",
+      "docs": "/docs/concepts/database-connections#solution-packages"
+    },
+    {
+      "code": "database_query_needs_superadmin",
+      "area": "package",
+      "message": "The import would create or change a database query. Only a superadmin in Tenant mode does that, in the Admin; a personal access token (cavelon apply) never writes a database query.",
+      "hint": "A superadmin signs in to the Admin, opens this tenant and imports the same package from the solution's Agents page (Import JSON), or saves the query under Settings → Databases. Once the target's queries match the package, cavelon apply passes for every other change.",
+      "docs": "/docs/concepts/database-connections#solution-packages"
+    },
+    {
+      "code": "database_query_tool_managed",
+      "area": "package",
+      "message": "The import would remove a database query's tool, or turn it into another tool type.",
+      "hint": "Keep the tool in the package as a database query, or delete the query under Settings → Databases.",
+      "docs": "/docs/concepts/database-connections#solution-packages"
+    },
+    {
+      "code": "database_query_tool_type_conflict",
+      "area": "package",
+      "message": "The package declares a database query under a slug the target tenant uses for another kind of tool.",
+      "hint": "Rename the package's tool or the target's tool.",
+      "docs": "/docs/concepts/database-connections#solution-packages"
     },
     {
       "code": "path_access_denied",

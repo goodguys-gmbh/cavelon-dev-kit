@@ -32,6 +32,7 @@ the environment over the files. The exit codes are listed in [Troubleshooting](t
 - **Solution as code:** [`init`](#cavelon-init), [`pull`](#cavelon-pull), [`validate`](#cavelon-validate), [`fmt`](#cavelon-fmt), [`schema`](#cavelon-schema), [`apply`](#cavelon-apply), [`activate`](#cavelon-activate), [`explain`](#cavelon-explain)
 - **Tenants and solutions:** [`tenant create`](#cavelon-tenant-create), [`tenant list`](#cavelon-tenant-list), [`harness list`](#cavelon-harness-list), [`harness new`](#cavelon-harness-new), [`harness clone`](#cavelon-harness-clone), [`harness default`](#cavelon-harness-default)
 - **Knowledge, tests and traces:** [`kb upload`](#cavelon-kb-upload), [`test run`](#cavelon-test-run), [`wait`](#cavelon-wait), [`watch`](#cavelon-watch), [`trace`](#cavelon-trace)
+- **Database connections and queries:** [`db connections`](#cavelon-db-connections), [`db queries`](#cavelon-db-queries), [`db runs`](#cavelon-db-runs), [`db test`](#cavelon-db-test), [`db test-run`](#cavelon-db-test-run)
 - **Variables and secrets:** [`variables list`](#cavelon-variables-list), [`variables get`](#cavelon-variables-get), [`variables set`](#cavelon-variables-set), [`variables delete`](#cavelon-variables-delete), [`secrets list`](#cavelon-secrets-list), [`secrets set`](#cavelon-secrets-set), [`secrets delete`](#cavelon-secrets-delete)
 - **Limits and capacity:** [`limits`](#cavelon-limits), [`limits set`](#cavelon-limits-set), [`models list`](#cavelon-models-list), [`models set-limit`](#cavelon-models-set-limit)
 - **Loops and triggers:** [`loop start`](#cavelon-loop-start), [`loop watch`](#cavelon-loop-watch), [`loop iterations`](#cavelon-loop-iterations), [`loop pause`](#cavelon-loop-pause), [`loop resume`](#cavelon-loop-resume), [`loop cancel`](#cavelon-loop-cancel), [`trigger identity`](#cavelon-trigger-identity)
@@ -666,6 +667,143 @@ Examples:
 cavelon trace op_test_run_…
 cavelon trace <run> --trace <trace_id>
 cavelon trace <run> --trace <trace_id> --span <span_id>
+```
+
+## Database connections and queries
+
+Read the connections, saved queries and query runs behind a solution's database query tools; the tenant Owner also tests a connection and test-runs a query. A superadmin creates and changes them in the Admin.
+
+### cavelon db connections
+
+The tenant's database connections: dialect, target, TLS mode, last test and query count; never a password.
+
+**read-only** · MCP tool: `db_connections`
+
+```text
+cavelon db connections [options]
+```
+
+A superadmin creates and changes connections in the Admin; a token reads them. A package names a query's connection by name and dialect, so the same name serves in every tenant and environment. A query tool is ready for agents only while its connection is enabled and its last test passed; the tenant Owner runs the test with `cavelon db test <connection>`.
+
+| Option | Description | MCP |
+|---|---|---|
+| `--limit <n>` | Return at most n connections (default 50). | yes |
+| `--cursor <cursor>` | Continue after the previous page (its next_cursor). | yes |
+
+Examples:
+
+```bash
+cavelon db connections
+cavelon db connections --json
+```
+
+### cavelon db queries
+
+The tenant's saved database queries by tool slug; with a query, its SQL, parameters and limits.
+
+**read-only** · MCP tool: `db_queries`
+
+```text
+cavelon db queries [query] [options]
+```
+
+Each saved query is one agent tool (tool_type database_query). A superadmin writes it in the Admin; `cavelon pull` writes its definition into the package's tools. A parameter filled by end_user.* comes from the signed-in visitor, never from the model. Without a query: one line per query. With one (its tool's slug or the query's id): the whole query.
+
+| Argument | Description |
+|---|---|
+| `query` | A query's tool slug or id: show it in full. |
+
+| Option | Description | MCP |
+|---|---|---|
+| `--connection <connection>` | Only the queries of this connection (name or id). | yes |
+| `--limit <n>` | Return at most n queries (default 50). | yes |
+| `--cursor <cursor>` | Continue after the previous page (its next_cursor). | yes |
+
+Examples:
+
+```bash
+cavelon db queries
+cavelon db queries --connection shop-db
+cavelon db queries order_status --json
+```
+
+### cavelon db runs
+
+A saved query's runs, newest first: source, outcome, error code, duration and row count; never values or rows.
+
+**read-only** · MCP tool: `db_runs`
+
+```text
+cavelon db runs <query> [options]
+```
+
+Every run leaves this evidence, an agent's call and a test run alike; the instance keeps no parameter value, row or SQL. `cavelon explain <code>` says what an error code means and how to fix it.
+
+| Argument | Description |
+|---|---|
+| `query` | The query's tool slug or id. Required. |
+
+| Option | Description | MCP |
+|---|---|---|
+| `--limit <n>` | Return at most n runs (default 20, at most 200). | yes |
+| `--cursor <cursor>` | Continue after the previous page (its next_cursor). | yes |
+
+Examples:
+
+```bash
+cavelon db runs order_status
+cavelon db runs order_status --limit 50 --json
+```
+
+### cavelon db test
+
+Test a database connection step by step (DNS, policy, TCP, TLS, login, SELECT 1, version, write privileges); exit 3 when a step fails.
+
+**changing** · MCP tool: `db_test`
+
+```text
+cavelon db test <connection>
+```
+
+Needs the tenant Owner's permission (database_connectors.test). The result becomes the connection's last test: a query tool is ready for agents only while it passed, and a package's query needs a tested connection of its name to import. A failed step names its code; `cavelon explain <code>` says how to fix it. A finding under write_privileges means the database user can write: ask the database administrator for a read-only user.
+
+| Argument | Description |
+|---|---|
+| `connection` | The connection's name or id. Required. |
+
+Examples:
+
+```bash
+cavelon db test shop-db
+cavelon db test shop-db --json
+```
+
+### cavelon db test-run
+
+Run a saved query once with the values given, identity parameters included; show what the model would see and the rows.
+
+**changing** · MCP tool: `db_test_run`
+
+```text
+cavelon db test-run <query> [options]
+```
+
+Needs the tenant Owner's permission (database_connectors.test); it reads the customer's own data. Give each parameter with --value name=value, those the platform fills from the signed-in visitor (end_user.*) too: that is how an identity-scoped query is checked for one customer. The instance records the run (counts only) and audits it with your name; the rows come back once and are never stored. A failed run names its code; `cavelon explain <code>` says more.
+
+| Argument | Description |
+|---|---|
+| `query` | The query's tool slug or id. Required. |
+
+| Option | Description | MCP |
+|---|---|---|
+| `--value <name=value>` | One parameter's value, typed as the parameter's type. Repeatable. | yes |
+| `--rows <n>` | Show at most n rows in the text (default 20); --json carries what the instance returned. | yes |
+
+Examples:
+
+```bash
+cavelon db test-run order_status --value order_no=A-10023 --value email=ada@example.com
+cavelon db test-run stock --value sku=4711 --json
 ```
 
 ## Variables and secrets

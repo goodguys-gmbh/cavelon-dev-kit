@@ -107,6 +107,10 @@ export const KIT_ERROR_CODES: CatalogEntry[] = [
   { code: "sandbox_transfer_size_limit", area: "cli", message: "The archive is larger than a Sandbox imports at once.", hint: "Seed fewer or smaller files; a seed replaces the whole workspace." },
   { code: "sandbox_artifact_digest_mismatch", area: "cli", message: "The export arrived with another digest than the instance declared; nothing was written.", hint: "Download it again." },
   { code: "invalid_job_id", area: "cli", message: "The instance returned an unexpected job id.", hint: "Retry; if it repeats, report it with the command." },
+  // Database connections and queries.
+  { code: "database_connector_disabled", area: "cli", message: "This instance has the database connector switched off.", hint: "Its operator switches it on (DATABASE_CONNECTOR_ENABLED); until then no agent gets a database tool." },
+  { code: "database_connection_not_found", area: "cli", message: "No database connection by that name or id in this tenant.", hint: "`cavelon db connections` lists them; a superadmin creates one in the Admin." },
+  { code: "database_query_not_found", area: "cli", message: "No saved database query by that tool slug or id in this tenant.", hint: "`cavelon db queries` lists them; a superadmin writes one in the Admin, and `cavelon pull` brings it into the package." },
   // Generic answers.
   { code: "usage", area: "cli", message: "The command was called the wrong way (a missing or invalid argument or option).", hint: "`cavelon <command> --help` shows its arguments." },
   { code: "validation_failed", area: "cli", message: "A value did not pass the check before it was sent, or the instance refused it as invalid.", hint: "The message names the field; `cavelon api describe <operation>` shows the shape." },

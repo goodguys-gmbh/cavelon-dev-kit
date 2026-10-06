@@ -249,6 +249,7 @@ every other preview first.
 | `chat` | `chat` | one turn of a conversation, which spends budget | at once |
 | `limits set` | `limits_set` | a limit of the tenant or the platform | preview, always |
 | `models set-limit` | `models_set_limit` | a model endpoint's concurrency limit | preview, always |
+| `db test`, `db test-run` | `db_test`, `db_test_run` | a tenant Owner's connection test (stored as the connection's last test), or one run of a saved query with the values given (the rows come back once; the instance keeps counts only) | at once; read-only on the database, and the instance refuses anyone but the tenant Owner |
 | `sandbox seed` | `sandbox_seed` | replaces a Sandbox's workspace | preview, always |
 | `sandbox validate`, `sandbox refresh` | `sandbox_validate`, `sandbox_refresh` | runs a Sandbox's readiness checks, or accepts a customer VM's workspace as it is now | at once |
 | `artifacts export` | `artifacts_export` | takes files out of an isolated container as a tar archive | at once; never writes over an existing file |
