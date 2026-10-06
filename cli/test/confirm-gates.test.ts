@@ -76,9 +76,12 @@ beforeAll(async () => {
   server = await startFakeServer();
   tenant = server.addTenant("acme", "Acme");
   server.state.features = { ...server.state.features, masterloop_enabled: true };
+  // The printed confirm lines quote for the shell; pin POSIX so Windows runners agree.
   sb = sandbox();
+  sb.env.SHELL = "/bin/sh";
   await login(sb, server.url, server.addToken({ kind: "pat", tenantIds: [tenant], defaultTenant: tenant, mayActivate: true }));
   platformSb = sandbox();
+  platformSb.env.SHELL = "/bin/sh";
   await login(platformSb, server.url, server.addToken({ kind: "pat", tenantIds: [], platform: true }));
 });
 afterAll(async () => {
