@@ -24,9 +24,10 @@ You need a Cavelon instance with personal access tokens turned on, and a coding
 agent: Claude Code, Codex, Cursor, VS Code with GitHub Copilot, Gemini CLI or
 Kiro. Nothing else: no Node.js, no administrator rights.
 
-**1. Install `cavelon`** with one line. It goes into your own user folder.
+**1. Install `cavelon`** the way that suits your machine. Each way installs
+the same `cavelon` into your own user folder, without administrator rights.
 
-On macOS or Linux, in Terminal:
+**One line, nothing else needed** (recommended). On macOS or Linux, in Terminal:
 
 ```bash
 curl -fsSL https://github.com/goodguys-gmbh/cavelon-dev-kit/releases/latest/download/install.sh | sh
@@ -38,23 +39,41 @@ On Windows, in PowerShell:
 irm https://github.com/goodguys-gmbh/cavelon-dev-kit/releases/latest/download/install.ps1 | iex
 ```
 
-The line downloads the `cavelon` built for your system from this
-repository's latest release, checks it against the release's checksums, puts
-it into `~/.local/bin` (on Windows, `%LOCALAPPDATA%\Programs\cavelon`), adds
-that folder to your `PATH` if it is not there yet, and says what to do next.
-Open a new terminal so it finds `cavelon`. Run the same line again to update.
-With Homebrew (macOS, Linux): `brew install goodguys-gmbh/cavelon/cavelon`.
-With Python: `uv tool install cavelon` or `pipx install cavelon` (`uvx cavelon`
-runs it without installing).
-[Installation](docs/installation.md) has the details, npm, and how to remove it.
-Where machines reach neither GitHub, npm nor PyPI, install from the signed
-[offline bundle](docs/offline-bundle.md) each release carries.
+The line downloads the `cavelon` built for your system from this repository's
+latest release, checks it against the release's checksums, puts it into
+`~/.local/bin` (on Windows, `%LOCALAPPDATA%\Programs\cavelon`), adds that folder
+to your `PATH` if it is not there yet, and says what to do next. Open a new
+terminal so it finds `cavelon`.
 
-*With Node.js instead:* if you have Node.js 20.3 or newer, `npx -y @cavelon/cli`
-runs the same `cavelon` without installing it: type `npx -y @cavelon/cli setup`
-in the next step, and wherever these docs write `cavelon`, write
-`npx -y @cavelon/cli`. [Installation](docs/installation.md#with-nodejs-npx-or-npm)
-covers npx and `npm i -g`.
+**With Homebrew** (macOS, Linux):
+
+```bash
+brew install goodguys-gmbh/cavelon/cavelon
+```
+
+**With Python** (macOS, Linux, Windows), through uv or pipx:
+
+```bash
+uv tool install cavelon      # or: pipx install cavelon
+```
+
+`uvx cavelon` runs it without installing anything, which suits CI and cloud
+agents. Python is only needed for the install: `cavelon` itself runs without it.
+
+**With Node.js** 20.3 or newer:
+
+```bash
+npm i -g @cavelon/cli
+```
+
+Or run it without installing: type `npx -y @cavelon/cli setup` in the next
+step, and wherever these docs write `cavelon`, write `npx -y @cavelon/cli`.
+
+`cavelon --version` names the way you installed it and the command that
+updates it. [Installation](docs/installation.md) has the details for each way,
+and how to remove it. Where machines reach neither GitHub, npm nor PyPI,
+install from the signed [offline bundle](docs/offline-bundle.md) each release
+carries.
 
 **2. Set up your agent and log in:**
 
