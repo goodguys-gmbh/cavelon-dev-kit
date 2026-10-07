@@ -19,7 +19,7 @@ issue.
 | `.claude-plugin/`, `.agents/plugins/` | the marketplaces of Claude Code and Codex, naming `plugin/` |
 | `contracts/` | snapshots of what an instance publishes, and the list of operations the kit uses |
 | `install.sh`, `install.ps1` | the one-line installers of the standalone executable, published with each release |
-| `packaging/` | what the release workflow writes for Homebrew and winget, and the macOS signing entitlements |
+| `packaging/` | what the release workflow writes for Homebrew and winget, the PyPI wheel builder (`pypi/`, standard-library Python), and the macOS signing entitlements |
 | `examples/` | solution repositories to copy: `support-faq/` (one agent and a knowledge base) and `expense-approval/` (a pipeline with an approval); the tests validate them |
 | `docs/` | the user documentation |
 

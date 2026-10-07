@@ -172,6 +172,24 @@ jobs:
           test "$("$(brew --prefix)/bin/cavelon" --version | head -n 1)" = "$VERSION"
           brew uninstall cavelon-test/local/cavelon
           brew untap cavelon-test/local
+      - name: The PyPI wheel installs, runs and is recognised
+        shell: bash
+        run: |
+          case "$RUNNER_OS" in
+            Linux) asset=cavelon-linux-x64; py=python3; bin=bin; exe=cavelon ;;
+            macOS) asset=cavelon-darwin-arm64; py=python3; bin=bin; exe=cavelon ;;
+            Windows) asset=cavelon-windows-x64.exe; py=python; bin=Scripts; exe=cavelon.exe ;;
+          esac
+          "$py" -I packaging/pypi/build_wheels.py release "$VERSION" wheels "$asset"
+          "$py" -I -m zipfile -l wheels/*.whl
+          "$py" -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/$bin/python" -I -m pip install --quiet --disable-pip-version-check wheels/*.whl
+          "$RUNNER_TEMP/venv/$bin/$exe" --version | tee version.txt
+          test "$(head -n 1 version.txt)" = "$VERSION"
+          grep -q "^installed with: pip " version.txt
+          grep -q "^update with: pip install --upgrade cavelon" version.txt
+          "$RUNNER_TEMP/venv/$bin/python" -I -m pip uninstall --yes --quiet cavelon
+          test ! -e "$RUNNER_TEMP/venv/$bin/$exe"
       - name: The winget manifest
         if: runner.os == 'Windows'
         shell: pwsh

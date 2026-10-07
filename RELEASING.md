@@ -8,9 +8,12 @@ or typed for it anywhere.
 
 The same run then builds the standalone executables, attests them, and
 creates the GitHub release that the one-line install downloads from: the five
-executables, `checksums.txt`, `install.sh` and `install.ps1`. It updates the
-Homebrew tap and writes the winget manifest when those are set up
-([One-time setup](#one-time-setup)).
+executables, `checksums.txt`, `install.sh` and `install.ps1`. It publishes the
+PyPI package `cavelon` (one wheel per executable), updates the Homebrew tap and
+writes the winget manifest when those are set up
+([One-time setup](#one-time-setup)). Unlike npm, PyPI has no staging: the
+wheels are public as soon as the `pypi` job uploads them, so pushing the tag is
+the approval there.
 
 The CLI, the skills and the plugin share one version.
 
@@ -47,7 +50,11 @@ The CLI, the skills and the plugin share one version.
    executable on its platform, signs it where the signing secrets are set, and
    runs its smoke test; `attest` writes `checksums.txt` and the build
    provenance attestations; `github-release` creates the release (a re-run
-   replaces its files); `homebrew` and `winget` follow.
+   replaces its files); `pypi`, `homebrew` and `winget` follow. `pypi` builds
+   the wheels from the release's executables
+   (`packaging/pypi/build_wheels.py`) and uploads them through PyPI's trusted
+   publishing, with attestations. A re-run cannot replace a file PyPI already
+   holds.
 5. **Approve the staged version** with an npm account that owns `@cavelon/cli`
    (two-factor authentication), on npmjs.com or with npm 11.16 or newer:
 
@@ -79,12 +86,23 @@ The CLI, the skills and the plugin share one version.
    gh release download vX.Y.Z -p cavelon-linux-x64 && gh attestation verify cavelon-linux-x64 --repo goodguys-gmbh/cavelon-dev-kit
    ```
 
-8. **Submit the winget manifest** once winget is set up: download the run's
+8. **Check the PyPI release** has a wheel for each executable and runs:
+
+   ```bash
+   curl -s https://pypi.org/pypi/cavelon/X.Y.Z/json | jq -r '.urls[].filename'
+   uvx cavelon@X.Y.Z --version                         # names "uvx" as the install method
+   ```
+
+   A wrong release cannot be replaced, only yanked (it stays installable by
+   its exact version, but `pip`, `uv` and `pipx` no longer pick it): on
+   pypi.org, Manage project → Releases → the version → Options → Yank. Then
+   fix, merge, and tag the next patch version.
+9. **Submit the winget manifest** once winget is set up: download the run's
    `winget-manifest` artifact and submit it ([winget](#winget)).
-9. **Check it on a clean machine:** the one-line install (macOS, Linux and
-   Windows), `npx -y @cavelon/cli whoami` and the plugin installed from the
-   marketplace answer against an instance, and the
-   [getting-started tutorial](docs/getting-started.md) runs as written.
+10. **Check it on a clean machine:** the one-line install (macOS, Linux and
+    Windows), `npx -y @cavelon/cli whoami`, `uvx cavelon whoami` and the plugin
+    installed from the marketplace answer against an instance, and the
+    [getting-started tutorial](docs/getting-started.md) runs as written.
 
 ## One-time setup
 
@@ -155,6 +173,30 @@ the formula stays on the last version, while the rest of the release still
 succeeds. Before then, create a new token the same way and replace the secret
 `HOMEBREW_TAP_TOKEN`; the reminder is the issue "Renew HOMEBREW_TAP_TOKEN before
 2027-10-05". A failed `homebrew` job in a release run means the same.
+
+### PyPI
+
+**Set up on 2026-10-03.** The project `cavelon` is owned by the company's PyPI
+account (two-factor authentication) and holds a placeholder `0.0.0`. Its
+trusted publisher is this repository, workflow `release.yml`, environment
+`release`, so the `pypi` job needs no token; none is stored anywhere. Adding a
+second owner on pypi.org keeps the project from hanging on one person.
+
+`packaging/pypi/build_wheels.py` writes one wheel per release executable, each
+carrying it as the script `cavelon` (the way ruff and uv ship theirs) and
+tagged for what it needs: `manylinux_2_17` for both Linux builds (they use
+glibc symbols up to 2.17), `macosx_13_0` for both macOS builds (their
+`LC_BUILD_VERSION` minimum) and `win_amd64`. Check those minimums again when
+`cli/.bun-version` moves to a new Bun release, and run the script on a folder
+of executables to try it:
+
+```bash
+python3 -I packaging/pypi/build_wheels.py release X.Y.Z dist   # release/: the executables
+```
+
+A pre-release version (`X.Y.Z-rc.N`) becomes PEP 440's `X.Y.ZrcN`. There is no
+source distribution: a platform without a wheel gets "no matching
+distribution" rather than a package that cannot run.
 
 ### winget
 

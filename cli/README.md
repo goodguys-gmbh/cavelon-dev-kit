@@ -17,8 +17,9 @@ npm i -g @cavelon/cli
 Without Node.js, one line installs a standalone `cavelon` into your user
 folder: `curl -fsSL https://github.com/goodguys-gmbh/cavelon-dev-kit/releases/latest/download/install.sh | sh`
 on macOS and Linux, `irm https://github.com/goodguys-gmbh/cavelon-dev-kit/releases/latest/download/install.ps1 | iex`
-in Windows PowerShell. Then `cavelon setup` sets up your coding agents and logs
-you in.
+in Windows PowerShell. With Python, `uvx cavelon` runs the same executable from
+PyPI, and `uv tool install cavelon` or `pipx install cavelon` installs it. Then
+`cavelon setup` sets up your coding agents and logs you in.
 
 The full documentation is in the repository's
 [`docs/`](https://github.com/goodguys-gmbh/cavelon-dev-kit/tree/main/docs):

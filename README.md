@@ -42,6 +42,8 @@ it into `~/.local/bin` (on Windows, `%LOCALAPPDATA%\Programs\cavelon`), adds
 that folder to your `PATH` if it is not there yet, and says what to do next.
 Open a new terminal so it finds `cavelon`. Run the same line again to update.
 With Homebrew (macOS, Linux): `brew install goodguys-gmbh/cavelon/cavelon`.
+With Python: `uv tool install cavelon` or `pipx install cavelon` (`uvx cavelon`
+runs it without installing).
 [Installation](docs/installation.md) has the details, npm, and how to remove it.
 
 *With Node.js instead:* if you have Node.js 20.3 or newer, `npx -y @cavelon/cli`
@@ -180,7 +182,7 @@ how to review and test its work.
 
 | Page | What it covers |
 |---|---|
-| [Installation](docs/installation.md) | the one-line install, Homebrew, npx and npm, `cavelon setup`, the plugin in Claude Code and Codex, other agents, updating, uninstalling, Windows/macOS/Linux, proxies |
+| [Installation](docs/installation.md) | the one-line install, Homebrew, PyPI (uvx, uv, pipx, pip), npx and npm, `cavelon setup`, the plugin in Claude Code and Codex, other agents, updating, uninstalling, Windows/macOS/Linux, proxies |
 | [Getting started](docs/getting-started.md) | a full tutorial from an empty folder to an active solution |
 | [Building with a coding agent](docs/coding-agents.md) | briefing the agent, the loop as it runs it, what stays with you, reviewing and testing its work, prompts to copy |
 | [Concepts](docs/concepts.md) | instance, tenant, solution, package, environments, preview and confirm, operations, tests, activation, Platform mode |
@@ -215,7 +217,7 @@ Details in [Troubleshooting](docs/troubleshooting.md#exit-codes).
 |---|---|
 | [`cli/`](cli/) | the `cavelon` CLI and MCP server (TypeScript, Node.js 20.3+), published as `@cavelon/cli` and as standalone executables |
 | [`install.sh`](install.sh), [`install.ps1`](install.ps1) | the one-line installers for macOS and Linux, and for Windows |
-| [`packaging/`](packaging/) | the Homebrew formula and winget manifest the release workflow writes, and the macOS signing entitlements |
+| [`packaging/`](packaging/) | the Homebrew formula and winget manifest the release workflow writes, the PyPI wheels it builds (`pypi/`), and the macOS signing entitlements |
 | [`plugin/`](plugin/) | the Cavelon plugin: the skills, the MCP entry, and a manifest each for Claude Code and Codex |
 | `.claude-plugin/`, `.agents/plugins/` | the plugin marketplaces of Claude Code and Codex |
 | [`examples/support-faq/`](examples/support-faq/) | a small solution to copy and try: one agent answering from a knowledge base |

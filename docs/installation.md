@@ -25,6 +25,7 @@ or [Building a solution with a coding agent](coding-agents.md).
 | **The operations API** turned on, for waiting | `wait`, `watch` and every `--wait` follow work through it. Without it, the commands still start the work, but cannot wait for it. |
 | **A coding agent** (optional) | Claude Code, Codex, Cursor, VS Code with GitHub Copilot, Gemini CLI or Kiro; `cavelon setup` sets up each one it finds. Any other agent that reads `AGENTS.md` and runs shell commands works too: see [Agents without a plugin](#agents-without-a-plugin). |
 | **Node.js 20.3 or newer** (optional) | Only to run `cavelon` through `npx` or install it with npm instead: [With Node.js](#with-nodejs-npx-or-npm). |
+| **Python with uv, pipx or pip** (optional) | Only to install `cavelon` from PyPI instead: [With Python](#with-python-uvx-uv-pipx-or-pip). |
 
 If you are not sure whether your instance has personal access tokens and the
 operations API turned on, log in (step 3 of [Getting started](getting-started.md))
@@ -159,6 +160,28 @@ on every release.
 
 A winget package for Windows follows once the Windows executable is signed;
 until then, use the one-line install above.
+
+### With Python: uvx, uv, pipx or pip
+
+The PyPI package `cavelon` carries the same executable from the same release,
+one wheel per platform, so Python is needed only to install it:
+
+```bash
+uvx cavelon --version              # runs it without installing, from uv's cache
+uv tool install cavelon            # or: pipx install cavelon
+pip install cavelon                # into the active environment
+```
+
+`uv tool install` and `pipx install` put `cavelon` on your PATH in an
+environment of its own; `cavelon --version` names the tool that installed it,
+and the update notice its upgrade command. Wheels exist for Linux (x64 and
+arm64, glibc 2.17 or newer), macOS 13 or newer (Apple silicon and Intel) and
+Windows x64; on any other platform (Alpine's musl, for example) pip finds no
+matching wheel, and the one-line install or `npx` are the way in. The wheels
+carry the same unsigned executables as the release (see above).
+
+In CI and cloud agents, `uvx cavelon` works like `npx -y @cavelon/cli`: write
+`uvx cavelon@<version> …` to stay on one release.
 
 ### With Node.js: npx or npm
 
@@ -424,12 +447,20 @@ cavelon 0.1.4 is out; this is 0.1.3. Update with:
 | Homebrew | an executable in Homebrew's `Cellar` | `brew upgrade cavelon` |
 | winget | an executable in winget's `Packages` folder | `winget upgrade goodguys.Cavelon` |
 | a download from the release page | an executable that kept the release's file name | download the new one |
+| `uv tool install` | the PyPI wheel's executable in uv's tools folder (or `UV_TOOL_DIR`) | `uv tool upgrade cavelon` |
+| `pipx install` | the PyPI wheel's executable in pipx's `venvs` folder (or `PIPX_HOME`) | `pipx upgrade cavelon` |
+| `uvx` | the PyPI wheel's executable in uv's cache | `uvx cavelon@latest`: `uvx` reuses the release it cached |
+| `pip install` | the PyPI wheel's executable in any other Python environment | `pip install --upgrade cavelon` |
 | `npm i -g` | the package in npm's global folder | `npm i -g @cavelon/cli` |
 | `npx` | the package in npx's cache | nothing: `npx` starts the newest release each time |
 
+A PyPI wheel puts a small marker file into its environment's data folder
+(`share/cavelon/pypi`), from which `cavelon` tells it from the one-line
+install; uninstalling the package removes it.
+
 It looks the latest release up where that way of installing gets it from: the
-GitHub release for the executables (`api.github.com`), the npm registry for
-npm. The request carries no token and nothing about you or your solutions, waits
+GitHub release for the executables, the PyPI wheels included, since they are
+built from it (`api.github.com`), the npm registry for npm. The request carries no token and nothing about you or your solutions, waits
 at most 1.5 seconds beside the command, and its answer is kept for a day in the
 cache folder (`update-check.json`). A failed lookup stays silent and is tried
 again the next day. It never runs with `--json`, in MCP mode, in CI (with `CI`
@@ -493,6 +524,7 @@ release's and changes nothing else. The other ways in, and the plugin:
 
 ```bash
 npm i -g @cavelon/cli                                   # the CLI, if npm installed it
+uv tool upgrade cavelon                                 # the CLI, if uv installed it (pipx upgrade cavelon for pipx)
 claude plugin marketplace update cavelon-dev-kit       # Claude Code
 claude plugin update cavelon@cavelon-dev-kit
 codex plugin marketplace upgrade cavelon-dev-kit        # Codex
@@ -540,7 +572,8 @@ $key.SetValue('Path', ($path -join ';'), 'ExpandString')
 Remove-Item -Recurse -Force $dir
 ```
 
-Installed with npm: `npm uninstall -g @cavelon/cli`.
+Installed with npm: `npm uninstall -g @cavelon/cli`. From PyPI:
+`uv tool uninstall cavelon`, `pipx uninstall cavelon` or `pip uninstall cavelon`.
 
 `logout` deletes the tokens from your machine; they remain valid in Cavelon
 until you revoke them on **`/account/access-tokens`**. To remove everything,

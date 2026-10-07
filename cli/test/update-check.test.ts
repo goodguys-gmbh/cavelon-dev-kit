@@ -56,6 +56,35 @@ describe("the install method", () => {
     expect(detectInstall(facts(file, { platform: "win32" }))).toMatchObject({ method: "winget", update: "winget upgrade goodguys.Cavelon", source: "github" });
   });
 
+  it("is the PyPI wheel where its marker lies in the environment's data folder, with the tool that installed it", () => {
+    const marked = (...markers: string[]) => ({ exists: (f: string) => markers.includes(f) });
+    const uvTool = "/u/ada/.local/share/uv/tools/cavelon/bin/cavelon";
+    expect(detectInstall(facts(uvTool, marked("/u/ada/.local/share/uv/tools/cavelon/share/cavelon/pypi")))).toMatchObject({
+      method: "uv-tool",
+      update: "uv tool upgrade cavelon",
+      source: "github",
+    });
+    // A tool folder of the person's choosing, named by UV_TOOL_DIR.
+    const moved = facts("/data/tools/cavelon/bin/cavelon", { env: { UV_TOOL_DIR: "/data/tools" }, ...marked("/data/tools/cavelon/share/cavelon/pypi") });
+    expect(detectInstall(moved)).toMatchObject({ method: "uv-tool" });
+    const pipx = "/u/ada/.local/share/pipx/venvs/cavelon/bin/cavelon";
+    expect(detectInstall(facts(pipx, marked("/u/ada/.local/share/pipx/venvs/cavelon/share/cavelon/pypi")))).toMatchObject({ method: "pipx", update: "pipx upgrade cavelon" });
+    const uvx = detectInstall(facts("/u/ada/.cache/uv/archive-v0/Xy12ab/bin/cavelon", marked("/u/ada/.cache/uv/archive-v0/Xy12ab/share/cavelon/pypi")));
+    expect(uvx).toMatchObject({ method: "uvx", source: "github" });
+    expect(uvx.update).toBeUndefined();
+    expect(uvx.advice).toContain("uvx cavelon@latest");
+    // pip install --user puts it where the install script does; the marker tells them apart.
+    expect(detectInstall(facts("/u/ada/.local/bin/cavelon", marked("/u/ada/.local/share/cavelon/pypi")))).toMatchObject({
+      method: "pip",
+      update: "pip install --upgrade cavelon",
+    });
+    const venv = "C:\\work\\.venv\\Scripts\\cavelon.exe";
+    expect(detectInstall(facts(venv, { platform: "win32", ...marked("C:\\work\\.venv\\share\\cavelon\\pypi") }))).toMatchObject({ method: "pip" });
+    // A Windows user install keeps its data folder one level above Python3XY\Scripts.
+    const user = "C:\\Users\\ada\\AppData\\Roaming\\Python\\Python313\\Scripts\\cavelon.exe";
+    expect(detectInstall(facts(user, { platform: "win32", ...marked("C:\\Users\\ada\\AppData\\Roaming\\Python\\share\\cavelon\\pypi") }))).toMatchObject({ method: "pip" });
+  });
+
   it("is a download by hand for an executable that kept the release's file name", () => {
     const install = detectInstall(facts("/u/ada/Downloads/cavelon-linux-x64"));
     expect(install).toMatchObject({ method: "executable", source: "github" });
