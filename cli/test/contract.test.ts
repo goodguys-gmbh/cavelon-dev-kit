@@ -56,6 +56,26 @@ function check(method: string, template: string, status: number, data: unknown) 
 }
 
 describe("contract snapshots", () => {
+  it("publishes per-request Chat User readers and verified identity listings", async () => {
+    for (const [method, route, base] of [
+      ["POST", "/api/v1/chat", { message: "My orders" }],
+      ["POST", "/api/v1/test-suites/{suite_id}/runs", {}],
+    ] as const) {
+      const schema = operationAt(doc, method, route)!.requestBody!.content["application/json"]!.schema!;
+      expect(schemaErrors(doc, schema, { ...base, reader_mode: "as_chat_user", reader_chat_user_id: randomUUID() })).toEqual([]);
+      expect(schemaErrors(doc, schema, { ...base, reader_mode: "as_chat_user", reader_chat_user_id: "invalid" })).not.toEqual([]);
+      expect(schemaErrors(doc, schema, { ...base, reader_mode: "unsupported" })).not.toEqual([]);
+    }
+    server.state.chatUsers.push({ id: randomUUID(), tenant_id: tenant, email: "reader@example.com", email_verified: true });
+    const result = await call("GET", `/api/v1/tenants/${tenant}/chat-users`);
+    check("GET", "/api/v1/tenants/{tenant_id}/chat-users", 200, result.data);
+    expect(result.data).toMatchObject({ items: [expect.objectContaining({ email_verified: true })] });
+    const response = operationAt(doc, "GET", "/api/v1/tenants/{tenant_id}/chat-users")!.responses["200"]!.content!["application/json"]!.schema!;
+    const broken = structuredClone(result.data) as { items: Array<Record<string, unknown>> };
+    broken.items[0]!.email_verified = "true";
+    expect(schemaErrors(doc, response, broken)).not.toEqual([]);
+  });
+
   it("records where they came from", () => {
     const readme = readFileSync(path.join(CONTRACTS, "..", "README.md"), "utf8");
     expect(readme).toMatch(/Recorded on \d{4}-\d{2}-\d{2}/);

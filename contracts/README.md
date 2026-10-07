@@ -132,6 +132,18 @@ recorded; connector and token defaults stay off and `may_write_queries` stays
 false. The tests also play an instance without the new report or confirmation
 metadata.
 
+On 2026-10-07 the snapshot took in Chat User readers from the published
+development build, without running the instance. The OpenAPI generator's
+output matches its `docs/openapi.json` reference; only `ChatRequest` and
+`TestRunCreate`'s `reader_mode` and `reader_chat_user_id`, the Chat User
+listing route, and its `EndUserListResponse` and `EndUserResponse` (including
+`email_verified`) are taken in, then trimmed. The functions behind
+`/meta/package-schema` and `/meta/error-catalog` supply only the new
+`allows_anonymous` description and the `identity_required` message and hint,
+then scrubbed. All other snapshot entries and capability defaults stay as
+recorded. The fake server also plays instances without reader overrides,
+principal permissions, OpenAPI or the email verification flag.
+
 | File | Source |
 |---|---|
 | `openapi.json` | `GET /openapi.json`, trimmed by `cli/scripts/trim-openapi.mjs` to the operations listed in [`kit-operations.json`](kit-operations.json) and the components they reference, without prose descriptions |

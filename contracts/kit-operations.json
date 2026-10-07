@@ -79,6 +79,7 @@
     "PATCH /api/v1/tenants/current/upload-defaults",
     "GET /api/v1/tenants/{tenant_id}",
     "GET /api/v1/tenants/{tenant_id}/api-keys",
+    "GET /api/v1/tenants/{tenant_id}/chat-users",
     "PATCH /api/v1/tenants/{tenant_id}/limits",
     "GET /api/v1/test-runs/{run_id}",
     "GET /api/v1/test-runs/{run_id}/results",

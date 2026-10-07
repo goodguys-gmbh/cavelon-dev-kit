@@ -679,7 +679,7 @@
         },
         "allows_anonymous": {
           "default": false,
-          "description": "'Visitors may call this without signing in'. Only for a query without an end_user.* parameter, for public data such as stock, prices or opening hours. False: an anonymous visitor's call answers identity_required and the query does not run.",
+          "description": "'Runs without a signed-in person (anonymous visitors, triggers)'. Only for a query without an end_user.* parameter, for public data such as stock, prices or opening hours, and for a query a trigger uses. False: a run without a signed-in person, an anonymous visitor's or a trigger's, answers identity_required and the query does not run.",
           "title": "Allows Anonymous",
           "type": "boolean"
         }

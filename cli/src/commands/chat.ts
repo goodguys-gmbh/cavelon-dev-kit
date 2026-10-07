@@ -9,6 +9,7 @@ import type { Session } from "../session.js";
 import { cavelonCommand, fill } from "../printed.js";
 import { MCP_MAX_WAIT_MS } from "./async.js";
 import { accessFor, activationStep, mayActivate } from "../access.js";
+import { AS_CHAT_USER_OPTION, chatUserReader, chatUserReaderError } from "../chat-reader.js";
 
 /**
  * Talking to one solution, and taking one out of service. The tenant's chat
@@ -70,7 +71,10 @@ export const chat: CommandSpec = {
     "not the default, or a draft, can be tried before it answers anyone. A draft answers a person's token as a Playground run\n" +
     "(counted as testing), never a tenant API key. Without --harness: the env file's or cavelon.yaml's solution, else the\n" +
     "tenant's default route. Each call is one turn; --session continues a conversation. Not streamed: waits for the whole\n" +
-    `answer, at most --timeout (default ${DEFAULT_CHAT_TIMEOUT}; ${MCP_MAX_WAIT_MS / 1000} s as an MCP tool).`,
+    `answer, at most --timeout (default ${DEFAULT_CHAT_TIMEOUT}; ${MCP_MAX_WAIT_MS / 1000} s as an MCP tool).\n` +
+    "--as-chat-user reads knowledge and binds database query identity as that Chat User, with a personal access token.\n" +
+    "Choose an id with `cavelon api list_chat_users -p tenant_id=<tenant_id>`; email_verified says whether an email-bound\n" +
+    "query can bind that address. Without the option, keeps the usual reader.",
   readOnly: false,
   mcpEffect: "Starts or continues a conversation with the solution and runs its agents (model usage, its tools' actions); changes no configuration.",
   mcpTool: "chat",
@@ -80,6 +84,7 @@ export const chat: CommandSpec = {
     harness: HARNESS_OPTION,
     env: ENV_OPTION,
     session: { type: "string", value: "<session_id>", description: "Continue this conversation (the session_id a previous chat printed)." },
+    "as-chat-user": AS_CHAT_USER_OPTION,
     timeout: { type: "string", value: "<duration>", description: `Wait at most this long for the answer (90s, 5m; default ${DEFAULT_CHAT_TIMEOUT}).` },
   },
   examples: ['cavelon chat "When are you open?" --harness support-faq', 'cavelon chat "And on Saturdays?" --session <session_id>', 'cavelon chat "Hello" --json'],
@@ -89,9 +94,10 @@ export const chat: CommandSpec = {
     const raw = stringOption(input, "timeout");
     const timeout = Math.min(parseDuration(raw ?? DEFAULT_CHAT_TIMEOUT), ctx.mode === "mcp" ? MCP_MAX_WAIT_MS : Number.MAX_SAFE_INTEGER);
     const session = await ctx.session();
+    const reader = await chatUserReader(ctx, input, "/api/v1/chat");
     const { ref, source } = harnessRef(session, input);
     const harness = ref ? await findHarness(ctx, ref, source, (slug) => cavelonCommand("chat", fill("message"), "--harness", slug)) : undefined;
-    const body: Record<string, unknown> = { message, stream: false };
+    const body: Record<string, unknown> = { message, stream: false, ...reader };
     if (harness) body.harness_id = harness.id;
     const sessionId = stringOption(input, "session");
     if (sessionId) body.session_id = sessionId;
@@ -99,20 +105,21 @@ export const chat: CommandSpec = {
     try {
       answer = await callStable<ChatResponse>(ctx, "POST", "/api/v1/chat", "chatting with a solution", { body, timeoutMs: timeout });
     } catch (error) {
-      throw chatError(error, harness, error instanceof CavelonError && error.status === 409 ? mayActivate(await accessFor(await ctx.client())) : null);
+      throw chatUserReaderError(chatError(error, harness, error instanceof CavelonError && error.status === 409 ? mayActivate(await accessFor(await ctx.client())) : null), reader);
     }
     const target = harness ? { id: harness.id, slug: harness.slug, name: harness.name, status: harness.status } : null;
     if (answer.retrieval_warning) ctx.warn(answer.retrieval_warning);
     const next = {
-      continue: cavelonCommand("chat", fill("message"), "--session", answer.session_id),
+      continue: cavelonCommand("chat", fill("message"), "--session", answer.session_id, ...(reader ? ["--as-chat-user", reader.reader_chat_user_id, ...(harness ? ["--harness", harness.slug] : [])] : [])),
       trace: cavelonCommand("trace", answer.conversation_id, "--kind", "conversation"),
     };
     const who = harness ? named(harness) : "The default route";
     const directives = answer.ui_directives?.length ? `\n(${answer.ui_directives.length} UI directive${answer.ui_directives.length === 1 ? "" : "s"}, such as a form; --json shows them)` : "";
     const limit = answer.limit_error ? `\nlimit: ${clip(JSON.stringify(answer.limit_error), 300)}` : "";
     return {
-      data: { harness: target, ...answer, next },
+      data: { harness: target, ...answer, ...reader, next },
       text: [
+        ...(reader ? [`Reading as Chat User ${reader.reader_chat_user_id}.`] : []),
         `${who} answered:`,
         `${answer.response || "(no text)"}${directives}${limit}`,
         "",
