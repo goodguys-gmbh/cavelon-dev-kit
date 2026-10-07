@@ -6,6 +6,7 @@ import { clip, keyValues, moreHint, table } from "../format.js";
 import { callStable } from "../invoke.js";
 import { cavelonCommand, fill } from "../printed.js";
 import { isUuid } from "../session.js";
+import { accessFor, requirePersonForIdentityChoice } from "../access.js";
 
 /**
  * `cavelon db`: what the instance offers for database connections (its
@@ -693,7 +694,10 @@ export const dbTestRun: CommandSpec = {
     "Needs the tenant Owner's permission (database_connectors.test); it reads the customer's own data. Give each parameter\n" +
     "with --value name=value, those the platform fills from the signed-in visitor (end_user.*) too: that is how an\n" +
     "identity-scoped query is checked for one customer. The instance records the run (counts only) and audits it with your\n" +
-    "name; the rows come back once and are never stored. A failed run names its code; `cavelon explain <code>` says more.\n" +
+    "name. Where the instance publishes the matching needs_a_person_when restriction, the kit refuses an API key on an\n" +
+    "end_user.* query before sending (exit 5): a person tests it in the Admin or with their personal access token. Ordinary queries\n" +
+    "remain usable with an API key. On an older instance that omits the restriction, the server decides.\n" +
+    "The rows come back once and are never stored. A failed run names its code; `cavelon explain <code>` says more.\n" +
     "A write query's test is a dry run that rolls back; it still needs the connection to allow writes. The result reports\n" +
     "kind, dry_run, rolled_back, affected_rows and committed only where published; an omitted value stays unknown. Never\n" +
     "retry an ambiguous write outcome. A read stored-procedure query (SQL Server) shows the procedure's first result set; the instance refuses its run (exit 4)\n" +
@@ -713,6 +717,9 @@ export const dbTestRun: CommandSpec = {
   examples: ["cavelon db test-run order_status --value order_no=A-10023 --value email=ada@example.com", "cavelon db test-run stock --value sku=4711 --json"],
   async run(ctx, input) {
     const query = await resolveQuery(ctx, positional(input, "query")!);
+    if (query.parameters.some(p => p.source?.startsWith("end_user."))) {
+      requirePersonForIdentityChoice(await accessFor(await ctx.client()), "POST /api/v1/database-connectors/queries/{query_id}/test-run", "test a query with end_user.* parameters");
+    }
     const values = runValues(query, listOption(input, "value"));
     const shown = intOption(input, "rows", { min: 0, max: 500, fallback: ROWS_SHOWN })!;
     let result: {

@@ -122,6 +122,8 @@ Show who the token acts as, in which tenant, and where the token came from.
 cavelon whoami
 ```
 
+Shows needs_a_person and the optional needs_a_person_when separately. Conditional identity guidance leaves ordinary requests usable; an omitted list stays unknown.
+
 ### cavelon use
 
 Choose the tenant this instance's commands act in.
@@ -572,7 +574,7 @@ Start test-suite runs; returns operation ids.
 cavelon test run [options]
 ```
 
-Without --suite, runs every suite of the solution (--harness, or cavelon.yaml's harness). With --wait, exits 1 when a case failed or a run measured nothing comparable (cases not run, technical errors), 5 when answers wait for a manual verdict or a value a case needs. --as-chat-user chooses a Chat User reader for these runs only, for knowledge and identity-bound database queries; it never edits a saved suite. Without the option, uses each suite's saved reader. Choose an id with `cavelon api list_chat_users -p tenant_id=<tenant_id>`; check email_verified for email-bound queries.
+Without --suite, runs every suite of the solution (--harness, or cavelon.yaml's harness). With --wait, exits 1 when a case failed or a run measured nothing comparable (cases not run, technical errors), 5 when answers wait for a manual verdict or a value a case needs. --as-chat-user chooses a Chat User reader for these runs only, for knowledge and identity-bound database queries; it never edits a saved suite. Without the option, uses each suite's saved reader. Choose an id with `cavelon api list_chat_users -p tenant_id=<tenant_id>`; check email_verified for email-bound queries. Where the instance publishes the matching needs_a_person_when restriction, an API key cannot choose this reader (exit 5, nothing sent): a person chooses it in the Admin or with their personal access token. A key can still run a suite whose reader a person saved. Older instances that omit the restriction leave the decision to the server.
 
 | Option | Description | MCP |
 |---|---|---|
@@ -808,7 +810,7 @@ Run a saved query once with the values given, identity parameters included; show
 cavelon db test-run <query> [options]
 ```
 
-Needs the tenant Owner's permission (database_connectors.test); it reads the customer's own data. Give each parameter with --value name=value, those the platform fills from the signed-in visitor (end_user.*) too: that is how an identity-scoped query is checked for one customer. The instance records the run (counts only) and audits it with your name; the rows come back once and are never stored. A failed run names its code; `cavelon explain <code>` says more. A write query's test is a dry run that rolls back; it still needs the connection to allow writes. The result reports kind, dry_run, rolled_back, affected_rows and committed only where published; an omitted value stays unknown. Never retry an ambiguous write outcome. A read stored-procedure query (SQL Server) shows the procedure's first result set; the instance refuses its run (exit 4) while the connection's last test found write privileges or the procedure's definition writes or cannot be read, and a run whose procedure ended the connector's transaction comes back with a notice saying so and whether the query was switched off.
+Needs the tenant Owner's permission (database_connectors.test); it reads the customer's own data. Give each parameter with --value name=value, those the platform fills from the signed-in visitor (end_user.*) too: that is how an identity-scoped query is checked for one customer. The instance records the run (counts only) and audits it with your name. Where the instance publishes the matching needs_a_person_when restriction, the kit refuses an API key on an end_user.* query before sending (exit 5): a person tests it in the Admin or with their personal access token. Ordinary queries remain usable with an API key. On an older instance that omits the restriction, the server decides. The rows come back once and are never stored. A failed run names its code; `cavelon explain <code>` says more. A write query's test is a dry run that rolls back; it still needs the connection to allow writes. The result reports kind, dry_run, rolled_back, affected_rows and committed only where published; an omitted value stays unknown. Never retry an ambiguous write outcome. A read stored-procedure query (SQL Server) shows the procedure's first result set; the instance refuses its run (exit 4) while the connection's last test found write privileges or the procedure's definition writes or cannot be read, and a run whose procedure ended the connector's transaction comes back with a notice saying so and whether the query was switched off.
 
 | Argument | Description |
 |---|---|
@@ -1642,6 +1644,8 @@ List the operations the instance publishes.
 cavelon api list [options]
 ```
 
+Shows needs_a_person_when separately from unconditional access restrictions; --usable keeps operations with conditional identity cases available for ordinary requests.
+
 | Option | Description | MCP |
 |---|---|---|
 | `--tag <tag>` | Only operations with this OpenAPI tag. | yes |
@@ -1661,6 +1665,8 @@ Show one operation's parameters, body and responses.
 ```text
 cavelon api describe <operation>
 ```
+
+Shows the credential's published needs_a_person_when as advisory guidance. Its reason describes the condition; it does not refuse an ordinary request.
 
 | Argument | Description |
 |---|---|

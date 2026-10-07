@@ -66,9 +66,12 @@ const INSTRUCTIONS =
   "instance allows this tenant (upload sizes and types, run and tool limits, timeouts, quotas) and who changes each. " +
   "Never change a limit on your own: propose the old and new value (limits_set for a limit a tenant admin changes, " +
   "models_set_limit for an endpoint's max_concurrent_requests) and let the person decide; an operator's limit goes to the operator. " +
-  "db_connections, db_queries and db_runs read the database connections, saved queries and their runs behind database query " +
-  "tools; only a superadmin in the Admin creates or changes a connection or a query, so an apply that changes a query is " +
-  "blocked for any token: tell the person, and apply the rest with the query left as the instance holds it. " +
+  "db_connections, db_queries and db_runs read database connections, saved queries and their runs. Connection commands " +
+  "and query-writing apply follow the permissions and needs_a_person the instance publishes: use whoami, including " +
+  "database_connectors.manage, instead of assuming every token is blocked. An authorized personal access token may " +
+  "manage definitions. Query changes need the person's approval even on a draft; after approval cavelon sends the " +
+  "instance's confirmation for the exact change where required. Passwords, privilege acknowledgment and enabling writes " +
+  "stay with a person in the Admin; never accept or pass the database password or set allows_writes through a tool. " +
   "variables_list/variables_get/variables_set handle plain-text {{var:…}} values; setting one needs a role that may manage " +
   "the tenant's settings, as a secret does (a Builder's may not): where whoami says the credential may not, tell the person " +
   "who sets it instead of calling variables_set. secrets_list shows which {{secret:…}} " +
@@ -173,9 +176,13 @@ export function toolFor(spec: CommandSpec, commands: readonly CommandSpec[] = []
   const marked =
     spec.mcpEffect ?? (spec.readOnly ? "Read-only." : spec.destructive ? "Changes the instance; may delete or overwrite." : "Changes the instance.");
   const refused = notForThisCredential(spec, access);
+  const conditional = (spec.operations ?? []).flatMap(operation => {
+    const reason = operationAccess(access, operation).personWhen;
+    return reason === undefined ? [] : [`Needs a person only when (${operation}): ${reason}. Ordinary requests remain usable; the instance decides every request.`];
+  });
   return {
     name: toolName(spec)!,
-    description: mcpSpelling([refused, spec.summary, spec.description, marked].filter(Boolean).join("\n"), spec, commands),
+    description: mcpSpelling([refused, spec.summary, spec.description, ...conditional, marked].filter(Boolean).join("\n"), spec, commands),
     inputSchema: inputSchema(spec, commands) as Tool["inputSchema"],
     annotations: {
       title: spec.summary,

@@ -1,4 +1,5 @@
 import type { ApiClient } from "./http.js";
+import { CavelonError, ExitCode } from "./errors.js";
 import { readPrincipal, type MetaPrincipal, type OperationNeedingAPerson } from "./principal.js";
 import { cavelonCommand } from "./printed.js";
 
@@ -89,6 +90,8 @@ export interface CredentialAccess {
   /** An API key's scopes; null for a person's token. */
   scopes: string[] | null;
   needsAPerson: OperationNeedingAPerson[];
+  /** Null where conditional guidance is not published; never an unconditional refusal. */
+  needsAPersonWhen: OperationNeedingAPerson[] | null;
   principal: MetaPrincipal;
 }
 
@@ -110,6 +113,7 @@ export function accessOf(principal: MetaPrincipal | undefined): CredentialAccess
     complete,
     scopes: principal.api_key ? [...principal.api_key.scopes] : null,
     needsAPerson: principal.needs_a_person ?? [],
+    needsAPersonWhen: principal.needs_a_person_when ?? null,
     principal,
   };
 }
@@ -156,6 +160,8 @@ export interface OperationAccess {
   missing?: string[];
   /** Where a person runs it, the instance's reason. */
   person?: string;
+  /** Advisory condition from the instance; does not change `allowed`. */
+  personWhen?: string;
 }
 
 /**
@@ -165,6 +171,11 @@ export interface OperationAccess {
  */
 export function operationAccess(access: CredentialAccess | undefined, operation: string): OperationAccess {
   if (!access) return { allowed: null };
+  const conditional = conditionalPersonOperation(access, operation);
+  return { ...unconditionalOperationAccess(access, operation), ...(conditional ? { personWhen: conditional.reason } : {}) };
+}
+
+function unconditionalOperationAccess(access: CredentialAccess, operation: string): OperationAccess {
   const [method, template] = operation.split(" ");
   const person = access.needsAPerson.find((o) => o.method === method && (o.path === template || pathMatches(o.path, template!)));
   if (person) return { allowed: false, person: person.reason || "a person runs it" };
@@ -173,6 +184,26 @@ export function operationAccess(access: CredentialAccess | undefined, operation:
   const held = (need: string | AnyOf) => (typeof need === "string" ? [need] : need).some((p) => access.permissions!.includes(p));
   const missing = needs.filter((need) => !held(need));
   return missing.length ? { allowed: false, missing: missing.map(needWords) } : { allowed: true };
+}
+
+/** Match published method/path metadata, never the human-readable reason or operation name. */
+function conditionalPersonOperation(access: CredentialAccess | undefined, operation: string): OperationNeedingAPerson | undefined {
+  const [method, path] = operation.split(" ");
+  // A different published template may describe an unknown condition, even when its placeholders overlap this route.
+  return access?.needsAPersonWhen?.find(o => o.method === method && (o.path === path || (!path!.includes("{") && pathMatches(o.path, path!))));
+}
+
+/** Called only when a dedicated command has recognized its identity-bound input. */
+export function requirePersonForIdentityChoice(access: CredentialAccess | undefined, operation: string, choice: string): void {
+  if (access?.kind !== "api_key") return;
+  const restriction = conditionalPersonOperation(access, operation);
+  if (!restriction) return;
+  throw new CavelonError(ExitCode.needsAction, {
+    code: "key_needs_a_person",
+    message: `A tenant API key cannot ${choice}. Nothing was sent.`,
+    hint: `A person makes this identity choice in the Admin or with their own personal access token. The instance's condition: ${restriction.reason || "this request binds a person's identity"}. Ordinary query tests and runs using a suite's saved reader remain available.`,
+    details: { credential: "api_key", needs_a_person_when: true, reason: restriction.reason, method: restriction.method, path: restriction.path, sent: false },
+  });
 }
 
 /** Whether the credential may activate a solution: null where the instance does not say. */

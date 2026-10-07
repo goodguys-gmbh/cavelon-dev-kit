@@ -212,6 +212,8 @@ export interface TokenInfo {
    * import, whose handler admits only a person; none for a token.
    */
   needsAPerson?: Array<{ method: string; path: string; reason: string }>;
+  /** Optional conditional guidance; unknown also exercises malformed published entries. */
+  needsAPersonWhen?: unknown;
   /**
    * An operator's token without a tenant allowlist: with X-Tenant-Id it enters
    * any tenant, and without one /meta/principal says it reaches every tenant
@@ -467,6 +469,8 @@ export interface FakeState {
    * settings ones alone and whose tokens never carry `harnesses.activate`.
    */
   serveCredentialAccess: boolean;
+  /** Off preserves the instance that omits conditional identity restrictions. */
+  serveConditionalPersonAccess?: boolean;
   /**
    * Whether the instance refuses a personal access token, as it does a key, on
    * setting or deleting a secret: only a person signed in to
@@ -1004,6 +1008,7 @@ export async function startFakeServer(): Promise<FakeServer> {
               needs_a_person: needsAPersonOf(info, state.tokensRefusedOnSecrets),
             }
           : {}),
+        ...(state.serveConditionalPersonAccess ? { needs_a_person_when: info.needsAPersonWhen === undefined ? [] : info.needsAPersonWhen } : {}),
         ...(info.kind === "pat" && state.serveTenantReach ? reachOf(info, url.searchParams) : {}),
       });
     }
