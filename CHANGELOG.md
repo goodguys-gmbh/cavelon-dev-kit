@@ -27,6 +27,10 @@ CLI, the skills and the plugin.
 
 ### Fixed
 
+- Re-running the Windows installer leaves a byte-identical, verified executable
+  in place (#180), so an open MCP process or file handle cannot block an
+  already up-to-date installation. Version labels alone never skip replacement.
+
 - `apply` still previews with an API key when the instance reserves imports
   for a person, but offers no confirm command and names the Admin or the
   person's own personal access token instead (#173). `apply --confirm`

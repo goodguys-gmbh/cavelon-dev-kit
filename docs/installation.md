@@ -87,7 +87,8 @@ The first line is the version alone, for scripts that compare it; the others
 say how this `cavelon` was installed and how to update it.
 
 Running the line again updates `cavelon` to the latest release, and changes
-nothing else.
+nothing else. On Windows, an installed executable whose SHA-256 matches the
+verified download stays in place, including while its MCP server is running.
 
 **Options.** On macOS and Linux, pass them after `sh -s --`; on Windows, set
 the environment variable before the line:
