@@ -636,8 +636,19 @@ personal access token must have been created with **May activate**; otherwise
 in the Admin. A solution that a channel or an active trigger already reaches
 goes live for them the moment it is active, so for one of those (or on an
 instance that does not say what reaches a solution) `activate` previews first
-and activates only with `--confirm`; a new draft that nothing reaches
-activates at once.
+and needs the person's confirmation. So does an activation that takes the
+default chat and widget route, even without `--make-default`, or whose route
+effect is unknown. Only a solution with known zero channels, no active
+triggers and explicit `takes_default_route: false` activates at once.
+
+Readiness publishes `takes_default_route` and the previous route's slug
+and display name (`takes_default_route_from`, `takes_default_route_from_name`).
+True with null/null assigns an unassigned route; false with null/null means
+no takeover. An omitted flag means unknown, regardless of its schema
+default. The preview reserves no state: successful activation reports the
+actual effect with `took_default_route` and the corresponding from/name
+fields, which may differ from readiness. The kit uses only these published
+effects to decide whether activation takes the route.
 
 ## Credentials
 
