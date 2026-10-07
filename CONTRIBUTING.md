@@ -17,9 +17,9 @@ issue.
 | `cli/scripts/` | build helpers: copying the skills into the package, building the standalone executable, trimming and cleaning the contract snapshots, generating `docs/commands.md` |
 | `plugin/` | the Cavelon plugin: `skills/` (the one source of the skills), `.mcp.json`, and a manifest each for Claude Code and Codex; the other clients' packages are rendered from it |
 | `.claude-plugin/`, `.agents/plugins/` | the marketplaces of Claude Code and Codex, naming `plugin/` |
-| `contracts/` | snapshots of what an instance publishes, the list of operations the kit uses, and the published schemas of the clients' plugin formats (`clients/`) |
+| `contracts/` | snapshots of what an instance publishes, the list of operations the kit uses, the published schemas of the clients' plugin formats (`clients/`), and the schema of the offline bundle's manifest |
 | `install.sh`, `install.ps1` | the one-line installers of the standalone executable, published with each release |
-| `packaging/` | what the release workflow writes for Homebrew and winget, the plugin packages for Cursor, VS Code, Kiro and Gemini CLI (`plugins.mjs`: `node packaging/render.mjs plugins`), the PyPI wheel builder (`pypi/`, standard-library Python), and the macOS signing entitlements |
+| `packaging/` | what the release workflow writes for Homebrew and winget, the plugin packages for Cursor, VS Code, Kiro and Gemini CLI (`plugins.mjs`: `node packaging/render.mjs plugins`), the PyPI wheel builder (`pypi/`, standard-library Python), the offline bundle builder (`bundle/`, standard-library Node.js), and the macOS signing entitlements |
 | `examples/` | solution repositories to copy: `support-faq/` (one agent and a knowledge base) and `expense-approval/` (a pipeline with an approval); the tests validate them |
 | `docs/` | the user documentation |
 
@@ -98,6 +98,27 @@ Plugins schemas kept in `contracts/clients/` and Gemini CLI's own rules, and
 that every render gives the same bytes. When a client changes its format,
 change `packaging/plugins.mjs` and the client's page in `docs/install/`, and
 say in the changelog what users of the old package do.
+
+### The offline bundle
+
+Each release also carries `cavelon-bundle-<version>.tar.gz`
+([docs/offline-bundle.md](docs/offline-bundle.md)), built by
+`packaging/bundle/build-bundle.mjs` from the release's executables and signed
+by the release workflow. The builder renders the plugin packages it carries
+itself, in the offline variant (`plugins.mjs` with `--server installed`). To
+build one from your tree, with the executable for your system:
+
+```bash
+cd cli && npm run build && npm run build:executable && cd ..
+node packaging/bundle/build-bundle.mjs --executables cli/build --allow-missing-executables
+# packaging-out/bundle/cavelon-bundle-<version>.tar.gz and .manifest.json
+```
+
+The same inputs give the same bytes; `offline-bundle.test.ts` checks that, the
+manifest against `contracts/offline-bundle-manifest.schema.json`, and an
+install from the extracted bundle with `install.sh`. CI's install job builds
+it from the five executables and installs from its `bin/` with `install.sh`
+and `install.ps1`.
 
 ## How the kit is built
 

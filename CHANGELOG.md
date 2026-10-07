@@ -31,31 +31,6 @@ CLI, the skills and the plugin.
   The `--json` output and the MCP tools carry the instance's new fields as it
   sends them. On an instance older than stored-procedure queries none of
   these fields exist, and the kit says nothing of them.
-
-### Fixed
-
-- `cavelon --version` and the update notice named pip, with `pip install
-  --upgrade cavelon`, for a `uvx` run whose cache `UV_CACHE_DIR` moved; they
-  now name uvx, as for uv's default cache.
-
-## [0.1.12] - 2026-10-07
-
-A person confirms what reaches live traffic or the whole tenant, and the
-instance can check that confirmation; database connections on SQL Server;
-`cavelon` on PyPI:
-- live, tenant-wide and destructive changes need the person's own yes, in the
-  MCP client's dialog or their own terminal; a coding agent's confirm alone no
-  longer sends them;
-- on an instance that enforces it, the kit sends the instance's confirmation
-  id with such a change, only after that yes; **update before your instance
-  enables it**, or those changes are refused (nothing is changed);
-- secrets follow what the instance lets a token do;
-- `db instance` and CA certificate expiry for database connections, and SQL
-  Server;
-- `uvx cavelon`, `pipx install cavelon` and `pip install cavelon`.
-
-### Added
-
 - Plugin packages for the clients without a marketplace in this repository
   (#155), rendered at release time from `plugin/`, the one source of the skills
   and the MCP entry (`node packaging/render.mjs plugins`), and attached to each
@@ -87,6 +62,48 @@ instance can check that confirmation; database connections on SQL Server;
   server updates the plugin: `gemini extensions update cavelon`,
   `copilot plugin update cavelon`, or for Cursor, VS Code and Kiro the update
   section of their install page.
+- An offline bundle per release (#156), for instances whose developers reach
+  neither GitHub, npm nor PyPI: `cavelon-bundle-<version>.tar.gz` holds every
+  platform's executable, the install scripts, the plugin for Claude Code and
+  Codex with an MCP entry that starts the `cavelon` on the PATH (never npx, no
+  update check), the skills, the plugin packages for the other clients in
+  their offline variant (`cavelon mcp`, never npx), and a
+  `manifest.json` listing every file with its size and SHA-256, the version
+  and the instance contract versions the release understands (schema:
+  `contracts/offline-bundle-manifest.schema.json`). The release workflow signs
+  the bundle and its manifest keylessly with Sigstore (`cosign sign-blob`,
+  bundle format), so no signing secret exists, and anyone can verify them
+  against this repository's release workflow, also offline with Sigstore's
+  trusted root. The same inputs build the same bytes.
+  [docs/offline-bundle.md](docs/offline-bundle.md) describes the format,
+  verifying, installing, and how an instance chooses and serves the bundle
+  that fits it.
+- `install.sh` and `install.ps1` take a local folder in `CAVELON_DOWNLOAD_URL`
+  (such as the offline bundle's `bin`), not only a URL.
+
+### Fixed
+
+- `cavelon --version` and the update notice named pip, with `pip install
+  --upgrade cavelon`, for a `uvx` run whose cache `UV_CACHE_DIR` moved; they
+  now name uvx, as for uv's default cache.
+
+## [0.1.12] - 2026-10-07
+
+A person confirms what reaches live traffic or the whole tenant, and the
+instance can check that confirmation; database connections on SQL Server;
+`cavelon` on PyPI:
+- live, tenant-wide and destructive changes need the person's own yes, in the
+  MCP client's dialog or their own terminal; a coding agent's confirm alone no
+  longer sends them;
+- on an instance that enforces it, the kit sends the instance's confirmation
+  id with such a change, only after that yes; **update before your instance
+  enables it**, or those changes are refused (nothing is changed);
+- secrets follow what the instance lets a token do;
+- `db instance` and CA certificate expiry for database connections, and SQL
+  Server;
+- `uvx cavelon`, `pipx install cavelon` and `pip install cavelon`.
+
+### Added
 
 - `cavelon` on PyPI (#151): `uvx cavelon` runs it without installing, and
   `uv tool install cavelon`, `pipx install cavelon` or `pip install cavelon`

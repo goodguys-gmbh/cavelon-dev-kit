@@ -97,7 +97,7 @@ the environment variable before the line:
 | `--version 0.1.3` | `$env:CAVELON_VERSION = '0.1.3'` | that release instead of the latest |
 | `--dir <folder>` | `$env:CAVELON_INSTALL_DIR = '<folder>'` | another folder |
 | `--no-modify-path` | `$env:CAVELON_NO_MODIFY_PATH = '1'` | change no startup file or `PATH`; it tells you what to add |
-| `CAVELON_DOWNLOAD_URL=<url>` | `$env:CAVELON_DOWNLOAD_URL = '<url>'` | download from a folder holding the release's files, such as a mirror, instead of GitHub |
+| `CAVELON_DOWNLOAD_URL=<url>` | `$env:CAVELON_DOWNLOAD_URL = '<url>'` | download from a folder holding the release's files instead of GitHub: a mirror's URL, or a local folder such as the [offline bundle](offline-bundle.md)'s `bin` |
 
 ```bash
 curl -fsSL https://github.com/goodguys-gmbh/cavelon-dev-kit/releases/latest/download/install.sh | sh -s -- --version 0.1.3
@@ -250,6 +250,35 @@ npm i -g @cavelon/cli
 With Node.js from nvm, fnm, Volta, Homebrew or the Windows installer, `npm i -g`
 works as it is. Or skip the global install: the one-line install, `npx` and
 the alias above need none of this.
+
+### Without internet access: the offline bundle
+
+Where your machine reaches neither GitHub, npm nor PyPI, install from the
+release's offline bundle, `cavelon-bundle-X.Y.Z.tar.gz`: every platform's
+executable, the plugin, the skills, the plugin packages for the other clients
+(with the MCP entry `cavelon mcp`) and a manifest of their SHA-256, signed by
+this repository's release workflow with Sigstore. Someone with internet access
+downloads it with its signature (`cavelon-bundle-X.Y.Z.tar.gz.sigstore.json`)
+from the release and verifies it with [cosign](https://docs.sigstore.dev/cosign/system_config/installation/):
+
+```bash
+cosign verify-blob cavelon-bundle-X.Y.Z.tar.gz \
+  --bundle cavelon-bundle-X.Y.Z.tar.gz.sigstore.json \
+  --certificate-identity https://github.com/goodguys-gmbh/cavelon-dev-kit/.github/workflows/release.yml@refs/tags/vX.Y.Z \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+Then, inside, from the extracted folder:
+
+```bash
+tar -xzf cavelon-bundle-X.Y.Z.tar.gz && cd cavelon-bundle-X.Y.Z
+CAVELON_DOWNLOAD_URL="$PWD/bin" sh bin/install.sh                 # Windows: $env:CAVELON_DOWNLOAD_URL = "$PWD\bin"; & .\bin\install.ps1
+claude plugin marketplace add "$PWD" && claude plugin install cavelon@cavelon-dev-kit
+```
+
+[The offline bundle](offline-bundle.md) describes its format, verifying it on
+a machine without internet access, checking each file against the manifest,
+and installing the plugin for Codex and the skills for other agents.
 
 ## Set up your coding agents
 

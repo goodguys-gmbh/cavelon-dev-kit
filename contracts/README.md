@@ -150,6 +150,15 @@ an operation the list does not name, or misses one it does.
 When the kit supports several instance versions, each gets its own folder
 here, and the contract tests run against every one.
 
+## `offline-bundle-manifest.schema.json`
+
+Not a snapshot but a contract the kit publishes: the schema of `manifest.json`
+in the offline bundle each release carries (`docs/offline-bundle.md`), which an
+instance reads to choose and verify the bundle that fits it.
+`packaging/bundle/build-bundle.mjs` writes the manifest and
+`cli/test/offline-bundle.test.ts` validates it against this schema. A change
+that a reader of the current `format` cannot follow raises `format`.
+
 ## `clients/`
 
 The schemas the coding agents publish for their plugin formats, which

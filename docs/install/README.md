@@ -38,6 +38,10 @@ in [`plugin/`](../../plugin/) (`packaging/plugins.mjs`), with their checksums in
 
 The newest release's files are at
 `https://github.com/goodguys-gmbh/cavelon-dev-kit/releases/latest/download/<file>`.
+For a machine that reaches neither GitHub nor npm, the
+[offline bundle](../offline-bundle.md#the-plugin-packages) carries the same
+packages in their offline variant, whose MCP entry is `cavelon mcp` and never
+npx.
 Unpack one into a folder of its own:
 
 ```bash

@@ -14,7 +14,8 @@
 #   --dir DIR          install into DIR instead of ~/.local/bin (CAVELON_INSTALL_DIR)
 #   --no-modify-path   never change a shell startup file       (CAVELON_NO_MODIFY_PATH=1)
 # CAVELON_DOWNLOAD_URL names a folder that holds the release's files instead of
-# the GitHub release, such as a mirror.
+# the GitHub release: a mirror's URL, or a local folder such as the bin folder
+# of the offline bundle.
 set -eu
 
 REPOSITORY="goodguys-gmbh/cavelon-dev-kit"
@@ -49,7 +50,7 @@ while [ $# -gt 0 ]; do
     --dir=*) dir="${1#--dir=}"; shift ;;
     --no-modify-path) modify_path=0; shift ;;
     -h | --help)
-      sed -n '2,17p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//' || true
+      sed -n '2,18p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//' || true
       exit 0
       ;;
     *) fail "unknown option $1 (try --version, --dir or --no-modify-path)." ;;
@@ -108,7 +109,10 @@ fi
 download() { # url file
   case "$1" in
     https://*) https_only=1 ;;
-    *) https_only=0 ;;
+    *://*) https_only=0 ;;
+    # A local folder, such as the offline bundle's bin. Only the content is
+    # copied: macOS's cp would carry over a quarantine flag.
+    *) cat "$1" >"$2"; return ;;
   esac
   if command -v curl >/dev/null 2>&1; then
     if [ "$https_only" = 1 ]; then
