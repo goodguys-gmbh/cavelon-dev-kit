@@ -31,6 +31,16 @@ CLI, the skills and the plugin.
   in place (#180), so an open MCP process or file handle cannot block an
   already up-to-date installation. Version labels alone never skip replacement.
 
+- `activate` reads a null single-read `channel_count` from the matching
+  published solution-list row (#174). Unknown reach still needs a person,
+  as does a true or omitted readiness `takes_default_route` flag, including
+  assigning an unassigned route without `--make-default`. Known no reach
+  activates without confirmation only with explicit false. Preview and
+  `status` explain the route effect; success reports the actual
+  `took_default_route` fields because readiness reserves no state. Schema
+  defaults never replace omitted response flags, and person confirmation,
+  server confirmation ids, rights checks and the force refusal remain.
+
 - `apply` still previews with an API key when the instance reserves imports
   for a person, but offers no confirm command and names the Admin or the
   person's own personal access token instead (#173). `apply --confirm`

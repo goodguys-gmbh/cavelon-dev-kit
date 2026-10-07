@@ -561,6 +561,7 @@ cavelon activate
 
 ```text
 Activated Support FAQ (support-faq); status active.
+Activation did not change the tenant's default chat and widget route.
 Readiness checks:
   ready  Outcome defined: …
   ready  Solution setup is confirmed: …
@@ -580,13 +581,28 @@ and every warning under `Warnings:`; a warning does not block activation
 (`--json`: `checks` and `warnings`). A solution that is not ready exits 3 and lists its
 blockers. A token without **May activate** is refused before anything is sent
 (exit 7): a person then activates in the Admin, or creates a token that may.
-A new draft that nothing reaches yet activates at once, as above. A solution
+A solution that nothing reaches activates at once only when readiness
+explicitly publishes `takes_default_route: false`. A solution
 that a channel or an active trigger already reaches goes live for them the
 moment it is active, so there `activate` previews first: it names the
 channels and triggers (on an instance that does not say what reaches a
 solution, it says so), activates nothing, and prints the command that does,
-`cavelon activate --harness support-faq --confirm` (from a coding agent's
-shell, with the preview's token).
+`cavelon activate --harness support-faq --confirm`. Activation that takes the
+default chat and widget route also needs your yes, even without
+`--make-default`: true with null `takes_default_route_from` and
+`takes_default_route_from_name` means assigning an unassigned route;
+false with null/null means no takeover. A missing flag is unknown and
+still needs your confirmation, even if the schema gives it a false default.
+When a coding agent runs it, your client asks you over MCP, or you run the
+confirm command in your own terminal.
+
+The kit reads a missing single-read `channel_count` from the matching row
+of the published solution list; if it cannot read that row or its count,
+reach stays unknown. The readiness preview reserves no route state.
+Success reports the actual effect in `took_default_route`,
+`took_default_route_from` and `took_default_route_from_name` (`--json`),
+which may differ from the preview. `status` also shows the preview fields
+under `solution.state`.
 
 `activate` also says whether the solution is the tenant's **default route**,
 the one the tenant's chat and widget answer with where no solution is named:
@@ -604,10 +620,9 @@ cavelon activate --make-default --confirm
 ```
 
 That bare `--confirm` is your form, in your terminal. Run by a coding agent,
-the preview prints the command with a token instead
-(`cavelon activate --make-default --confirm 3f9a0c1d2e4b`), and the agent
-confirms with exactly that: its shell refuses a bare `--confirm` (exit 5), so
-it cannot skip the preview you are shown.
+the preview names the command you run in your own terminal; the agent
+cannot confirm it there, even with a token. Over MCP it confirms with the
+preview's token and the client asks you for your yes.
 
 `cavelon harness default <solution>` does the same for a solution that is
 already active, and `cavelon harness list` marks the default in its DEFAULT

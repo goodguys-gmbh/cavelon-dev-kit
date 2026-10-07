@@ -119,6 +119,24 @@ function withChatReaders(text: string, readers: boolean, verified: boolean): str
   return JSON.stringify(doc);
 }
 
+/** An older instance publishes neither the preview nor the activation's actual route effect. */
+function withActivationRoute(text: string, on: boolean): string {
+  if (on) return text;
+  const doc = JSON.parse(text) as { components: { schemas: Record<string, { properties: Record<string, unknown> }> } };
+  for (const [name, prefix] of [["HarnessReadinessResponse", "takes"], ["HarnessActivationResponse", "took"]]) {
+    const properties = doc.components.schemas[name!]?.properties;
+    if (!properties) continue;
+    for (const suffix of ["", "_from", "_from_name"]) delete properties[`${prefix}_default_route${suffix}`];
+  }
+  return JSON.stringify(doc);
+}
+
+export interface FakeActivationRoute {
+  takes_default_route: boolean;
+  takes_default_route_from: string | null;
+  takes_default_route_from_name: string | null;
+}
+
 export interface FakeChatUser {
   id: string;
   tenant_id: string;
@@ -388,6 +406,16 @@ export interface FakeState {
   importRequirementsChanged: { blockers?: string[]; blocker_details?: Array<Record<string, unknown>> } | null;
   /** Whether readiness lets a solution activate. */
   ready: boolean;
+  /** The single reads may leave the count to the list, as the instance does. */
+  singleHarnessWithoutChannelCount?: boolean;
+  harnessListWithoutChannelCount?: boolean;
+  harnessListOmitIds?: string[];
+  /** Off plays an older instance; an omitted response flag also remains unknown with a newer schema. */
+  activationRouteFields?: boolean;
+  readinessWithoutRouteEffect?: boolean;
+  readinessRouteEffect?: FakeActivationRoute;
+  /** Re-evaluated on activation: the preview reserves no route state. */
+  activationRouteEffect?: FakeActivationRoute;
   /** The blockers readiness names while not ready; a missing test run by default. */
   readinessBlockers?: Array<{ key: string; label: string; state: string; detail: string; href: string | null; items?: Array<Record<string, unknown>> }>;
   /** Every check readiness ran, and its non-blocking warnings; none by default. */
@@ -844,7 +872,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     }
     if (p === "/openapi.json" || (p === "/api/v1/openapi.json" && !state.rootPathsReachApi)) {
       res.writeHead(200, { "content-type": "application/json" });
-      const marked = withChatReaders(withConfirmations(withMarkers(state.personOnly, state.secretFields), state.confirmations !== null), state.readerOverrides, state.chatUserEmailVerified);
+      const marked = withActivationRoute(withChatReaders(withConfirmations(withMarkers(state.personOnly, state.secretFields), state.confirmations !== null), state.readerOverrides, state.chatUserEmailVerified), state.activationRouteFields !== false);
       return res.end(withoutOperations(withTenantWideFlag(withUploadReplace(marked, state.uploadReplace), state.tenantWideFlag), state.openapiWithout));
     }
 
@@ -1079,7 +1107,8 @@ export async function startFakeServer(): Promise<FakeServer> {
     if (tenantLimitsRoute && method === "PATCH") return handleInferenceBudget(res, tenantLimitsRoute[1]!, tid, body.json, info);
 
     if (p === "/api/v1/harnesses" && method === "GET") {
-      const listed = state.harnesses.filter((h) => h.tenant_id === tid);
+      const listed = state.harnesses.filter((h) => h.tenant_id === tid && !state.harnessListOmitIds?.includes(h.id))
+        .map((h) => state.harnessListWithoutChannelCount ? { ...h, channel_count: null } : h);
       if (state.harnessesWithoutDefault) return send(res, 200, listed.map(({ is_default: _d, ...h }) => h));
       return send(res, 200, listed);
     }
@@ -1094,7 +1123,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     if (m) {
       const h = state.harnesses.find((x) => x.tenant_id === tid && x.id === m![1]);
       if (!h) return send(res, 404, { detail: "Harness not found." });
-      if (!m[2] && method === "GET") return send(res, 200, h);
+      if (!m[2] && method === "GET") return send(res, 200, singleHarness(h));
       const readiness = {
         harness_id: h.id,
         status: h.status,
@@ -1104,6 +1133,7 @@ export async function startFakeServer(): Promise<FakeServer> {
         warnings: state.readinessWarnings ?? [],
         ...(state.readinessWithoutLatestRun ? {} : { latest_test_run: state.latestTestRun ?? null }),
         activation_override: null,
+        ...(state.activationRouteFields === false || state.readinessWithoutRouteEffect ? {} : previewRoute(h)),
       };
       if (m[2] === "/readiness" && method === "GET") return send(res, 200, readiness);
       if (m[2] === "/activate" && method === "POST") {
@@ -1114,7 +1144,16 @@ export async function startFakeServer(): Promise<FakeServer> {
           return send(res, 409, { detail: { code: "solution_not_ready", message: "Resolve the required readiness actions before activating this solution.", readiness } });
         }
         h.status = "active";
-        return send(res, 200, h);
+        const effect = actualRoute();
+        if (effect.takes_default_route) for (const other of state.harnesses) if (other.tenant_id === tid) other.is_default = other.id === h.id;
+        return send(res, 200, {
+          ...singleHarness(h),
+          ...(state.activationRouteFields === false ? {} : {
+            took_default_route: effect.takes_default_route,
+            took_default_route_from: effect.takes_default_route_from,
+            took_default_route_from_name: effect.takes_default_route_from_name,
+          }),
+        });
       }
     }
     m = /^\/api\/v1\/harnesses\/([0-9a-f-]{36})\/deactivate$/.exec(p);
@@ -1145,7 +1184,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     m = /^\/api\/v1\/harnesses\/by-slug\/([^/]+)$/.exec(p);
     if (m) {
       const h = state.harnesses.find((x) => x.tenant_id === tid && x.slug === decodeURIComponent(m![1]!));
-      return h ? send(res, 200, h) : send(res, 404, { detail: "Harness not found" });
+      return h ? send(res, 200, singleHarness(h)) : send(res, 404, { detail: "Harness not found" });
     }
     m = /^\/api\/v1\/harnesses\/([^/]+)\/default$/.exec(p);
     if (m && method === "POST") {
@@ -1522,6 +1561,20 @@ export async function startFakeServer(): Promise<FakeServer> {
     return send(res, 404, { detail: "Not Found" });
   }
 
+  function singleHarness(h: Record<string, unknown>): Record<string, unknown> {
+    return state.singleHarnessWithoutChannelCount ? { ...h, channel_count: null } : h;
+  }
+
+  function previewRoute(h: Record<string, unknown>): FakeActivationRoute {
+    return h.status === "active" || h.status === "archived"
+      ? { takes_default_route: false, takes_default_route_from: null, takes_default_route_from_name: null }
+      : state.readinessRouteEffect ?? { takes_default_route: false, takes_default_route_from: null, takes_default_route_from_name: null };
+  }
+
+  function actualRoute(): FakeActivationRoute {
+    return state.activationRouteEffect ?? state.readinessRouteEffect ?? { takes_default_route: false, takes_default_route_from: null, takes_default_route_from_name: null };
+  }
+
   /** The chosen reader is admitted inside the acting tenant, as on the instance. */
   function admitReader(res: http.ServerResponse, info: TokenInfo, tid: string, body: unknown, chat = false): boolean {
     const reader = body as { reader_mode?: string; reader_chat_user_id?: string } | undefined;
@@ -1570,7 +1623,7 @@ export async function startFakeServer(): Promise<FakeServer> {
       const activated = harnessOf(/^\/api\/v1\/harnesses\/([^/]+)\/activate$/);
       if (activated) {
         const reached = Number(activated.channel_count ?? 0) > 0 || state.lr.triggers.some((t) => t.tenant_id === tid && t.harness_id === activated.id && t.is_active);
-        return activated.status !== "active" && reached ? "activate" : undefined;
+        return activated.status !== "active" && (reached || actualRoute().takes_default_route) ? "activate" : undefined;
       }
       const deactivated = harnessOf(/^\/api\/v1\/harnesses\/([^/]+)\/deactivate$/);
       if (deactivated) return deactivated.status === "active" && !deactivated.is_default ? "deactivate" : undefined;
