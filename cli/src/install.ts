@@ -16,7 +16,15 @@ export const NPM_PACKAGE = "@cavelon/cli";
 const WINGET_ID = "goodguys.Cavelon";
 const RELEASES = `https://github.com/${REPOSITORY}/releases/latest`;
 
-export type InstallMethod = "script" | "executable" | "homebrew" | "winget" | "npm" | "npx" | "package" | "source";
+export type InstallMethod = "script" | "executable" | "homebrew" | "winget" | "uv-tool" | "pipx" | "uvx" | "pip" | "npm" | "npx" | "package" | "source";
+
+/**
+ * The file a PyPI wheel installs into the environment's data folder beside
+ * the executable (packaging/pypi/build_wheels.py): pip, uv and pipx record
+ * nothing else in a place `cavelon` can find without Python, and they remove
+ * it with the package.
+ */
+export const PYPI_MARKER = ["share", "cavelon", "pypi"] as const;
 
 export interface Install {
   method: InstallMethod;
@@ -47,6 +55,10 @@ const LABELS: Record<InstallMethod, string> = {
   executable: "a downloaded executable",
   homebrew: "Homebrew",
   winget: "winget",
+  "uv-tool": "uv tool install",
+  pipx: "pipx",
+  uvx: "uvx",
+  pip: "pip",
   npm: "npm i -g",
   npx: "npx",
   package: "a package manager",
@@ -70,6 +82,8 @@ export function detectInstall(facts: InstallFacts): Install {
     if (platform === "win32" && packages > 0 && lower[packages - 1] === "winget" && lower[packages + 1]?.startsWith(`${WINGET_ID.toLowerCase()}_`)) {
       return { method: "winget", path: file, update: `winget upgrade ${WINGET_ID}`, source: "github" };
     }
+    const pypi = pypiInstall(facts, p, lower);
+    if (pypi) return pypi;
     // The install scripts always name it cavelon; a file of another name was downloaded by hand.
     const name = p.basename(file).toLowerCase();
     if (name !== (platform === "win32" ? "cavelon.exe" : "cavelon")) {
@@ -94,6 +108,36 @@ export function detectInstall(facts: InstallFacts): Install {
         : undefined;
   if (shim && facts.exists(shim)) return { method: "npm", path: file, update: `npm i -g ${NPM_PACKAGE}`, source: "npm" };
   return { method: "package", path: file, advice: `Update ${NPM_PACKAGE} with the package manager that installed it.`, source: "npm" };
+}
+
+/**
+ * The executable of a PyPI wheel. It lies in a Python environment's scripts
+ * folder (`bin`, or `Scripts` on Windows), with the wheel's marker in that
+ * environment's data folder: the scripts folder's parent for a virtual
+ * environment (uv tool, pipx, uvx, a venv) and for a system or user install
+ * on macOS and Linux, and its grandparent for a user install on Windows
+ * (`%APPDATA%\Python\Python3XY\Scripts`). The wheels are built from the
+ * GitHub release, so a newer release shows there first.
+ */
+function pypiInstall(facts: InstallFacts, p: path.PlatformPath, lower: string[]): Install | undefined {
+  const prefix = p.dirname(p.dirname(facts.file));
+  const roots = facts.platform === "win32" ? [prefix, p.dirname(prefix)] : [prefix];
+  if (!roots.some((root) => facts.exists(p.join(root, ...PYPI_MARKER)))) return undefined;
+  const file = facts.file;
+  const follows = (a: string, b: string) => lower.some((s, i) => s === a && lower[i + 1] === b);
+  // Where the person moved uv's or pipx's folders, the variable names them.
+  const under = (dir: string | undefined) => {
+    if (!dir) return false;
+    const fold = (v: string) => (facts.platform === "win32" ? v.toLowerCase() : v);
+    return fold(file).startsWith(fold(p.join(dir, p.sep)));
+  };
+  if (follows("uv", "tools") || under(facts.env.UV_TOOL_DIR)) return { method: "uv-tool", path: file, update: "uv tool upgrade cavelon", source: "github" };
+  if (follows("pipx", "venvs") || under(facts.env.PIPX_HOME)) return { method: "pipx", path: file, update: "pipx upgrade cavelon", source: "github" };
+  // uvx builds its environment in uv's cache and reuses it until asked for the latest.
+  if (lower.includes("uv") && lower.some((s) => s.startsWith("archive-v"))) {
+    return { method: "uvx", path: file, advice: "uvx reuses the release it cached; `uvx cavelon@latest` runs the newest.", source: "github" };
+  }
+  return { method: "pip", path: file, update: "pip install --upgrade cavelon", source: "github" };
 }
 
 /** Running the install script again, into the folder it installed to when that is not its default. */

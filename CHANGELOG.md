@@ -9,6 +9,16 @@ CLI, the skills and the plugin.
 
 ### Added
 
+- `cavelon` on PyPI (#151): `uvx cavelon` runs it without installing, and
+  `uv tool install cavelon`, `pipx install cavelon` or `pip install cavelon`
+  install it. Each platform's wheel carries the release's standalone executable
+  as its `cavelon` script, so Python is needed only to install it; wheels exist
+  for Linux x64 and arm64 (glibc 2.17 or newer), macOS 13 or newer and Windows
+  x64. The release workflow builds them from the attested executables after
+  the GitHub release and publishes them through PyPI's trusted publishing,
+  with attestations. `cavelon --version` and the update notice name uv, pipx,
+  uvx or pip as the install method, with its upgrade command, from a marker
+  the wheel installs; the latest version is still looked up on GitHub.
 - `cavelon db instance` (`db_instance`) says what the instance offers for
   database connections (#146): the dialects it runs, and the addresses it
   connects to databases from (`egress_ips`), which the customer allows through

@@ -292,6 +292,10 @@ every other preview first.
   dependencies from the npm registry. Releases are published from this
   repository's release workflow with npm provenance; `npm view @cavelon/cli
   dist.attestations` shows it.
+- **PyPI.** `uvx`, `uv tool install`, `pipx` and `pip` download the `cavelon`
+  wheel for your platform from PyPI; it holds the release's executable and no
+  dependencies. The release workflow publishes the wheels through PyPI's
+  trusted publishing, with attestations (shown on each file's page on pypi.org).
 - **GitHub releases.** The one-line install downloads the install script, the
   executable for your system and `checksums.txt` from this repository's
   GitHub release, and installs nothing whose SHA-256 checksum does not match.
