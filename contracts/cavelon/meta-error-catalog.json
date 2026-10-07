@@ -3804,6 +3804,13 @@
       "message": "Scope invalid.",
       "hint": null,
       "docs": "/docs/reference/nodes-and-edges#masterloop"
+    },
+    {
+      "code": "tool_call_database_query_missing",
+      "area": "package",
+      "message": "A workflow's Tool Call node runs a database query that neither the package nor the target tenant has.",
+      "hint": "Add the query's tool to the package (an export of the solution that uses it carries its definition), or create the query in the target tenant under Settings → Databases first, then preview again.",
+      "docs": "/docs/concepts/database-connections#solution-packages"
     }
   ]
 }

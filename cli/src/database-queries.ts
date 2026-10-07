@@ -66,7 +66,7 @@ export function schemaKnowsQueries(schema: PackageSchema | null): boolean {
 }
 
 /** The schema of a query's parameter, followed from the tool's `database_query`. */
-function parameterSchema(schema: PackageSchema): Json | undefined {
+export function parameterSchema(schema: PackageSchema): Json | undefined {
   const field = (toolSchema(schema)?.properties as Json | undefined)?.[QUERY_FIELD];
   const branches = isObject(field) && Array.isArray(field.anyOf) ? field.anyOf : [field];
   for (const branch of branches) {

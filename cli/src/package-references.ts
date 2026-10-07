@@ -1,6 +1,7 @@
 import type { PackageSchema } from "./contracts.js";
 import type { InventoryKind, TenantInventory } from "./commands/inventory.js";
 import { locate, type Finding, type PackageOnDisk } from "./package-files.js";
+import { schemaRunsQueryNodes, workflowQueryNodes } from "./workflow-queries.js";
 
 /**
  * The offline checks `validate` adds to the schema's: references between the
@@ -394,9 +395,11 @@ export const checkedBy = (kind: InventoryKind) => CHECKED_BY[kind];
  * of that kind in .cavelon/inventory.json. Those references are not checked
  * until the list is read (`pull`, `models list`, or validate when online).
  */
-export function missingInventory(disk: PackageOnDisk, inventory: TenantInventory | undefined): InventoryKind[] {
+export function missingInventory(disk: PackageOnDisk, inventory: TenantInventory | undefined, schema?: PackageSchema): InventoryKind[] {
   const needed = new Set<InventoryKind>();
   const pkg = disk.package;
+  const ownTools = new Set(keysIn(pkg, TOOL));
+  if ((!schema || schemaRunsQueryNodes(schema)) && workflowQueryNodes(pkg).some((node) => !ownTools.has(node.slug))) needed.add("tools");
   for (const ref of references(pkg)) {
     const kind = ref.target.inventory;
     if (!kind || keysIn(pkg, ref.target).includes(ref.name) || ref.target.builtin?.has(ref.name)) continue;

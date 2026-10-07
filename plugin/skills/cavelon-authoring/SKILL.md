@@ -404,6 +404,87 @@ says who does what on the instance.
   `validate` and the preview name, the codes of a failed call (`timeout`,
   `identity_required`, …) and of a connection test.
 
+### Calling a query from a workflow
+
+Where the instance's package schema supports it, a `tool_call` node names a
+saved query with `tool_slug` and `tool_type: database_query`. Its incoming
+payload is the query's arguments: only the model-sourced parameter names.
+Map workflow data with a Transform before the node; there is no per-node
+JSONPath argument mapping. Never include an identity parameter (such as
+`email`) or an unknown name: the call answers `invalid_arguments` and runs
+nothing. `config_overrides` do not apply to a query node.
+
+For `order_status` above, add this fragment to
+`package/registry_entities.yaml`, connect the workflow's entry to
+`query_arguments`, and provide the `query_failed` and `show_order` agents.
+Keep these nodes and edges in the same solution.
+
+```yaml
+orchestration_nodes:
+  - slug: query_arguments
+    node_type: transform
+    config:
+      mode: json_mapping
+      mapping: { order_no: $.previous_output.order_number }
+  - slug: lookup_order
+    node_type: tool_call
+    config:
+      tool_slug: order_status
+      tool_type: database_query
+      input_schema:
+        type: object
+        properties: { order_no: { type: string, maxLength: 20 } }
+        required: [order_no]
+        additionalProperties: false
+      output_format: auto
+  - slug: query_result
+    node_type: router
+    config: { strategy: condition }
+graph_edges:
+  - from_node_ref: { kind: orchestration, slug: query_arguments }
+    to_node_ref: { kind: orchestration, slug: lookup_order }
+    edge_type: pipeline
+  - from_node_ref: { kind: orchestration, slug: lookup_order }
+    to_node_ref: { kind: orchestration, slug: query_result }
+    edge_type: pipeline
+  - from_node_ref: { kind: orchestration, slug: query_result }
+    to_node_ref: { kind: agent, slug: query_failed }
+    edge_type: condition
+    config:
+      branch_key: failed
+      priority: 0
+      condition: { source: previous_output, path: error, operator: exists }
+  - from_node_ref: { kind: orchestration, slug: query_result }
+    to_node_ref: { kind: agent, slug: show_order }
+    edge_type: condition
+    config: { branch_key: answered, default: true }
+```
+
+- **Output.** Success is `columns`, `rows` (each row an array in column
+  order), `returned_rows`, `truncated`, an optional `note`, and the query's
+  `source`. Read cells by position, e.g. `$.previous_output.rows[0][1]` for
+  the second column. Failure is `{error, message}` with a fixed message,
+  never database driver text; the node records the code as its failure and
+  keeps this output, so the Router branches on `error`. Read the published
+  output under `x-cavelon-output.database_query` on the Tool Call config.
+- **Identity.** A conversation-bound run fills identity parameters from its
+  signed-in Chat User. A trigger, schedule or inbound-email run has none:
+  an identity-bound query, or one without `allows_anonymous: true`, answers
+  `identity_required`. `validate` warns on trigger paths that reach these
+  queries. A trigger execution identity is not a Chat User; use only a
+  public-data query with no identity parameters and `allows_anonymous: true`
+  in such a run.
+- **Validation.** `validate` checks argument names in `input_schema` and a
+  directly preceding Transform's flat JSON mapping, using the query's
+  parameters (or the remembered query when its definition is left out).
+  Dynamic arguments still need a test. If neither the package nor the
+  tenant's last tools list names the query, it warns with
+  `tool_call_database_query_missing`; `--strict` fails. The server's import
+  preview checks the reference again. `cavelon explain
+  tool_call_database_query_missing` explains the published code. On an
+  older instance the kit keeps the schema's rules and skips checks for query
+  nodes it does not publish.
+
 ## After each edit
 
 1. `cavelon validate` until it reports no errors (`--strict` before an apply
