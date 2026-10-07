@@ -7,6 +7,22 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+## [0.1.12] - 2026-10-07
+
+A person confirms what reaches live traffic or the whole tenant, and the
+instance can check that confirmation; database connections on SQL Server;
+`cavelon` on PyPI:
+- live, tenant-wide and destructive changes need the person's own yes, in the
+  MCP client's dialog or their own terminal; a coding agent's confirm alone no
+  longer sends them;
+- on an instance that enforces it, the kit sends the instance's confirmation
+  id with such a change, only after that yes; **update before your instance
+  enables it**, or those changes are refused (nothing is changed);
+- secrets follow what the instance lets a token do;
+- `db instance` and CA certificate expiry for database connections, and SQL
+  Server;
+- `uvx cavelon`, `pipx install cavelon` and `pip install cavelon`.
+
 ### Added
 
 - `cavelon` on PyPI (#151): `uvx cavelon` runs it without installing, and
