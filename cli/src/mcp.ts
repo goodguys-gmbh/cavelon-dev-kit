@@ -173,9 +173,13 @@ export function toolFor(spec: CommandSpec, commands: readonly CommandSpec[] = []
   const marked =
     spec.mcpEffect ?? (spec.readOnly ? "Read-only." : spec.destructive ? "Changes the instance; may delete or overwrite." : "Changes the instance.");
   const refused = notForThisCredential(spec, access);
+  const conditional = (spec.operations ?? []).flatMap(operation => {
+    const reason = operationAccess(access, operation).personWhen;
+    return reason === undefined ? [] : [`Needs a person only when (${operation}): ${reason}. Ordinary requests remain usable; the instance decides every request.`];
+  });
   return {
     name: toolName(spec)!,
-    description: mcpSpelling([refused, spec.summary, spec.description, marked].filter(Boolean).join("\n"), spec, commands),
+    description: mcpSpelling([refused, spec.summary, spec.description, ...conditional, marked].filter(Boolean).join("\n"), spec, commands),
     inputSchema: inputSchema(spec, commands) as Tool["inputSchema"],
     annotations: {
       title: spec.summary,

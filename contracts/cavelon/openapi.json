@@ -15086,6 +15086,14 @@
               }
             ],
             "title": "Next Cursor"
+          },
+          "needs_a_person_when": {
+            "items": {
+              "$ref": "#/components/schemas/OperationNeedingAPerson"
+            },
+            "type": "array",
+            "title": "Needs A Person When",
+            "default": []
           }
         },
         "type": "object",

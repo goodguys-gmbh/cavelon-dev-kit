@@ -40,6 +40,7 @@ Each suite has evaluation settings on its detail page:
 | Language | English | The language the judge reasons in. Fifteen languages are supported |
 | Judge Model | Tenant default | Which model evaluates answers, chosen from your tenant's model registry |
 | Judge samples | 1 | How many times the judge scores each step. With 3 or 5, the per-criterion median is used — the way to reduce judge disagreement when its temperature cannot be pinned. Costs one judge call per sample |
+| Read as | Audience | Whose view the steps get. **Audience** reads what a visitor who is not signed in reads. **Every document (operator)** reads every knowledge base and restricted document. **A Chat User…**, with the Chat User picked beside it (or `reader_mode: as_chat_user` with `reader_chat_user_id` through the API), reads with that Chat User's groups and gives database queries that user's identity; see [Testing a query that needs a signed-in visitor](#testing-a-query-that-needs-a-signed-in-visitor). Choosing anything but Audience needs `knowledge_bases.view`, and One Chat User also `end_users.read` |
 | Step timeout | 300s | How long a single step may take before the runner stops it: the step's chat run is cancelled and the step is recorded as an error |
 | Court files | none | Shown only on a solution an order profile claims for answering. The court files the suite is about, by the source system's own reference (`external_ref`), up to five of one kind. A run that names none stops at preflight with `ordered_corpus_unaddressed` rather than grading glossary-only answers as model failures; see [Ordered knowledge bases](/docs/concepts/kb-orders) |
 
@@ -48,6 +49,28 @@ Raise the step timeout for suites whose cases do heavy work — many tool calls,
 The fifteen evaluation languages are English, German, French, Spanish, Italian, Portuguese, Dutch, Polish, Czech, Slovak, Hungarian, Croatian, Slovenian, Turkish, and Arabic.
 
 The default judge model is your tenant's assigned evaluator role from the [Model Registry](/docs/administration/model-registry); override it per suite from the Judge Model dropdown. Pick a capable model for nuanced evaluation.
+
+### Testing a query that needs a signed-in visitor
+
+A [database query](/docs/administration/database-connectors) that is filled from the visitor's identity (user id, external subject or verified email) answers "please sign in" to a visitor who is not signed in, and so does a query without **Runs without a signed-in person (anonymous visitors, triggers)**. A suite that reads as the audience can therefore only check that refusal. To test what a customer gets, have the suite read as one Chat User: in the suite's settings, set **Read as** to **A Chat User…** and pick the Chat User from the list, which marks one whose email is not verified. Through the API:
+
+```json
+PUT /api/v1/test-suites/{suite_id}
+{"settings": {"reader_mode": "as_chat_user", "reader_chat_user_id": "<the Chat User's id>"}}
+```
+
+To read as a Chat User for one run only, without changing the suite, name the reader when you start the run; the dev kit's `cavelon test run` does this. It needs the same two permissions from whoever starts it, a personal access token included. A person chooses the Chat User, both here and in the suite's settings: a tenant API key never does, and gets `key_needs_a_person`, because a key in CI could otherwise read as any customer. A key may start a suite whose Chat User a person saved, so CI runs it as usual:
+
+```json
+POST /api/v1/test-suites/{suite_id}/runs
+{"reader_mode": "as_chat_user", "reader_chat_user_id": "<the Chat User's id>"}
+```
+
+Every step then runs the query with that Chat User's own values, read by the platform from their Chat User record in your tenant, exactly as if they were signed in: their user id, their external subject, and their email only when it is verified. A suite never supplies an identity value itself, and the agent never sees one. An unverified email stays empty, so a query on it still answers "please sign in": a Chat User created by hand under **Audience** is not verified until that person signs in through the widget's email code or SSO. The run does not become that person's: no conversation, memory or personal library of theirs is read or written.
+
+Use a Chat User you keep for testing, ideally one whose external subject has known rows in your test database, so the expected answer stays stable. A suite that reads as the audience still gets the refusal, so one suite of each kind covers both sides.
+
+Starting such a run needs `knowledge_bases.view` and `end_users.read`, the permission that shows that Chat User's record under Chat Users, so nobody reads through a suite what they could not read about that person already. Each start is recorded in the [audit log](/docs/administration/audit-log-tenant) as `test_run.started_as_chat_user`, with who started it and the Chat User's id. A Chat User of another tenant is refused.
 
 ### Editing and deleting suites
 

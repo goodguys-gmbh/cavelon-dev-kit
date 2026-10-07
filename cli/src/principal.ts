@@ -47,6 +47,8 @@ export interface MetaPrincipal {
    * nor say whether a token may activate (see access.ts).
    */
   needs_a_person?: OperationNeedingAPerson[];
+  /** Conditional identity restrictions; the operation remains usable outside the named case. */
+  needs_a_person_when?: OperationNeedingAPerson[];
 }
 
 /** An operation the instance says this credential cannot run, because a person runs it. */
@@ -67,16 +69,27 @@ export interface OperationNeedingAPerson {
 export async function readPrincipal(client: ApiClient, options: { sendTenant?: boolean } = {}): Promise<MetaPrincipal | undefined> {
   const response = await client.get<MetaPrincipal>("/api/v1/meta/principal", { allow: [400, 403, 404, 405], sendTenant: options.sendTenant });
   if (response.status !== 200 || !response.data?.kind) return undefined;
-  const { permissions, needs_a_person: needsAPerson, tenant, ...rest } = response.data;
+  const { permissions, needs_a_person: needsAPerson, needs_a_person_when: needsAPersonWhen, tenant, ...rest } = response.data;
   const principal: MetaPrincipal = rest;
   if (Array.isArray(permissions)) principal.permissions = permissions.filter((p) => typeof p === "string");
   if (Array.isArray(needsAPerson)) principal.needs_a_person = operationsNeedingAPerson(needsAPerson);
+  if (Array.isArray(needsAPersonWhen)) principal.needs_a_person_when = conditionalOperations(needsAPersonWhen);
   if (tenant === null) principal.tenant = null;
   else if (tenant && typeof tenant === "object" && typeof tenant.id === "string") {
     const text = (v: unknown) => (typeof v === "string" && v ? v : null);
     principal.tenant = { id: tenant.id, name: text(tenant.name), slug: text(tenant.slug) };
   }
   return principal;
+}
+
+/** Discard malformed guidance rather than turn arbitrary response values into authority. */
+function conditionalOperations(value: unknown[]): OperationNeedingAPerson[] {
+  return value
+    .filter((o): o is Record<string, unknown> => Boolean(o) && typeof o === "object" && !Array.isArray(o))
+    .filter((o) => typeof o.method === "string" && ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE"].includes(o.method.toUpperCase())
+      && typeof o.path === "string" && o.path.startsWith("/") && !/[\s?#]/.test(o.path)
+      && (o.operation === null || typeof o.operation === "string") && typeof o.reason === "string")
+    .map((o) => ({ operation: o.operation as string | null, method: (o.method as string).toUpperCase(), path: o.path as string, reason: o.reason as string }));
 }
 
 function operationsNeedingAPerson(value: unknown[]): OperationNeedingAPerson[] {

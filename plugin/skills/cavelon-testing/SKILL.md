@@ -152,6 +152,15 @@ the Admin. Then:
   besides permission to run the suite. Knowledge reads use that person's
   groups, and queries bind their identity. The override is on each run
   request: never edit a saved suite just to choose a test reader.
+- A person chooses the test identity in the Admin or with their personal
+  access token. With the matching published `needs_a_person_when`, the kit
+  refuses an API key on `test run --as-chat-user` and on `db test-run` for
+  a query with `end_user.*` parameters before execution (`key_needs_a_person`,
+  exit 5). Ordinary key query tests, unrestricted readers and a suite's
+  reader already saved by a person remain usable in CI. `whoami` and
+  `api describe` show the instance's condition. Do not parse its reason or
+  refuse an unknown conditional operation; generic API calls and instances
+  that omit the list leave authority to the server.
 - For an `end_user.email` parameter, check the published `email_verified`
   flag. A manually created, unverified Chat User cannot prove the address:
   its query answers `identity_required` and asks for sign-in. Verification

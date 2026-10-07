@@ -56,6 +56,19 @@ function check(method: string, template: string, status: number, data: unknown) 
 }
 
 describe("contract snapshots", () => {
+  it("publishes optional conditional principal guidance in the existing operation-entry shape", async () => {
+    const schemas = doc.components!.schemas! as Record<string, unknown>;
+    const principal = schemas.MetaPrincipal as { properties: Record<string, unknown>; required: string[] };
+    expect(principal.properties.needs_a_person_when).toEqual({ items: { $ref: "#/components/schemas/OperationNeedingAPerson" }, type: "array", title: "Needs A Person When", default: [] });
+    expect(principal.required).not.toContain("needs_a_person_when");
+    const response = operationAt(doc, "GET", "/api/v1/meta/principal")!.responses["200"]!.content!["application/json"]!.schema!;
+    const base = (await call("GET", "/api/v1/meta/principal")).data as Record<string, unknown>;
+    expect(schemaErrors(doc, response, base)).toEqual([]);
+    const entry = { operation: null, method: "POST", path: "/api/v1/test-suites/{suite_id}/runs", reason: "Chooses a Chat User" };
+    expect(schemaErrors(doc, response, { ...base, needs_a_person_when: [entry] })).toEqual([]);
+    expect(schemaErrors(doc, response, { ...base, needs_a_person_when: [{ ...entry, reason: 3 }] })).not.toEqual([]);
+  });
+
   it("publishes activation's preview and actual route effects, including unassigned routes", () => {
     const schemas = (doc.components as { schemas: Record<string, { properties: Record<string, unknown> }> }).schemas;
     for (const [name, prefix] of [["HarnessReadinessResponse", "takes"], ["HarnessActivationResponse", "took"]]) {

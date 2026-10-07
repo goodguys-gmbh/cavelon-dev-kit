@@ -9,6 +9,14 @@ CLI, the skills and the plugin.
 
 ### Added
 
+- Conditional identity guidance from the instance's optional
+  `needs_a_person_when`: `whoami`, API discovery and MCP tool descriptions
+  show it separately from unconditional restrictions. Dedicated query tests
+  with `end_user.*` parameters and test runs choosing a Chat User refuse an
+  API key before execution only when the matching restriction is published.
+  Ordinary query tests, unrestricted readers, suites with a saved reader,
+  personal access tokens and older instances keep their existing behavior.
+
 - Write-query interfaces (#171): query packages retain
   published `kind`, `max_affected_rows`, `requires_confirmation` and
   `max_calls`; validation warns on explicitly disabled connection writes

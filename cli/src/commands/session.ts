@@ -347,6 +347,7 @@ function reachText(reach: Reach): string {
 export const whoami: CommandSpec = {
   name: "whoami",
   summary: "Show who the token acts as, in which tenant, and where the token came from.",
+  description: "Shows needs_a_person and the optional needs_a_person_when separately. Conditional identity guidance leaves ordinary requests usable; an omitted list stays unknown.",
   readOnly: true,
   idempotent: true,
   mcpTool: "whoami",
@@ -431,6 +432,7 @@ export const whoami: CommandSpec = {
         permissions: access?.permissions ?? null,
         // The operations those permissions would allow that a person still runs; null on an instance that does not say.
         needs_a_person: access?.complete ? access.needsAPerson : null,
+        needs_a_person_when: access?.needsAPersonWhen ?? null,
         // False only when the instance is too old to say who the credential is.
         published: Boolean(principal),
       },
@@ -481,6 +483,7 @@ export const whoami: CommandSpec = {
         ["scopes", data.credential.scopes ? data.credential.scopes.join(", ") || "none" : undefined],
         ["permissions", permissionsText(access)],
         ["needs a person", needsAPersonText(access)],
+        ["needs a person when", needsAPersonWhenText(access)],
         // An instance that does not say whether the token allows Platform mode gets no line.
         ["platform mode", typeof principal?.token?.platform_mode_allowed === "boolean" ? platformModeText(principal.token) : undefined],
         ["reaches", reach ? reachText(reach) : undefined],
@@ -523,6 +526,13 @@ function needsAPersonText(access: CredentialAccess | undefined): string | undefi
   const all = access.needsAPerson;
   const shown = all.slice(0, LISTED).map((o) => `\n  ${o.method} ${o.path}${o.reason ? ` (${clip(o.reason, 80)})` : ""}`);
   return `${all.length} operation${all.length === 1 ? "" : "s"} a person runs, not this credential:${shown.join("")}${all.length > LISTED ? `\n  … ${all.length - LISTED} more (--json)` : ""}`;
+}
+
+function needsAPersonWhenText(access: CredentialAccess | undefined): string | undefined {
+  const all = access?.needsAPersonWhen;
+  if (!all?.length) return undefined;
+  const shown = all.slice(0, LISTED).map(o => `\n  ${o.method} ${o.path}: ${clip(o.reason, 160)}`);
+  return `Only in these cases; ordinary requests remain usable:${shown.join("")}${all.length > LISTED ? `\n  … ${all.length - LISTED} more (--json)` : ""}`;
 }
 
 /** `inAdmin`: the instance publishes `needs_a_person`, and since that release lets only a person signed in to the Admin set a secret. */

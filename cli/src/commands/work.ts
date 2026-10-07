@@ -860,7 +860,10 @@ export const testRun: CommandSpec = {
     "5 when answers wait for a manual verdict or a value a case needs.\n" +
     "--as-chat-user chooses a Chat User reader for these runs only, for knowledge and identity-bound database queries;\n" +
     "it never edits a saved suite. Without the option, uses each suite's saved reader. Choose an id with\n" +
-    "`cavelon api list_chat_users -p tenant_id=<tenant_id>`; check email_verified for email-bound queries.",
+    "`cavelon api list_chat_users -p tenant_id=<tenant_id>`; check email_verified for email-bound queries.\n" +
+    "Where the instance publishes the matching needs_a_person_when restriction, an API key cannot choose this reader\n" +
+    "(exit 5, nothing sent): a person chooses it in the Admin or with their personal access token. A key can still run a\n" +
+    "suite whose reader a person saved. Older instances that omit the restriction leave the decision to the server.",
   readOnly: false,
   mcpTool: "test_run",
   operations: ["POST /api/v1/test-suites/{suite_id}/runs"],

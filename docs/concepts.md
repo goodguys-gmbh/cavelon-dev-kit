@@ -698,6 +698,23 @@ effects to decide whether activation takes the route.
 A person stores either with `cavelon login`. In CI, set `CAVELON_URL` and
 `CAVELON_TOKEN` instead. See [Security](security.md).
 
+`whoami` shows the instance's unconditional `needs_a_person` operations and
+its optional `needs_a_person_when` conditions separately. `api list` and
+`api describe` show each operation's condition too; `api list --usable`
+keeps conditionally restricted operations available for ordinary requests.
+The kit displays the reason without interpreting its wording. Unknown
+conditional operations are advisory, and generic API requests leave the
+decision to the instance.
+
+For a matching published restriction, the dedicated `db test-run` refuses
+an API key on a query with `end_user.*` parameters, and `test run
+--as-chat-user` refuses a key choosing that identity for one run. Both exit
+5 with `key_needs_a_person` before sending the execution request. A person
+chooses the identity in the Admin or with their personal access token.
+Ordinary query tests, unrestricted reader requests and runs using a suite's
+saved reader remain usable in CI. Omitted conditional metadata leaves the
+decision to the server; token and session behavior stays as before.
+
 ## Platform mode
 
 Some changes belong to the instance's operators, not to a tenant: creating

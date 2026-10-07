@@ -435,6 +435,7 @@ async function previewUnlessConfirmed(
 export const apiList: CommandSpec = {
   name: "api list",
   summary: "List the operations the instance publishes.",
+  description: "Shows needs_a_person_when separately from unconditional access restrictions; --usable keeps operations with conditional identity cases available for ordinary requests.",
   readOnly: true,
   idempotent: true,
   mcpTool: "api_list",
@@ -490,6 +491,7 @@ export const apiList: CommandSpec = {
     );
     const flags = [tag ? ["--tag", tag] : [], method ? ["--method", method] : [], search ? ["--search", search] : [], usableOnly ? ["--usable"] : []].flat();
     const marked = page.items.some((i) => i.may_send === false);
+    const conditional = page.items.some(i => i.needs_a_person_when !== null);
     return {
       data: { ...page, credential_published: Boolean(access) },
       text:
@@ -497,6 +499,7 @@ export const apiList: CommandSpec = {
           page.items.map((i) => ({ ...i, access: i.needs_a_person ? "a person" : i.needs?.length ? `needs ${i.needs.join(" and ")}` : "" })),
           marked ? ["operation", "method", "path", "access", "summary"] : ["operation", "method", "path", "summary"],
         ) +
+        (conditional ? `\nNeeds a person only when (ordinary requests remain usable):${page.items.filter(i => i.needs_a_person_when !== null).map(i => `\n  ${i.method} ${i.path}: ${clip(i.needs_a_person_when!, 240)}`).join("")}` : "") +
         `\n${page.items.length} of ${page.total}` +
         (marked ? `\nOperations with an access entry are ones this credential may not send, as the instance says; --usable leaves them out.` : "") +
         moreHint(page.next_cursor, cavelonCommand("api", "list", ...flags)),
@@ -515,13 +518,14 @@ async function listAccess(ctx: Context): Promise<CredentialAccess | undefined> {
 }
 
 /** An operation's entry as the credential may send it: may_send null where the instance does not say. */
-function accessFields(mark: OperationAccess): { may_send: boolean | null; needs_a_person: string | null; needs: string[] | null } {
-  return { may_send: mark.allowed, needs_a_person: mark.person ?? null, needs: mark.missing ?? null };
+function accessFields(mark: OperationAccess): { may_send: boolean | null; needs_a_person: string | null; needs_a_person_when: string | null; needs: string[] | null } {
+  return { may_send: mark.allowed, needs_a_person: mark.person ?? null, needs_a_person_when: mark.personWhen ?? null, needs: mark.missing ?? null };
 }
 
 export const apiDescribe: CommandSpec = {
   name: "api describe",
   summary: "Show one operation's parameters, body and responses.",
+  description: "Shows the credential's published needs_a_person_when as advisory guidance. Its reason describes the condition; it does not refuse an ordinary request.",
   readOnly: true,
   idempotent: true,
   mcpTool: "api_describe",
@@ -547,6 +551,7 @@ export const apiDescribe: CommandSpec = {
       method: op.method,
       path: op.path,
       read_only: op.readOnly,
+      ...accessFields(operationAccess(await listAccess(ctx), `${op.method} ${op.path}`)),
       person_only: kept ? { source: kept.source, reason: kept.reason ?? null, hint: kept.hint } : null,
       secret_fields: secrets,
       confirmation: op.confirmation ? { required: true, when: op.confirmationWhen ?? null } : null,
@@ -566,6 +571,7 @@ export const apiDescribe: CommandSpec = {
       responses,
     };
     const lines = [`${op.method} ${op.path}  (${op.readOnly ? "read-only" : "changing"})`, op.summary ?? ""];
+    if (data.needs_a_person_when !== null) lines.push(`Needs a person only when: ${data.needs_a_person_when}. Ordinary requests remain usable; the instance decides every request.`);
     if (kept) {
       lines.push(
         kept.source === "instance"

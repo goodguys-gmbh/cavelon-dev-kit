@@ -16,7 +16,7 @@ The section appears only on instances where the connector is switched on.
 | Builder, Observer and the other roles that see tools | Read everything, SQL included, with all fields disabled. A Builder assigns the query tools to agents |
 | Platform Admin | Reads everything; neither changes nor tests |
 | Superadmin, in Tenant mode | The same as the Owner, except **Allow write queries**, which needs the Owner role in this workspace |
-| Tenant API key | With the `admin` scope and no workflow restriction: reads everything, tests connections and test-runs saved queries, for example from CI. Never writes, explores the schema, allows write queries or sets a password |
+| Tenant API key | With the `admin` scope and no workflow restriction: reads everything, tests connections and test-runs saved queries that bind no visitor identity, for example from CI. Never writes, explores the schema, allows write queries or sets a password, and never test-runs a query filled from the visitor's identity: a person tests those, in the Admin or with a personal access token |
 
 Where you may not change something, the page says **Database connections and queries are set up by the tenant Owner.** The target, the database user and the SQL decide which data leaves your database, so give the Owner role only to people who may decide that. Every change is recorded in the audit log: the Owner's under their own name, a superadmin's as an operator action. Deciding which assistant uses a query is open to Builders too. Your database administrator prepares the database side with the [Database Administrator Checklist](/docs/administration/database-connector-checklist).
 
