@@ -377,15 +377,15 @@ jobs:
         env:
           TAG: ${{ github.ref_name }}
         run: |
-          node packaging/bundle/build-bundle.mjs --executables release --plugin-packages plugin-packages --out bundle --commit "$GITHUB_SHA"
+          node packaging/bundle/build-bundle.mjs --executables release --plugin-packages plugin-packages --commit "$GITHUB_SHA"
           echo "name=cavelon-bundle-${TAG#v}" >> "$GITHUB_OUTPUT"
-          ls -l bundle
+          ls -l packaging-out/bundle
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
       - name: Sign the bundle and its manifest, and verify them as a user would
         env:
           NAME: ${{ steps.bundle.outputs.name }}
         run: |
-          cd bundle
+          cd packaging-out/bundle
           for file in "$NAME.tar.gz" "$NAME.manifest.json"; do
             cosign sign-blob --yes --bundle "$file.sigstore.json" "$file"
             cosign verify-blob --bundle "$file.sigstore.json" \
@@ -395,13 +395,13 @@ jobs:
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
-            bundle/${{ steps.bundle.outputs.name }}.tar.gz
-            bundle/${{ steps.bundle.outputs.name }}.manifest.json
+            packaging-out/bundle/${{ steps.bundle.outputs.name }}.tar.gz
+            packaging-out/bundle/${{ steps.bundle.outputs.name }}.manifest.json
       - name: Add them to the release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
-        run: gh release upload "$TAG" bundle/* --repo "$GITHUB_REPOSITORY" --clobber
+        run: gh release upload "$TAG" packaging-out/bundle/* --repo "$GITHUB_REPOSITORY" --clobber
   # --- end of the offline bundle ---------------------------------------------------
 
   homebrew:

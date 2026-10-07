@@ -6,7 +6,7 @@
 // cli/dist/version.js):
 //
 //   node packaging/bundle/build-bundle.mjs --executables release [--plugin-packages plugin-packages]
-//     [--out packaging-out/bundle] [--commit <sha>] [--allow-missing-executables]
+//     [--commit <sha>] [--allow-missing-executables]
 //
 // --executables is a folder holding the release's standalone executables
 // (cavelon-<os>-<arch>[.exe]); every platform must be there unless
@@ -14,8 +14,10 @@
 // --plugin-packages is a folder of plugin packages; every file below it goes
 // into the bundle, and a missing or empty folder is fine.
 //
-// It writes <out>/cavelon-bundle-<version>.tar.gz and, beside it, a copy of the
-// manifest (cavelon-bundle-<version>.manifest.json) that the release signs.
+// It writes packaging-out/bundle/cavelon-bundle-<version>.tar.gz and, beside
+// it, a copy of the manifest (cavelon-bundle-<version>.manifest.json) that the
+// release signs. The folder is fixed, as render.mjs's is: a script that writes
+// only there cannot be pointed at another file.
 // The same inputs give the same bytes: the entries are sorted, carry one fixed
 // time and no owner, and the gzip header holds no time or system.
 import { createHash } from "node:crypto";
@@ -30,6 +32,7 @@ export const BUNDLE_FORMAT = 1;
 export const PLATFORMS = ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64", "windows-x64"];
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+const OUT = path.join(ROOT, "packaging-out", "bundle");
 const BLOCK = 512;
 // 1980-01-01T00:00:00Z: a fixed time that no archive tool calls implausibly old.
 const MTIME = 315532800;
@@ -59,7 +62,7 @@ function checkedName(name, where) {
 /** Every regular file below `dir`, as [relative parts, absolute path], sorted; symbolic links are refused. */
 function filesBelow(dir, where, parts = []) {
   const found = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true }).toSorted((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
+  for (const entry of readdirSync(dir, { withFileTypes: true }).toSorted((a, b) => byBytes(a.name, b.name))) {
     const full = path.join(dir, entry.name);
     if (entry.isSymbolicLink()) throw new Error(`${where}: ${full} is a symbolic link; the bundle takes regular files only.`);
     // A plugin's own folders (.claude-plugin, .codex-plugin) and .mcp.json start with a dot.
@@ -71,69 +74,88 @@ function filesBelow(dir, where, parts = []) {
   return found;
 }
 
-/**
- * Build the bundle in memory: { name, tarball, manifest }. `contracts` is the
- * kit's SUPPORTED_CONTRACTS; `executablesDir` holds cavelon-<platform>[.exe].
- */
-export function buildBundle({ root = ROOT, version, contracts, executablesDir, pluginPackagesDir, commit, allowMissingExecutables = false }) {
+/** The bundle's files: path inside the bundle → { bytes, mode }. */
+class FileSet {
+  files = new Map();
+
+  add(relative, bytes, mode = 0o644) {
+    if (this.files.has(relative)) throw new Error(`${relative} would go into the bundle twice.`);
+    this.files.set(relative, { bytes: Buffer.from(bytes), mode });
+  }
+
+  /** Every file below `dir`, under `prefix`, except the paths in `skip`. */
+  addTree(dir, prefix, where, skip = []) {
+    for (const [parts, full] of filesBelow(dir, where)) {
+      const relative = parts.join("/");
+      if (!skip.includes(relative)) this.add(`${prefix}/${relative}`, readFileSync(full));
+    }
+  }
+}
+
+function checkOptions({ version, contracts, commit }) {
   if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/.test(version ?? "")) throw new Error(`"${version}" is not a release version.`);
   if (!Array.isArray(contracts?.api_versions) || !Array.isArray(contracts?.package_versions)) {
-    throw new Error("The supported contract versions (api_versions, package_versions) are missing.");
+    throw new TypeError("The supported contract versions (api_versions, package_versions) are missing.");
   }
   if (commit !== undefined && !/^[0-9a-f]{40}$/.test(commit)) throw new Error(`"${commit}" is not a full commit id.`);
-  const top = `cavelon-bundle-${version}`;
-  /** path inside the bundle → { bytes, mode } */
-  const files = new Map();
-  const add = (relative, bytes, mode = 0o644) => {
-    if (files.has(relative)) throw new Error(`${relative} would go into the bundle twice.`);
-    files.set(relative, { bytes: Buffer.from(bytes), mode });
-  };
-  const read = (...parts) => readFileSync(path.join(root, ...parts));
+}
 
-  // The standalone executables, with a checksums.txt that install.sh and
-  // install.ps1 read when CAVELON_DOWNLOAD_URL names this folder.
+/**
+ * The standalone executables, with a checksums.txt that install.sh and
+ * install.ps1 read when CAVELON_DOWNLOAD_URL names this folder.
+ */
+function addExecutables(set, root, executablesDir, allowMissing) {
   const executables = [];
   for (const platform of PLATFORMS) {
     const name = executableName(platform);
     const file = path.join(executablesDir, name);
-    if (!existsSync(file)) {
-      if (allowMissingExecutables) continue;
+    if (existsSync(file)) {
+      if (!lstatSync(file).isFile()) throw new Error(`${file} is not a regular file.`);
+      set.add(`bin/${name}`, readFileSync(file), 0o755);
+      executables.push({ platform, path: `bin/${name}` });
+    } else if (!allowMissing) {
       throw new Error(`${file} is missing; the bundle carries every platform's executable (--allow-missing-executables for a trial).`);
     }
-    if (!lstatSync(file).isFile()) throw new Error(`${file} is not a regular file.`);
-    add(`bin/${name}`, readFileSync(file), 0o755);
-    executables.push({ platform, path: `bin/${name}` });
   }
   if (!executables.length) throw new Error(`${executablesDir} holds no cavelon executable.`);
-  add("bin/install.sh", read("install.sh"), 0o755);
-  add("bin/install.ps1", read("install.ps1"));
-  const sums = [...files].filter(([p]) => p.startsWith("bin/")).map(([p, f]) => `${sha256(f.bytes)}  ${p.slice("bin/".length)}\n`);
-  add("bin/checksums.txt", sums.join(""));
+  set.add("bin/install.sh", readFileSync(path.join(root, "install.sh")), 0o755);
+  set.add("bin/install.ps1", readFileSync(path.join(root, "install.ps1")));
+  const sums = [...set.files].filter(([p]) => p.startsWith("bin/")).map(([p, f]) => `${sha256(f.bytes)}  ${p.slice("bin/".length)}\n`);
+  set.add("bin/checksums.txt", sums.join(""));
+  return executables;
+}
 
-  // The plugin for Claude Code and Codex, with the offline MCP entry, and the
-  // marketplaces that name it, so the bundle's folder is a local marketplace.
-  const pluginVersion = JSON.parse(read("plugin", ".claude-plugin", "plugin.json").toString("utf8")).version;
+/**
+ * The plugin for Claude Code and Codex with the offline MCP entry, the
+ * marketplaces that name it (so the bundle's folder is a local marketplace),
+ * and the skills and MCP entry on their own, for agents without a plugin.
+ */
+function addPlugin(set, root, version) {
+  const pluginVersion = JSON.parse(readFileSync(path.join(root, "plugin", ".claude-plugin", "plugin.json"), "utf8")).version;
   if (pluginVersion !== version) throw new Error(`The plugin's version ${pluginVersion} is not the release's ${version}.`);
-  for (const [parts, full] of filesBelow(path.join(root, "plugin"), "plugin")) {
-    const relative = parts.join("/");
-    if (relative === ".mcp.json") continue;
-    add(`plugin/${relative}`, readFileSync(full));
-  }
-  add("plugin/.mcp.json", jsonText(offlineMcpEntry(pluginVersion)));
-  add(".claude-plugin/marketplace.json", read(".claude-plugin", "marketplace.json"));
-  add(".agents/plugins/marketplace.json", read(".agents", "plugins", "marketplace.json"));
+  set.addTree(path.join(root, "plugin"), "plugin", "plugin", [".mcp.json"]);
+  set.add("plugin/.mcp.json", jsonText(offlineMcpEntry(pluginVersion)));
+  set.add(".claude-plugin/marketplace.json", readFileSync(path.join(root, ".claude-plugin", "marketplace.json")));
+  set.add(".agents/plugins/marketplace.json", readFileSync(path.join(root, ".agents", "plugins", "marketplace.json")));
+  set.addTree(path.join(root, "plugin", "skills"), "skills", "skills");
+  set.add("mcp/cavelon.mcp.json", jsonText(offlineMcpEntry()));
+}
 
-  // The skills on their own, for agents without a plugin, and the MCP entry for them.
-  for (const [parts, full] of filesBelow(path.join(root, "plugin", "skills"), "skills")) add(`skills/${parts.join("/")}`, readFileSync(full));
-  add("mcp/cavelon.mcp.json", jsonText(offlineMcpEntry()));
-
+/**
+ * Build the bundle in memory: { name, tarball, manifest, manifestText }.
+ * `contracts` is the kit's SUPPORTED_CONTRACTS; `executablesDir` holds
+ * cavelon-<platform>[.exe].
+ */
+export function buildBundle({ root = ROOT, version, contracts, executablesDir, pluginPackagesDir, commit, allowMissingExecutables = false }) {
+  checkOptions({ version, contracts, commit });
+  const set = new FileSet();
+  const executables = addExecutables(set, root, executablesDir, allowMissingExecutables);
+  addPlugin(set, root, version);
   // Whatever plugin packages the release built for other clients.
-  if (pluginPackagesDir && existsSync(pluginPackagesDir)) {
-    for (const [parts, full] of filesBelow(pluginPackagesDir, "plugin packages")) add(`plugin-packages/${parts.join("/")}`, readFileSync(full));
-  }
-
-  add("README.md", read("packaging", "bundle", "README.md"));
-  add("LICENSE", read("LICENSE"));
+  if (pluginPackagesDir && existsSync(pluginPackagesDir)) set.addTree(pluginPackagesDir, "plugin-packages", "plugin packages");
+  set.add("README.md", readFileSync(path.join(root, "packaging", "bundle", "README.md")));
+  set.add("LICENSE", readFileSync(path.join(root, "LICENSE")));
+  const files = set.files;
 
   const manifest = {
     format: BUNDLE_FORMAT,
@@ -147,8 +169,9 @@ export function buildBundle({ root = ROOT, version, contracts, executablesDir, p
     files: [...files.keys()].toSorted(byBytes).map((p) => ({ path: p, size: files.get(p).bytes.length, sha256: sha256(files.get(p).bytes) })),
   };
   const manifestText = jsonText(manifest);
-  add("manifest.json", manifestText);
+  set.add("manifest.json", manifestText);
 
+  const top = `cavelon-bundle-${version}`;
   return { name: top, tarball: gzip(tar(top, files)), manifest, manifestText };
 }
 
@@ -243,13 +266,12 @@ async function main() {
     options: {
       executables: { type: "string" },
       "plugin-packages": { type: "string" },
-      out: { type: "string", default: path.join("packaging-out", "bundle") },
       commit: { type: "string" },
       "allow-missing-executables": { type: "boolean", default: false },
     },
   });
   if (!values.executables) {
-    throw new Error("Usage, from the repository's root: node packaging/bundle/build-bundle.mjs --executables <dir> [--plugin-packages <dir>] [--out <dir>] [--commit <sha>]");
+    throw new Error("Usage, from the repository's root: node packaging/bundle/build-bundle.mjs --executables <dir> [--plugin-packages <dir>] [--commit <sha>] [--allow-missing-executables]");
   }
   const versionModule = path.join(ROOT, "cli", "dist", "version.js");
   if (!existsSync(versionModule)) throw new Error("Run `npm run build` in cli/ first: cli/dist/version.js is missing.");
@@ -265,9 +287,9 @@ async function main() {
     commit: values.commit,
     allowMissingExecutables: values["allow-missing-executables"],
   });
-  mkdirSync(values.out, { recursive: true });
-  const tarball = path.join(values.out, `${bundle.name}.tar.gz`);
-  const manifest = path.join(values.out, `${bundle.name}.manifest.json`);
+  mkdirSync(OUT, { recursive: true });
+  const tarball = path.join(OUT, `${bundle.name}.tar.gz`);
+  const manifest = path.join(OUT, `${bundle.name}.manifest.json`);
   writeFileSync(tarball, bundle.tarball);
   writeFileSync(manifest, bundle.manifestText);
   process.stdout.write(`${tarball}\n${manifest}\n`);

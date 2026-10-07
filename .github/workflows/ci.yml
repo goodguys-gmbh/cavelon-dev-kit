@@ -163,10 +163,10 @@ jobs:
         shell: bash
         run: |
           (cd cli && npm ci --ignore-scripts && npm run build)
-          node packaging/bundle/build-bundle.mjs --executables release --out bundle-out
-          mkdir bundle-x && tar -xzf "bundle-out/cavelon-bundle-$VERSION.tar.gz" -C bundle-x
+          node packaging/bundle/build-bundle.mjs --executables release
+          mkdir bundle-x && tar -xzf "packaging-out/bundle/cavelon-bundle-$VERSION.tar.gz" -C bundle-x
           cd "bundle-x/cavelon-bundle-$VERSION"
-          cmp manifest.json "../../bundle-out/cavelon-bundle-$VERSION.manifest.json"
+          cmp manifest.json "../../packaging-out/bundle/cavelon-bundle-$VERSION.manifest.json"
           node -e '
             const { createHash } = require("node:crypto");
             const fs = require("node:fs");
