@@ -9,6 +9,13 @@ CLI, the skills and the plugin.
 
 ### Added
 
+- `chat --as-chat-user <id>` and `test run --as-chat-user <id>` read
+  knowledge and identity-bound database queries as a selected Chat User
+  (#172). Test overrides apply to each run and never edit saved suites.
+  Published permissions are checked before sending, older instances refuse
+  unsupported selection explicitly, and `api list_chat_users` exposes
+  `email_verified` to choose a reader for email-bound queries.
+
 - Workflow Tool Call nodes for saved database queries (part of #171):
   `validate` checks model-sourced argument names, explains missing queries
   with `tool_call_database_query_missing`, and warns when a trigger path

@@ -570,12 +570,13 @@ Start test-suite runs; returns operation ids.
 cavelon test run [options]
 ```
 
-Without --suite, runs every suite of the solution (--harness, or cavelon.yaml's harness). With --wait, exits 1 when a case failed or a run measured nothing comparable (cases not run, technical errors), 5 when answers wait for a manual verdict or a value a case needs.
+Without --suite, runs every suite of the solution (--harness, or cavelon.yaml's harness). With --wait, exits 1 when a case failed or a run measured nothing comparable (cases not run, technical errors), 5 when answers wait for a manual verdict or a value a case needs. --as-chat-user chooses a Chat User reader for these runs only, for knowledge and identity-bound database queries; it never edits a saved suite. Without the option, uses each suite's saved reader. Choose an id with `cavelon api list_chat_users -p tenant_id=<tenant_id>`; check email_verified for email-bound queries.
 
 | Option | Description | MCP |
 |---|---|---|
 | `--suite <suite>` | Suite name or id. Repeatable. | yes |
 | `--harness <harness>` | The solution to run against: its name, slug or id. | yes |
+| `--as-chat-user <id>` | Read knowledge and identity-bound queries as this tenant's Chat User; needs knowledge_bases.view and end_users.read. | yes |
 | `--wait` | Wait for the work to finish (see `cavelon wait`). | CLI only |
 | `--timeout <duration>` | Stop waiting after this long (90s, 5m; default 90s). The work goes on; run wait again to resume. | yes |
 | `--idempotency-key <key>` | Send an Idempotency-Key with each start. | yes |
@@ -1800,7 +1801,7 @@ Send one message to a solution and print its answer, with the session to continu
 cavelon chat <message> [options]
 ```
 
-The tenant's chat and widget answer only with the default route; this names the solution, so an active solution that is not the default, or a draft, can be tried before it answers anyone. A draft answers a person's token as a Playground run (counted as testing), never a tenant API key. Without --harness: the env file's or cavelon.yaml's solution, else the tenant's default route. Each call is one turn; --session continues a conversation. Not streamed: waits for the whole answer, at most --timeout (default 2m; 50 s as an MCP tool).
+The tenant's chat and widget answer only with the default route; this names the solution, so an active solution that is not the default, or a draft, can be tried before it answers anyone. A draft answers a person's token as a Playground run (counted as testing), never a tenant API key. Without --harness: the env file's or cavelon.yaml's solution, else the tenant's default route. Each call is one turn; --session continues a conversation. Not streamed: waits for the whole answer, at most --timeout (default 2m; 50 s as an MCP tool). --as-chat-user reads knowledge and binds database query identity as that Chat User, with a personal access token. Choose an id with `cavelon api list_chat_users -p tenant_id=<tenant_id>`; email_verified says whether an email-bound query can bind that address. Without the option, keeps the usual reader.
 
 | Argument | Description |
 |---|---|
@@ -1811,6 +1812,7 @@ The tenant's chat and widget answer only with the default route; this names the 
 | `--harness <harness>` | The solution (harness): its name, slug or id; default: env file, then cavelon.yaml. | yes |
 | `--env <name>` | Use env/&lt;name&gt;.yaml: its tenant and solution. | yes |
 | `--session <session_id>` | Continue this conversation (the session_id a previous chat printed). | yes |
+| `--as-chat-user <id>` | Read knowledge and identity-bound queries as this tenant's Chat User; needs knowledge_bases.view and end_users.read. | yes |
 | `--timeout <duration>` | Wait at most this long for the answer (90s, 5m; default 2m). | yes |
 
 Examples:

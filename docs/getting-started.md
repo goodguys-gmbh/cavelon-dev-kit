@@ -474,6 +474,29 @@ The operation succeeded (the run finished); its result did not pass. That is
 why the exit code is 1, so a script or CI job stops there. A run whose answers
 wait for a person's verdict exits 5.
 
+For a suite that checks knowledge access or an identity-bound database query,
+choose a test Chat User of the acting tenant:
+
+```bash
+cavelon whoami
+cavelon api list_chat_users -p tenant_id=<tenant_id> --json
+cavelon test run --suite Smoke --as-chat-user <chat_user_id> --wait --timeout 5m
+```
+
+The reader applies to these runs only; the saved suite keeps its settings.
+Without `--as-chat-user`, each suite uses its saved reader. A personal access
+token needs `knowledge_bases.view` and `end_users.read` to choose this reader,
+besides its permission to run tests. Listing Chat Users needs
+`chat_users.view`. For a query bound to `end_user.email`, choose an identity
+whose published `email_verified` is true: an unverified address asks the
+visitor to sign in. An older instance may omit that flag; its absence does
+not prove the email is verified. Use test identities and known test rows.
+
+An instance without reader support refuses the selection before starting
+anything. An older instance may publish reader fields but refuse a PAT on
+them; follow its refusal or ask the operator for reader support. Omitting
+the option keeps normal test runs available.
+
 ## 9. Read the trace
 
 ```bash
@@ -614,6 +637,16 @@ conversation, and `--json` gives `response`, `session_id`, `conversation_id`,
 left out: `chat` then talks to the solution `cavelon.yaml` names (outside one,
 to the default route). A draft answers as a Playground run, so only a person's
 token gets an answer from one, never a tenant API key.
+
+To try the same knowledge and query access as a test Chat User, use
+`cavelon chat "What are my orders?" --harness support-faq --as-chat-user
+<chat_user_id>`. It needs a personal access token with
+`knowledge_bases.view` and `end_users.read`. Choose the id with
+`cavelon api list_chat_users -p tenant_id=<tenant_id>` and check
+`email_verified` for email-bound queries. The continuation command keeps
+the selected reader and solution. Without the option, chat keeps its usual
+reader. A missing, deleted or cross-tenant reader is refused by the instance;
+use a current identity from the acting tenant's list.
 
 ### Take it out of service
 

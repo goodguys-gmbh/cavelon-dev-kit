@@ -142,12 +142,30 @@ the Admin. Then:
 
 - A step can assert the agent calls the query (`tool_called` with the tool's
   slug), and the judge checks the answer against the known rows.
-- A test run has no signed-in visitor. A query with an identity parameter
-  (`end_user.*`), or one without `allows_anonymous`, answers
-  `identity_required` there and runs nothing: such a step checks that the
-  agent asks the visitor to sign in, not the rows. The instance does not yet
-  let a suite name a test Chat User whose identity its queries use (a suite's
-  `as_chat_user` reader reads knowledge as that person, nothing more).
+- For identity-scoped queries (`end_user.*`), choose a test Chat User of the
+  acting tenant: `cavelon whoami` shows the tenant;
+  `cavelon api list_chat_users -p tenant_id=<tenant_id> --json` lists its
+  identities (`chat_users.view` is needed). Use
+  `cavelon test run --suite <suite> --as-chat-user <id> --wait --timeout 5m`
+  or `cavelon chat "<message>" --harness <solution> --as-chat-user <id>`.
+  A personal access token needs `knowledge_bases.view` and `end_users.read`,
+  besides permission to run the suite. Knowledge reads use that person's
+  groups, and queries bind their identity. The override is on each run
+  request: never edit a saved suite just to choose a test reader.
+- For an `end_user.email` parameter, check the published `email_verified`
+  flag. A manually created, unverified Chat User cannot prove the address:
+  its query answers `identity_required` and asks for sign-in. Verification
+  comes from the widget's email code or SSO. An older instance may omit the
+  flag; do not infer verification from an email being present.
+- Check one identity's known rows, another identity's different rows, and
+  an audience run that asks for sign-in. Omit the option to use the suite's
+  saved reader (audience by default); an audience run has no identity, so a
+  query with an identity parameter or without `allows_anonymous` runs
+  nothing. Assert the query tool was called and the answer contains only
+  the chosen identity's rows. A deleted or cross-tenant reader must be
+  refused, not fall back to audience. An older instance may not support a
+  reader override, or may refuse a PAT on it even with reader fields:
+  follow the command's actionable refusal and ask its operator for support.
 - To check what an identity-scoped query returns for one customer, the tenant
   Owner runs it once with `cavelon db test-run <query> --value <name>=<value>`,
   identity parameters included; it shows what the model would see. Never put

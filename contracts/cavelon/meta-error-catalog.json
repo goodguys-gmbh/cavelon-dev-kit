@@ -2576,8 +2576,8 @@
     {
       "code": "identity_required",
       "area": "database_connector",
-      "message": "A database query needs a signed-in visitor: a context parameter (end_user.*) has no value, end_user.email is not verified, or the query does not allow anonymous visitors. It did not run.",
-      "hint": "Test it as a signed-in Chat User. For public data such as stock or opening hours, a superadmin sets 'Visitors may call this without signing in' (allows_anonymous) on a query without a context parameter under Settings → Databases.",
+      "message": "A database query needs a signed-in visitor: a context parameter (end_user.*) has no value, end_user.email is not verified, or the query does not run without a signed-in person, which anonymous visitors and trigger runs are. It did not run.",
+      "hint": "Test it as a Chat User whose email is verified (widget email code or SSO). For public data such as stock or opening hours, or a query a trigger uses, whoever manages database queries sets 'Runs without a signed-in person (anonymous visitors, triggers)' (allows_anonymous) on a query without a context parameter under Settings → Databases.",
       "docs": "/docs/troubleshooting/database-connections#error-codes"
     },
     {
