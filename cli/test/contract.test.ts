@@ -655,6 +655,37 @@ describe("the fake server answers in the published shapes", () => {
     }
   });
 
+  it("query writes publish the person-confirmation marks, request fields and response shapes", async () => {
+    const { connection } = seedQueryTool(server.state.db, tenant);
+    server.state.features.database_connector_enabled = true;
+    try {
+      const route = "/api/v1/database-connectors/queries";
+      const template = `${route}/{query_id}`;
+      for (const [method, path] of [["POST", route], ["PATCH", template], ["DELETE", template]]) {
+        const op = operationAt(doc, method!, path!)!;
+        expect(op.confirmation).toBe(true);
+        expect(op.confirmationWhen).toMatch(/^Always:/);
+        expect(op.responses).toHaveProperty("428");
+        expect(op.personOnly).toBeUndefined();
+      }
+      expect(operationAt(doc, "POST", "/api/v1/agent-graph/import")!.confirmationWhen).toContain("database_queries.would_write");
+      const body = { connection_id: connection.id, slug: "new_query", name: "New query", description: "Read public data.", sql_text: "SELECT 1", parameters: [] };
+      const schema = operationAt(doc, "POST", route)!.requestBody!.content!["application/json"]!.schema!;
+      expect(schemaErrors(doc, schema, body)).toEqual([]);
+      const refused = await call("POST", route, body);
+      expect(refused).toMatchObject({ status: 428, data: { code: "confirmation_required", confirmations: "/api/v1/confirmations", header: "X-Cavelon-Confirmation" } });
+      const created = await call("POST", route, body, await confirmed("POST", route, body));
+      check("POST", route, 201, created.data);
+      const path = `${route}/${(created.data as { id: string }).id}`;
+      const patch = { max_rows: 10 };
+      const id = await confirmed("PATCH", path, patch);
+      expect(await call("PATCH", path, { max_rows: 20 }, id)).toMatchObject({ status: 428, data: { code: "confirmation_invalid", reason: "other_change" } });
+      check("PATCH", template, 200, (await call("PATCH", path, patch, id)).data);
+      expect(await call("PATCH", path, patch, id)).toMatchObject({ status: 428, data: { code: "confirmation_invalid", reason: "used" } });
+      check("DELETE", template, 200, (await call("DELETE", path, undefined, await confirmed("DELETE", path))).data);
+    } finally { delete server.state.features.database_connector_enabled; }
+  });
+
   it("triggers, runs, loops, identities, Sandboxes and archive jobs", async () => {
     const harness = randomUUID();
     const keyId = randomUUID();

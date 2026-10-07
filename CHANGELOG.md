@@ -9,6 +9,16 @@ CLI, the skills and the plugin.
 
 ### Added
 
+- Database query authoring from package files (#169): `pull`, `validate` and
+  `apply` retain published query definitions, and a personal access token
+  holding `database_connectors.manage` may apply them. Query writes always
+  need the person's approval, including on drafts; MCP asks the person and
+  an agent shell prints their terminal command. After approval, the kit sends
+  the instance's nonce for that exact import or API query mutation. Unchanged
+  definitions remain unguarded, and refused credentials get the instance's
+  permission blocker and an actionable next step. Older metadata keeps its
+  fallbacks. Connection commands and write-query semantics are separate.
+
 - `chat --as-chat-user <id>` and `test run --as-chat-user <id>` read
   knowledge and identity-bound database queries as a selected Chat User
   (#172). Test overrides apply to each run and never edit saved suites.
