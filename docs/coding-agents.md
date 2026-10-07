@@ -367,10 +367,12 @@ these lessons:
 **`cavelon setup`, for you.** `cavelon setup` finds Claude Code, Codex, Cursor,
 VS Code with GitHub Copilot, Gemini CLI and Kiro on your computer and sets up
 each for your user, in every folder you open: Claude Code and Codex get the
-Cavelon plugin through their own plugin command, which also updates it; the
-others get the skills and the MCP server in their user settings, which
-`cavelon setup` refreshes after you update `cavelon`
-([Set up your coding agents](installation.md#set-up-your-coding-agents)).
+Cavelon plugin through their own plugin command, which also updates it, and
+Gemini CLI the Cavelon extension; the others get the skills and the MCP server
+in their user settings, which `cavelon setup` refreshes after you update
+`cavelon` ([Set up your coding agents](installation.md#set-up-your-coding-agents)).
+Each client has its [install page](install/README.md), with the plugin
+packages for Cursor, VS Code with GitHub Copilot and Kiro.
 `cavelon setup --check` says what works; `cavelon setup --remove` undoes it.
 
 **`cavelon init --agents`, for a repository.** To give everyone who clones a
