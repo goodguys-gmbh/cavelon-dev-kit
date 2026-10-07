@@ -137,6 +137,16 @@ Its relevant HTTP, package, catalog and administration-page shapes are
 unchanged. Snapshots and fake tests prove interfaces; runtime enforcement
 needs the instance's execution evidence.
 
+Later on 2026-10-07 the snapshot took in the optional
+`MetaPrincipal.needs_a_person_when` from the instance's published OpenAPI
+generator output, without running an instance. Only that property is selected;
+the existing operation-entry schema and every other route, schema and default
+stay as recorded. The Database Connectors page takes the API key's
+identity-bound testing guidance, and Regression Testing takes only the reader
+setting and the section on testing as a Chat User. The published API endpoints
+page supplies the distinction between unconditional and conditional principal
+restrictions. The fake server also plays an instance that omits the new list.
+
 The tests switch features on in the fake server where a command needs them
 (personal access tokens, the operations API, Sandboxes, Masterloop, archive
 uploads, the database connector); the snapshot keeps the defaults.

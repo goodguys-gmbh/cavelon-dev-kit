@@ -1,4 +1,4 @@
-import { accessFor } from "./access.js";
+import { accessFor, requirePersonForIdentityChoice } from "./access.js";
 import { stringOption, type Context, type Input } from "./command.js";
 import { CavelonError, ExitCode, usageError, validationError } from "./errors.js";
 import { workflowOperation } from "./invoke.js";
@@ -42,6 +42,9 @@ export async function chatUserReader(ctx: Context, input: Input, path: string): 
     throw validationError("The Chat User id does not match the instance's reader_chat_user_id schema.", { sent: false }, chooseReader);
   }
   const access = await accessFor(await ctx.client());
+  if (path === "/api/v1/test-suites/{suite_id}/runs") {
+    requirePersonForIdentityChoice(access, `POST ${path}`, "choose an as_chat_user reader for a test run");
+  }
   if (path === "/api/v1/chat" && (access?.kind === "api_key" || (await ctx.session()).tokenKind === "api_key")) {
     throw new CavelonError(ExitCode.unauthorized, {
       code: "chat_user_reader_forbidden",

@@ -492,6 +492,13 @@ whose published `email_verified` is true: an unverified address asks the
 visitor to sign in. An older instance may omit that flag; its absence does
 not prove the email is verified. Use test identities and known test rows.
 
+A person chooses this identity in the Admin or with their personal access
+token. Where the instance publishes the matching `needs_a_person_when`
+restriction, a tenant API key using `--as-chat-user` is refused before a run
+starts (`key_needs_a_person`, exit 5). CI can still use a key to run a suite
+whose reader a person saved: omit the override. `whoami` and `api describe`
+show the instance's condition; older instances that omit it decide the request.
+
 An instance without reader support refuses the selection before starting
 anything. An older instance may publish reader fields but refuse a PAT on
 them; follow its refusal or ask the operator for reader support. Omitting

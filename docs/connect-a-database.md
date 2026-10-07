@@ -137,6 +137,13 @@ keeps counts and codes. Enable the saved query after its connection test,
 assign its tool to the agent under **Tools** or in `package/agents.yaml`,
 then follow the [development loop](getting-started.md).
 
+A person tests identity-scoped queries in the Admin or with their personal
+access token. When the instance publishes the matching `needs_a_person_when`
+restriction, `db test-run` refuses an API key before execution for any query
+with an `end_user.*` parameter (`key_needs_a_person`, exit 5). An API key can
+still test ordinary queries in CI. `whoami` shows the conditional guidance;
+on an older instance that omits it, the server decides the request.
+
 A package carries only the query's connection reference (name and dialect),
 never its host, login, password, certificate or write-enable flag.
 

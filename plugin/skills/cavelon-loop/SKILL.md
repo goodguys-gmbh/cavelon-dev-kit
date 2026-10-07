@@ -21,6 +21,10 @@ use it when you parse the result.
   enter Platform mode, which tenants it reaches, and what it may do there: its
   permissions (an API key's scopes too), whether it may activate and set
   variables, and the operations a person runs instead.
+  Its optional `needs_a_person_when` lists conditional identity choices
+  separately; `api list` and `api describe` show their reasons, and
+  `api list --usable` keeps these operations for ordinary requests. Never
+  read a reason as authority or treat the conditional list as unconditional.
 - **Offer only what the credential may do.** Over MCP, a tool whose
   description starts with "Not for this credential" is one the instance says
   this token or key may not use in this tenant; `api_list` marks such
