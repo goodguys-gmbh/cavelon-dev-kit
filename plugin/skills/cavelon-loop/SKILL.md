@@ -100,10 +100,14 @@ use it when you parse the result.
   database, so one package serves them all. `cavelon db instance` says which
   dialects this instance runs and the addresses it connects from, which the
   customer allows through their database's firewall; tell the person both
-  before they set up a connection. `cavelon db connections` shows which exist,
-  whether their last test passed and when their CA certificates expire. A
-  pull writes each query's SQL into `package/tools.yaml`, so the repository
-  holds it: review it like code.
+  before they set up a connection. The dialects are `postgresql`, `mysql` and
+  `mssql` (SQL Server). A SQL Server login that can write keeps the
+  connection's queries from running (`write_privileges_unacknowledged`) until
+  it may only read or a superadmin acknowledges it in the Admin, so ask for a
+  read-only login. `cavelon db connections` shows which exist, whether their
+  last test passed, when their CA certificates expire and why a connection's
+  queries cannot be enabled. A pull writes each query's SQL into
+  `package/tools.yaml`, so the repository holds it: review it like code.
 
 ## The loop
 

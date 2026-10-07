@@ -43,15 +43,25 @@ the credential's permissions would allow that a person runs instead). Trimmed,
 it differs from the snapshot only there and in `MetaLimits.tenant_quotas`,
 which that build may leave out (null).
 
-On 2026-10-07 the OpenAPI was taken again from the instance's main branch,
-from the reference its generator writes into the repository (`docs/openapi.json`,
-generated from the code without running it), to add
-`GET /api/v1/database-connectors/instance` (the dialects the instance runs and
-its egress addresses). Trimmed, it differs from the snapshot only there and in
-the connections' `ca_certificates` (subject, issuer, validity and fingerprint
-per certificate). The instance's SQL Server support, with its refusal code
-`write_privileges_unacknowledged`, was not on that branch yet, so the error
-catalog and the capabilities stay as they were.
+Refreshed on 2026-10-07 from the instance's main branch with its SQL Server
+support, again without running it. The OpenAPI is the reference its generator
+writes into the repository (`docs/openapi.json`). With
+`GET /api/v1/database-connectors/instance` added to the list, the trimmed
+snapshot gains that route (the dialects the instance runs and its egress
+addresses). It also gains the connections' `ca_certificates`,
+`write_privileges_acknowledged` and `query_enable_refusal`. The error catalog
+and the package schema come from the functions behind `/meta/error-catalog`
+and `/meta/package-schema`. Only the catalog's database connector codes are
+taken in: `write_privileges_unacknowledged`, and the SQL Server wording of
+`unavailable` and `forbidden_keyword`. The same build also refuses personal
+access tokens on person-only operations (`person_only_operation`, and new
+wording for `secret_needs_a_person` and `approval_needs_a_person`), which
+changes what `secrets set` may do; that waits for the change that adapts the
+kit to it. The build's `model_role_not_configured` waits with it. The package
+schema is unchanged; it already named `mssql`. The capabilities differ only in settings
+and stay. Of the docs, only the Database Connectors page is taken in (a
+paragraph on testing an identity-scoped query as a Chat User). The index and
+the other pages changed in parts the kit does not read, and stay as recorded.
 
 The tests switch features on in the fake server where a command needs them
 (personal access tokens, the operations API, Sandboxes, Masterloop, archive

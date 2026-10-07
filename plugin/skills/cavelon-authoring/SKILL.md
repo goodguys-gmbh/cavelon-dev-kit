@@ -334,7 +334,7 @@ says who does what on the instance.
   tool_type: database_query
   scope: tenant_local
   database_query:
-    connection: { name: shop-db, dialect: postgresql }   # by name only: never a host, user or password
+    connection: { name: shop-db, dialect: postgresql }   # by name only: never a host, user or password; postgresql, mysql or mssql
     sql_text: SELECT number, status, shipped_at FROM orders WHERE number = :order_no AND email = :email LIMIT 5
     parameters:
       - name: order_no

@@ -784,7 +784,7 @@ Test a database connection step by step (DNS, policy, TCP, TLS, login, SELECT 1,
 cavelon db test <connection>
 ```
 
-Needs the tenant Owner's permission (database_connectors.test). The result becomes the connection's last test: a query tool is ready for agents only while it passed, and a package's query needs a tested connection of its name to import. A failed step names its code; `cavelon explain <code>` says how to fix it. A finding under write_privileges means the database user can write: ask the database administrator for a read-only user.
+Needs the tenant Owner's permission (database_connectors.test). The result becomes the connection's last test: a query tool is ready for agents only while it passed, and a package's query needs a tested connection of its name to import. A failed step names its code; `cavelon explain <code>` says how to fix it. A finding under write_privileges means the database user can write: ask the database administrator for a read-only user. On SQL Server, which has no read-only transaction, the connection's queries then do not run (write_privileges_unacknowledged) until its login may only read or a superadmin acknowledges the write privileges in the Admin.
 
 | Argument | Description |
 |---|---|

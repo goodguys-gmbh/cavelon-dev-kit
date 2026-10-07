@@ -39,6 +39,10 @@ interface Connection {
   last_test_at?: string | null;
   last_test_outcome?: string | null;
   last_test_detail?: Record<string, unknown> | null;
+  /** A superadmin's decision that queries run although the last test found write privileges (SQL Server). */
+  write_privileges_acknowledged?: boolean;
+  /** Why the connection's queries may not be enabled now (`code`, `message`); an older instance does not say. */
+  query_enable_refusal?: { code?: string; message?: string } | null;
   query_count?: number;
   [key: string]: unknown;
 }
@@ -352,6 +356,7 @@ export const dbConnections: CommandSpec = {
       };
     });
     const untested = page.items.filter((c) => (c as unknown as Connection).last_test_outcome !== "ok").map((c) => String(c.name));
+    const refused = (page.items as unknown as Connection[]).filter((c) => c.query_enable_refusal?.code);
     return {
       data: page,
       text:
@@ -359,7 +364,11 @@ export const dbConnections: CommandSpec = {
           `No database connections. A superadmin creates one in the Admin (\`${cavelonCommand("docs", "get", DOCS_PAGE)}\` says who does what).`) +
         caLines(page.items as unknown as Connection[]).join("\n") +
         moreHint(page.next_cursor, cavelonCommand("db", "connections")) +
-        (untested.length ? `\n\nNot tested successfully: ${untested.join(", ")}; its queries are not ready for agents. The Owner tests one with: ${cavelonCommand("db", "test", fill("connection"))}` : ""),
+        (untested.length ? `\n\nNot tested successfully: ${untested.join(", ")}; its queries are not ready for agents. The Owner tests one with: ${cavelonCommand("db", "test", fill("connection"))}` : "") +
+        (refused.length
+          ? `\n\nQueries cannot be enabled on: ${refused.map((c) => `${c.name} (${c.query_enable_refusal!.code}${c.query_enable_refusal!.message ? `: ${clip(c.query_enable_refusal!.message, 200)}` : ""})`).join("; ")}` +
+            explainLine(refused.map((c) => c.query_enable_refusal!.code))
+          : ""),
     };
   },
 };
@@ -488,7 +497,9 @@ export const dbTest: CommandSpec = {
     "Needs the tenant Owner's permission (database_connectors.test). The result becomes the connection's last test: a query tool\n" +
     "is ready for agents only while it passed, and a package's query needs a tested connection of its name to import. A failed\n" +
     "step names its code; `cavelon explain <code>` says how to fix it. A finding under write_privileges means the database user\n" +
-    "can write: ask the database administrator for a read-only user.",
+    "can write: ask the database administrator for a read-only user. On SQL Server, which has no read-only transaction, the\n" +
+    "connection's queries then do not run (write_privileges_unacknowledged) until its login may only read or a superadmin\n" +
+    "acknowledges the write privileges in the Admin.",
   readOnly: false,
   idempotent: true,
   mcpEffect: "Runs the connection test on the instance and stores its outcome as the connection's last test; changes no setting.",

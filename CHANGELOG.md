@@ -21,7 +21,18 @@ CLI, the skills and the plugin.
   expiry, `ca_certificates` in `--json`) and warns of one that has expired or
   expires within 30 days, since the connection's TLS check and its queries
   fail from then. An instance that publishes only the fingerprints gets a line
-  that a CA is set.
+  that a CA is set. It also names a connection whose queries cannot be
+  enabled, with the instance's code (`query_enable_refusal`), such as
+  `write_privileges_unacknowledged`.
+- SQL Server (`mssql`) connections: `db instance`, `apply`'s dialect check and
+  `explain` take the instance's word for them, and the skills, `db test`'s help
+  and the concepts say that a SQL Server login that can write runs no query
+  (`write_privileges_unacknowledged`) until it may only read or a superadmin
+  acknowledges it.
+- The contract snapshot carries SQL Server: the error catalog's
+  `write_privileges_unacknowledged` and its wording of `unavailable` and
+  `forbidden_keyword`, and the connections' `write_privileges_acknowledged`
+  and `query_enable_refusal`.
 
 ### Fixed
 

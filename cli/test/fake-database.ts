@@ -21,6 +21,8 @@ export interface FakeConnection {
   caCertificates?: FakeCaCertificate[];
   /** False plays an instance that publishes only the certificates' fingerprints. */
   caDetails?: false;
+  /** Why its queries may not be enabled, as the instance says it (SQL Server with write privileges). */
+  queryEnableRefusal?: { code: string; message: string };
 }
 
 export interface FakeCaCertificate {
@@ -82,7 +84,7 @@ export function databaseState(): DatabaseState {
     mayTest: true,
     testRuns: [],
     mayView: true,
-    instance: { runnable_dialects: ["mysql", "postgresql"], network: { egress_ips: ["203.0.113.10", "203.0.113.11"], connections_per_process: 5 } },
+    instance: { runnable_dialects: ["mssql", "mysql", "postgresql"], network: { egress_ips: ["203.0.113.10", "203.0.113.11"], connections_per_process: 5 } },
   };
 }
 
@@ -122,6 +124,8 @@ function connectionView(state: DatabaseState, c: FakeConnection) {
     last_test_at: c.last_test_outcome ? "2026-10-01T08:05:00Z" : null,
     last_test_outcome: c.last_test_outcome,
     last_test_detail: null,
+    write_privileges_acknowledged: false,
+    query_enable_refusal: c.queryEnableRefusal ?? null,
     query_count: state.queries.filter((q) => q.connection_id === c.id).length,
     created_by_user_id: null,
     updated_by_user_id: null,

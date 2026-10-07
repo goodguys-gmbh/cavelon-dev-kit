@@ -9448,6 +9448,25 @@
             ],
             "title": "Last Test Detail"
           },
+          "write_privileges_acknowledged": {
+            "type": "boolean",
+            "title": "Write Privileges Acknowledged",
+            "default": false
+          },
+          "query_enable_refusal": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query Enable Refusal"
+          },
           "query_count": {
             "type": "integer",
             "title": "Query Count",

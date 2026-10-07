@@ -243,6 +243,15 @@ describe("apply", () => {
     server.state.capsPatch = { database_connector: { ...SNAPSHOT_OFFER, dialects: ["mysql"], may_write_queries: false } };
     preview = await cli(sb, ["apply"], { cwd: dir, env: fresh() });
     expect(preview.stderr).toMatch(/This instance runs only mysql queries; "order_status" names another dialect/);
+    // A SQL Server query: fine where the instance runs mssql, warned where it runs only the others.
+    editTool(dir, "order_status", (t) => (t.database_query.connection.dialect = "mssql"));
+    server.state.capsPatch = { database_connector: { ...SNAPSHOT_OFFER, dialects: ["mssql", "mysql", "postgresql"], may_write_queries: false } };
+    preview = await cli(sb, ["apply"], { cwd: dir, env: fresh() });
+    expect(preview.stderr).not.toMatch(/names another dialect/);
+    server.state.capsPatch = { database_connector: { ...SNAPSHOT_OFFER, dialects: ["mysql", "postgresql"], may_write_queries: false } };
+    preview = await cli(sb, ["apply"], { cwd: dir, env: fresh() });
+    expect(preview.stderr).toMatch(/This instance runs only mysql, postgresql queries; "order_status" names another dialect/);
+    connectorOn();
   });
 
   it("says nothing of queries on an instance that publishes neither the switch nor the offer", async () => {
@@ -279,12 +288,12 @@ describe("db commands", () => {
   it("says the dialects the instance runs and the egress addresses a database's firewall lets in", async () => {
     const shown = await cli(sb, ["db", "instance"], { env: fresh() });
     expect(shown.code, shown.stderr).toBe(0);
-    expect(shown.stdout).toMatch(/^dialects:\s+mysql, postgresql$/m);
+    expect(shown.stdout).toMatch(/^dialects:\s+mssql, mysql, postgresql$/m);
     expect(shown.stdout).toMatch(/^egress_ips:\s+203\.0\.113\.10, 203\.0\.113\.11$/m);
     expect(shown.stdout).toMatch(/Allow 203\.0\.113\.10, 203\.0\.113\.11 through the database's firewall, on the database's port/);
     expect(shown.stdout).toMatch(/opens at most 5 connections per database connection/);
     const json = (await cli(sb, ["db", "instance", "--json"])).json<Record<string, unknown>>();
-    expect(json).toMatchObject({ published: true, runnable_dialects: ["mysql", "postgresql"], network: { egress_ips: ["203.0.113.10", "203.0.113.11"], connections_per_process: 5 } });
+    expect(json).toMatchObject({ published: true, runnable_dialects: ["mssql", "mysql", "postgresql"], network: { egress_ips: ["203.0.113.10", "203.0.113.11"], connections_per_process: 5 } });
     expect(json.firewall).toMatch(/^Allow 203\.0\.113\.10/);
     const before = server.state.db.instance;
     server.state.db.instance = { runnable_dialects: ["postgresql"], network: { egress_ips: [], connections_per_process: 1 } };
@@ -350,6 +359,29 @@ describe("db commands", () => {
       delete seeded.connection.caCertificates;
       delete seeded.connection.caDetails;
     }
+  });
+
+  it("names a connection whose queries cannot be enabled, with the instance's code, and explains it", async () => {
+    seeded.connection.queryEnableRefusal = {
+      code: "write_privileges_unacknowledged",
+      message: "The connection's last test found that its login can write, and SQL Server has no read-only transaction.",
+    };
+    try {
+      const listed = await cli(sb, ["db", "connections"], { env: fresh() });
+      expect(listed.stdout).toMatch(/^Queries cannot be enabled on: shop-db \(write_privileges_unacknowledged: The connection's last test found/m);
+      expect(listed.stdout).toMatch(/cavelon explain <code> \(write_privileges_unacknowledged\)/);
+      const json = (await cli(sb, ["db", "connections", "--json"])).json<{ items: Array<Record<string, unknown>> }>();
+      expect(json.items[0]).toMatchObject({ write_privileges_acknowledged: false, query_enable_refusal: { code: "write_privileges_unacknowledged" } });
+    } finally {
+      delete seeded.connection.queryEnableRefusal;
+    }
+    const explained = await cli(sb, ["explain", "write_privileges_unacknowledged", "--json"]);
+    expect(explained.code, explained.stderr).toBe(0);
+    expect(explained.json<{ code: string; message: string; hint: string }>()).toMatchObject({
+      code: "write_privileges_unacknowledged",
+      message: expect.stringContaining("SQL Server"),
+      hint: expect.stringContaining("a superadmin acknowledges"),
+    });
   });
 
   it("tests a connection, and exits 3 with the failed step's code when a step fails", async () => {
