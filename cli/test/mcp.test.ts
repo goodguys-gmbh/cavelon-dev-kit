@@ -434,7 +434,7 @@ describe("cavelon mcp", () => {
     // No tool sets or deletes a secret, or deletes a variable; no secret tool takes a value.
     for (const name of ["secrets_set", "secrets_delete", "variables_delete"]) expect(byName[name], name).toBeUndefined();
     for (const tool of tools.filter((t) => t.name.startsWith("secrets"))) expect(Object.keys((tool.inputSchema as { properties: object }).properties)).not.toContain("value");
-    expect(client.getInstructions()).toMatch(/tell them the exact `cavelon secrets set <name>` command/);
+    expect(client.getInstructions()).toMatch(/the exact `cavelon secrets set <name>` command to run in their terminal, or, where the instance lets no token set one, the Admin under Settings › Secrets/);
     expect(client.getInstructions()).toMatch(/Never approve or decide an approval/);
 
     const set = payload(await client.callTool({ name: "variables_set", arguments: { name: "region", value: "eu" } }));

@@ -88,7 +88,8 @@ It does **not** see:
 
 - **secret values** (`{{secret:…}}`): `secrets list` shows only names and
   whether each is set; a value is set by a person with `cavelon secrets set`
-  in their own terminal, and is never printed, written to a file or read back;
+  in their own terminal, or in the Admin where the instance lets no token set
+  one, and is never printed, written to a file or read back;
 - the **keys of model endpoints**: `models list` shows the endpoint and the
   key's kind, never the key;
 - **API keys** a trigger runs as: they are named by name or id, never by value.
@@ -211,7 +212,11 @@ confirms, as before; a token given there is checked too.
 `secrets set` and `secrets delete` are refused under a coding agent, with or
 without `--confirm`, before a value is read or anything is sent
 (`operation_for_a_person`, exit 5), as `cavelon api` refuses the same
-operations. You run them in your own terminal.
+operations. You run them in your own terminal. Where the instance lets only a
+person signed in to the Admin set or delete a secret (its `/meta/principal`
+lists them in `needs_a_person`), they are refused for every token before a
+value is read (`secret_needs_a_person`, exit 5), and you set it in the Admin
+under Settings › Secrets.
 
 A refusal says who runs the command instead, never which variable made
 `cavelon` take the shell for an agent's.
@@ -237,7 +242,7 @@ every other preview first.
 | `tenant create` | `tenant_create` | adds a tenant to the platform (Platform mode) | preview, always |
 | `variables set` | `variables_set` | a tenant-wide `{{var:…}}` value every solution reads | preview when it replaces another value; a new variable is created at once |
 | `variables delete` | none | removes a tenant variable | preview, always |
-| `secrets set` | none | a secret's value | a person only: refused under a coding agent; the value is read from a terminal or stdin |
+| `secrets set` | none | a secret's value | a person only: refused under a coding agent, and for every token where the instance lets only the Admin set it; the value is read from a terminal or stdin |
 | `secrets delete` | none | removes a secret's value | a person only, and a preview |
 | `loop start` | `loop_start` | starts a run that acts as you and spends budget | preview, always (an agent may confirm a trigger of a draft solution in a test environment) |
 | `loop cancel` | `loop_cancel` | stops a run and its loops | preview, always |

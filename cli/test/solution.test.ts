@@ -1769,7 +1769,7 @@ describe("activate and status with a secret the package declares and nobody set"
   const items = [{ key: "secret:crm_api_token", label: "Secret crm_api_token", kind: "secret", required: true, status: "missing", confirmed: false, href: "/settings/secrets" }];
   const blocker = { key: "requirements", label: "Required configuration", state: "action_required", detail: "set what its package declares it needs", href: null };
 
-  it("names who sets it: a person with this token, or a tenant Owner when the token's role may not", async () => {
+  it("names who sets it: a person with this token, or a tenant Owner in the Admin when the token's role may not", async () => {
     await cli(sb, ["harness", "new", "needs-secret"]);
     server.state.ready = false;
     server.state.readinessBlockers = [{ ...blocker, items }];
@@ -1789,10 +1789,31 @@ describe("activate and status with a secret the package declares and nobody set"
       await login(builder, server.url, server.addToken({ kind: "pat", tenantIds: [tenant], defaultTenant: tenant, mayActivate: true, permissions: ["agents.manage", "agents.view"] }));
       const theirs = await cli(builder, ["activate", "--harness", "needs-secret"]);
       expect(theirs.code, theirs.stderr + theirs.stdout).toBe(3);
+      // The instance publishes needs_a_person, so it refuses every token on a secret: the Owner sets it in the Admin.
       expect(theirs.stdout).toContain(
         "Secret crm_api_token is not set, and this token's role cannot set secrets. A tenant Owner (or another role allowed to manage secrets) sets it, " +
-          "in the Admin under Settings › Secrets or with their own token: cavelon secrets set crm_api_token",
+          "signed in to the Admin under Settings › Secrets.",
       );
+      // An older instance, whose tokens set secrets, names the Owner's own token too.
+      server.state.serveCredentialAccess = false;
+      try {
+        expect((await cli(builder, ["activate", "--harness", "needs-secret"])).stdout).toContain(
+          "A tenant Owner (or another role allowed to manage secrets) sets it, in the Admin under Settings › Secrets or with their own token: cavelon secrets set crm_api_token",
+        );
+      } finally {
+        server.state.serveCredentialAccess = true;
+      }
+      // Where no token sets a secret, a person's own token hears the Admin too.
+      server.state.tokensRefusedOnSecrets = true;
+      try {
+        const own = await cli(sb, ["activate", "--harness", "needs-secret", "--json"]);
+        expect(own.json<{ missing_secrets: Record<string, unknown> }>().missing_secrets).toMatchObject({ may_set: false });
+        expect((await cli(sb, ["activate", "--harness", "needs-secret"])).stdout).toContain(
+          "Secret crm_api_token is not set: A tenant Owner (or another role allowed to manage secrets) sets it, signed in to the Admin under Settings › Secrets (never the agent).",
+        );
+      } finally {
+        server.state.tokensRefusedOnSecrets = false;
+      }
       const dir = folder();
       expect((await cli(builder, ["init", "--instance", server.url, "--tenant", tenant, "--harness", "needs-secret"], { cwd: dir })).code).toBe(0);
       const status = await cli(builder, ["status"], { cwd: dir });

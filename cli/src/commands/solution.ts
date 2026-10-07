@@ -52,8 +52,8 @@ import { listedPages } from "./docs.js";
 import { readInventory, readInventoryKinds, writeInventory, type InventoryKind } from "./inventory.js";
 import { checkedBy, MODEL_UNKNOWN_CODE, missingInventory, REFERENCE_UNKNOWN_CODE } from "../package-references.js";
 import { cavelonCommand, printedCommand, spoken } from "../printed.js";
-import { secretSetCommand, variableSetCommand } from "./values.js";
-import { maySetSecrets, SECRET_SETTER, VARIABLE_SETTER } from "../secret-access.js";
+import { secretStep, variableSetCommand } from "./values.js";
+import { maySetSecrets, SECRET_SETTER, SECRET_SETTER_IN_ADMIN, secretsInAdminOnly, VARIABLE_SETTER } from "../secret-access.js";
 import { ACTIVATOR, accessFor, accessOf, mayActivate, operationAccess, principalOf, type CredentialAccess } from "../access.js";
 
 /**
@@ -640,11 +640,15 @@ function valueNeeds(list: Array<ValueNeed | string> | undefined): ValueNeed[] {
   return (list ?? []).map((n) => (typeof n === "string" ? { name: n } : n)).filter((n) => typeof n.name === "string" && n.name !== "");
 }
 
-/** The commands that set what the target still lacks: a person runs the secret ones, never the agent. */
-function setCommands(preview: Preview, env?: string | null): { secrets: string[]; variables: string[] } {
+/**
+ * The commands that set what the target still lacks: a person runs the secret
+ * ones, never the agent; where only a person signed in to the Admin sets a
+ * secret (`inAdmin`), each names the Admin page instead.
+ */
+function setCommands(preview: Preview, env?: string | null, inAdmin = false): { secrets: string[]; variables: string[] } {
   const needs = preview.target_needs ?? {};
   return {
-    secrets: valueNeeds(needs.secrets).map((n) => secretSetCommand(n.name!, env)),
+    secrets: valueNeeds(needs.secrets).map((n) => secretStep(n.name!, inAdmin, env)),
     variables: valueNeeds(needs.variables).map((n) => variableSetCommand(n.name!, env)),
   };
 }
@@ -676,8 +680,10 @@ function needsLines(needs: NonNullable<Preview["target_needs"]>, access?: Creden
   const lines: Array<[string, unknown]> = [];
   const secrets = valueNeeds(needs.secrets);
   if (secrets.length) {
-    const each = needLines(secrets, (name) => secretSetCommand(name), cavelonCommand("secrets", "list", "--missing"));
-    lines.push(["needs secrets", `${each}\n  (a person runs these in a terminal, or sets them in the Admin; never the agent)`]);
+    const inAdmin = secretsInAdminOnly(access?.principal) === true;
+    const each = needLines(secrets, (name) => secretStep(name, inAdmin), cavelonCommand("secrets", "list", "--missing"));
+    const who = inAdmin ? "a person sets them, signed in to the Admin; never the agent" : "a person runs these in a terminal, or sets them in the Admin; never the agent";
+    lines.push(["needs secrets", `${each}\n  (${who})`]);
   }
   const variables = valueNeeds(needs.variables);
   if (variables.length) {
@@ -986,7 +992,7 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
     // The instance now holds the package's queries: an import that would have changed one was refused.
     await rememberQueries(project.root, stored.request.package, (await schemaFor(ctx, packageVersionOf(stored.request.package), false)).schema, "apply", ctx.io.now());
     const summary = (result.summary ?? {}) as Preview["summary"];
-    const still = setCommands(stored.preview as Preview, stored.env ?? undefined);
+    const still = setCommands(stored.preview as Preview, stored.env ?? undefined, secretsInAdminOnly((await accessFor(client))?.principal) === true);
     // The tenant-wide sections this import took along: as its result says on a recent instance, else as its preview reported them.
     const sharedSent = stored.request[INCLUDE_TENANT_WIDE] === true;
     const resultReport = tenantWideReport(result.tenant_wide);
@@ -1170,7 +1176,7 @@ export const apply: CommandSpec = {
     "still needs (secrets and variables with the command that sets each, grants, runtime bindings, trigger identities), loop\n" +
     "budgets and ignored sections, and is stored in .cavelon/. A preview never creates the solution: one the env file names\n" +
     "that is not on the instance yet gets the `cavelon harness new` command that creates it as a draft. A person sets the\n" +
-    "secrets (`cavelon secrets set <name>`), never the agent.\n" +
+    "secrets (`cavelon secrets set <name>`, or in the Admin where the instance lets no token set one), never the agent.\n" +
     "Show a preview that reaches an active solution or env/prod to a person before confirming. A stale preview exits 4 and\n" +
     "imports nothing: one whose target changed on the instance since, one whose package files changed since (what they\n" +
     "hold, not their formatting; --allow-stale imports what the preview showed anyway), and one older than a day. So does\n" +
@@ -1316,9 +1322,10 @@ export const apply: CommandSpec = {
         : sharedLeftOut.length
           ? `tenant-wide: ${sharedLeftOut.join(", ")} left out (\`${cavelonCommand("apply", "--include-tenant-wide")}\` imports them, for every solution of the tenant${reachText ? `; they would reach ${reachText}` : ""})`
           : undefined;
-    const commands = setCommands(preview);
+    const access = await accessFor(await ctx.client());
+    const commands = setCommands(preview, undefined, secretsInAdminOnly(access?.principal) === true);
     if (commands.secrets.length || commands.variables.length) data.set_commands = commands;
-    const context: PreviewContext = { disk, harness: harness?.slug, access: await accessFor(await ctx.client()) };
+    const context: PreviewContext = { disk, harness: harness?.slug, access };
     Object.assign(data, previewReport(preview, context));
     // A blocked preview has no id on recent instances: its blockers come first, never a call to update the instance.
     if (!preview.ready) {
@@ -1645,11 +1652,24 @@ function missingSecrets(blockers: ReadinessCheck[]): string[] {
   return [...names];
 }
 
-/** What to do about secrets the gate names as not set: who sets each, by whether this credential may. */
-function missingSecretsLine(names: string[], may: boolean | null): string {
+/**
+ * What to do about secrets the gate names as not set: who sets each, by
+ * whether this credential may, and where. `inAdmin` is `secretsInAdminOnly`:
+ * true where only a person signed in to the Admin sets one; false on an
+ * instance that says so for other credentials (it publishes `needs_a_person`,
+ * and refuses every token on a secret since the same release), so whoever
+ * sets it for a role that may not does so in the Admin; null on an older
+ * instance, where a person's own token sets it too.
+ */
+function missingSecretsLine(names: string[], may: boolean | null, inAdmin: boolean | null): string {
   const which = `Secret${names.length === 1 ? "" : "s"} ${names.join(", ")} ${names.length === 1 ? "is" : "are"} not set`;
-  const commands = names.map((n) => secretSetCommand(n)).join("; ");
-  if (may === false) return `${which}, and this token's role cannot set secrets. ${SECRET_SETTER}: ${commands}`;
+  if (inAdmin === true) return `${which}: ${SECRET_SETTER_IN_ADMIN} (never the agent).`;
+  const commands = names.map((n) => secretStep(n, false)).join("; ");
+  if (may === false) {
+    return inAdmin === false
+      ? `${which}, and this token's role cannot set secrets. ${SECRET_SETTER_IN_ADMIN}.`
+      : `${which}, and this token's role cannot set secrets. ${SECRET_SETTER}: ${commands}`;
+  }
   return `${which}: a person sets ${names.length === 1 ? "it" : "each"} (never the agent): ${commands}`;
 }
 
@@ -1676,7 +1696,8 @@ export interface SolutionState {
    */
   default_route?: { is_default: boolean | null; current: { id: string; slug: string; name: string } | null };
   /** The secrets readiness names as not set, and whether this credential may set them (null: the instance does not say). */
-  missing_secrets?: { names: string[]; may_set: boolean | null };
+  /** `set_in_admin`: whether only a person signed in to the Admin sets them; null where the instance does not say. */
+  missing_secrets?: { names: string[]; may_set: boolean | null; set_in_admin?: boolean | null };
   /** Whether this credential may activate it; null where the instance does not say. */
   may_activate?: boolean | null;
   /** Why part of it could not be read; the rest stands. */
@@ -1714,7 +1735,7 @@ export async function solutionState(ctx: Context, ref: string): Promise<Solution
     state.blockers = (readiness.blockers ?? []).map((b) => clip(String(b.label ?? b.key ?? b.detail ?? "?"), 80));
     const secrets = missingSecrets(readiness.blockers ?? []);
     const principal = await principalOf(await ctx.client());
-    if (secrets.length) state.missing_secrets = { names: secrets, may_set: maySetSecrets(principal) };
+    if (secrets.length) state.missing_secrets = { names: secrets, may_set: maySetSecrets(principal), set_in_admin: secretsInAdminOnly(principal) };
     if (harness.status !== "active") state.may_activate = mayActivate(accessOf(principal));
     if ("latest_test_run" in readiness) {
       const run = readiness.latest_test_run;
@@ -1750,7 +1771,7 @@ export function solutionStateLines(state: SolutionState): Array<[string, unknown
           ? `not ready to activate${state.blockers?.length ? ` (${list(state.blockers, 3)})` : ""}`
           : undefined;
   const lines: Array<[string, unknown]> = [["state", [state.harness.status, ready].filter(Boolean).join(", ")]];
-  if (state.missing_secrets) lines.push(["secrets", missingSecretsLine(state.missing_secrets.names, state.missing_secrets.may_set)]);
+  if (state.missing_secrets) lines.push(["secrets", missingSecretsLine(state.missing_secrets.names, state.missing_secrets.may_set, state.missing_secrets.set_in_admin ?? null)]);
   const route = state.default_route;
   if (route) lines.push(["default route", defaultRouteText(state.harness, route, state.may_activate ?? null)]);
   const run = state.latest_test_run;
@@ -1972,7 +1993,7 @@ export const activate: CommandSpec = {
       // A secret the package declares is a person's to set, and with a role that may not, someone else's.
       const secrets = missingSecrets(blockers);
       const maySet = maySetSecrets(principal);
-      const secretsLine = secrets.length ? missingSecretsLine(secrets, maySet) : undefined;
+      const secretsLine = secrets.length ? missingSecretsLine(secrets, maySet, secretsInAdminOnly(principal)) : undefined;
       return {
         data: {
           activated: false,

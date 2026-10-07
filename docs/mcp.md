@@ -175,7 +175,8 @@ catalog names that the kit does not have stays as the catalog wrote it.
 - **`secrets set` and `secrets delete`**: a secret's value comes from a person.
   `secrets_list` shows which secrets are set (never a value), and the agent
   tells you the exact `cavelon secrets set <name>` command to run in your
-  terminal.
+  terminal, or, where the instance lets no token set a secret, to set it in
+  the Admin under Settings › Secrets.
 - **`variables delete`**: run it yourself.
 - **`watch` and `loop watch`**: they stream until the work ends, and a tool
   must not block. The agent polls `operation_status` and `loop_iterations`

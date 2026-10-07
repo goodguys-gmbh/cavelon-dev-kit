@@ -176,27 +176,85 @@ describe("cavelon secrets", () => {
     expect(server.state.requests.some((r) => r.method === "PUT")).toBe(false);
   });
 
-  it("refuses a tenant API key before asking for a value or sending anything, naming why", async () => {
+  it("refuses a tenant API key before asking for a value or sending anything, naming the Admin where the instance says a person sets it", async () => {
+    // A recent instance lists setting and deleting a secret among what a person runs, not this key.
     const result = await cli(keySb, ["secrets", "set", "crm_api_token", "--json"], { stdin: SECRET });
-    expect(result.code).toBe(7);
+    expect(result.code).toBe(5);
     const error = result.json<{ error: { code: string; message: string; hint: string; details: Record<string, unknown> } }>().error;
-    expect(error.code).toBe("secret_needs_a_person");
-    expect(error.message).toMatch(/A tenant API key cannot set a secret, so nothing was sent: setting a secret needs a person/);
-    expect(error.hint).toMatch(/personal access token \(`cavelon login`\) and runs `cavelon secrets set crm_api_token`/);
-    expect(error.details).toEqual({ sent: false, credential: "api_key" });
+    expect(error).toMatchObject({
+      code: "secret_needs_a_person",
+      message: expect.stringMatching(/^A tenant API key cannot set a secret on this instance, so nothing was sent: only a person signed in to the Admin sets/),
+      hint: "A person sets crm_api_token in the Admin under Settings › Secrets.",
+      details: { sent: false, credential: "api_key" },
+    });
     expect(result.stdout + result.stderr).not.toContain(SECRET);
     expect(secretRequests()).toHaveLength(0);
     expect(server.state.requests.some((r) => r.method === "PUT")).toBe(false);
-
-    // The same through CAVELON_TOKEN, and for delete.
-    const env = { CAVELON_URL: server.url, CAVELON_TOKEN: apiKey };
-    const bare = sandbox();
-    const fromEnv = await cli(bare, ["secrets", "delete", "crm_api_token", "--confirm", "--json"], { env }).finally(() => bare.cleanup());
-    expect(fromEnv.code).toBe(7);
-    expect(fromEnv.json<{ error: { code: string; hint: string } }>().error).toMatchObject({ code: "secret_needs_a_person", hint: expect.stringMatching(/^CAVELON_TOKEN holds a tenant API key/) });
-    expect(server.state.requests.some((r) => r.method === "DELETE" || r.method === "PUT")).toBe(false);
     // `cavelon explain` knows the instance's code.
-    expect((await cli(keySb, ["explain", "secret_needs_a_person"])).stdout).toMatch(/A tenant API key cannot set or delete a secret value/);
+    expect((await cli(keySb, ["explain", "secret_needs_a_person"])).stdout).toMatch(/A personal access token or an API key cannot set or delete a secret value/);
+  });
+
+  it("on an older instance, refuses a tenant API key and names a person's token, as before", async () => {
+    server.state.serveCredentialAccess = false;
+    try {
+      const result = await cli(keySb, ["secrets", "set", "crm_api_token", "--json"], { stdin: SECRET });
+      expect(result.code).toBe(7);
+      const error = result.json<{ error: { code: string; message: string; hint: string; details: Record<string, unknown> } }>().error;
+      expect(error.code).toBe("secret_needs_a_person");
+      expect(error.message).toMatch(/A tenant API key cannot set a secret, so nothing was sent: setting a secret needs a person/);
+      expect(error.hint).toMatch(/personal access token \(`cavelon login`\) and runs `cavelon secrets set crm_api_token`/);
+      expect(error.details).toEqual({ sent: false, credential: "api_key" });
+      expect(result.stdout + result.stderr).not.toContain(SECRET);
+
+      // The same through CAVELON_TOKEN, and for delete.
+      const env = { CAVELON_URL: server.url, CAVELON_TOKEN: apiKey };
+      const bare = sandbox();
+      const fromEnv = await cli(bare, ["secrets", "delete", "crm_api_token", "--confirm", "--json"], { env }).finally(() => bare.cleanup());
+      expect(fromEnv.code).toBe(7);
+      expect(fromEnv.json<{ error: { code: string; hint: string } }>().error).toMatchObject({ code: "secret_needs_a_person", hint: expect.stringMatching(/^CAVELON_TOKEN holds a tenant API key/) });
+      expect(server.state.requests.some((r) => r.method === "DELETE" || r.method === "PUT")).toBe(false);
+    } finally {
+      server.state.serveCredentialAccess = true;
+    }
+  });
+
+  describe("on an instance that lets only a person signed in to the Admin set a secret", () => {
+    beforeEach(() => {
+      server.state.tokensRefusedOnSecrets = true;
+    });
+    afterEach(() => {
+      server.state.tokensRefusedOnSecrets = false;
+      server.state.servePrincipal = true;
+    });
+
+    it("refuses a person's token on set and delete before reading a value or sending anything, naming the Admin", async () => {
+      server.state.requests.length = 0;
+      const set = await cli(sb, ["secrets", "set", "crm_api_token", "--json"], { stdin: SECRET });
+      expect(set.code).toBe(5);
+      expect(set.json<{ error: Record<string, unknown> }>().error).toMatchObject({
+        code: "secret_needs_a_person",
+        message: expect.stringMatching(/^A personal access token cannot set a secret on this instance/),
+        hint: "A person sets crm_api_token in the Admin under Settings › Secrets.",
+        details: { sent: false, credential: "personal_access_token" },
+      });
+      expect(set.stdout + set.stderr).not.toContain(SECRET);
+      const removed = await cli(sb, ["secrets", "delete", "crm_api_token", "--confirm", "--json"]);
+      expect(removed.code).toBe(5);
+      expect(removed.json<{ error: { hint: string } }>().error.hint).toBe("A person deletes crm_api_token in the Admin under Settings › Secrets.");
+      // An agent hears the same: the Admin, not a command that would be refused.
+      const agent = await cli(sb, ["secrets", "set", "crm_api_token", "--json"], { stdin: SECRET, env: { CLAUDECODE: "1" } });
+      expect(agent.json<{ error: { code: string } }>().error.code).toBe("secret_needs_a_person");
+      expect(server.state.requests.some((r) => r.method === "PUT" || r.method === "DELETE")).toBe(false);
+    });
+
+    it("passes the instance's own refusal on where the principal cannot be read, never naming a token", async () => {
+      server.state.servePrincipal = false;
+      const set = await cli(sb, ["secrets", "set", "crm_api_token", "--json"], { stdin: SECRET });
+      expect(set.code).toBe(7);
+      const error = set.json<{ error: { code: string; hint: string } }>().error;
+      expect(error).toMatchObject({ code: "secret_needs_a_person", hint: "A person sets it, signed in to the Admin under Settings › Secrets." });
+      expect(set.stdout + set.stderr).not.toContain(SECRET);
+    });
   });
 
   describe("run by a coding agent in its shell", () => {
@@ -248,17 +306,26 @@ describe("cavelon secrets", () => {
       const error = refused.json<Refusal>().error;
       expect(error).toMatchObject({ code: "permission_missing", details: { sent: true, permissions: ["settings.manage", "settings.secrets.manage"] } });
       expect(error.message).toMatch(/^This token's role may not set secrets: the instance refused it, as that needs settings\.manage or settings\.secrets\.manage/);
-      expect(error.hint).toBe(
-        "A tenant Owner (or another role allowed to manage secrets) sets it, in the Admin under Settings › Secrets or with their own token: `cavelon secrets set crm_api_token`.",
-      );
+      // This instance publishes needs_a_person, so it lets only a person signed in to the Admin set one: the Owner does it there.
+      expect(error.hint).toBe("A tenant Owner (or another role allowed to manage secrets) sets it, signed in to the Admin under Settings › Secrets.");
       expect(refused.stdout + refused.stderr).not.toContain(SECRET);
-      const elsewhere = await cli(builder, ["secrets", "set", "crm_api_token", "--tenant", tenant, "--json"], { stdin: SECRET });
-      expect(elsewhere.json<Refusal>().error.hint).toMatch(new RegExp(`: \`cavelon secrets set crm_api_token --tenant ${tenant}\`\\.$`));
+      expect((await cli(builder, ["whoami"])).stdout).toMatch(/^may set secrets:\s+no \(a tenant Owner sets them, signed in to the Admin under Settings › Secrets\)$/m);
+      // An older instance, whose tokens set secrets, names the Owner's own token and the command, with the --tenant given.
+      server.state.serveCredentialAccess = false;
+      try {
+        const older = await cli(builder, ["secrets", "set", "crm_api_token", "--json"], { stdin: SECRET });
+        expect(older.json<Refusal>().error.hint).toBe(
+          "A tenant Owner (or another role allowed to manage secrets) sets it, in the Admin under Settings › Secrets or with their own token: `cavelon secrets set crm_api_token`.",
+        );
+        const elsewhere = await cli(builder, ["secrets", "set", "crm_api_token", "--tenant", tenant, "--json"], { stdin: SECRET });
+        expect(elsewhere.json<Refusal>().error.hint).toMatch(new RegExp(`: \`cavelon secrets set crm_api_token --tenant ${tenant}\`\\.$`));
+        expect((await cli(builder, ["whoami"])).stdout).toMatch(/^may set secrets:\s+no \(a tenant Owner sets them, in the Admin or with their own token\)$/m);
+      } finally {
+        server.state.serveCredentialAccess = true;
+      }
       // The instance decided: the kit sent the request rather than refusing on permission names it only knows from a refusal.
-      expect(secretRequests().filter((r) => r.method === "PUT")).toHaveLength(2);
+      expect(secretRequests().filter((r) => r.method === "PUT")).toHaveLength(3);
 
-      const who = await cli(builder, ["whoami"]);
-      expect(who.stdout).toMatch(/^may set secrets:\s+no \(a tenant Owner sets them, in the Admin or with their own token\)$/m);
       expect((await cli(builder, ["whoami", "--json"])).json<{ credential: { may_set_secrets: boolean } }>().credential.may_set_secrets).toBe(false);
       expect((await cli(sb, ["whoami", "--json"])).json<{ credential: { may_set_secrets: boolean } }>().credential.may_set_secrets).toBe(true);
       expect((await cli(keySb, ["whoami", "--json"])).json<{ credential: { may_set_secrets: boolean } }>().credential.may_set_secrets).toBe(false);
@@ -394,6 +461,28 @@ describe("apply names the variables and secrets the target still needs", () => {
       expect.objectContaining({ name: "crm_api_token", status: "set", declared: true, description: "Token of the CRM integration user" }),
       expect.objectContaining({ name: "crm_token", status: "set", declared: false }),
     ]);
+  });
+
+  it("names the Admin for each secret where the instance lets no token set one", async () => {
+    const dir = await solution();
+    declare(dir);
+    server.state.tokensRefusedOnSecrets = true;
+    try {
+      const text = await cli(sb, ["apply", "--env", "test"], { cwd: dir });
+      expect(text.code, text.stdout + text.stderr).toBe(0);
+      expect(text.stdout).toMatch(/needs secrets:\s+- crm_api_token \(Token of the CRM integration user\): in the Admin under Settings › Secrets \(crm_api_token\)/);
+      expect(text.stdout).toMatch(/\(a person sets them, signed in to the Admin; never the agent\)/);
+      expect(text.stdout).not.toMatch(/cavelon secrets set/);
+      // Variables are not person-only: their commands stay.
+      expect(text.stdout).toMatch(/cavelon variables set crm_base_url <value> --env test/);
+      const data = (await cli(sb, ["apply", "--env", "test", "--json"], { cwd: dir })).json<{ set_commands: { secrets: string[] } }>();
+      expect(data.set_commands.secrets).toEqual(["in the Admin under Settings › Secrets (crm_api_token)", "in the Admin under Settings › Secrets (crm_token)"]);
+      const list = await cli(sb, ["secrets", "list", "--json"], { cwd: dir });
+      expect(list.json<{ declared_locally: unknown[] }>().declared_locally.length).toBeGreaterThan(0);
+      expect((await cli(sb, ["secrets", "list"], { cwd: dir })).stdout).toMatch(/A person may set it before that: in the Admin under Settings › Secrets \(crm_api_token\)/);
+    } finally {
+      server.state.tokensRefusedOnSecrets = false;
+    }
   });
 
   it("tells a credential that may not set variables who sets them", async () => {

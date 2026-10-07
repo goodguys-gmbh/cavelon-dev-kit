@@ -43,6 +43,13 @@ the credential's permissions would allow that a person runs instead). Trimmed,
 it differs from the snapshot only there and in `MetaLimits.tenant_quotas`,
 which that build may leave out (null).
 
+On 2026-10-07 the error catalog took three entries from ChatFlow main, as its
+`app/core/api_errors.py` defines them: the new wording of
+`secret_needs_a_person` (a personal access token cannot set or delete a secret
+either) and `approval_needs_a_person`, and the new `person_only_operation`,
+from the instance build that refuses every token and key on what a person runs.
+The rest of the catalog stays as recorded.
+
 The tests switch features on in the fake server where a command needs them
 (personal access tokens, the operations API, Sandboxes, Masterloop, archive
 uploads, the database connector); the snapshot keeps the defaults.

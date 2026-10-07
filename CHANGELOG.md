@@ -7,6 +7,27 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Fixed
+
+- An instance that lets only a person signed in to the Admin set or delete a
+  secret refuses every personal access token there, not only a tenant API key
+  (#149). `cavelon secrets set` then failed after asking for the value, and
+  `apply`, `activate`, `status` and `secrets list` sent the person to that
+  command. The kit now reads it from `/meta/principal`, whose `needs_a_person`
+  lists both operations for the credential:
+  - `secrets set` and `secrets delete` refuse before they read a value or send
+    anything (`secret_needs_a_person`, exit 5), naming the Admin's Settings ›
+    Secrets page;
+  - `apply`'s needs and `set_commands`, the reminder after an import,
+    `activate`, `status`, `secrets list` and `whoami` ("may set secrets") name
+    that page instead of the command, and so does the hint for a role that may
+    not set secrets;
+  - the MCP server's instructions, the skills and the docs say both ways.
+  An instance that does not publish `needs_a_person` takes a personal access
+  token there, and nothing changes for it. The contract snapshot carries the
+  instance's new wording of `secret_needs_a_person` and
+  `approval_needs_a_person`, and `person_only_operation`.
+
 ## [0.1.11] - 2026-10-06
 
 Permissions and safeguards from a review of what a restricted credential may

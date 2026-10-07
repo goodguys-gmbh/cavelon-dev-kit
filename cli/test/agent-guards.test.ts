@@ -179,7 +179,7 @@ describe("cavelon api and the api tool, run by an agent and by a person", () => 
         expect(result.json<{ error: Record<string, unknown> }>().error).toMatchObject({
           code: "operation_for_a_person",
           message: expect.stringMatching(/is for a person only, as the instance marks it .*cavelon api does not send it when a coding agent runs it, with or without --confirm\.$/),
-          hint: expect.stringMatching(/^A person sets a secret in their own terminal with `cavelon secrets set <name>`/),
+          hint: expect.stringMatching(/^A person sets a secret in the Admin under Settings › Secrets, or, on an instance that still takes a token there, in their own terminal with `cavelon secrets set <name>`/),
           details: { source: "instance" },
         });
         // What tells an agent from a person stays unsaid, so the refusal does not say how to get past it.

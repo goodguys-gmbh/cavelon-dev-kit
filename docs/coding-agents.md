@@ -43,7 +43,9 @@ Codex with the Cavelon plugin; any agent `cavelon setup` or
 **Some things the agent never does.** It never sees your token, never asks you
 for a secret's value or sets one, and never approves or rejects anything that
 waits at an approval step. When a secret is missing, it gives you the
-`cavelon secrets set <name>` command to run in your own terminal.
+`cavelon secrets set <name>` command to run in your own terminal, or, where
+your instance lets no token set a secret, points you to the Admin
+(Settings › Secrets).
 
 ### Where each rule comes from
 
@@ -190,7 +192,7 @@ runs.
      the agent stops and asks you;
    - **needs**: variables, secrets, grants, runtime bindings and trigger
      identities the target is missing. Run the `cavelon secrets set` commands
-     it prints yourself;
+     it prints yourself, or set the secrets in the Admin where it names it;
    - **ignored**: sections the instance does not know, which a newer package
      format or a typo can cause.
 5. **Apply.** For a draft solution in test, the agent confirms with

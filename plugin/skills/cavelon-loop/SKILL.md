@@ -35,7 +35,9 @@ use it when you parse the result.
 - **Secrets are set by a person.** When a preview or `cavelon secrets list`
   names a secret that is not set, tell the person the exact command to run in
   their terminal, `cavelon secrets set <name>` (as `apply` prints it, with its
-  `--env` and `--tenant`). Never ask for the value, never pipe or pass one yourself; there is
+  `--env` and `--tenant`). Where the instance lets no token set a secret,
+  `apply`, `activate`, `status` and `secrets list` name the Admin page
+  (Settings › Secrets) instead: tell the person that, not the command. Never ask for the value, never pipe or pass one yourself; there is
   no MCP tool for it. Plain-text variables you may set with `cavelon variables
   set <name> <value>` when the value is not a credential and your role may
   manage the tenant's settings, as for a secret: a Builder's may not, and
@@ -253,7 +255,8 @@ show the preview to the person, and confirm only after they agree, when:
   `--include-tenant-wide` or on an instance that imports them anyway): every
   solution of the tenant sees the change;
 - the preview lists target needs (secrets, grants, identities): only a person
-  can provide them, with `cavelon secrets set <name>` or in the Admin.
+  can provide them, with `cavelon secrets set <name>` or in the Admin, as the
+  preview names it.
 
 The same holds for the other commands that take `--confirm`: without it they
 only show what would happen. Show it to the person before `cavelon trigger
