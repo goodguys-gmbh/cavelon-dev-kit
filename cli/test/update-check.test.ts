@@ -73,6 +73,9 @@ describe("the install method", () => {
     expect(uvx).toMatchObject({ method: "uvx", source: "github" });
     expect(uvx.update).toBeUndefined();
     expect(uvx.advice).toContain("uvx cavelon@latest");
+    // A cache of the person's choosing, named by UV_CACHE_DIR.
+    const movedCache = facts("/data/uvcache/archive-v0/Xy12ab/bin/cavelon", { env: { UV_CACHE_DIR: "/data/uvcache" }, ...marked("/data/uvcache/archive-v0/Xy12ab/share/cavelon/pypi") });
+    expect(detectInstall(movedCache)).toMatchObject({ method: "uvx" });
     // pip install --user puts it where the install script does; the marker tells them apart.
     expect(detectInstall(facts("/u/ada/.local/bin/cavelon", marked("/u/ada/.local/share/cavelon/pypi")))).toMatchObject({
       method: "pip",

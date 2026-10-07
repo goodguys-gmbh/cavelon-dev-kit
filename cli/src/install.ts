@@ -133,8 +133,8 @@ function pypiInstall(facts: InstallFacts, p: path.PlatformPath, lower: string[])
   };
   if (follows("uv", "tools") || under(facts.env.UV_TOOL_DIR)) return { method: "uv-tool", path: file, update: "uv tool upgrade cavelon", source: "github" };
   if (follows("pipx", "venvs") || under(facts.env.PIPX_HOME)) return { method: "pipx", path: file, update: "pipx upgrade cavelon", source: "github" };
-  // uvx builds its environment in uv's cache and reuses it until asked for the latest.
-  if (lower.includes("uv") && lower.some((s) => s.startsWith("archive-v"))) {
+  // uvx builds its environment in uv's cache (or where UV_CACHE_DIR moved it) and reuses it until asked for the latest.
+  if ((lower.includes("uv") || under(facts.env.UV_CACHE_DIR)) && lower.some((s) => s.startsWith("archive-v"))) {
     return { method: "uvx", path: file, advice: "uvx reuses the release it cached; `uvx cavelon@latest` runs the newest.", source: "github" };
   }
   return { method: "pip", path: file, update: "pip install --upgrade cavelon", source: "github" };

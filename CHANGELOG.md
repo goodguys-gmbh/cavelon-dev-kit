@@ -7,6 +7,12 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Fixed
+
+- `cavelon --version` and the update notice named pip, with `pip install
+  --upgrade cavelon`, for a `uvx` run whose cache `UV_CACHE_DIR` moved; they
+  now name uvx, as for uv's default cache.
+
 ## [0.1.12] - 2026-10-07
 
 A person confirms what reaches live traffic or the whole tenant, and the
