@@ -15,6 +15,9 @@ export interface FakeConnection {
   name: string;
   dialect: string;
   last_test_outcome: string | null;
+  /** Saved public connection fields; seeded connections retain the older defaults. */
+  fields?: Record<string, unknown>;
+  schemaResult?: Record<string, unknown>;
   /** The steps a test reports; a passing run of every step by default. */
   testSteps?: Array<{ name: string; status: string; code: string | null }>;
   /** The uploaded CA's certificates. */
@@ -106,6 +109,8 @@ export interface DatabaseRoute {
   tenantId: string;
   /** features.database_connector_enabled as the capabilities publish it. */
   enabled: boolean;
+  /** The server checks effective permissions independently of what /meta/principal publishes. */
+  mayManage?: boolean;
   send: (status: number, body: unknown) => void;
 }
 
@@ -142,6 +147,7 @@ function connectionView(state: DatabaseState, c: FakeConnection) {
     updated_by_user_id: null,
     created_at: "2026-10-01T08:00:00Z",
     updated_at: "2026-10-01T08:00:00Z",
+    ...c.fields,
   };
 }
 
@@ -212,11 +218,51 @@ export function handleDatabase(state: DatabaseState, rc: DatabaseRoute): boolean
     rc.send(200, state.instance);
     return true;
   }
+  const connectionBody = (rc.json ?? {}) as Record<string, unknown>;
+  const connectionChange = rc.path === "/api/v1/database-connectors/connections" && rc.method === "POST";
+  const managed = connectionChange || (rc.path.startsWith("/api/v1/database-connectors/connections/") && (rc.method === "PATCH" || rc.method === "DELETE" || rc.path.endsWith("/schema")));
+  if (managed && rc.mayManage === false) {
+    rc.send(403, { detail: "Missing permissions: database_connectors.manage" });
+    return true;
+  }
+  if (managed && "password" in connectionBody) {
+    rc.send(403, { detail: { code: "person_only_operation", message: "A person sets the database password in the Admin." } });
+    return true;
+  }
+  if (connectionChange) {
+    if (own(state.connections).some(c => c.name === connectionBody.name)) {
+      rc.send(409, { detail: "A database connection with this name already exists" });
+      return true;
+    }
+    const created: FakeConnection = {
+      id: randomUUID(), tenant_id: rc.tenantId, name: String(connectionBody.name), dialect: String(connectionBody.dialect), last_test_outcome: null,
+      fields: { ...connectionBody, password_set: false },
+    };
+    state.connections.push(created);
+    rc.send(201, connectionView(state, created));
+    return true;
+  }
+  const loginPath = rc.path === "/api/v1/database-connectors/login-script";
+  const savedLogin = /^\/api\/v1\/database-connectors\/connections\/([^/]+)\/login-script$/.exec(rc.path);
+  if ((loginPath || savedLogin) && rc.method === "GET") {
+    const saved = savedLogin ? own(state.connections).find(c => c.id === savedLogin[1]) : undefined;
+    if (savedLogin && !saved) { rc.send(404, { detail: "Database connection not found" }); return true; }
+    const dialect = saved?.dialect ?? rc.url.searchParams.get("dialect");
+    rc.send(200, {
+      dialect, kind: "read_only", database_name: saved?.fields?.database_name ?? rc.url.searchParams.get("database_name") ?? "your_database",
+      username: saved?.fields?.username ?? rc.url.searchParams.get("username") ?? "cavelon_reader", schema: rc.url.searchParams.get("schema"),
+      egress_ips: rc.url.searchParams.has("egress_ips") ? rc.url.searchParams.getAll("egress_ips") : state.instance.network.egress_ips,
+      connection_limit: Number(rc.url.searchParams.get("connection_limit") ?? 20), connection_limit_enforced: dialect !== "mssql",
+      require_tls: saved ? saved.fields?.tls_mode !== "disable" : rc.url.searchParams.get("require_tls") !== "false",
+      script: "-- Public read-only login template; the DBA replaces the password locally.\nSELECT 1;",
+    });
+    return true;
+  }
   if (rc.path === "/api/v1/database-connectors/connections" && rc.method === "GET") {
     rc.send(200, own(state.connections).map((c) => connectionView(state, c)));
     return true;
   }
-  let m = /^\/api\/v1\/database-connectors\/connections\/([^/]+)(\/test)?$/.exec(rc.path);
+  let m = /^\/api\/v1\/database-connectors\/connections\/([^/]+)(\/test|\/schema)?$/.exec(rc.path);
   if (m) {
     const connection = own(state.connections).find((c) => c.id === m![1]);
     if (!connection) {
@@ -227,7 +273,35 @@ export function handleDatabase(state: DatabaseState, rc: DatabaseRoute): boolean
       rc.send(200, connectionView(state, connection));
       return true;
     }
-    if (m[2] && rc.method === "POST") {
+    if (!m[2] && rc.method === "PATCH") {
+      const before = connectionView(state, connection);
+      const changedTarget = ["host", "port", "dialect"].filter(k => k in connectionBody && connectionBody[k] !== (before as Record<string, unknown>)[k]);
+      if (before.password_set && changedTarget.length) {
+        rc.send(422, { detail: { code: "credential_required_for_target_change", message: "A person changes this target with its password in the Admin.", fields: changedTarget } });
+        return true;
+      }
+      connection.fields = { ...connection.fields, ...connectionBody, config_version: Number(before.config_version) + 1 };
+      if (connectionBody.name) connection.name = String(connectionBody.name);
+      if (connectionBody.dialect) connection.dialect = String(connectionBody.dialect);
+      rc.send(200, connectionView(state, connection));
+      return true;
+    }
+    if (!m[2] && rc.method === "DELETE") {
+      if (state.queries.some(q => q.connection_id === connection.id)) { rc.send(409, { detail: "Queries still use the connection" }); return true; }
+      state.connections.splice(state.connections.indexOf(connection), 1);
+      rc.send(204, null);
+      return true;
+    }
+    if (m[2] === "/schema" && rc.method === "POST") {
+      const schema = connectionBody.schema;
+      rc.send(200, connection.schemaResult ?? {
+        schema: schema ?? null, schemas: schema ? [] : ["public"],
+        tables: schema ? [{ name: "orders", kind: "table", columns: [{ name: "order_number", data_type: "text", nullable: false }], columns_truncated: false }] : [],
+        truncated: false, error_code: null, driver_message: null, duration_ms: 10,
+      });
+      return true;
+    }
+    if (m[2] === "/test" && rc.method === "POST") {
       if (!state.mayTest) {
         rc.send(403, { detail: "Permission denied: database_connectors.test" });
         return true;

@@ -1355,7 +1355,7 @@ export async function startFakeServer(): Promise<FakeServer> {
         : handleSecret(res, method, tid, decodeURIComponent(rest), body.json, info);
     }
     const caps = capabilitiesFor(tid) as { features?: Record<string, boolean> };
-    if (handleDatabase(state.db, { method, path: p, url, json: body.json, tenantId: tid, enabled: caps.features?.database_connector_enabled === true, send: (status, payload) => send(res, status, payload) })) return;
+    if (handleDatabase(state.db, { method, path: p, url, json: body.json, tenantId: tid, enabled: caps.features?.database_connector_enabled === true, mayManage: info.kind !== "key" && (!info.permissions || info.permissions.includes("database_connectors.manage")), send: (status, payload) => send(res, status, payload) })) return;
     const handled = handleLongRunning(state.lr, {
       method,
       path: p,

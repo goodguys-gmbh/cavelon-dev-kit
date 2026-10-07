@@ -568,7 +568,7 @@ describe("skills", () => {
     const text = (name: string) => skills.find((s) => s.name === name)!.files.find((f) => f.path === "SKILL.md")!.content;
     expect(text("cavelon-authoring")).toMatch(/## Database query tools[\s\S]*source: end_user\.email[\s\S]*allows_anonymous/);
     expect(text("cavelon-authoring")).toContain("cavelon docs get administration/database-connectors");
-    expect(text("cavelon-loop")).toMatch(/Database connections are set up by a person[\s\S]*same connection name in every tenant and environment/);
+    expect(text("cavelon-loop")).toMatch(/Connect a database, leaving the password with a person[\s\S]*same connection name in every tenant and environment/);
     expect(text("cavelon-loop")).toMatch(/`cavelon db instance` says which\s+dialects this instance runs and the addresses it connects from/);
     expect(text("cavelon-loop")).toMatch(/Database query changes need manage permission and the person's yes/);
     expect(text("cavelon-loop")).toMatch(/database_queries\.would_write[\s\S]*person\s+approval even on a draft/);

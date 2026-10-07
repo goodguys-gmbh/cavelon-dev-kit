@@ -9,6 +9,16 @@ CLI, the skills and the plugin.
 
 ### Added
 
+- Database connection management (#170): `db connections create`, `update`,
+  `delete` and `ca` follow `database_connectors.manage`, validate published
+  fields and upload only public certificates. Passwords stay in the Admin;
+  creation prints the `needs_a_person` step. `db login-script` prints only
+  the instance's published login SQL (this build offers `read_only`), and
+  `db schema` explores the catalog read-only under the manage gate. Optional
+  `allows_writes` is output only; enabling writes stays in the dashboard.
+  Includes a [connect-a-database walkthrough](docs/connect-a-database.md),
+  connection skill guidance and compatibility with older routes/principals.
+
 - Database query authoring from package files (#169): `pull`, `validate` and
   `apply` retain published query definitions, and a personal access token
   holding `database_connectors.manage` may apply them. Query writes always
@@ -36,6 +46,11 @@ CLI, the skills and the plugin.
   write-query half remains pending its instance contract.
 
 ### Fixed
+
+- Connection deletion checks published person-only restrictions and known
+  missing manage permission before offering a preview or confirmation. An
+  older principal that omits permissions still leaves the final decision to
+  the instance (#170).
 
 - Re-running the Windows installer leaves a byte-identical, verified executable
   in place (#180), so an open MCP process or file handle cannot block an

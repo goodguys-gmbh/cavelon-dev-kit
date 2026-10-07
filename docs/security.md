@@ -295,6 +295,10 @@ terminal. The agent shows you every preview first.
 | `variables delete` | none | removes a tenant variable | preview, always, and your yes |
 | `secrets set` | none | a secret's value | a person only: refused under a coding agent, and for every token where the instance lets only the Admin set it; the value is read from a terminal or stdin |
 | `secrets delete` | none | removes a secret's value | a person only, and a preview |
+| `db connections create` | `db_connection_create` | creates a connection without a password | at once; database_connectors.manage; a person sets the password in the Admin |
+| `db connections update` | `db_connection_update` | changes given public connection fields | at once; database_connectors.manage; a password-bearing target move stays in the Admin |
+| `db connections ca` | `db_connection_ca` | uploads a public certificate bundle | at once; database_connectors.manage; private keys and invalid certificates refused before upload |
+| `db connections delete` | `db_connection_delete` | removes a connection no query uses | preview, always; database_connectors.manage; the instance refuses while queries use it |
 | `loop start` | `loop_start` | starts a run that acts as you and spends budget | preview, always, and your yes, except for a trigger of a draft solution, which an agent confirms with the token |
 | `loop cancel` | `loop_cancel` | stops a run and its loops | preview, always |
 | `loop pause`, `loop resume` | `loop_pause`, `loop_resume` | asks a loop to pause at its next safe point, or resumes a paused one | at once |

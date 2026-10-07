@@ -4,8 +4,9 @@ import { cavelonCommand } from "./printed.js";
 
 /**
  * What a credential may do, as `/meta/principal` publishes it, so the kit
- * offers and suggests only that. Advice only: nothing is refused on it, the
- * instance decides, and where it does not say, the kit behaves as before.
+ * offers and suggests only that. A command may refuse a known restriction
+ * before offering a preview; this never grants access, and the instance
+ * decides the request. Where it does not say, the kit behaves as before.
  *
  * A recent instance publishes, for every kind of credential, the permissions
  * as its routes accept them (activation as `harnesses.activate`, which a
@@ -30,8 +31,8 @@ const SETTINGS_VALUES: AnyOf = ["settings.secrets.manage", "settings.manage"];
  * The permissions an operation the kit sends needs: each entry, a permission
  * or any one of a list, as the instance's roles name them. The instance
  * publishes them only in a refusal ("Missing one of permissions: …"), so these
- * are the ones it checks today: they decide only what the kit offers and
- * suggests, never what it sends; a refusal that names others wins.
+ * are the ones it checks today: they guide suggestions and preflight known
+ * restrictions, never grant access; a refusal that names others wins.
  */
 export const OPERATION_PERMISSIONS: Readonly<Record<string, ReadonlyArray<string | AnyOf>>> = {
   "POST /api/v1/agent-graph/import": ["agents.edit"],
@@ -53,6 +54,12 @@ export const OPERATION_PERMISSIONS: Readonly<Record<string, ReadonlyArray<string
   "POST /api/v1/sandboxes/{sandbox_id}/refresh-workspace": ["sandboxes.manage"],
   "POST /api/v1/sandboxes/{sandbox_id}/validate": ["sandboxes.manage"],
   "POST /api/v1/database-connectors/connections/{connection_id}/test": [["database_connectors.test", "database_connectors.manage"]],
+  "POST /api/v1/database-connectors/connections": ["database_connectors.manage"],
+  "PATCH /api/v1/database-connectors/connections/{connection_id}": ["database_connectors.manage"],
+  "DELETE /api/v1/database-connectors/connections/{connection_id}": ["database_connectors.manage"],
+  "POST /api/v1/database-connectors/connections/{connection_id}/schema": ["database_connectors.manage"],
+  "GET /api/v1/database-connectors/login-script": ["database_connectors.view"],
+  "GET /api/v1/database-connectors/connections/{connection_id}/login-script": ["database_connectors.view"],
   "POST /api/v1/database-connectors/queries/{query_id}/test-run": [["database_connectors.test", "database_connectors.manage"]],
   "POST /api/v1/database-connectors/queries": ["database_connectors.manage"],
   "PATCH /api/v1/database-connectors/queries/{query_id}": ["database_connectors.manage"],
