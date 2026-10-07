@@ -14,6 +14,7 @@
     "GET /api/v1/database-connectors/connections",
     "GET /api/v1/database-connectors/connections/{connection_id}",
     "POST /api/v1/database-connectors/connections/{connection_id}/test",
+    "GET /api/v1/database-connectors/instance",
     "GET /api/v1/database-connectors/queries",
     "GET /api/v1/database-connectors/queries/{query_id}",
     "GET /api/v1/database-connectors/queries/{query_id}/runs",

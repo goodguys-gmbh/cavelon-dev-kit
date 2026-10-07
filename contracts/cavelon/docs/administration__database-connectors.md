@@ -24,6 +24,8 @@ Where you may not change something, the page says **Database connections are set
 
 A parameter **filled by the visitor's identity** (user id, external subject or verified email) is set by the platform from the signed-in visitor, never by the model. That is what keeps one visitor from reading another's rows. A visitor who is not signed in gets "please sign in" and no query runs, unless the operator marked the query **Visitors may call this without signing in** for public data such as stock or opening hours.
 
+To test such a query with an agent, let a test suite read as one of your Chat Users: each step then runs it with that user's identity, exactly as if they were signed in. See [Testing a query that needs a signed-in visitor](/docs/concepts/regression-testing#testing-a-query-that-needs-a-signed-in-visitor). To try it in the Playground or the Workbench, read as one of your Chat Users there in the same way. See [Reading as a Chat User](/docs/concepts/playground-and-debugging#reading-as-a-chat-user).
+
 ## As the Owner
 
 - **Replace password**: open the connection, click **Replace password**, enter the new one. It is stored encrypted, never shown again, and the change is recorded in the audit log. The next tool call signs in with it, and the dialog offers to run the connection test right away.

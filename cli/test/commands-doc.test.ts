@@ -36,8 +36,8 @@ const GROUPS: Array<{ title: string; intro: string; names: string[] }> = [
   {
     title: "Database connections and queries",
     intro:
-      "Read the connections, saved queries and query runs behind a solution's database query tools; the tenant Owner also tests a connection and test-runs a query. A superadmin creates and changes them in the Admin.",
-    names: ["db connections", "db queries", "db runs", "db test", "db test-run"],
+      "Read what the instance offers for database connections, and the connections, saved queries and query runs behind a solution's database query tools; the tenant Owner also tests a connection and test-runs a query. A superadmin creates and changes them in the Admin.",
+    names: ["db instance", "db connections", "db queries", "db runs", "db test", "db test-run"],
   },
   {
     title: "Variables and secrets",
