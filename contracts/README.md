@@ -63,8 +63,8 @@ and stay. Of the docs, only the Database Connectors page is taken in (a
 paragraph on testing an identity-scoped query as a Chat User). The index and
 the other pages changed in parts the kit does not read, and stay as recorded.
 
-On 2026-10-07 the error catalog took three entries from ChatFlow main, as its
-`app/core/api_errors.py` defines them: the new wording of
+On 2026-10-07 the error catalog took three entries from the instance's current
+development build, as its catalog defines them: the new wording of
 `secret_needs_a_person` (a personal access token cannot set or delete a secret
 either) and `approval_needs_a_person`, and the new `person_only_operation`,
 from the instance build that refuses every token and key on what a person runs.
