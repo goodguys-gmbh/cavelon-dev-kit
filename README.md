@@ -87,6 +87,19 @@ carries.
 > **Adds Cavelon to the agents installed on this computer, and logs you in.**
 > Run it after step 1, and again whenever you install another coding agent.
 
+**Before you run it, have two things ready**, since `setup` logs you in at
+the end:
+
+- **Your Cavelon address**: the URL you open Cavelon at in the browser.
+  `https://cavelon.example.com` stands for it throughout these docs.
+- **A personal access token**: in Cavelon, user menu → **Personal access
+  tokens** → **Create token**, then copy it. Tick **May activate** only if this
+  token may put solutions live. Use this token, not a tenant API key: it acts
+  as you, while a key is meant for CI and stays within its own tenant and
+  scopes.
+
+Then run:
+
 ```bash
 cavelon setup
 ```
@@ -102,17 +115,11 @@ for each, and asks once; Enter means yes.
 It changes nothing else in those files, and `cavelon setup --remove` undoes
 what it did.
 
-Then it logs you in. Have two things ready:
-
-- **Your Cavelon address**: the URL you open Cavelon at in the browser.
-  `https://cavelon.example.com` stands for it throughout these docs.
-- **A personal access token**: in Cavelon, user menu → **Personal access
-  tokens** → **Create token**. Tick **May activate** only if this token may put
-  solutions live. Paste it when `setup` asks; it is not shown, and it is kept in
-  your system's credential store.
-
-If the token reaches several tenants, choose yours from the list by number or
-name. `cavelon setup --check` shows what is set up and working.
+Then it logs you in: enter your Cavelon address and paste the token when it
+asks. The token is not shown as you paste it, and it is kept in your system's
+credential store, never in a file of yours. If the token reaches several
+tenants, choose yours from the list by number or name. `cavelon setup --check`
+shows what is set up and working.
 
 > [!TIP]
 > **Installed another coding agent later?** Run `setup` again. It finds the
