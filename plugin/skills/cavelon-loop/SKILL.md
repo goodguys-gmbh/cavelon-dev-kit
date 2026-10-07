@@ -295,6 +295,13 @@ says how in `needs_person`:
 A new variable, and a draft solution no channel or trigger reaches, need no
 confirm.
 
+An instance that publishes `confirmations.enforced` checks the person's yes
+too: after it, `cavelon` asks the instance for a confirmation id for exactly
+that request and sends it along; you never handle it. `confirmation_required`
+or `confirmation_invalid` (exit code 5) means the instance changed nothing:
+show the person the preview again and let them confirm it (in the client's
+dialog or their own terminal), never retry on your own.
+
 **Over MCP, confirm with the preview's token.** `api`, `tenant_create`,
 `variables_set` where it replaces a value, `loop_start`, `limits_set`,
 `models_set_limit`, `loop_cancel`, `sandbox_seed`, `trigger_identity`,

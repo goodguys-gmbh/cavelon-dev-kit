@@ -8,10 +8,12 @@ through the Admin.
   and activates solutions. It learns each instance's API, package schema, error
   codes and docs from what the instance publishes, so it works with every
   Cavelon version without an update.
-- **The Cavelon plugin** for Claude Code and Codex adds four skills that teach
-  the agent the development loop, and the `cavelon` MCP server. `cavelon setup`
-  installs it for you, and gives Cursor, GitHub Copilot in VS Code, Gemini CLI
-  and Kiro the same skills and server.
+- **The Cavelon plugin** adds four skills that teach the agent the development
+  loop, and the `cavelon` MCP server. Claude Code and Codex install it from this
+  repository, Gemini CLI as an extension, and each release carries it as a
+  package for Cursor, VS Code with GitHub Copilot and Kiro. `cavelon setup`
+  installs it for you, or gives those agents the same skills and server in
+  their settings. [One install page per client](docs/install/README.md).
 
 Your token stays with you: `cavelon` never takes it as an argument, keeps it in
 your system's credential store, and your agent never sees it.
@@ -64,10 +66,9 @@ cavelon setup
 for each, and asks once; Enter means yes.
 
 - Claude Code and Codex get the Cavelon plugin through their own plugin
-  command.
-- Cursor, VS Code with GitHub Copilot, Gemini CLI and Kiro get the `cavelon`
-  MCP server in their user settings and the Cavelon skills in their skills
-  folder.
+  command, and Gemini CLI the Cavelon extension.
+- Cursor, VS Code with GitHub Copilot and Kiro get the `cavelon` MCP server in
+  their user settings and the Cavelon skills in their skills folder.
 
 It changes nothing else in those files, and `cavelon setup --remove` undoes
 what it did.
@@ -137,7 +138,9 @@ In CI, setting `CAVELON_URL` and `CAVELON_TOKEN` from the CI system's secrets
 works too ([Security](docs/security.md)).
 
 **Set up an agent** with its own commands instead of `setup`
-([Installation](docs/installation.md#install-the-plugin)), or for one solution
+([Install the kit in your coding agent](docs/install/README.md): Claude Code,
+Codex, Cursor, VS Code with GitHub Copilot, Kiro, Gemini CLI, cloud agents and
+CI), or for one solution
 only, in its folder, with `cavelon init --agents`
 ([Agents without a plugin](docs/installation.md#agents-without-a-plugin)).
 
@@ -185,6 +188,7 @@ how to review and test its work.
 | Page | What it covers |
 |---|---|
 | [Installation](docs/installation.md) | the one-line install, Homebrew, PyPI (uvx, uv, pipx, pip), npx and npm, `cavelon setup`, the plugin in Claude Code and Codex, other agents, updating, uninstalling, Windows/macOS/Linux, proxies |
+| [Install pages](docs/install/README.md) | one page per client: Claude Code, Codex, Cursor, VS Code with GitHub Copilot, Kiro, Gemini CLI, cloud agents and CI; the plugin packages each release carries |
 | [Getting started](docs/getting-started.md) | a full tutorial from an empty folder to an active solution |
 | [Building with a coding agent](docs/coding-agents.md) | briefing the agent, the loop as it runs it, what stays with you, reviewing and testing its work, prompts to copy |
 | [Concepts](docs/concepts.md) | instance, tenant, solution, package, environments, preview and confirm, operations, tests, activation, Platform mode |
@@ -220,8 +224,8 @@ Details in [Troubleshooting](docs/troubleshooting.md#exit-codes).
 |---|---|
 | [`cli/`](cli/) | the `cavelon` CLI and MCP server (TypeScript, Node.js 20.3+), published as `@cavelon/cli` and as standalone executables |
 | [`install.sh`](install.sh), [`install.ps1`](install.ps1) | the one-line installers for macOS and Linux, and for Windows |
-| [`packaging/`](packaging/) | the Homebrew formula and winget manifest the release workflow writes, the PyPI wheels (`pypi/`) and the offline bundle (`bundle/`) it builds, and the macOS signing entitlements |
-| [`plugin/`](plugin/) | the Cavelon plugin: the skills, the MCP entry, and a manifest each for Claude Code and Codex |
+| [`packaging/`](packaging/) | the Homebrew formula and winget manifest the release workflow writes, the plugin packages it renders (`plugins.mjs`), the PyPI wheels (`pypi/`) and the offline bundle (`bundle/`) it builds, and the macOS signing entitlements |
+| [`plugin/`](plugin/) | the Cavelon plugin, the one source of every client's package: the skills, the MCP entry, and a manifest each for Claude Code and Codex |
 | `.claude-plugin/`, `.agents/plugins/` | the plugin marketplaces of Claude Code and Codex |
 | [`examples/support-faq/`](examples/support-faq/) | a small solution to copy and try: one agent answering from a knowledge base |
 | [`examples/expense-approval/`](examples/expense-approval/) | a pipeline to copy and try: chat, agents, routers, an approval by a person, and its test suite |

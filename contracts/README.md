@@ -63,12 +63,29 @@ and stay. Of the docs, only the Database Connectors page is taken in (a
 paragraph on testing an identity-scoped query as a Chat User). The index and
 the other pages changed in parts the kit does not read, and stay as recorded.
 
-On 2026-10-07 the error catalog took three entries from ChatFlow main, as its
-`app/core/api_errors.py` defines them: the new wording of
+On 2026-10-07 the error catalog took three entries from the instance's current
+development build, as its catalog defines them: the new wording of
 `secret_needs_a_person` (a personal access token cannot set or delete a secret
 either) and `approval_needs_a_person`, and the new `person_only_operation`,
 from the instance build that refuses every token and key on what a person runs.
 The rest of the catalog stays as recorded.
+
+Later on 2026-10-07 the snapshot was refreshed from the instance's next
+build, which is not released or deployed anywhere yet, again without running
+it: the change that checks a person's confirmation of a personal access
+token's guarded change on the server. The OpenAPI is the reference that build's
+generator writes (`docs/openapi.json`), trimmed with `POST /api/v1/confirmations`
+added to the list; against the snapshot it differs only in that route, its
+`Confirmation*` schemas, `MetaCapabilities.confirmations`, and
+`x-cavelon-confirmation`, `x-cavelon-confirmation-when` and a `428` response on
+the six guarded operations. The capabilities gain `confirmations` as that
+build's `/meta/capabilities` returns it at its default settings (`enforced`
+true), and the error catalog its four `confirmation` codes, as its
+`/meta/error-catalog` defines them (`confirmation_required`,
+`confirmation_invalid`, `confirmation_not_needed`,
+`confirmation_needs_a_token`). The rest stays as recorded. Until that build is
+released, a deployed instance publishes none of this; the fake server plays
+both (`confirmations: null` is the instance without it).
 
 The tests switch features on in the fake server where a command needs them
 (personal access tokens, the operations API, Sandboxes, Masterloop, archive
@@ -125,3 +142,19 @@ instance reads to choose and verify the bundle that fits it.
 `packaging/bundle/build-bundle.mjs` writes the manifest and
 `cli/test/offline-bundle.test.ts` validates it against this schema. A change
 that a reader of the current `format` cannot follow raises `format`.
+
+## `clients/`
+
+The schemas the coding agents publish for their plugin formats, which
+`cli/test/plugin-packages.test.ts` checks the release's packages against:
+
+- `agent-plugins-1.0.0/plugin.schema.json` and `mcp.schema.json`: the
+  [Agent Plugins](https://agent-plugins.org) 1.0.0 manifest and MCP file, which
+  Cursor, VS Code with GitHub Copilot, Copilot CLI and Kiro read. Downloaded on
+  2026-10-07 from `https://agent-plugins.org/schemas/1.0.0/`.
+
+Gemini CLI publishes no schema for `gemini-extension.json`; the test holds the
+rules its loader applies, and CI runs `gemini extensions validate`. CI also
+compares the kept schemas with the published ones and warns when they differ
+(`.github/scripts/test-plugin-packages.sh`); refresh them by downloading the
+same URLs again.

@@ -7,8 +7,9 @@
 # when the signing secrets are set), attests them, and creates the GitHub
 # release with the executables, checksums.txt and the install scripts. Then it
 # publishes the PyPI wheels, updates the Homebrew tap (when HOMEBREW_TAP_TOKEN
-# is set) and writes the winget manifest for submission. RELEASING.md lists the
-# secrets.
+# is set) and writes the winget manifest for submission. Beside them it renders
+# the plugin packages for Cursor, VS Code, Kiro and Gemini CLI and attaches
+# them to the release. RELEASING.md lists the secrets.
 #
 # A release starts with a tag `vX.Y.Z` matching cli/package.json. Only repository
 # admins may create `v*` tags (ruleset "Release tags: admins only"), and the
@@ -299,6 +300,78 @@ jobs:
           else
             gh release create "$TAG" release/* --repo "$GITHUB_REPOSITORY" --verify-tag --title "cavelon ${version}" --notes-file notes.md
           fi
+
+  # ---- Plugin packages --------------------------------------------------------
+  # The plugin packages of the clients without a marketplace in this repository
+  # (packaging/plugins.mjs), rendered from the tagged plugin/ and attested. Each
+  # is its own artifact, plugin-package-<package>, for other jobs to take in;
+  # plugin-packages-release attaches them to the release with their checksums.
+  plugin-packages:
+    name: plugin packages
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write # Sigstore signs the attestation
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - name: Render the packages
+        run: node packaging/render.mjs plugins
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: packaging-out/plugins/*.tar.gz
+      # Cursor, VS Code with GitHub Copilot, Copilot CLI and Kiro.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: plugin-package-agent-plugins
+          path: packaging-out/plugins/cavelon-agent-plugin*.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: plugin-package-gemini
+          path: packaging-out/plugins/*.cavelon-gemini-extension.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+      # Claude Code and Codex, for a machine that cannot reach GitHub.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: plugin-package-marketplace
+          path: packaging-out/plugins/cavelon-marketplace.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
+  plugin-packages-release:
+    name: attach the plugin packages
+    needs: [github-release, plugin-packages]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # upload the release's files
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: plugin-package-*
+          path: packages
+          merge-multiple: true
+      # `gemini extensions install <this repository>` takes the asset whose name starts with its platform.
+      - name: Upload them with checksums-plugins.txt (a re-run replaces them)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          cd packages
+          sha256sum -- *.tar.gz > checksums-plugins.txt
+          cat checksums-plugins.txt
+          gh release upload "$TAG" ./*.tar.gz checksums-plugins.txt --repo "$GITHUB_REPOSITORY" --clobber
+  # ---- end of plugin packages ---------------------------------------------------
 
   # The wheels carry the executables the GitHub release published, so they wait
   # for it: an upload to PyPI cannot be replaced, and a failed release before it

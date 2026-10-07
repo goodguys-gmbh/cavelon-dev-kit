@@ -1,10 +1,11 @@
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { COMMANDS } from "../src/commands/index.js";
 import { removeBlock, removeJsonEntry, upsertBlock, upsertJsonEntry } from "../src/markers.js";
-import { MARKETPLACE, MARKETPLACE_SOURCE, PLUGIN_ID } from "../src/setup-agents.js";
+import { GEMINI_SOURCE, MARKETPLACE, MARKETPLACE_SOURCE, PLUGIN_ID } from "../src/setup-agents.js";
+import { KIT_VERSION } from "../src/version.js";
 import { startFakeServer, type FakeServer } from "./fake-server.js";
 import { cli, login, sandbox, type Sandbox } from "./helpers.js";
 
@@ -371,13 +372,70 @@ describe("Claude Code and Codex get the plugin through their own commands", () =
   });
 });
 
+describe("Gemini CLI gets the extension from this version's release", () => {
+  const install = `extensions install ${GEMINI_SOURCE} --ref v${KIT_VERSION} --consent`;
+
+  it("installs it from a folder of the kit's own, once; --check reads it; --remove uninstalls it", async () => {
+    const env = pathEnv(fakeBin(["gemini"]));
+    const result = await cli(sb, ["setup", "--yes", "--json"], { env });
+    expect(result.code, result.stderr + result.stdout).toBe(0);
+    const gemini = result.json<any>().agents.find((a: any) => a.name === "gemini");
+    expect(gemini.method).toBe("plugin");
+    expect(gemini.changes.filter((c: any) => c.kind !== "mcp")).toEqual([{ kind: "plugin", summary: "install the Cavelon extension (skills and tools)", target: `gemini ${install}`, outcome: "done" }]);
+    expect(log("gemini")).toEqual([install]);
+    // `extensions install` trusts the folder it runs in: an empty one in the kit's cache, never the person's.
+    expect(realpathSync(read(path.join(sb.home, ".fake-gemini.cwd")))).toBe(realpathSync(path.join(sb.env.CAVELON_CACHE_DIR!, "gemini")));
+    expect(existsSync(path.join(sb.home, ".gemini", "skills"))).toBe(false);
+
+    const again = await cli(sb, ["setup", "--yes", "--json"], { env });
+    for (const change of again.json<any>().agents.find((a: any) => a.name === "gemini").changes) expect(change.outcome).toBe("unchanged");
+
+    const check = await cli(sb, ["setup", "--check", "--json", "--agents", "gemini"], { env });
+    expect(check.json<any>().agents[0]).toMatchObject({ name: "gemini", method: "plugin", ok: true, details: expect.arrayContaining(["the Cavelon extension is installed"]) });
+
+    const removed = await cli(sb, ["setup", "--remove", "--yes"], { env });
+    expect(removed.code, removed.stderr + removed.stdout).toBe(0);
+    expect(log("gemini")).toContain("extensions uninstall cavelon");
+    expect(existsSync(path.join(sb.env.CAVELON_CONFIG_DIR!, "setup.json"))).toBe(false);
+  });
+
+  it.skipIf(process.platform === "win32")("falls back to the files when the release has no extension, and replaces them once it has", async () => {
+    const { layout } = agentHome("linux");
+    const env = pathEnv(fakeBin(["gemini"]));
+    const before = await cli(sb, ["setup", "--yes", "--json", "--agents", "gemini"], { env: { ...env, FAKE_AGENT_FAIL: "extensions install" } });
+    expect(before.code, before.stderr + before.stdout).toBe(0);
+    expect(before.json<any>().agents[0].changes.map((c: any) => [c.kind, c.outcome])).toEqual([
+      ["plugin", "skipped"],
+      ["mcp", "done"],
+      ["skills", "done"],
+    ]);
+    expect(before.json<any>().agents[0].changes[0].reason).toMatch(/could not reach github\.com; the tools server and skills go into Gemini CLI's files instead/);
+    expect(readJson(layout.geminiSettings).mcpServers.cavelon).toEqual(NPX);
+    expectSkills(layout.geminiSkills);
+    const check = await cli(sb, ["setup", "--check", "--json", "--agents", "gemini"], { env });
+    expect(check.json<any>().agents[0]).toMatchObject({ method: "files", ok: true });
+
+    // With the extension released, the next run installs it and takes its own files out again.
+    const after = await cli(sb, ["setup", "--yes", "--json", "--agents", "gemini"], { env });
+    expect(after.json<any>().agents[0].changes.map((c: any) => [c.kind, c.outcome])).toEqual([
+      ["plugin", "done"],
+      ["mcp", "removed"],
+      ["skills", "removed"],
+    ]);
+    expect(existsSync(layout.geminiSettings)).toBe(false);
+    expect(existsSync(layout.geminiSkills)).toBe(false);
+    await cli(sb, ["setup", "--remove", "--yes"], { env });
+    expect(log("gemini").at(-1)).toBe("extensions uninstall cavelon");
+  });
+});
+
 describe("asking a person", () => {
   it("without a terminal and without --yes it changes nothing and shows the plan", async () => {
     const { env, layout } = agentHome("linux");
     const result = await onPlatform("linux", () => cli(sb, ["setup", "--json"], { env }));
     expect(result.code).toBe(2);
     const error = result.json<any>().error;
-    expect(error.code).toBe("confirmation_required");
+    expect(error.code).toBe("yes_required");
     expect(error.details.agents.find((a: any) => a.name === "cursor").changes[0]).toMatchObject({ kind: "mcp", outcome: "planned", target: layout.cursorMcp });
     expect(existsSync(layout.cursorMcp)).toBe(false);
   });

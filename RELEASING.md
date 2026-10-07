@@ -18,6 +18,12 @@ those are set up
 wheels are public as soon as the `pypi` job uploads them, so pushing the tag is
 the approval there.
 
+The same run renders the plugin packages for Cursor, VS Code with GitHub
+Copilot, Kiro and Gemini CLI, and the marketplace for Claude Code and Codex
+offline, from `plugin/` (`packaging/plugins.mjs`), and attaches them to the
+release with `checksums-plugins.txt` and their provenance
+([Install the kit in your coding agent](docs/install/README.md#the-packages)).
+
 The CLI, the skills and the plugin share one version.
 
 ## Steps
@@ -54,12 +60,16 @@ The CLI, the skills and the plugin share one version.
    runs its smoke test; `attest` writes `checksums.txt` and the build
    provenance attestations; `github-release` creates the release (a re-run
    replaces its files); `offline-bundle`, `pypi`, `homebrew` and `winget`
-   follow. `offline-bundle` builds the bundle from the release's executables
-   and every `plugin-package*` artifact of the run
-   (`packaging/bundle/build-bundle.mjs`), signs the bundle and its manifest
-   with `cosign sign-blob` (Sigstore keyless, bundle format), verifies both
-   against this workflow's identity, attests them, and adds the four files to
-   the release (a re-run replaces them). `pypi` builds
+   follow. Beside them, `plugin-packages` renders and attests the plugin
+   packages (artifacts `plugin-package-agent-plugins`, `plugin-package-gemini`
+   and `plugin-package-marketplace`), and `plugin-packages-release` attaches
+   them to the release once it exists. `offline-bundle` waits for both
+   `github-release` and `plugin-packages`, builds the bundle from the release's
+   executables and the offline variant of the plugin packages, which it renders
+   itself (`packaging/bundle/build-bundle.mjs`), signs the bundle and its
+   manifest with `cosign sign-blob` (Sigstore keyless, bundle format), verifies
+   both against this workflow's identity, attests them, and adds the four files
+   to the release (a re-run replaces them). `pypi` builds
    the wheels from the release's executables
    (`packaging/pypi/build_wheels.py`) and uploads them through PyPI's trusted
    publishing, with attestations. A re-run cannot replace a file PyPI already
@@ -87,12 +97,22 @@ The CLI, the skills and the plugin share one version.
    ```
 
 7. **Check the GitHub release** has the five executables, `checksums.txt`,
-   `install.sh` and `install.ps1`, and that an executable's provenance checks
-   out:
+   `install.sh` and `install.ps1`, the plugin packages
+   (`cavelon-agent-plugin.tar.gz`, `cavelon-agent-plugin-windows.tar.gz`,
+   `darwin.`, `linux.` and `win32.cavelon-gemini-extension.tar.gz`,
+   `cavelon-marketplace.tar.gz`) with `checksums-plugins.txt`, and that an
+   executable's provenance checks out:
 
    ```bash
    gh release view vX.Y.Z --json assets --jq '.assets[].name'
    gh release download vX.Y.Z -p cavelon-linux-x64 && gh attestation verify cavelon-linux-x64 --repo goodguys-gmbh/cavelon-dev-kit
+   ```
+
+   Gemini CLI installs its extension from the release by the asset's platform
+   prefix; check it in a throwaway home:
+
+   ```bash
+   HOME="$(mktemp -d)" npx -y @google/gemini-cli extensions install https://github.com/goodguys-gmbh/cavelon-dev-kit --ref vX.Y.Z --consent
    ```
 
    It also has the offline bundle, its manifest and their `.sigstore.json`

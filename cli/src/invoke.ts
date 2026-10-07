@@ -5,6 +5,7 @@ import type { OpenApiDoc } from "./contracts.js";
 import { CavelonError, ExitCode, validationError } from "./errors.js";
 import { bodyBytes, isPlatformRoute, type ApiClient, type QueryValue } from "./http.js";
 import { coerceParameter, isArrayParameter, operationAt, validateBody, type Operation } from "./openapi.js";
+import { confirmationRefused } from "./change-confirmation.js";
 import { cavelonCommand } from "./printed.js";
 
 /**
@@ -25,6 +26,8 @@ export interface CallArguments {
   timeoutMs?: number;
   /** Platform calls send no tenant. */
   sendTenant?: boolean;
+  /** False sends the request without asking for a confirmation id (sent again with the one the instance asked for). */
+  confirmation?: false;
 }
 
 export interface CallResult {
@@ -124,8 +127,10 @@ export async function callOperation(ctx: Context, client: ApiClient, doc: OpenAp
     if (doc) validateBody(doc, op, args.body);
     json = args.body;
   }
+  // A change the person approved carries the instance's confirmation id (change-confirmation.ts).
+  const { change, confirmed } = await client.confirmationBefore(op.method, target, { query, json, form, confirmation: args.confirmation });
   const signal = AbortSignal.timeout(args.timeoutMs ?? (Number(ctx.io.env.CAVELON_HTTP_TIMEOUT_MS) || 30_000));
-  const response = await client.fetchRaw(op.method, target, { query, headers, json, form, sendTenant: args.sendTenant, signal });
+  const response = await client.fetchRaw(op.method, target, { query, headers: { ...headers, ...confirmed }, json, form, sendTenant: args.sendTenant, signal });
   const contentType = response.headers.get("content-type") ?? "";
   const bytes = await bodyBytes(response, client.resolve(target), signal);
   const isText = /json|text|xml|yaml|markdown|event-stream/.test(contentType) || bytes.length === 0;
@@ -140,12 +145,15 @@ export async function callOperation(ctx: Context, client: ApiClient, doc: OpenAp
   }
   if (!response.ok) {
     if (await client.tenantMoved(op.method, target, response.status, { sendTenant: args.sendTenant })) return callOperation(ctx, client, doc, op, args);
+    const late = await client.confirmationAsked(response.status, data, change, confirmed);
+    if (late) return callOperation(ctx, client, doc, op, { ...args, headers: { ...args.headers, ...late }, confirmation: false });
     const pathname = new URL(client.resolve(target)).pathname;
-    throw await client.refusal(response.status, data, `${op.method} ${pathname}`, response.headers, {
+    const error = await client.refusal(response.status, data, `${op.method} ${pathname}`, response.headers, {
       platform: args.sendTenant === false || isPlatformRoute(pathname),
       method: op.method,
       path: pathname,
     });
+    throw confirmationRefused(error, Boolean(confirmed) || args.confirmation === false);
   }
   return { status: response.status, contentType, data: isText ? (text ? data : null) : undefined, bytes: isText ? undefined : bytes };
 }

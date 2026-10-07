@@ -715,6 +715,7 @@ describe("the update warning over MCP", () => {
   const UPDATE = "curl -fsSL https://github.com/goodguys-gmbh/cavelon-dev-kit/releases/latest/download/install.sh | sh";
   const CLAUDE = "`claude plugin marketplace update cavelon-dev-kit` and `claude plugin update cavelon@cavelon-dev-kit`";
   const CODEX = "`codex plugin marketplace upgrade cavelon-dev-kit` and `codex plugin add cavelon@cavelon-dev-kit`";
+  const INSTALL_DOCS = "https://github.com/goodguys-gmbh/cavelon-dev-kit/blob/main/docs/install";
   const RELEASES = "https://api.github.com/repos/goodguys-gmbh/cavelon-dev-kit/releases/latest";
 
   interface SessionOptions {
@@ -830,9 +831,22 @@ describe("the update warning over MCP", () => {
     });
     // Nothing cached: the plugin's version is compared with the GitHub release.
     await inSession({ install: NPX, env: { CAVELON_PLUGIN_VERSION: "0.1.7" } }, async (s) => {
-      expect(await firstOnly(s)).toContain(`Update the plugin: in Claude Code with ${CLAUDE}; in Codex with ${CODEX}.`);
+      expect(await firstOnly(s)).toContain(`Update the plugin: in Claude Code with ${CLAUDE}; in Codex with ${CODEX}; in another agent as its page in ${INSTALL_DOCS}/ says.`);
       expect(s.calls).toEqual([RELEASES]);
     });
+  });
+
+  it("names each other client's own way to update the plugin", async () => {
+    for (const [client, update] of [
+      ["gemini-cli-mcp-client", "with `gemini extensions update cavelon`"],
+      ["cursor-vscode", `as ${INSTALL_DOCS}/cursor.md#update says`],
+      ["Visual Studio Code", `as ${INSTALL_DOCS}/vscode-copilot.md#update says`],
+      ["Kiro", `as ${INSTALL_DOCS}/kiro.md#update says`],
+    ]) {
+      await inSession({ install: NPX, cached: "99.0.0", client, env: { CAVELON_PLUGIN_VERSION: "0.1.7" } }, async (s) => {
+        expect(await firstOnly(s)).toContain(`Tell the user: Update the plugin ${update}. Then start a new agent session.`);
+      });
+    }
   });
 
   it("reads an installed plugin's version from its manifest when Claude Code names the plugin's folder", async () => {

@@ -13,7 +13,8 @@ CLI, the skills and the plugin.
   neither GitHub, npm nor PyPI: `cavelon-bundle-<version>.tar.gz` holds every
   platform's executable, the install scripts, the plugin for Claude Code and
   Codex with an MCP entry that starts the `cavelon` on the PATH (never npx, no
-  update check), the skills, the plugin packages the release built, and a
+  update check), the skills, the plugin packages for the other clients in
+  their offline variant (`cavelon mcp`, never npx), and a
   `manifest.json` listing every file with its size and SHA-256, the version
   and the instance contract versions the release understands (schema:
   `contracts/offline-bundle-manifest.schema.json`). The release workflow signs
@@ -26,6 +27,57 @@ CLI, the skills and the plugin.
   that fits it.
 - `install.sh` and `install.ps1` take a local folder in `CAVELON_DOWNLOAD_URL`
   (such as the offline bundle's `bin`), not only a URL.
+
+## [0.1.12] - 2026-10-07
+
+A person confirms what reaches live traffic or the whole tenant, and the
+instance can check that confirmation; database connections on SQL Server;
+`cavelon` on PyPI:
+- live, tenant-wide and destructive changes need the person's own yes, in the
+  MCP client's dialog or their own terminal; a coding agent's confirm alone no
+  longer sends them;
+- on an instance that enforces it, the kit sends the instance's confirmation
+  id with such a change, only after that yes; **update before your instance
+  enables it**, or those changes are refused (nothing is changed);
+- secrets follow what the instance lets a token do;
+- `db instance` and CA certificate expiry for database connections, and SQL
+  Server;
+- `uvx cavelon`, `pipx install cavelon` and `pip install cavelon`.
+
+### Added
+
+- Plugin packages for the clients without a marketplace in this repository
+  (#155), rendered at release time from `plugin/`, the one source of the skills
+  and the MCP entry (`node packaging/render.mjs plugins`), and attached to each
+  release with `checksums-plugins.txt` and build provenance:
+  `cavelon-agent-plugin.tar.gz` (and `-windows`) in the Agent Plugins 1.0
+  format that Cursor, VS Code with GitHub Copilot, Copilot CLI and Kiro (as a
+  power) read; a Gemini CLI extension per platform
+  (`<platform>.cavelon-gemini-extension.tar.gz`, named so that
+  `gemini extensions install https://github.com/goodguys-gmbh/cavelon-dev-kit`
+  picks it); and `cavelon-marketplace.tar.gz` for Claude Code and Codex on a
+  machine that cannot reach GitHub. `--server installed` renders them with
+  `cavelon mcp` in place of the npx fallback. The tests check every manifest
+  against the Agent Plugins schemas (kept in `contracts/clients/`) and Gemini
+  CLI's rules, and CI has Gemini CLI validate, install and list the extension.
+- One install page per client in `docs/install/`: Claude Code, Codex, Cursor,
+  VS Code with GitHub Copilot (and Copilot CLI), Kiro, Gemini CLI, and cloud
+  agents and CI (`npx`, `uvx`). Each covers the install, the first login, how
+  to check that the skills and MCP tools are listed, updating and removing,
+  and says what was verified with the client.
+- `cavelon setup` installs the Cavelon extension in Gemini CLI from this
+  version's release (`gemini extensions install … --ref v<version> --consent`,
+  run in an empty folder of the kit's cache, which Gemini CLI then trusts), and
+  takes out the files an earlier `setup` wrote there. Where the release has no
+  extension (every release up to 0.1.11), it writes the files as before.
+  Cursor, VS Code and Kiro keep the files: their plugins install only from
+  their own window, VS Code's are off by default, and a Kiro power loads only
+  when a prompt names its keywords.
+- The update notice in an agent session names how the agent that started the
+  server updates the plugin: `gemini extensions update cavelon`,
+  `copilot plugin update cavelon`, or for Cursor, VS Code and Kiro the update
+  section of their install page.
+
 - `cavelon` on PyPI (#151): `uvx cavelon` runs it without installing, and
   `uv tool install cavelon`, `pipx install cavelon` or `pip install cavelon`
   install it. Each platform's wheel carries the release's standalone executable
@@ -60,6 +112,12 @@ CLI, the skills and the plugin.
   `write_privileges_unacknowledged` and its wording of `unavailable` and
   `forbidden_keyword`, and the connections' `write_privileges_acknowledged`
   and `query_enable_refusal`.
+
+### Changed
+
+- `setup`'s refusal to change something without a terminal to ask is now
+  `yes_required` (was `confirmation_required`, which the instance now uses for
+  its own check of a person's confirmation).
 
 ### Fixed
 
@@ -111,6 +169,30 @@ CLI, the skills and the plugin.
   `apply` and `loop start`, `loop cancel`, `sandbox seed` and `kb upload
   --replace` are confirmed with the token as before, and nothing changes in a
   person's own terminal.
+- The instance's own check of the person's yes (#153). An instance that
+  publishes `confirmations.enforced` in `/meta/capabilities` refuses a
+  personal access token's change to an operation its OpenAPI marks
+  `x-cavelon-confirmation` (the default route, activating a solution a channel
+  or an active trigger reaches, deactivating an active one, an import that
+  writes tenant-wide sections, deleting a variable, a trigger's execution
+  identity) without a confirmation id that names exactly that change. Once the
+  person approved, in their own terminal with `--confirm` or in the MCP
+  client's dialog, and never before, `cavelon` asks the instance for one
+  (`POST /api/v1/confirmations` with the method, path and body) and sends it
+  with exactly that request; an agent's token alone never gets one, and an API
+  key, which the instance does not ask, never asks. Where the kit does not
+  expect the operation to be guarded (`api` from a person's terminal, a
+  change whose condition only the instance knows), it asks only once the
+  instance answers `428 confirmation_required`, and sends the approved
+  request once more. A refusal changes nothing and exits 5:
+  `confirmation_required`, or `confirmation_invalid` with `details.reason`
+  (`unknown`, `expired`, `used`, `other_change`), whose hint says to run the
+  command again; `explain` knows both, with what `cavelon` does about them.
+  `api describe` and an `api` preview name a marked operation and when the
+  instance asks. On an instance that does not publish `confirmations`, or has
+  it off, nothing is asked for. The contract snapshot comes from the
+  instance's next build, which adds the route, the marks, the capabilities'
+  `confirmations` and the four `confirmation` codes of its error catalog.
 
 ## [0.1.11] - 2026-10-06
 

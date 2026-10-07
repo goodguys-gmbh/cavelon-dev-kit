@@ -126,7 +126,14 @@ async function gateOf(
   const given = input.options.confirm;
   const driven = drivenByAgent(ctx);
   const tokenGiven = typeof given === "string" && given !== "";
-  if (!driven && !tokenGiven) return { confirmed: given === true, fields: {}, confirm: (command) => command };
+  // In a person's own terminal, the confirm is the person's yes: the instance's confirmation may be asked for.
+  const approve = () => {
+    if (!driven) ctx.approved = { guarded: Boolean(options.person) };
+  };
+  if (!driven && !tokenGiven) {
+    if (given === true) approve();
+    return { confirmed: given === true, fields: {}, confirm: (command) => command };
+  }
   if (driven?.by === "mcp" && given === true) throw confirmTokenRequired(tool);
   const session = await ctx.session();
   const token = confirmToken({ url: session.url, tenant: session.tenant }, tool, change);
@@ -168,7 +175,10 @@ async function gateOf(
     };
   }
   if (!tokenGiven) return { confirmed: false, fields: { confirm_token: token }, confirm };
-  if (given === token) return { confirmed: true, fields: {}, confirm };
+  if (given === token) {
+    approve();
+    return { confirmed: true, fields: {}, confirm };
+  }
   return {
     confirmed: false,
     fields: { confirm_token: token, token_mismatch: true },
@@ -190,12 +200,15 @@ export const PERSON_WAIT_MS = 10 * 60_000;
  * The person's own yes to a change an agent confirmed with its token: over
  * MCP the client asks them; without a client that can ask, or in an agent's
  * shell, it is refused, naming the command the person runs in their own
- * terminal. Returns only when the person approved.
+ * terminal. Returns only when the person approved, and only then may the
+ * instance's confirmation be asked for (`Context.approved`); `guarded: false`
+ * where the change is not one the instance guards as far as the kit knows,
+ * so the id is asked for only if the instance asks.
  */
 export async function personApproves(
   ctx: Context,
   driven: DrivenBy,
-  change: { tool: string; what: string; command: string },
+  change: { tool: string; what: string; command: string; guarded?: boolean },
   target: PlatformTarget = {},
 ): Promise<void> {
   if (personRoute(ctx, driven) === "terminal") throw needsPerson(change.command);
@@ -203,7 +216,10 @@ export async function personApproves(
   const answer = await ctx.askPerson!(
     [change.what, where, `A coding agent asks to make this change through cavelon (${change.tool}). Approve only this exact change.`].filter(Boolean).join("\n"),
   );
-  if (answer === "approved") return;
+  if (answer === "approved") {
+    ctx.approved = { guarded: change.guarded ?? true };
+    return;
+  }
   throw new CavelonError(ExitCode.needsAction, {
     code: "confirm_declined",
     message:

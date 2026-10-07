@@ -351,6 +351,8 @@ export const api: CommandSpec = {
       const preview = await previewUnlessConfirmed(ctx, input, doc, op, args, driven, personCommand(...words));
       if (preview) return preview;
     }
+    // A person's own terminal sends what they typed: the instance's confirmation is asked for if the instance asks for it.
+    if (!driven && !op.readOnly) ctx.approved = { guarded: false };
     const client = await ctx.client();
     const result = await callOperation(ctx, client, doc, op, args);
     if (output) {
@@ -409,6 +411,7 @@ async function previewUnlessConfirmed(
   const lines = [`Would send ${request.method} ${request.path}. Nothing was sent.`, targetLine(target)];
   if (stale) lines.push("The confirm token is not this request's: the request changed since its preview, or the token is another one's.");
   if (bare && driven.by === "agent") lines.push("A coding agent cannot send it: the person sends it from their own terminal.");
+  if (op.confirmation) lines.push(`The instance asks for the person's confirmation of it (x-cavelon-confirmation)${op.confirmationWhen ? `: ${op.confirmationWhen}` : ""}`);
   if (Object.keys(request.query).length) lines.push(`Query: ${JSON.stringify(request.query)}`);
   if (Object.keys(request.headers).length) lines.push(`Headers: ${JSON.stringify(request.headers)}`);
   if (request.body !== null) lines.push("Body:", JSON.stringify(request.body, null, 2));
@@ -420,6 +423,7 @@ async function previewUnlessConfirmed(
       ...(route === "client" ? { confirm_token: token } : {}),
       confirm,
       needs_person: route,
+      ...(op.confirmation ? { instance_confirmation: op.confirmationWhen ?? true } : {}),
       ...(stale ? { token_mismatch: true } : {}),
       ...(bare ? { token_required: true } : {}),
     },
@@ -545,6 +549,7 @@ export const apiDescribe: CommandSpec = {
       read_only: op.readOnly,
       person_only: kept ? { source: kept.source, reason: kept.reason ?? null, hint: kept.hint } : null,
       secret_fields: secrets,
+      confirmation: op.confirmation ? { required: true, when: op.confirmationWhen ?? null } : null,
       tags: op.tags,
       summary: op.summary ?? null,
       description: op.description ? clip(op.description, 1500) : null,
@@ -569,6 +574,12 @@ export const apiDescribe: CommandSpec = {
       );
     }
     if (secrets.length) lines.push(`Secret values (x-cavelon-secret): ${secrets.join(", ")}. A person enters them; an agent leaves them out.`);
+    if (op.confirmation) {
+      lines.push(
+        `A person confirms it (x-cavelon-confirmation)${op.confirmationWhen ? `: ${op.confirmationWhen}` : "."} cavelon asks the instance for the ` +
+          "confirmation once the person approved the call: in their own terminal, or in the MCP client's dialog.",
+      );
+    }
     if (data.description && data.description !== op.summary) lines.push("", data.description);
     if (data.parameters.length) {
       lines.push("", "Parameters:", table(data.parameters, ["name", "in", "required", "type", "description"]));

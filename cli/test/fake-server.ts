@@ -89,6 +89,21 @@ function withTenantWideFlag(text: string, on: boolean): string {
   delete doc.components.schemas.AgentGraphPackageImportRequest!.properties.include_tenant_wide;
   return JSON.stringify(doc);
 }
+/** The OpenAPI without the confirmation route and the `x-cavelon-confirmation` marks, as an instance older than them publishes it. */
+function withConfirmations(text: string, on: boolean): string {
+  if (on) return text;
+  const doc = JSON.parse(text) as { paths: Record<string, Record<string, Record<string, unknown>>> };
+  delete doc.paths["/api/v1/confirmations"];
+  for (const item of Object.values(doc.paths)) {
+    for (const op of Object.values(item)) {
+      if (!op["x-cavelon-confirmation"]) continue;
+      delete op["x-cavelon-confirmation"];
+      delete op["x-cavelon-confirmation-when"];
+      delete (op.responses as Record<string, unknown> | undefined)?.["428"];
+    }
+  }
+  return JSON.stringify(doc);
+}
 /** The OpenAPI without these operations ("METHOD /path"), as an instance older than them publishes it. */
 function withoutOperations(text: string, operations: string[]): string {
   if (!operations.length) return text;
@@ -110,6 +125,20 @@ function canonical(value: unknown): string {
   return JSON.stringify(value, (_key, v: unknown) =>
     v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : 1))) : v,
   );
+}
+
+/**
+ * The digest a confirmation binds, as the instance computes it: the method,
+ * the decoded path with its query sorted, and the canonical JSON body, where
+ * no body and an empty object are one change.
+ */
+export function changeDigest(method: string, pathWithQuery: string, body: unknown): string {
+  const url = new URL(pathWithQuery, "http://fake");
+  const query = [...url.searchParams].sort(([a, x], [b, y]) => (a === b ? (x < y ? -1 : x > y ? 1 : 0) : a < b ? -1 : 1));
+  const search = new URLSearchParams(query).toString();
+  const empty = body === undefined || body === "" || (body !== null && typeof body === "object" && !Array.isArray(body) && !Object.keys(body).length);
+  const path = `${decodeURIComponent(url.pathname)}${search ? `?${search}` : ""}`;
+  return createHash("sha256").update(canonical({ method: method.toUpperCase(), path, body: empty ? null : body })).digest("hex");
 }
 
 export type OpStatus = "queued" | "running" | "needs_action" | "succeeded" | "failed" | "cancelled";
@@ -388,7 +417,7 @@ export interface FakeState {
   serveCredentialAccess: boolean;
   /**
    * Whether the instance refuses a personal access token, as it does a key, on
-   * setting or deleting a secret (ChatFlow #4881): only a person signed in to
+   * setting or deleting a secret: only a person signed in to
    * the Admin does it, and /meta/principal lists both operations in a token's
    * `needs_a_person` too. Off by default, so a token sets secrets as on an
    * instance before it.
@@ -411,6 +440,28 @@ export interface FakeState {
   tenantFlags: Map<string, Map<string, boolean>>;
   /** The tenants on Processing-Step terms: the token budget stops nothing there. */
   processingStepTerms: Set<string>;
+  /**
+   * The confirmation a personal access token's guarded change carries:
+   * `enforced`, as the snapshot's instance; published but off (`enforced:
+   * false`), as an operator who turned CONFIRMATION_NONCE_REQUIRED off; null,
+   * an older instance, which publishes no `confirmations`, no
+   * `x-cavelon-confirmation` marks and no route, and asks for nothing.
+   */
+  confirmations: { enforced: boolean } | null;
+  /** The confirmation ids issued, by id: bound to the token, the tenant and the change's digest; a test expires one through `expiresAt`. */
+  confirmationIds: Map<string, FakeConfirmation>;
+  /** How long an issued id lasts; the instance's is 10 minutes, 0 issues ids that have expired by the time they are sent. */
+  confirmationTtlMs: number;
+}
+
+export interface FakeConfirmation {
+  token: string;
+  tenantId: string;
+  method: string;
+  path: string;
+  digest: string;
+  expiresAt: number;
+  used: boolean;
 }
 
 /** A Model Registry row in ModelResponse's shape, with the tenant it belongs to. */
@@ -704,6 +755,9 @@ export async function startFakeServer(): Promise<FakeServer> {
     tenantRunCaps: new Map(),
     tenantFlags: new Map(),
     processingStepTerms: new Set(),
+    confirmations: { enforced: true },
+    confirmationIds: new Map(),
+    confirmationTtlMs: 600_000,
   };
 
   const server = http.createServer((req, res) => {
@@ -761,7 +815,8 @@ export async function startFakeServer(): Promise<FakeServer> {
     }
     if (p === "/openapi.json" || (p === "/api/v1/openapi.json" && !state.rootPathsReachApi)) {
       res.writeHead(200, { "content-type": "application/json" });
-      return res.end(withoutOperations(withTenantWideFlag(withUploadReplace(withMarkers(state.personOnly, state.secretFields), state.uploadReplace), state.tenantWideFlag), state.openapiWithout));
+      const marked = withConfirmations(withMarkers(state.personOnly, state.secretFields), state.confirmations !== null);
+      return res.end(withoutOperations(withTenantWideFlag(withUploadReplace(marked, state.uploadReplace), state.tenantWideFlag), state.openapiWithout));
     }
 
     // Auth: every API and docs route needs a known bearer token.
@@ -962,6 +1017,14 @@ export async function startFakeServer(): Promise<FakeServer> {
 
     if (!needTenant()) return;
     const tid = tenantId!;
+
+    if (p === "/api/v1/confirmations" && method === "POST" && state.confirmations) return issueConfirmation(res, token!, info, tid, body.json);
+    // A personal access token's guarded change carries its confirmation, checked before the change and used once it succeeds.
+    const guarded = state.confirmations?.enforced && info.kind === "pat" ? guardedChange(method, p, tid, body.json) : undefined;
+    if (guarded) {
+      const refused = checkConfirmation(req, res, url, token!, tid, method, body.json);
+      if (refused) return send(res, 428, refused);
+    }
 
     if (p === "/api/v1/tenants/current/quota-usage" && method === "GET") return send(res, 200, quotaUsageFor(tid));
     if (p === "/api/v1/tenants/current/processing-step-cap" && method === "PATCH") return handleProcessingStepCap(res, tid, body.json, info);
@@ -1406,10 +1469,99 @@ export async function startFakeServer(): Promise<FakeServer> {
     return send(res, 404, { detail: "Not Found" });
   }
 
+  /** A coded refusal as the instance sends one: the fields beside its code, message, catalog hint and docs link. */
+  function coded(code: string, detail: string, fields: Record<string, unknown> = {}): Record<string, unknown> {
+    const catalog = JSON.parse(readContract("meta-error-catalog.json")) as { api_error_codes: Array<{ code: string; hint?: string; docs?: string }> };
+    const entry = catalog.api_error_codes.find((e) => e.code === code);
+    return { ...fields, detail, code, message: detail, hint: entry?.hint ?? null, docs: entry?.docs ?? null };
+  }
+
+  /**
+   * The guarded change a request makes, as the instance's handlers decide it:
+   * the operation, when its condition holds; undefined for any other request
+   * and for one whose condition does not hold (a draft nothing reaches).
+   */
+  function guardedChange(method: string, p: string, tid: string, json: unknown): string | undefined {
+    const harnessOf = (re: RegExp) => {
+      const m = re.exec(p);
+      return m ? state.harnesses.find((h) => h.tenant_id === tid && h.id === m[1]) : undefined;
+    };
+    if (method === "POST") {
+      const toDefault = harnessOf(/^\/api\/v1\/harnesses\/([^/]+)\/default$/);
+      if (toDefault) return toDefault.is_default ? undefined : "default";
+      const activated = harnessOf(/^\/api\/v1\/harnesses\/([^/]+)\/activate$/);
+      if (activated) {
+        const reached = Number(activated.channel_count ?? 0) > 0 || state.lr.triggers.some((t) => t.tenant_id === tid && t.harness_id === activated.id && t.is_active);
+        return activated.status !== "active" && reached ? "activate" : undefined;
+      }
+      const deactivated = harnessOf(/^\/api\/v1\/harnesses\/([^/]+)\/deactivate$/);
+      if (deactivated) return deactivated.status === "active" && !deactivated.is_default ? "deactivate" : undefined;
+      if (p === "/api/v1/agent-graph/import") {
+        const b = (json ?? {}) as { include_tenant_wide?: boolean; package?: { manifest?: { scope?: string } } };
+        return b.include_tenant_wide === true || b.package?.manifest?.scope === "full_config" ? "import" : undefined;
+      }
+    }
+    if (method === "DELETE") {
+      const m = /^\/api\/v1\/variables\/([^/]+)$/.exec(p);
+      if (m) return valuesFor(tid).variables.has(decodeURIComponent(m[1]!)) ? "delete_variable" : undefined;
+    }
+    if (method === "PUT") {
+      const m = /^\/api\/v1\/triggers\/([^/]+)\/execution-identity$/.exec(p);
+      const trigger = m ? state.lr.triggers.find((t) => t.tenant_id === tid && t.id === m[1]) : undefined;
+      if (trigger) return trigger.identity.api_key_id !== ((json as { api_key_id?: string | null } | undefined)?.api_key_id ?? null) ? "execution_identity" : undefined;
+    }
+    return undefined;
+  }
+
+  /** The operation a confirmation names, by its method and path, as the published marks list them. */
+  function markedOperation(method: string, p: string): boolean {
+    const routes: Array<[string, RegExp]> = [
+      ["POST", /^\/api\/v1\/harnesses\/[^/]+\/(default|activate|deactivate)$/],
+      ["POST", /^\/api\/v1\/agent-graph\/import$/],
+      ["DELETE", /^\/api\/v1\/variables\/[^/]+$/],
+      ["PUT", /^\/api\/v1\/triggers\/[^/]+\/execution-identity$/],
+    ];
+    return routes.some(([m, re]) => m === method && re.test(p));
+  }
+
+  function issueConfirmation(res: http.ServerResponse, token: string, info: TokenInfo, tid: string, json: unknown) {
+    if (info.kind !== "pat") return send(res, 400, coded("confirmation_needs_a_token", "Only a personal access token's change needs a confirmation."));
+    const b = (json ?? {}) as { method?: string; path?: string; body?: unknown };
+    if (!b.method || !["POST", "PUT", "PATCH", "DELETE"].includes(b.method) || typeof b.path !== "string" || !b.path.startsWith("/")) {
+      return send(res, 422, { detail: [{ loc: ["body"], msg: "invalid confirmation request", type: "value_error" }], code: "request_invalid" });
+    }
+    const target = new URL(b.path, "http://fake");
+    if (!markedOperation(b.method, target.pathname)) return send(res, 422, coded("confirmation_not_needed", "This operation needs no confirmation."));
+    const id = `cfm_${randomBytes(16).toString("hex")}`;
+    const expiresAt = Date.now() + state.confirmationTtlMs;
+    state.confirmationIds.set(id, { token, tenantId: tid, method: b.method, path: target.pathname, digest: changeDigest(b.method, b.path, b.body), expiresAt, used: false });
+    return send(res, 201, { confirmation_id: id, expires_at: new Date(expiresAt).toISOString(), summary: `${b.method} ${target.pathname}, confirmed by its person.` });
+  }
+
+  /** The 428 body for a guarded change without its confirmation, or undefined when it carries the right one, which is used once the change succeeds. */
+  function checkConfirmation(req: http.IncomingMessage, res: http.ServerResponse, url: URL, token: string, tid: string, method: string, json: unknown): Record<string, unknown> | undefined {
+    const next = { confirmations: "/api/v1/confirmations", header: "X-Cavelon-Confirmation" };
+    const given = String(req.headers["x-cavelon-confirmation"] ?? "").trim();
+    if (!given) return coded("confirmation_required", "This change needs a person's confirmation. Nothing was changed.", next);
+    const refuse = (reason: string) => coded("confirmation_invalid", `The confirmation id is ${reason}. Nothing was changed.`, { reason, ...next });
+    const issued = state.confirmationIds.get(given);
+    if (!issued) return refuse("unknown");
+    if (issued.tenantId !== tid || issued.token !== token || issued.digest !== changeDigest(method, `${url.pathname}${url.search}`, json)) return refuse("other_change");
+    if (issued.expiresAt <= Date.now()) return refuse("expired");
+    if (issued.used) return refuse("used");
+    // Used in the change's own transaction: a change that fails leaves it unused.
+    res.on("finish", () => {
+      if (res.statusCode < 400) issued.used = true;
+    });
+    return undefined;
+  }
+
   /** The capabilities snapshot with the test's patch, and the tenant's own limit values in its limits. */
   function capabilitiesFor(tenantId: string): Record<string, unknown> {
     const caps = JSON.parse(readContract("meta-capabilities.json"));
     caps.features = { ...caps.features, ...state.features };
+    if (state.confirmations) caps.confirmations = { ...caps.confirmations, enforced: state.confirmations.enforced };
+    else delete caps.confirmations;
     const merged = { ...caps, ...structuredClone(state.capsPatch) } as Record<string, unknown> & { limits?: { values?: Array<Record<string, unknown>> } };
     const own = state.tenantLimits.get(tenantId);
     const stored: Record<string, number | undefined> = {

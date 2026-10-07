@@ -133,6 +133,21 @@ activates. Over MCP, `cavelon` limits it further:
   test environment stays the agent's fast loop: `apply` of a preview that
   needs no person, `loop_start` of a draft's trigger, `loop_cancel`,
   `sandbox_seed` and `kb_upload` with `replace` confirm with the token alone.
+- The instance checks your yes as well, where it publishes
+  `confirmations.enforced` in `/api/v1/meta/capabilities`. A personal access
+  token's change to an operation its OpenAPI marks `x-cavelon-confirmation`
+  (the default route, activating a solution a channel or an active trigger
+  reaches, deactivating an active one, an import that writes tenant-wide
+  sections, deleting a variable, a trigger's execution identity) needs a
+  confirmation id that names exactly that change: its method, path and body,
+  for this token and tenant, once, within 10 minutes. `cavelon` asks the
+  instance for one only after your yes, in your own terminal with `--confirm`
+  or in your agent client's dialog, and sends it with exactly that request;
+  an agent's token alone never gets one. A change the instance refuses for
+  lack of it changes nothing: `confirmation_required` or
+  `confirmation_invalid` (exit 5, `details.reason` says why, such as
+  `expired`). On an instance that does not publish `confirmations` nothing is
+  asked for.
 - `api` refuses, even with `confirm`, an operation the instance keeps for a
   person: one its OpenAPI marks with `x-cavelon-person-only` (setting or
   deleting a secret value, issuing, resetting or revoking a credential,

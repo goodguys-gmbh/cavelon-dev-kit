@@ -2329,6 +2329,34 @@
       "docs": "/docs/reference/api-endpoints#errors-and-retries"
     },
     {
+      "code": "confirmation_required",
+      "area": "confirmation",
+      "message": "This change needs a person's confirmation; a personal access token sends it with X-Cavelon-Confirmation. Nothing was changed.",
+      "hint": "Update the cavelon dev-kit: it asks you before it confirms such a change. Or make the change yourself, signed in to the Admin.",
+      "docs": "/docs/reference/api-endpoints#changes-a-person-confirms"
+    },
+    {
+      "code": "confirmation_invalid",
+      "area": "confirmation",
+      "message": "The confirmation id is unknown, expired, already used, or confirms another change, token or tenant. Nothing was changed.",
+      "hint": "Preview the change again and confirm the new preview: the dev-kit asks for a new confirmation. An older dev-kit needs updating; or make the change yourself, signed in to the Admin.",
+      "docs": "/docs/reference/api-endpoints#changes-a-person-confirms"
+    },
+    {
+      "code": "confirmation_not_needed",
+      "area": "confirmation",
+      "message": "This operation needs no confirmation: it is not one the OpenAPI document marks `x-cavelon-confirmation: required`.",
+      "hint": "Send the change without X-Cavelon-Confirmation.",
+      "docs": "/docs/reference/api-endpoints#changes-a-person-confirms"
+    },
+    {
+      "code": "confirmation_needs_a_token",
+      "area": "confirmation",
+      "message": "Only a personal access token's change needs a confirmation.",
+      "hint": "A dashboard session and an API key send the change without X-Cavelon-Confirmation.",
+      "docs": "/docs/reference/api-endpoints#changes-a-person-confirms"
+    },
+    {
       "code": "server_error",
       "area": "request",
       "message": "The server failed to complete the request.",

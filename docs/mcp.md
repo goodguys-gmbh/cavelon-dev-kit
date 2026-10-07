@@ -241,6 +241,16 @@ repeat them:
     A call with the token is refused (`confirm_needs_person`, exit code 5,
     with the command in `details.person_command`).
 
+  Where the instance publishes `confirmations.enforced`, it checks your yes
+  too: after it, and only then, `cavelon` asks the instance for a
+  confirmation id for exactly the request it sends (an operation the
+  instance's OpenAPI marks `x-cavelon-confirmation`), and sends it with that
+  request. An `api` preview of such an operation says so in
+  `instance_confirmation`. The instance refuses such a change without one
+  (`confirmation_required`, exit code 5), and one that expired, was used or
+  names another change (`confirmation_invalid`, `details.reason`): nothing
+  changes, and a new preview and your yes get a new one.
+
   `apply` of a preview that needs no person (a draft, outside `env/prod`),
   `loop_start` of a draft's trigger, `loop_cancel`, `sandbox_seed` and
   `kb_upload` with `replace` confirm with the token alone: the fast loop on a

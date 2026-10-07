@@ -326,12 +326,22 @@ const PLUGIN_UPDATE = {
   claude: "`claude plugin marketplace update cavelon-dev-kit` and `claude plugin update cavelon@cavelon-dev-kit`",
   codex: "`codex plugin marketplace upgrade cavelon-dev-kit` and `codex plugin add cavelon@cavelon-dev-kit`",
 };
+const INSTALL_DOCS = `https://github.com/${REPOSITORY}/blob/main/docs/install`;
 
-/** The plugin's update commands for the client that started the server (MCP's clientInfo.name), or for both. */
+/**
+ * How the client that started the server (MCP's clientInfo.name) updates the
+ * plugin: its command, or its install page where the package is replaced by
+ * hand. Cursor's name carries "vscode", so it is asked first.
+ */
 function pluginUpdate(client: string | undefined): string | undefined {
   const name = client?.toLowerCase() ?? "";
-  if (name.includes("claude")) return PLUGIN_UPDATE.claude;
-  if (name.includes("codex")) return PLUGIN_UPDATE.codex;
+  if (name.includes("claude")) return `with ${PLUGIN_UPDATE.claude}`;
+  if (name.includes("codex")) return `with ${PLUGIN_UPDATE.codex}`;
+  if (name.includes("gemini")) return "with `gemini extensions update cavelon`";
+  if (name.includes("cursor")) return `as ${INSTALL_DOCS}/cursor.md#update says`;
+  if (name.includes("kiro")) return `as ${INSTALL_DOCS}/kiro.md#update says`;
+  if (name.includes("copilot")) return "with `copilot plugin update cavelon`";
+  if (name.includes("visual studio code") || name.includes("vscode")) return `as ${INSTALL_DOCS}/vscode-copilot.md#update says`;
   return undefined;
 }
 
@@ -358,11 +368,15 @@ export function sessionWarning(facts: SessionWarningFacts): string | undefined {
   if (pluginBehind) {
     said.push(`The Cavelon plugin is ${plugin}${latest ? "" : `, older than cavelon ${newest}`}.`);
     const commands = pluginUpdate(facts.client);
-    asks.push(commands ? `Update the plugin with ${commands}.` : `Update the plugin: in Claude Code with ${PLUGIN_UPDATE.claude}; in Codex with ${PLUGIN_UPDATE.codex}.`);
+    asks.push(
+      commands
+        ? `Update the plugin ${commands}.`
+        : `Update the plugin: in Claude Code with ${PLUGIN_UPDATE.claude}; in Codex with ${PLUGIN_UPDATE.codex}; in another agent as its page in ${INSTALL_DOCS}/ says.`,
+    );
   } else if (latest && plugin === undefined && pluginUpdate(facts.client)) {
     // The plugin's version is unknown: Codex started a plugin from before
     // PLUGIN_VERSION_VARIABLE, or the person configured the server themselves.
-    asks.push(`If they use the Cavelon plugin, also update it with ${pluginUpdate(facts.client)}.`);
+    asks.push(`If they use the Cavelon plugin, also update it ${pluginUpdate(facts.client)}.`);
   }
   if (skillsBehind) {
     said.push(`The skills \`cavelon init --agents\` wrote in this solution folder are from cavelon ${skills}.`);
