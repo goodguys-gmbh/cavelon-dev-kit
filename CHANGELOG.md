@@ -7,7 +7,38 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Added
+
+- `cavelon db instance` (`db_instance`) says what the instance offers for
+  database connections (#146): the dialects it runs, and the addresses it
+  connects to databases from (`egress_ips`), which the customer allows through
+  their database's firewall, with how many connections each process opens per
+  connection. Where the operator named no addresses, it says to ask them. An
+  instance older than `GET /api/v1/database-connectors/instance` gets the
+  dialects from its capabilities and a line that it does not publish the rest.
+  The cavelon-loop skill names it where a person sets up a connection.
+- `db connections` shows each connection's CA certificates (subject and
+  expiry, `ca_certificates` in `--json`) and warns of one that has expired or
+  expires within 30 days, since the connection's TLS check and its queries
+  fail from then. An instance that publishes only the fingerprints gets a line
+  that a CA is set. It also names a connection whose queries cannot be
+  enabled, with the instance's code (`query_enable_refusal`), such as
+  `write_privileges_unacknowledged`.
+- SQL Server (`mssql`) connections: `db instance`, `apply`'s dialect check and
+  `explain` take the instance's word for them, and the skills, `db test`'s help
+  and the concepts say that a SQL Server login that can write runs no query
+  (`write_privileges_unacknowledged`) until it may only read or a superadmin
+  acknowledges it.
+- The contract snapshot carries SQL Server: the error catalog's
+  `write_privileges_unacknowledged` and its wording of `unavailable` and
+  `forbidden_keyword`, and the connections' `write_privileges_acknowledged`
+  and `query_enable_refusal`.
+
 ### Fixed
+
+- The database commands that read name the permission a 403 is missing:
+  `database_connectors.view`, which the tenant roles that see tools hold
+  (#146).
 
 - An instance that lets only a person signed in to the Admin set or delete a
   secret refuses every personal access token there, not only a tenant API key
@@ -27,6 +58,32 @@ CLI, the skills and the plugin.
   token there, and nothing changes for it. The contract snapshot carries the
   instance's new wording of `secret_needs_a_person` and
   `approval_needs_a_person`, and `person_only_operation`.
+
+### Security
+
+- A coding agent could confirm a live, tenant-wide or destructive change on
+  its own: the preview handed it the confirm token (or preview id), and the
+  token is a hash it could even compute, so nothing made a person take part
+  (#134). These changes now need the person's own yes on top of the token:
+  `harness default`, `activate` where it previews (a solution something
+  reaches, or `--make-default`), `deactivate`, `tenant create`, `variables
+  set` replacing a value, `variables delete`, `limits set`, `models
+  set-limit`, `trigger identity`, `api` for an operation that is not
+  read-only, `loop start` unless the trigger's solution is a draft, and
+  `apply` of a preview that `show_to_person` marks (tenant-wide sections, an
+  active solution, deletions, env/prod; a preview an older cavelon stored is
+  held to the person too). Over MCP, once the agent confirms with the token,
+  the client asks the person (MCP elicitation) to approve exactly that change,
+  and waits up to 10 minutes; a no or no answer changes nothing
+  (`confirm_declined`, exit 5), and `apply` sends the preview id to the
+  instance only after the yes. A client that cannot ask, and a coding agent's
+  shell, leave the confirm to the person's own terminal: the preview says
+  `needs_person: "terminal"` and names the command, and a confirm with the
+  token is refused (`confirm_needs_person`, exit 5). A preview says
+  `needs_person` (`client` or `terminal`) wherever this applies. A draft's
+  `apply` and `loop start`, `loop cancel`, `sandbox seed` and `kb upload
+  --replace` are confirmed with the token as before, and nothing changes in a
+  person's own terminal.
 
 ## [0.1.11] - 2026-10-06
 

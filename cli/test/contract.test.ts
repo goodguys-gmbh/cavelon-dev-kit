@@ -560,6 +560,8 @@ describe("the fake server answers in the published shapes", () => {
     server.state.features.database_connector_enabled = true;
     try {
       check("GET", "/api/v1/meta/capabilities", 200, (await call("GET", "/api/v1/meta/capabilities")).data);
+      check("GET", "/api/v1/database-connectors/instance", 200, (await call("GET", "/api/v1/database-connectors/instance")).data);
+      connection.caCertificates = [{ subject: "CN=Shop Root CA", issuer: "CN=Shop Root CA", not_before: "2026-01-01T00:00:00Z", not_after: "2031-01-01T00:00:00Z", sha256: "AB:CD" }];
       check("GET", "/api/v1/database-connectors/connections", 200, (await call("GET", "/api/v1/database-connectors/connections")).data);
       check("GET", "/api/v1/database-connectors/connections/{connection_id}", 200, (await call("GET", `/api/v1/database-connectors/connections/${connection.id}`)).data);
       check("POST", "/api/v1/database-connectors/connections/{connection_id}/test", 200, (await call("POST", `/api/v1/database-connectors/connections/${connection.id}/test`)).data);

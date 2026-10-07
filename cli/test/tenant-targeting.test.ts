@@ -8,7 +8,7 @@ import { COMMANDS } from "../src/commands/index.js";
 import type { InStream, Io } from "../src/io.js";
 import { createMcpServer } from "../src/mcp.js";
 import { startFakeServer, type FakeServer } from "./fake-server.js";
-import { cli, login, sandbox, type Sandbox } from "./helpers.js";
+import { askingClient, cli, login, sandbox, type Sandbox } from "./helpers.js";
 
 /**
  * Which tenant a command acts in, and who sees it: a tenant API key never
@@ -285,7 +285,7 @@ async function mcpClient(box: Sandbox, env: Record<string, string> = {}): Promis
   const mcp = createMcpServer(io, COMMANDS);
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
   await mcp.connect(serverSide);
-  const client = new Client({ name: "test", version: "0" });
+  const client = askingClient();
   await client.connect(clientSide);
   return client;
 }

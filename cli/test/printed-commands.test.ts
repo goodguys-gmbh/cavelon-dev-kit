@@ -1,4 +1,3 @@
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Readable } from "node:stream";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -16,7 +15,7 @@ import { mcpInstructions } from "../src/mcp.js";
 import { cavelonCommand, fill, folderCommand, printingFor, printedCommand, spoken, type PrintTarget } from "../src/printed.js";
 import { currentShell, useShell } from "../src/shell.js";
 import { startFakeServer, type FakeServer } from "./fake-server.js";
-import { cli, login, sandbox, type Sandbox } from "./helpers.js";
+import { askingClient, cli, login, sandbox, type Sandbox } from "./helpers.js";
 
 /**
  * The commands the kit prints act where the command that printed it did: a
@@ -50,7 +49,7 @@ function mcpClient(env: Record<string, string> = sb.env) {
     COMMANDS,
   );
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
-  const client = new Client({ name: "test", version: "0" });
+  const client = askingClient();
   const connected = (async () => {
     await mcp.connect(serverSide);
     await client.connect(clientSide);
@@ -104,12 +103,14 @@ describe("a printed confirm keeps the --tenant it was given, outside a solution 
     expect(solution(beta, "support").status).toBe("active");
   });
 
-  it("deactivate from an agent's shell: a bare --confirm prints the line with its token and --tenant", async () => {
+  it("deactivate from an agent's shell: a bare --confirm prints the person's line with --tenant", async () => {
     const bare = await cli(sb, ["deactivate", "--harness", "support", "--tenant", "acme", "--confirm", "--json"], { env: AGENT });
     expect(bare.code).toBe(5);
-    const shown = bare.json<{ confirm: string; confirm_token: string }>();
-    expect(shown.confirm).toBe(`cavelon deactivate --harness support --tenant acme --confirm ${shown.confirm_token}`);
-    expect((await cli(sb, argsOf(shown.confirm), { env: AGENT })).code).toBe(0);
+    const shown = bare.json<{ confirm: string }>();
+    const line = "cavelon deactivate --harness support --tenant acme --confirm";
+    expect(shown.confirm).toBe(`${line} (the person runs it in their own terminal: a coding agent cannot confirm this change)`);
+    // The person runs it in their own terminal, where it acts in the tenant the agent's command named.
+    expect((await cli(sb, argsOf(line))).code).toBe(0);
     expect(solution(acme, "support").status).toBe("inactive");
     expect(solution(beta, "support").status).toBe("active");
   });
@@ -379,10 +380,10 @@ describe("in a coding agent's shell, a confirm line printed before its preview n
     });
   });
 
-  it("a preview's own confirm line carries its token, not the placeholder", async () => {
+  it("a preview's own confirm line for the person carries no token and no placeholder", async () => {
     const preview = await cli(sb, ["harness", "default", "support", "--tenant", "acme", "--json"], { env: AGENT });
-    const shown = preview.json<{ confirm: string; confirm_token: string }>();
-    expect(shown.confirm).toBe(`cavelon harness default support --tenant acme --confirm ${shown.confirm_token}`);
+    const shown = preview.json<{ confirm: string }>();
+    expect(shown.confirm).toBe("cavelon harness default support --tenant acme --confirm (the person runs it in their own terminal: a coding agent cannot confirm this change)");
   });
 
   it("in a person's terminal the line stays a bare --confirm", () => {

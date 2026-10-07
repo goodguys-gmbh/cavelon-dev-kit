@@ -21,7 +21,8 @@ Codex with the Cavelon plugin; any agent `cavelon setup` or
   bases, triggers) and the test suites in `tests/`;
 - runs `cavelon validate` and fixes what it reports;
 - previews the import with `cavelon apply --env test`, and confirms it on its
-  own when the target is a draft solution in a test environment;
+  own when the preview reaches no active solution, nothing tenant-wide, deletes
+  nothing and does not go to `env/prod` (a draft in a test environment);
 - uploads the knowledge with `cavelon kb upload`;
 - runs the suites with `cavelon test run`, reads the results and traces with
   `cavelon trace`, changes the files and runs them again;
@@ -55,7 +56,7 @@ by the others:
 | Source | What it enforces |
 |---|---|
 | **The skills** (`cavelon-loop`, `cavelon-authoring`, `cavelon-testing`, `cavelon-long-running`) and the server's instructions when the agent connects | When to stop and show you a preview; propose a limit change and let you decide; never handle a token or secret; never approve. |
-| **The commands and their MCP tools** | `apply` imports only with the id of a preview; `tenant create`, `variables set` where it replaces a value, `loop start`, `limits set`, `models set-limit`, `loop cancel`, `sandbox seed`, `trigger identity`, `harness default`, `activate` of a solution a channel or trigger reaches, `activate --make-default` and `deactivate` change nothing without `--confirm` (from the agent's shell, `--confirm <token>` from their preview), and neither does the `api` tool for an operation that is not read-only. Over MCP, `confirm` is the token the tool's preview returned, so it confirms exactly the change shown. The `api` tool refuses to change a secret, create or revoke a credential or decide an approval, or to send a body field the instance marks as a secret value, and the tools read and write files only inside the solution folder. `cavelon api` run from the agent's shell applies the same guards, with `--confirm <token>` from its preview ([Security](security.md#when-the-agent-runs-cavelon-in-its-shell)). [Security](security.md#every-changing-command-and-its-guard) lists every changing command and its guard. Each tool is annotated read-only or destructive (`readOnlyHint`, `destructiveHint`), so your agent client can ask you before it calls a destructive one. There is no tool for `login`, `secrets set` or deciding an approval, and no command takes a token or secret value as an argument. `activate` goes through the readiness gate and never forces. |
+| **The commands and their MCP tools** | `apply` imports only with the id of a preview; `tenant create`, `variables set` where it replaces a value, `loop start`, `limits set`, `models set-limit`, `loop cancel`, `sandbox seed`, `trigger identity`, `harness default`, `activate` of a solution a channel or trigger reaches, `activate --make-default` and `deactivate` change nothing without `--confirm` (from the agent's shell, `--confirm <token>` from their preview), and neither does the `api` tool for an operation that is not read-only. Over MCP, `confirm` is the token the tool's preview returned, so it confirms exactly the change shown. A change that reaches live traffic, the whole tenant, or cannot be taken back (a new tenant, a replaced or deleted variable, a limit, a trigger's identity, the default route, an activation something reaches, a deactivation, a loop of a solution that is not a draft, any changing `api` call, and an `apply` whose preview needs a person) also needs your yes, which the agent cannot give: your agent client asks you in its own dialog (MCP elicitation), or, where it cannot, and from the agent's shell, you run the command in your own terminal. The `api` tool refuses to change a secret, create or revoke a credential or decide an approval, or to send a body field the instance marks as a secret value, and the tools read and write files only inside the solution folder. `cavelon api` run from the agent's shell applies the same guards, and leaves a changing operation to your terminal ([Security](security.md#when-the-agent-runs-cavelon-in-its-shell)). [Security](security.md#every-changing-command-and-its-guard) lists every changing command and its guard. Each tool is annotated read-only or destructive (`readOnlyHint`, `destructiveHint`), so your agent client can ask you before it calls a destructive one. There is no tool for `login`, `secrets set` or deciding an approval, and no command takes a token or secret value as an argument. `activate` goes through the readiness gate and never forces. |
 | **Your token's permissions on the server** | The token acts as you, within your roles, and within the ceiling you chose when you created it. Without **May activate**, activation is refused, whatever the agent tries. A limit only a Tenant Owner or the operator may change is refused for anyone else. |
 
 The skills shape what a well-behaved agent does; the token decides what any
@@ -227,8 +228,8 @@ runs.
     and activates only with the confirm command it prints. When the solution is not the tenant's default route,
     `activate` says so, and the agent asks you whether it should become the
     default; `cavelon activate --make-default` shows the change, and only
-    the confirm command it prints makes it (from the agent's shell it carries
-    the preview's token, `--confirm <token>`). Until then, `cavelon chat
+    the confirm command it prints makes it, with your yes: your agent client
+    asks you, or you run the command in your own terminal. Until then, `cavelon chat
     "<message>" --harness <solution>` talks to the solution by name, and
     `cavelon deactivate` (previewed, then confirmed by you) takes it out of
     service again: its status becomes `inactive`.

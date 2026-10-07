@@ -1417,6 +1417,47 @@ describe("apply", () => {
     expect(read(agentsFile)).toContain("temperature: 0.5");
   });
 
+  it("under a coding agent, confirms a draft's preview itself, and leaves one that reaches an active solution to the person", async () => {
+    const agent = { cwd: await pulled(), env: { CLAUDECODE: "1" } };
+    const support = server.state.harnesses.find((h) => h.tenant_id === tenant && h.slug === "support")!;
+    const imports = () => server.state.requests.filter((r) => r.method === "POST" && r.path === "/api/v1/agent-graph/import");
+    const was = support.status;
+    support.status = "draft";
+    const draft = (await cli(sb, ["apply", "--json"], agent)).json<Record<string, any>>();
+    expect(draft).toMatchObject({ show_to_person: false });
+    expect(draft.needs_person).toBeUndefined();
+    server.state.requests.length = 0;
+    expect((await cli(sb, ["apply", "--confirm", draft.preview_id, "--json"], agent)).code).toBe(0);
+    expect(imports()).toHaveLength(1);
+
+    support.status = "active";
+    try {
+      const preview = await cli(sb, ["apply", "--json"], agent);
+      const live = preview.json<Record<string, any>>();
+      expect(live).toMatchObject({ show_to_person: true, needs_person: "terminal" });
+      expect((await cli(sb, ["apply"], agent)).stdout).toMatch(
+        /This reaches the active solution support: show this preview to a person before confirming\.\nImport exactly this: cavelon apply --confirm pv_\S+ \(the person runs it in their own terminal: a coding agent cannot confirm this change\)/,
+      );
+      server.state.requests.length = 0;
+      const refused = await cli(sb, ["apply", "--confirm", live.preview_id, "--json"], agent);
+      expect(refused.code).toBe(5);
+      expect(refused.json<{ error: Record<string, unknown> }>().error).toMatchObject({ code: "confirm_needs_person", details: { person_command: `cavelon apply --confirm ${live.preview_id}` } });
+      expect(imports()).toEqual([]);
+      // A preview an older cavelon stored says nothing about the person, so it is held to them.
+      const stored = path.join(agent.cwd, ".cavelon", "previews", `${live.preview_id}.json`);
+      const older = JSON.parse(read(stored));
+      delete older.person_reason;
+      support.status = "draft";
+      writeFileSync(stored, JSON.stringify(older));
+      expect((await cli(sb, ["apply", "--confirm", live.preview_id, "--json"], agent)).json<{ error: { code: string } }>().error.code).toBe("confirm_needs_person");
+      // The person's own terminal imports it.
+      expect((await cli(sb, ["apply", "--confirm", live.preview_id, "--json"], { cwd: agent.cwd })).code).toBe(0);
+      expect(imports()).toHaveLength(1);
+    } finally {
+      support.status = was;
+    }
+  });
+
   it("after a confirm, a file whose bytes changed since the preview but whose content the instance holds is the base for pull", async () => {
     const dir = await pulled();
     const agentsFile = path.join(dir, "package", "agents.yaml");

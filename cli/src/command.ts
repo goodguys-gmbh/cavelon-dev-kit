@@ -108,7 +108,16 @@ export interface Context {
   /** A client that sends the credential when there is one, for public routes. */
   optionalClient(): Promise<ApiClient>;
   contracts(): Promise<Contracts>;
+  /**
+   * Over MCP, where the client can ask the person (elicitation): shows them
+   * a change and returns their answer, which the agent cannot give. Unset in
+   * a terminal and for a client that cannot ask.
+   */
+  askPerson?: (message: string) => Promise<PersonAnswer>;
 }
+
+/** A person's answer to a change the client showed them; `unanswered` when no answer came in time or the client failed. */
+export type PersonAnswer = "approved" | "declined" | "unanswered";
 
 export interface CommandSpec {
   /** Words, e.g. "tenant create". */

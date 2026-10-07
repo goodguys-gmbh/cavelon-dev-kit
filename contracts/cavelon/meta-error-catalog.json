@@ -2597,8 +2597,8 @@
     {
       "code": "unavailable",
       "area": "database_connector",
-      "message": "The database connector, the connection or the query is switched off, or the instance does not run this connection's dialect.",
-      "hint": "Check DATABASE_CONNECTOR_ENABLED and database_connector.dialects in /meta/capabilities, and that the connection and the query are enabled under Settings → Databases.",
+      "message": "The database connector, the connection or the query is switched off, the instance does not run this connection's dialect, or a SQL Server connection's last test found write privileges that no superadmin acknowledged.",
+      "hint": "Check DATABASE_CONNECTOR_ENABLED and database_connector.dialects in /meta/capabilities, and that the connection and the query are enabled under Settings → Databases. For SQL Server, give the connection a read-only login and test it again, or have a superadmin acknowledge its write privileges.",
       "docs": "/docs/troubleshooting/database-connections#error-codes"
     },
     {
@@ -2639,7 +2639,7 @@
     {
       "code": "forbidden_keyword",
       "area": "database_connector",
-      "message": "The SQL names a keyword that writes, creates or calls something (INSERT, INTO, DELETE, EXEC, …).",
+      "message": "The SQL names a keyword that writes, creates or calls something (INSERT, INTO, DELETE, EXEC, …); on SQL Server also a statement keyword T-SQL would run as a second statement (COMMIT, DECLARE, SET, WAITFOR, …) or a function that reaches another server (OPENROWSET, OPENQUERY).",
       "hint": "Remove the keyword; a query only reads. A column or table of that name is written as a quoted identifier.",
       "docs": "/docs/concepts/database-connections#queries-and-parameters"
     },
@@ -2683,6 +2683,13 @@
       "area": "database_connector",
       "message": "A query with an end_user.* parameter cannot allow anonymous visitors: it needs a signed-in visitor anyway.",
       "hint": "Set allows_anonymous to false, or remove the context parameter for a query on public data.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
+      "code": "write_privileges_unacknowledged",
+      "area": "database_connector",
+      "message": "The connection's last test found that its login can write, and its dialect (SQL Server) has no read-only transaction, so its queries cannot be enabled and do not run.",
+      "hint": "Give the connection a login that may only read (Settings → Databases shows the script) and test it again. Or a superadmin acknowledges on the connection that this login can write; the rollback after every call stays.",
       "docs": "/docs/concepts/database-connections#queries-and-parameters"
     },
     {

@@ -105,6 +105,7 @@ only reads it).
 | `kb_upload` | `cavelon kb upload` | changing |
 | `test_run` | `cavelon test run` | changing |
 | `trace` | `cavelon trace` | read-only |
+| `db_instance` | `cavelon db instance` | read-only |
 | `db_connections` | `cavelon db connections` | read-only |
 | `db_queries` | `cavelon db queries` | read-only |
 | `db_runs` | `cavelon db runs` | read-only |
@@ -154,7 +155,9 @@ harness_default {"solution":"support","confirm":"<confirm_token of its preview>"
 ```
 
 A value in angle brackets is the agent's to fill: a `confirm_token` comes from
-calling that tool without `confirm` first. A command only a person runs
+calling that tool without `confirm` first. For a change that needs your yes,
+the client then asks you, or the preview names the command you run in your
+own terminal (see [What needs your yes](#how-agents-use-it)). A command only a person runs
 (`secrets set`, `login`) stays a command line for their terminal. The tools'
 descriptions spell their arguments the same way (`make_default`, not
 `--make-default`), and `init` as a tool names the `harness_new` call (with the
@@ -212,16 +215,37 @@ repeat them:
   refused (`confirm_token_required`). `kb_upload` with `replace` needs it only
   on an instance whose upload cannot replace a document itself: there it
   returns the documents it would deactivate after the upload, and uploads
-  nothing without its token. The agent shows that to you first, and must show you any
-  preview that reaches an active solution or production. Making a solution
-  the tenant's default route changes which solution the tenant's chat and
-  widget answer with, and deactivating one takes it out of live traffic, so
-  the agent asks you before it confirms either; so it does before it confirms
-  a new tenant, a replaced variable (every solution of the tenant reads it),
-  or the activation of a solution a channel or trigger reaches. It confirms a
-  `loop_start` on its own only for a trigger of a draft solution in a test
-  environment: a run acts as you and spends budget. The same goes for `apply` with
-  `include_tenant_wide`: it imports the package's tenant-wide sections
+  nothing without its token. The agent shows you every preview first.
+- **What needs your yes.** The token proves only that a preview came first.
+  A change that reaches live traffic, the whole tenant, or cannot be taken
+  back also needs your own yes, which the agent cannot give: `tenant_create`,
+  `variables_set` where it replaces a value (every solution of the tenant
+  reads it), `loop_start` (a run acts as you and spends budget) except for a
+  trigger of a draft solution, `limits_set`, `models_set_limit`,
+  `trigger_identity`, `harness_default` (which solution the tenant's chat and
+  widget answer with), `activate` where it previews (a channel or trigger
+  reaches the solution, or `make_default`), `deactivate` (it takes a solution
+  out of live traffic), `api` for any operation that is not read-only, and
+  `apply` where its preview needs a person: it changes the tenant-wide
+  sections, reaches an active solution, deletes (or `mode` `replace`), or goes
+  to `env/prod`. Their previews say how in `needs_person`:
+  - `"client"`: your agent client can ask you (MCP elicitation). When the
+    agent calls the tool again with the token (for `apply`, the preview id),
+    the client shows you the change, where it goes, and one question, **Make
+    this change**. Yes makes exactly that change; no, or no answer within
+    10 minutes, changes nothing (`confirm_declined`, exit code 5). For `apply`,
+    the preview id goes to the instance only after your yes.
+  - `"terminal"`: the client cannot ask you, so the preview's `confirm` is the
+    command you run in your own terminal, such as
+    `cavelon harness default support --confirm (the person runs it in their own terminal: a coding agent cannot confirm this change)`.
+    A call with the token is refused (`confirm_needs_person`, exit code 5,
+    with the command in `details.person_command`).
+
+  `apply` of a preview that needs no person (a draft, outside `env/prod`),
+  `loop_start` of a draft's trigger, `loop_cancel`, `sandbox_seed` and
+  `kb_upload` with `replace` confirm with the token alone: the fast loop on a
+  draft in a test environment. `apply` with
+  `include_tenant_wide` imports the package's tenant-wide sections
   (`tenant_settings`, `model_registry`, …) for every solution of the tenant,
   and its preview's `tenant_wide` names the sections the confirm would import
   (`would_import`) and the active solutions the change reaches
@@ -286,8 +310,9 @@ repeat them:
 - **The same guards in the agent's shell.** When a coding agent runs
   `cavelon api` in its shell, the rules of the `api` tool hold there too: it
   refuses what the tool refuses, keeps its files in the solution folder, and
-  for an operation that is not read-only prints the request and a token and
-  sends it only when run again with `--confirm <token>`.
+  for an operation that is not read-only prints the request and the command
+  you run in your own terminal to send it; the agent cannot send it, with or
+  without a token (`confirm_needs_person`).
   [Security](security.md#when-the-agent-runs-cavelon-in-its-shell) lists the
   variables and the limits of this guard.
 - **Files stay in the solution folder.** Every path a tool takes (`api`'s

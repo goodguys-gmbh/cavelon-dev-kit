@@ -6,7 +6,7 @@ import type { WarningEntry } from "../context.js";
 import { Contracts, type CachedContract, type ErrorCatalog, type PackageSchema } from "../contracts.js";
 import { CavelonError, ExitCode, usageError, type ExitCodeValue } from "../errors.js";
 import { drivenByAgent } from "../agent-env.js";
-import { confirmation, confirmTokenRequired, shellTokenRequired } from "../confirm-token.js";
+import { confirmation, confirmInTerminal, confirmTokenRequired, PERSON_CONFIRMS_HELP, personApproves, personRoute, shellTokenRequired } from "../confirm-token.js";
 import { actingTarget, targetLine, targetText } from "../acting.js";
 import { clip, keyValues } from "../format.js";
 import { readTextFile, writeFileAtomic } from "../fsutil.js";
@@ -51,7 +51,7 @@ import { isUuid, requireInstance, type Session } from "../session.js";
 import { listedPages } from "./docs.js";
 import { readInventory, readInventoryKinds, writeInventory, type InventoryKind } from "./inventory.js";
 import { checkedBy, MODEL_UNKNOWN_CODE, missingInventory, REFERENCE_UNKNOWN_CODE } from "../package-references.js";
-import { cavelonCommand, printedCommand, spoken } from "../printed.js";
+import { cavelonCommand, personCommand, printedCommand, spoken } from "../printed.js";
 import { secretStep, variableSetCommand } from "./values.js";
 import { maySetSecrets, SECRET_SETTER, SECRET_SETTER_IN_ADMIN, secretsInAdminOnly, VARIABLE_SETTER } from "../secret-access.js";
 import { ACTIVATOR, accessFor, accessOf, mayActivate, operationAccess, principalOf, type CredentialAccess } from "../access.js";
@@ -920,6 +920,11 @@ async function instanceHolds(ctx: Context, project: ProjectConfig, stored: Store
   return new Set(planned.unchanged);
 }
 
+/** The confirm a person runs in their own terminal, in the solution folder, for a preview an agent may not confirm. */
+function personApplyCommand(stored: Pick<StoredPreview, "preview_id" | "env">): string {
+  return personCommand("apply", ...(stored.env ? ["--env", stored.env] : []), "--confirm", stored.preview_id);
+}
+
 async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: string, allowStale: boolean) {
   const stored = await loadPreview(project.root, previewId);
   const session = await ctx.session();
@@ -958,6 +963,12 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
     });
   }
   if (stored.tenant_id && session.tokenKind !== "api_key") client.target.tenantId = stored.tenant_id;
+  const driven = drivenByAgent(ctx);
+  if (driven && stored.person_reason !== null) {
+    const into = stored.harness ? `solution ${stored.harness.slug}` : "the tenant";
+    const reason = stored.person_reason ?? "was stored by an older cavelon, which did not record whether it needs a person";
+    await personApproves(ctx, driven, { tool: "apply", what: `Import preview ${stored.preview_id} into ${into}: it ${reason}.`, command: personApplyCommand(stored) });
+  }
   const acting = await actingTarget(ctx);
   const disk = await readPackage(project.root, project.layout);
   const changed = await filesChangedSince(project, stored, disk);
@@ -1177,7 +1188,9 @@ export const apply: CommandSpec = {
     "budgets and ignored sections, and is stored in .cavelon/. A preview never creates the solution: one the env file names\n" +
     "that is not on the instance yet gets the `cavelon harness new` command that creates it as a draft. A person sets the\n" +
     "secrets (`cavelon secrets set <name>`, or in the Admin where the instance lets no token set one), never the agent.\n" +
-    "Show a preview that reaches an active solution or env/prod to a person before confirming. A stale preview exits 4 and\n" +
+    "Show a preview that reaches an active solution or env/prod to a person before confirming. Such a preview (show_to_person:\n" +
+    "tenant-wide sections, an active solution, deletions, env/prod) a coding agent cannot confirm: over MCP the client asks\n" +
+    "the person, and from an agent's shell the person runs the confirm in their own terminal. A stale preview exits 4 and\n" +
     "imports nothing: one whose target changed on the instance since, one whose package files changed since (what they\n" +
     "hold, not their formatting; --allow-stale imports what the preview showed anyway), and one older than a day. So does\n" +
     "an import its own check refuses when it applies, naming each blocker. --discard <id|all> forgets stored previews;\n" +
@@ -1379,6 +1392,7 @@ export const apply: CommandSpec = {
     if (!preview.preview_id) {
       ctx.warn("This instance's preview returns no preview id, so `apply --confirm` cannot import exactly it; update the instance.");
     }
+    const reason = personReason(preview, harness, mode, envFile?.name, sharedImported, reaches);
     if (preview.preview_id) {
       const stored: StoredPreview = {
         preview_id: preview.preview_id,
@@ -1391,6 +1405,7 @@ export const apply: CommandSpec = {
         file_digests: await fileDigests(project.root, sourceFiles(disk)),
         request,
         preview,
+        person_reason: reason ?? null,
       };
       await savePreview(project.root, stored);
       // An expired preview can no longer be confirmed; it would only pile up for a later agent to find.
@@ -1398,9 +1413,18 @@ export const apply: CommandSpec = {
       const expired = (await listPreviews(project.root, ctx.io.now())).filter((old) => old.expired);
       await retirePreviews(project.root, expired.map((old) => ({ preview_id: old.preview_id, reason: "expired" as const, at })));
     }
-    const reason = personReason(preview, harness, mode, envFile?.name, sharedImported, reaches);
     data.show_to_person = Boolean(reason);
-    const confirmLine = preview.preview_id ? cavelonCommand("apply", "--confirm", preview.preview_id) : undefined;
+    // An agent may not confirm what the person has to see: the client asks them, or they confirm in their own terminal.
+    const driven = drivenByAgent(ctx);
+    const route = driven && reason && preview.preview_id ? personRoute(ctx, driven) : undefined;
+    if (route) data.needs_person = route;
+    const confirmLine = !preview.preview_id
+      ? undefined
+      : route === "terminal"
+        ? confirmInTerminal(personApplyCommand({ preview_id: preview.preview_id, env: envFile?.name ?? null }))
+        : route === "client"
+          ? `${cavelonCommand("apply", "--confirm", preview.preview_id)}; the client then asks the person to approve it`
+          : cavelonCommand("apply", "--confirm", preview.preview_id);
     const text = [
       `Preview of ${project.layout.package}/ for ${harness ? `solution ${harness.slug}${harness.status ? ` (${harness.status})` : ""}` : "the tenant"}${envFile ? ` [env ${envFile.name}]` : ""}:`,
       previewText(preview, context),
@@ -1847,7 +1871,12 @@ async function defaultRouteAfterActivation(
   if (route.current?.id === harness.id) return { data: { default_route: { is_default: true, current } }, lines: [`${named(harness)} is the tenant's default route.`] };
   const commands = defaultCommands(harness.slug);
   // An activation whose preview named the default route too was confirmed with it, by one token.
-  const gate = make && !defaultConfirmed ? await confirmation(ctx, input, "activate", { harness: harness.id, from: current?.id ?? null }) : undefined;
+  const gate =
+    make && !defaultConfirmed
+      ? await confirmation(ctx, input, "activate", { harness: harness.id, from: current?.id ?? null }, {
+          person: { what: defaultChangeLine(harness, route), words: ["activate", "--harness", harness.slug, "--make-default", "--confirm"] },
+        })
+      : undefined;
   if (gate?.confirmed || (make && defaultConfirmed)) {
     try {
       await setDefaultRoute(ctx, harness.id);
@@ -1930,7 +1959,8 @@ export const activate: CommandSpec = {
     "Afterwards it says whether the solution is the tenant's default route (the one the tenant's chat and widget answer with\n" +
     "where no solution is named). --make-default previews making it the default; with --confirm as well, it changes it. That\n" +
     "changes live traffic: show the preview to a person and confirm only with their yes. `cavelon harness default` does the\n" +
-    "same for an active solution.",
+    "same for an active solution.\n" +
+    PERSON_CONFIRMS_HELP,
   readOnly: false,
   idempotent: true,
   mcpTool: "activate",
@@ -2028,9 +2058,15 @@ export const activate: CommandSpec = {
         triggers: reach.triggers?.map((t) => t.id) ?? null,
         ...(make ? { make_default: true, from: route?.current?.id ?? null } : {}),
       };
-      const gate = await confirmation(ctx, input, "activate", change);
+      const words = ["activate", "--harness", harness.slug, ...(make ? ["--make-default"] : []), "--confirm"];
+      const gate = await confirmation(ctx, input, "activate", change, {
+        person: {
+          what: [reachText(harness, reach), ...(make && route && route.current?.id !== harness.id ? [defaultChangeLine(harness, route)] : [])].join("\n"),
+          words,
+        },
+      });
       if (!gate.confirmed) {
-        const confirm = gate.confirm(cavelonCommand("activate", "--harness", harness.slug, ...(make ? ["--make-default"] : []), "--confirm"));
+        const confirm = gate.confirm(cavelonCommand(...words));
         const routeLine = make && route && route.current?.id !== harness.id ? [defaultChangeLine(harness, route)] : [];
         return {
           data: {

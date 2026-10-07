@@ -243,6 +243,15 @@ describe("apply", () => {
     server.state.capsPatch = { database_connector: { ...SNAPSHOT_OFFER, dialects: ["mysql"], may_write_queries: false } };
     preview = await cli(sb, ["apply"], { cwd: dir, env: fresh() });
     expect(preview.stderr).toMatch(/This instance runs only mysql queries; "order_status" names another dialect/);
+    // A SQL Server query: fine where the instance runs mssql, warned where it runs only the others.
+    editTool(dir, "order_status", (t) => (t.database_query.connection.dialect = "mssql"));
+    server.state.capsPatch = { database_connector: { ...SNAPSHOT_OFFER, dialects: ["mssql", "mysql", "postgresql"], may_write_queries: false } };
+    preview = await cli(sb, ["apply"], { cwd: dir, env: fresh() });
+    expect(preview.stderr).not.toMatch(/names another dialect/);
+    server.state.capsPatch = { database_connector: { ...SNAPSHOT_OFFER, dialects: ["mysql", "postgresql"], may_write_queries: false } };
+    preview = await cli(sb, ["apply"], { cwd: dir, env: fresh() });
+    expect(preview.stderr).toMatch(/This instance runs only mysql, postgresql queries; "order_status" names another dialect/);
+    connectorOn();
   });
 
   it("says nothing of queries on an instance that publishes neither the switch nor the offer", async () => {
@@ -274,6 +283,105 @@ describe("db commands", () => {
     expect(one.stdout).toContain(seeded.query.sql_text);
     expect(one.stdout).toMatch(/^email\s+end_user\.email\s+string\s+yes/m);
     expect(one.stdout).toMatch(/Its runs \(no values, no rows\): cavelon db runs order_status/);
+  });
+
+  it("says the dialects the instance runs and the egress addresses a database's firewall lets in", async () => {
+    const shown = await cli(sb, ["db", "instance"], { env: fresh() });
+    expect(shown.code, shown.stderr).toBe(0);
+    expect(shown.stdout).toMatch(/^dialects:\s+mssql, mysql, postgresql$/m);
+    expect(shown.stdout).toMatch(/^egress_ips:\s+203\.0\.113\.10, 203\.0\.113\.11$/m);
+    expect(shown.stdout).toMatch(/Allow 203\.0\.113\.10, 203\.0\.113\.11 through the database's firewall, on the database's port/);
+    expect(shown.stdout).toMatch(/opens at most 5 connections per database connection/);
+    const json = (await cli(sb, ["db", "instance", "--json"])).json<Record<string, unknown>>();
+    expect(json).toMatchObject({ published: true, runnable_dialects: ["mssql", "mysql", "postgresql"], network: { egress_ips: ["203.0.113.10", "203.0.113.11"], connections_per_process: 5 } });
+    expect(json.firewall).toMatch(/^Allow 203\.0\.113\.10/);
+    const before = server.state.db.instance;
+    server.state.db.instance = { runnable_dialects: ["postgresql"], network: { egress_ips: [], connections_per_process: 1 } };
+    try {
+      const unnamed = await cli(sb, ["db", "instance"]);
+      expect(unnamed.stdout).toMatch(/^egress_ips:\s+none named$/m);
+      expect(unnamed.stdout).toMatch(/has named no addresses it connects from, so it does not say what to allowlist: ask the operator/);
+    } finally {
+      server.state.db.instance = before;
+    }
+  });
+
+  it("db instance falls back to the capabilities' dialects on an instance without the route", async () => {
+    server.state.openapiWithout = ["GET /api/v1/database-connectors/instance"];
+    try {
+      const older = await cli(sb, ["db", "instance", "--json"], { env: fresh() });
+      expect(older.code, older.stderr).toBe(0);
+      expect(older.json()).toEqual({ published: false, runnable_dialects: ["postgresql"], network: null });
+      const text = await cli(sb, ["db", "instance"], { env: fresh() });
+      expect(text.stdout).toMatch(/does not publish which addresses it connects to databases from[\s\S]*Dialects it runs: postgresql/);
+    } finally {
+      server.state.openapiWithout = [];
+    }
+  });
+
+  it("names the view permission when the token's role may not read the connector", async () => {
+    server.state.db.mayView = false;
+    try {
+      for (const args of [["db", "instance"], ["db", "connections"]]) {
+        const refused = await cli(sb, [...args, "--json"], { env: fresh() });
+        expect(refused.code, args.join(" ")).not.toBe(0);
+        expect(refused.json<{ error: { hint: string } }>().error.hint).toMatch(/^Reading the database connector needs database_connectors\.view/);
+      }
+    } finally {
+      server.state.db.mayView = true;
+    }
+  });
+
+  it("shows each connection's CA certificates and warns of one that expires within 30 days or has expired", async () => {
+    const inDays = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString();
+    seeded.connection.caCertificates = [
+      { subject: "CN=Shop Root CA", issuer: "CN=Shop Root CA", not_before: "2026-01-01T00:00:00Z", not_after: inDays(400), sha256: "AA:BB" },
+      { subject: "CN=Shop Intermediate", issuer: "CN=Shop Root CA", not_before: "2026-01-01T00:00:00Z", not_after: inDays(12.5), sha256: "CC:DD" },
+    ];
+    try {
+      const listed = await cli(sb, ["db", "connections"], { env: fresh() });
+      expect(listed.code, listed.stderr).toBe(0);
+      expect(listed.stdout).toMatch(/^CA certificates:$/m);
+      expect(listed.stdout).toContain(`shop-db: CN=Shop Root CA, valid until ${inDays(400).slice(0, 10)}`);
+      expect(listed.stderr).toMatch(/The CA certificate "CN=Shop Intermediate" of the database connection "shop-db" expires on \S+ \(in 12 days\): from then its TLS check fails/);
+      expect(listed.stderr).not.toMatch(/Shop Root CA" of/);
+      seeded.connection.caCertificates[1]!.not_after = inDays(-3);
+      const json = (await cli(sb, ["db", "connections", "--json"])).json<{ items: Array<Record<string, unknown>>; warnings: string[] }>();
+      expect(json.items[0]!.ca_certificates).toHaveLength(2);
+      expect(json.items[0]).not.toHaveProperty("ca_certificate_pem");
+      expect(json.warnings).toEqual([expect.stringMatching(/"CN=Shop Intermediate" of the database connection "shop-db" expired on .*cavelon db test shop-db$/)]);
+      // An instance that publishes only the fingerprints: the CA is named as set, nothing is warned.
+      seeded.connection.caDetails = false;
+      const older = await cli(sb, ["db", "connections"]);
+      expect(older.stdout).toMatch(/^shop-db: a CA is set \(2 certificates\); this instance does not publish their subject or expiry$/m);
+      expect(older.stderr).not.toMatch(/CA certificate/);
+    } finally {
+      delete seeded.connection.caCertificates;
+      delete seeded.connection.caDetails;
+    }
+  });
+
+  it("names a connection whose queries cannot be enabled, with the instance's code, and explains it", async () => {
+    seeded.connection.queryEnableRefusal = {
+      code: "write_privileges_unacknowledged",
+      message: "The connection's last test found that its login can write, and SQL Server has no read-only transaction.",
+    };
+    try {
+      const listed = await cli(sb, ["db", "connections"], { env: fresh() });
+      expect(listed.stdout).toMatch(/^Queries cannot be enabled on: shop-db \(write_privileges_unacknowledged: The connection's last test found/m);
+      expect(listed.stdout).toMatch(/cavelon explain <code> \(write_privileges_unacknowledged\)/);
+      const json = (await cli(sb, ["db", "connections", "--json"])).json<{ items: Array<Record<string, unknown>> }>();
+      expect(json.items[0]).toMatchObject({ write_privileges_acknowledged: false, query_enable_refusal: { code: "write_privileges_unacknowledged" } });
+    } finally {
+      delete seeded.connection.queryEnableRefusal;
+    }
+    const explained = await cli(sb, ["explain", "write_privileges_unacknowledged", "--json"]);
+    expect(explained.code, explained.stderr).toBe(0);
+    expect(explained.json<{ code: string; message: string; hint: string }>()).toMatchObject({
+      code: "write_privileges_unacknowledged",
+      message: expect.stringContaining("SQL Server"),
+      hint: expect.stringContaining("a superadmin acknowledges"),
+    });
   });
 
   it("tests a connection, and exits 3 with the failed step's code when a step fails", async () => {
@@ -460,6 +568,7 @@ describe("skills", () => {
     expect(text("cavelon-authoring")).toMatch(/## Database query tools[\s\S]*source: end_user\.email[\s\S]*allows_anonymous/);
     expect(text("cavelon-authoring")).toContain("cavelon docs get administration/database-connectors");
     expect(text("cavelon-loop")).toMatch(/Database connections are set up by a person[\s\S]*same connection name in every tenant and environment/);
+    expect(text("cavelon-loop")).toMatch(/`cavelon db instance` says which\s+dialects this instance runs and the addresses it connects from/);
     expect(text("cavelon-loop")).toMatch(/A database query your package creates or changes stops the whole\s+apply/);
     expect(text("cavelon-testing")).toMatch(/## Database query tools[\s\S]*test database[\s\S]*cavelon db test-run/);
     expect(read(path.join(CONTRACTS, "docs", "llms.txt"))).toContain("/api/v1/docs/administration/database-connectors.md)");

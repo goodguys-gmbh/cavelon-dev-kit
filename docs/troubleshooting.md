@@ -81,6 +81,8 @@ came from. The order is in [Concepts](concepts.md#tenant).
 | `operation_for_a_person` | 2 | Over MCP, `api` does not send an operation the instance marks for a person only (`x-cavelon-person-only`; the message has its reason), even with `confirm`. On an instance that marks none, that is an operation that changes a secret, creates or revokes a credential or decides an approval. A person does it: `cavelon secrets set <name>` in their terminal, or in Cavelon. |
 | `path_outside_solution` | 2 | Over MCP, a tool reads and writes files only inside the solution folder (the folder of `cavelon.yaml`, or the one the server started in), after following symlinks. Move the file into the folder, or run the command in your terminal. |
 | `path_in_kit_directory` | 2 | Over MCP, no tool reads or writes in `cavelon`'s own config or cache directory, which hold the stored token and the instance's contracts. |
+| `confirm_needs_person` | 5 | A coding agent confirmed, with its preview's token, a change only a person may confirm (it reaches live traffic or the whole tenant, or cannot be taken back), from its shell or over MCP from a client that cannot ask the person. Nothing was changed. The person runs the command in `details.person_command` in their own terminal (not with `!` in the agent). |
+| `confirm_declined` | 5 | Over MCP, the agent's client asked the person to approve the change, and they declined or did not answer within 10 minutes. Nothing was changed. Ask the person; with their yes, confirm again with the same token, or they run the command in their own terminal. |
 | `confirm_token_required` | 2 | Over MCP, a tool that confirms a change (`api`, `limits_set`, `harness_default`, …) was called with `confirm: true`. It confirms only with the `confirm_token` its preview returned: call it without `confirm`, show the preview, then call it again with the same arguments and that token. A token of another change returns the new preview with `token_mismatch` and exit code 4. |
 
 `CAVELON_TOKEN` is used only together with `CAVELON_URL`, and only for that
@@ -264,6 +266,9 @@ until `cavelon.yaml` names the tenant: without it a command acts in the tenant
 **A coding agent's `--confirm` exits 5.** Run by a coding agent, a confirming
 command takes the token its preview printed (`--confirm <token>`); the bare
 flag only shows the preview. Run the confirm command the preview printed.
+Where the preview says `needs_person: "terminal"` (a change only a person may
+confirm), it prints no token: the person runs the command it names in their
+own terminal, and a token gets `confirm_needs_person`.
 
 ## Network
 

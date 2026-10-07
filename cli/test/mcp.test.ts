@@ -14,13 +14,31 @@ import { createMcpServer } from "../src/mcp.js";
 import type { UpdateCheckOptions } from "../src/update-check.js";
 import { KIT_VERSION } from "../src/version.js";
 import { modelRow, startFakeServer, type FakeServer } from "./fake-server.js";
-import { cli, login, sandbox, type Sandbox } from "./helpers.js";
+import { askingClient, cli, login, sandbox, type PersonAtClient, type Sandbox } from "./helpers.js";
 
 let server: FakeServer;
 let sb: Sandbox;
-let client: Client;
+let client: ReturnType<typeof askingClient>;
 let tenant: string;
 let stdout = "";
+
+/** Another MCP session on the same login and folder as `client`, whose person answers as given. */
+async function sessionWith(person: PersonAtClient): Promise<ReturnType<typeof askingClient>> {
+  const io: Io = {
+    stdout: { write: () => true },
+    stderr: { write: () => true },
+    stdin: Readable.from([]) as unknown as InStream,
+    env: sb.env,
+    cwd: sb.home,
+    now: () => new Date(),
+    sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+  };
+  const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+  await createMcpServer(io, COMMANDS).connect(serverSide);
+  const other = askingClient({ person });
+  await other.connect(clientSide);
+  return other;
+}
 
 beforeAll(async () => {
   server = await startFakeServer();
@@ -40,7 +58,7 @@ beforeAll(async () => {
   const mcp = createMcpServer(io, COMMANDS);
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
   await mcp.connect(serverSide);
-  client = new Client({ name: "test", version: "0" });
+  client = askingClient();
   await client.connect(clientSide);
 });
 afterAll(async () => {
@@ -71,7 +89,7 @@ describe("cavelon mcp", () => {
     const mcp = createMcpServer(io, COMMANDS);
     const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
     await mcp.connect(serverSide);
-    const other = new Client({ name: "test", version: "0" });
+    const other = askingClient();
     await other.connect(clientSide);
     try {
       const choices = payload(await other.callTool({ name: "use_tenant", arguments: {} }));
@@ -107,6 +125,7 @@ describe("cavelon mcp", () => {
         "artifacts_export",
         "chat",
         "db_connections",
+        "db_instance",
         "db_queries",
         "db_runs",
         "db_test",
@@ -169,7 +188,7 @@ describe("cavelon mcp", () => {
     expect(byName.api!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true });
     expect(byName.validate!.annotations).toMatchObject({ readOnlyHint: true });
     // A token reads the connections, queries and runs; the Owner's two checks run on the instance and change no setting.
-    for (const name of ["db_connections", "db_queries", "db_runs"]) expect(byName[name]!.annotations, name).toMatchObject({ readOnlyHint: true });
+    for (const name of ["db_instance", "db_connections", "db_queries", "db_runs"]) expect(byName[name]!.annotations, name).toMatchObject({ readOnlyHint: true });
     for (const name of ["db_test", "db_test_run"]) {
       expect(byName[name]!.annotations, name).toMatchObject({ readOnlyHint: false, destructiveHint: false });
       expect(byName[name]!.description, name).toMatch(/changes no setting/);
@@ -224,7 +243,11 @@ describe("cavelon mcp", () => {
     expect(preview.isError).toBeFalsy();
     const shown = payload(preview);
     expect(shown).toMatchObject({ key: "agent_max_turns", previous: 25, value: 40, changed: false, sent: false, confirm_token: expect.stringMatching(/^[0-9a-f]{12}$/) });
-    expect(shown.confirm).toBe(`Show the person this, then call limits_set again with the same arguments and confirm: "${shown.confirm_token}" to make exactly this change.`);
+    // A limit is the person's: the confirm asks them through the client, which the agent cannot answer.
+    expect(shown.needs_person).toBe("client");
+    expect(shown.confirm).toBe(
+      `Show the person this, then call limits_set again with the same arguments and confirm: "${shown.confirm_token}": the client then asks the person to approve exactly this change, and nothing changes without their yes.`,
+    );
     // true is refused, never taken as yes; a token of another change confirms nothing.
     const bare = await client.callTool({ name: "limits_set", arguments: { key: "agent_max_turns", value: 40, confirm: true } });
     expect(bare.isError).toBe(true);
@@ -233,9 +256,13 @@ describe("cavelon mcp", () => {
     expect(other).toMatchObject({ value: 41, changed: false, sent: false, token_mismatch: true, exit_code: 4 });
     expect(other.confirm_token).not.toBe(shown.confirm_token);
     expect(server.state.requests.slice(before).filter((r) => r.method === "PATCH")).toEqual([]);
+    // Neither the preview nor a refused confirm asked the person anything.
+    const asked = client.asked.length;
     const done = await client.callTool({ name: "limits_set", arguments: { key: "agent_max_turns", value: 40, confirm: shown.confirm_token } });
     expect(done.isError).toBeFalsy();
     expect(payload(done)).toMatchObject({ now: 40, source: "tenant", changed: true, sent: true });
+    expect(client.asked.length).toBe(asked + 1);
+    expect(client.asked.at(-1)).toMatch(/^agent_max_turns: 25 → 40\.\n.*\nA coding agent asks to make this change through cavelon \(limits_set\)/);
     server.state.tenantLimits.clear();
   });
 
@@ -413,6 +440,26 @@ describe("cavelon mcp", () => {
       sections: expect.arrayContaining(["tenant_settings"]),
     });
     expect(preview.show_to_person).toBe(true);
+    expect(preview.needs_person).toBe("client");
+
+    // A tenant-wide import completes only with the person's answer: a no, or a client that cannot ask, imports nothing.
+    const imports = () => server.state.requests.filter((r) => r.method === "POST" && r.path === "/api/v1/agent-graph/import");
+    const declines = await sessionWith("declines");
+    const cannot = await sessionWith("cannot ask");
+    try {
+      const declined = await declines.callTool({ name: "apply", arguments: { confirm: preview.preview_id } });
+      expect(declined.isError).toBe(true);
+      expect(payload(declined).error).toMatchObject({ code: "confirm_declined", details: { answer: "declined" } });
+      expect(declines.asked).toEqual([expect.stringMatching(/^Import preview \S+ into solution support: it changes what the whole tenant shares \(.*tenant_settings/)]);
+      const shown = payload(await cannot.callTool({ name: "apply", arguments: { include_tenant_wide: true } }));
+      expect(shown.needs_person).toBe("terminal");
+      const refused = await cannot.callTool({ name: "apply", arguments: { confirm: shown.preview_id } });
+      expect(payload(refused).error).toMatchObject({ code: "confirm_needs_person", details: { person_command: `cavelon apply --confirm ${shown.preview_id}` } });
+      expect(imports()).toEqual([]);
+    } finally {
+      await declines.close();
+      await cannot.close();
+    }
 
     const former = payload(await client.callTool({ name: "apply", arguments: { tenant_wide: true } }));
     expect(bodies().at(-1)).toMatchObject({ include_tenant_wide: true });
@@ -495,6 +542,8 @@ describe("cavelon mcp", () => {
       /api for an operation that is not read-only, return what they would do and a confirm_token, and change nothing until called again with the same arguments and confirm set to that token/,
     );
     expect(client.getInstructions()).toMatch(/a different change needs a new preview, and confirm: true is refused/);
+    expect(client.getInstructions()).toMatch(/With needs_person "client", call again with the token and the client asks the person to approve exactly that change/);
+    expect(client.getInstructions()).toMatch(/With needs_person "terminal" .*they run in their own terminal, never in yours/);
     expect(client.getInstructions()).toMatch(/api refuses, even with confirm, an operation the instance marks for a person \(x-cavelon-person-only; its reason is in the error\), or on an instance that marks none, one that changes a secret, creates or revokes a credential/);
     const changes = (before: number) => server.state.requests.slice(before).filter((r) => r.method !== "GET");
 
@@ -623,7 +672,7 @@ describe("cavelon mcp", () => {
       const mcp = createMcpServer(io, COMMANDS);
       const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
       await mcp.connect(serverSide);
-      const other = new Client({ name: "test", version: "0" });
+      const other = askingClient();
       await other.connect(clientSide);
       return other;
     };
@@ -716,7 +765,7 @@ describe("the update warning over MCP", () => {
     const mcp = createMcpServer(io, COMMANDS, updates);
     const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
     await mcp.connect(serverSide);
-    const agent = new Client({ name: options.client ?? "test", version: "0" });
+    const agent = askingClient({ name: options.client });
     await agent.connect(clientSide);
     return {
       calls,
