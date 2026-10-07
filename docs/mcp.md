@@ -107,6 +107,12 @@ only reads it).
 | `trace` | `cavelon trace` | read-only |
 | `db_instance` | `cavelon db instance` | read-only |
 | `db_connections` | `cavelon db connections` | read-only |
+| `db_connection_create` | `cavelon db connections create` | changing |
+| `db_connection_update` | `cavelon db connections update` | changing |
+| `db_connection_delete` | `cavelon db connections delete` | destructive |
+| `db_connection_ca` | `cavelon db connections ca` | changing |
+| `db_login_script` | `cavelon db login-script` | read-only |
+| `db_schema` | `cavelon db schema` | read-only |
 | `db_queries` | `cavelon db queries` | read-only |
 | `db_runs` | `cavelon db runs` | read-only |
 | `db_test` | `cavelon db test` | changing |
@@ -201,7 +207,7 @@ repeat them:
 - **What needs `confirm`.** `apply` returns a preview and imports only with
   `confirm` set to that preview's id. `tenant_create`, `variables_set` where
   it replaces another value, `loop_start`, `limits_set`, `models_set_limit`,
-  `loop_cancel`, `sandbox_seed`, `trigger_identity`, `harness_default`,
+  `loop_cancel`, `sandbox_seed`, `trigger_identity`, `harness_default`, `db_connection_delete`,
   `activate` of a solution a channel or an active trigger reaches (or on an
   instance that does not say) or with `make_default`, `deactivate`, and `api`
   for any operation that is not
@@ -292,7 +298,8 @@ repeat them:
   `variables_set` of a new variable (or the same value), `kb_upload` (without
   `replace`, or where the instance replaces itself), `test_run`,
   `loop_pause`, `loop_resume`, `sandbox_validate`,
-  `sandbox_refresh`, `artifacts_export`, and the tenant Owner's two database
+  `sandbox_refresh`, `artifacts_export`, `db_connection_create`,
+  `db_connection_update`, `db_connection_ca` (public certificates only), and the tenant Owner's two database
   checks, `db_test` (a connection test, stored as the connection's last test)
   and `db_test_run` (one run of a saved query with the values given; the rows
   come back once, and the instance keeps counts only).
@@ -328,7 +335,7 @@ repeat them:
 - **Files stay in the solution folder.** Every path a tool takes (`api`'s
   `file` and `body` `@file`, `loop_start`'s `input` `@file`, `kb_upload`'s
   folder, `sandbox_seed`'s source, `artifacts_export`'s `out`, `init`'s
-  `from`) must lead, after symlinks, into the folder of `cavelon.yaml`, or the
+  `from`, `db_connection_ca`'s `file`) must lead, after symlinks, into the folder of `cavelon.yaml`, or the
   folder the server started in when there is none (`path_outside_solution`),
   and never into cavelon's own config or cache directory, which hold the
   stored token (`path_in_kit_directory`). In your terminal, `cavelon` takes
@@ -339,6 +346,11 @@ repeat them:
   value and lets you decide; an operator's limit goes to the operator.
 - **Secrets stay with people**, as above. The agent never asks for, reads or
   passes a secret value, and never decides an approval.
+  Connection tools take only public fields and public CA files; a person
+  sets the database password in the Admin. `allows_writes` is output only;
+  enabling writes stays in the dashboard. `db_schema` uses the instance's
+  read-only catalog explorer under `database_connectors.manage`.
+  See [Connect a database](connect-a-database.md).
 - **Docs before guessing.** `docs_search` and `docs_get` read the instance's
   own documentation; `api_list`, `api_describe` and `api` reach any operation
   without its own tool. A platform page the token can read but not act on

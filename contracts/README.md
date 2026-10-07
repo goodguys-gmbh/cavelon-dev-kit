@@ -118,6 +118,18 @@ The tests switch features on in the fake server where a command needs them
 (personal access tokens, the operations API, Sandboxes, Masterloop, archive
 uploads, the database connector); the snapshot keeps the defaults.
 
+On 2026-10-07 the snapshot took connection management, login scripts and the
+schema explorer from the published development build, without running it.
+The OpenAPI comes from the reference its generator writes (`docs/openapi.json`),
+trimmed to the six added operations and their referenced schemas. Existing
+operations and component shapes stay as recorded. Create and update publish
+password as optional, secret and person-only; this build's login-script
+response publishes only `read_only`, and its connection response does not yet
+publish `allows_writes`. The two Database Connectors/Setup pages come from
+the docs corpus's renderer; only their index entries change. The catalog's
+generator was checked for connection-specific additions and none were needed.
+Capabilities, package schema, unrelated pages and all defaults stay as recorded.
+
 | File | Source |
 |---|---|
 | `openapi.json` | `GET /openapi.json`, trimmed by `cli/scripts/trim-openapi.mjs` to the operations listed in [`kit-operations.json`](kit-operations.json) and the components they reference, without prose descriptions |

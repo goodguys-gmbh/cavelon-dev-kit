@@ -39,7 +39,7 @@ the environment over the files. The exit codes are listed in [Troubleshooting](t
 - **Sandboxes:** [`sandbox list`](#cavelon-sandbox-list), [`sandbox validate`](#cavelon-sandbox-validate), [`sandbox files`](#cavelon-sandbox-files), [`sandbox cat`](#cavelon-sandbox-cat), [`sandbox activity`](#cavelon-sandbox-activity), [`sandbox logs`](#cavelon-sandbox-logs), [`sandbox receipt`](#cavelon-sandbox-receipt), [`sandbox seed`](#cavelon-sandbox-seed), [`sandbox refresh`](#cavelon-sandbox-refresh), [`artifacts export`](#cavelon-artifacts-export)
 - **API and docs:** [`api list`](#cavelon-api-list), [`api describe`](#cavelon-api-describe), [`api`](#cavelon-api), [`docs search`](#cavelon-docs-search), [`docs get`](#cavelon-docs-get)
 - **For agents:** [`commands`](#cavelon-commands), [`mcp`](#cavelon-mcp)
-- **Other commands:** [`deactivate`](#cavelon-deactivate), [`chat`](#cavelon-chat)
+- **Other commands:** [`deactivate`](#cavelon-deactivate), [`chat`](#cavelon-chat), [`db connections create`](#cavelon-db-connections-create), [`db connections update`](#cavelon-db-connections-update), [`db connections delete`](#cavelon-db-connections-delete), [`db connections ca`](#cavelon-db-connections-ca), [`db login-script`](#cavelon-db-login-script), [`db schema`](#cavelon-db-schema)
 
 ## Session
 
@@ -700,7 +700,7 @@ The tenant's database connections: dialect, target, TLS mode, CA certificates, l
 cavelon db connections [options]
 ```
 
-A superadmin creates and changes connections in the Admin; a token reads them. A package names a query's connection by name and dialect, so the same name serves in every tenant and environment. A query tool is ready for agents only while its connection is enabled and its last test passed; the tenant Owner runs the test with `cavelon db test <connection>`. It warns of a CA certificate that has expired or expires within 30 days.
+A token holding database_connectors.manage creates and changes connections; a person sets the password in the Admin. allows_writes, when published, is read-only here: enabling writes remains a dashboard action. A package names a connection by name and dialect, so the same name serves in every tenant and environment. A query tool is ready for agents only while its connection is enabled and its last test passed; the tenant Owner runs the test with `cavelon db test <connection>`. It warns of a CA certificate that has expired or expires within 30 days.
 
 | Option | Description | MCP |
 |---|---|---|
@@ -1819,4 +1819,184 @@ Examples:
 cavelon chat "When are you open?" --harness support-faq
 cavelon chat "And on Saturdays?" --session <session_id>
 cavelon chat "Hello" --json
+```
+
+### cavelon db connections create
+
+Create a connection without a password (database_connectors.manage); print the Admin password step.
+
+**changing** · MCP tool: `db_connection_create`
+
+```text
+cavelon db connections create <name> [options]
+```
+
+The tenant Owner (legacy Admin), or a superadmin in Tenant mode, creates it with a personal access token. Fields and defaults come from this instance's OpenAPI. No password argument, environment value, stdin or file is read. A person sets the password in Settings › Security & access › Databases before testing. Connections stay outside packages.
+
+| Argument | Description |
+|---|---|
+| `name` | Connection name, the same in every environment that uses the package. Required. |
+
+| Option | Description | MCP |
+|---|---|---|
+| `--dialect <dialect>` | Database type, checked against this instance's published create/update schema. | yes |
+| `--host <host>` | One DNS name or IP address, without port, path or user. | yes |
+| `--port <port>` | Database port; required on create (the instance validates its bounds). | yes |
+| `--database-name <name>` | Database name on this server. | yes |
+| `--username <name>` | Database login name; its password is set only in the Admin. | yes |
+| `--tls-mode <mode>` | TLS mode, checked against the published schema; omitted on create uses the instance's default. | yes |
+| `--statement-timeout-ms <ms>` | Statement timeout in milliseconds, within the instance's bounds. | yes |
+| `--enabled <true|false>` | Enable or disable the connection (true or false); omitted leaves the instance's default or current value. | yes |
+
+Examples:
+
+```bash
+cavelon db connections create shop-db --dialect postgresql --host db.example.com --port 5432 --database-name shop --username cavelon_reader
+```
+
+### cavelon db connections update
+
+Change only given public connection fields (database_connectors.manage); never a password or allows_writes.
+
+**changing** · MCP tool: `db_connection_update`
+
+```text
+cavelon db connections update <connection> [options]
+```
+
+A person must move a password-bearing connection to another host, port or dialect in the Admin with its password. The instance refuses that change from the kit; an uncredentialed connection moves freely. Test again after changing it. Enabling writes and acknowledging write privileges remain dashboard actions and never enter a package.
+
+| Argument | Description |
+|---|---|
+| `connection` | Connection name or id. Required. |
+
+| Option | Description | MCP |
+|---|---|---|
+| `--name <name>` | New connection name. | yes |
+| `--dialect <dialect>` | Database type, checked against this instance's published create/update schema. | yes |
+| `--host <host>` | One DNS name or IP address, without port, path or user. | yes |
+| `--port <port>` | Database port; required on create (the instance validates its bounds). | yes |
+| `--database-name <name>` | Database name on this server. | yes |
+| `--username <name>` | Database login name; its password is set only in the Admin. | yes |
+| `--tls-mode <mode>` | TLS mode, checked against the published schema; omitted on create uses the instance's default. | yes |
+| `--statement-timeout-ms <ms>` | Statement timeout in milliseconds, within the instance's bounds. | yes |
+| `--enabled <true|false>` | Enable or disable the connection (true or false); omitted leaves the instance's default or current value. | yes |
+
+Examples:
+
+```bash
+cavelon db connections update shop-db --statement-timeout-ms 3000
+cavelon db connections update shop-db --enabled false
+```
+
+### cavelon db connections delete
+
+Delete an unused connection (database_connectors.manage); previews first, --confirm deletes it.
+
+**changing (destructive)** · MCP tool: `db_connection_delete`
+
+```text
+cavelon db connections delete <connection> [options]
+```
+
+Without --confirm nothing is deleted. The instance refuses deletion while queries still use the connection.
+
+| Argument | Description |
+|---|---|
+| `connection` | Connection name or id. Required. |
+
+| Option | Description | MCP |
+|---|---|---|
+| `--confirm [<token>]` | Delete the previewed connection. In a person's terminal the flag alone confirms; run by a coding agent, `--confirm <token>` with the token its preview printed (the bare flag only shows the preview there, exit 5). | yes |
+
+Examples:
+
+```bash
+cavelon db connections delete unused-db
+cavelon db connections delete unused-db --confirm
+```
+
+### cavelon db connections ca
+
+Upload a public CA certificate bundle (database_connectors.manage); refuse private keys before sending.
+
+**changing** · MCP tool: `db_connection_ca`
+
+```text
+cavelon db connections ca <connection> <file>
+```
+
+The file must contain only valid PEM CERTIFICATE blocks. It is bounded by the instance's published CA limit. The output keeps certificate metadata and fingerprints, never the PEM. Test the connection again after uploading it.
+
+| Argument | Description |
+|---|---|
+| `connection` | Connection name or id. Required. |
+| `file` | Public PEM certificate file, never a private key. Required. |
+
+Examples:
+
+```bash
+cavelon db connections ca shop-db ./public-ca.pem
+```
+
+### cavelon db login-script
+
+Print the instance's published read-only login SQL for a dialect or saved connection; no database is contacted.
+
+**read-only** · MCP tool: `db_login_script`
+
+```text
+cavelon db login-script [dialect] [options]
+```
+
+Needs database_connectors.view. The DBA replaces the script's password placeholder locally, outside the kit. Only variants this instance publishes are offered; this build publishes read_only. Omitted inputs use its defaults. For SQL Server, connection_limit_enforced is false; --schema scopes SELECT instead of granting db_datareader.
+
+| Argument | Description |
+|---|---|
+| `dialect` | Database dialect; omit only with --connection. |
+
+| Option | Description | MCP |
+|---|---|---|
+| `--connection <connection>` | Use dialect, database, user and TLS from this saved connection (name or id). | yes |
+| `--database-name <name>` | Database the login may read (without --connection). | yes |
+| `--username <name>` | Database login name (without --connection). | yes |
+| `--schema <name>` | Schema the read grants cover. | yes |
+| `--egress-ip <ip>` | Outbound IP address; omitted uses the instance's configured addresses. Repeatable. | yes |
+| `--connection-limit <n>` | Connections to allow; omitted uses the instance's pool size times four. | yes |
+| `--require-tls <true|false>` | MySQL REQUIRE SSL (true or false, without --connection). | yes |
+
+Examples:
+
+```bash
+cavelon db login-script postgresql --database-name shop --username cavelon_reader
+cavelon db login-script --connection shop-db --schema public
+```
+
+### cavelon db schema
+
+Explore readable schemas or one schema's tables and columns (database_connectors.manage); read-only.
+
+**read-only** · MCP tool: `db_schema`
+
+```text
+cavelon db schema <connection> [schema] [options]
+```
+
+Reads only the database catalog, under the connection's timeout and read-only boundary. The instance records counts in its audit log. It caps schemas/tables at 500 and columns at 2,000; truncated flags say what was cut. Only the tenant Owner (legacy Admin) or a superadmin in Tenant mode may explore, using a session or personal access token.
+
+| Argument | Description |
+|---|---|
+| `connection` | Connection name or id. Required. |
+| `schema` | Schema to inspect; omitted lists schemas. |
+
+| Option | Description | MCP |
+|---|---|---|
+| `--limit <n>` | Return at most n schemas or tables (default 50, maximum 500). | yes |
+| `--cursor <cursor>` | Continue after the previous page (its next_cursor). | yes |
+
+Examples:
+
+```bash
+cavelon db schema shop-db
+cavelon db schema shop-db public --json
 ```

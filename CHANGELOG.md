@@ -9,6 +9,15 @@ CLI, the skills and the plugin.
 
 ### Added
 
+- Database connection management (#170): `db connections create`, `update`,
+  `delete` and `ca` follow `database_connectors.manage`, validate published
+  fields and upload only public certificates. Passwords stay in the Admin;
+  creation prints the `needs_a_person` step. `db login-script` prints only
+  the instance's published login SQL (this build offers `read_only`), and
+  `db schema` explores the catalog read-only under the manage gate. Optional
+  `allows_writes` is output only; enabling writes stays in the dashboard.
+  Includes a [connect-a-database walkthrough](docs/connect-a-database.md),
+  connection skill guidance and compatibility with older routes/principals.
 - Workflow Tool Call nodes for saved database queries (part of #171):
   `validate` checks model-sourced argument names, explains missing queries
   with `tool_call_database_query_missing`, and warns when a trigger path

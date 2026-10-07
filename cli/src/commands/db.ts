@@ -12,13 +12,12 @@ import { isUuid } from "../session.js";
  * dialects and the addresses it connects from), the tenant's connections,
  * saved queries and their runs, as a token may read them, and the two checks
  * the tenant Owner may run with a token: a connection test and a test run of
- * a saved query. Who creates
- * or changes a connection or a query is a superadmin in the Admin; a pull
+ * a saved query. Connection management is in db-connections.ts; a pull
  * writes the queries into the package. Nothing here prints a password: the
  * instance never returns one.
  */
 
-interface Connection {
+export interface Connection {
   id: string;
   name: string;
   dialect: string;
@@ -35,6 +34,8 @@ interface Connection {
   ca_certificates?: CaCertificate[];
   statement_timeout_ms: number;
   is_enabled: boolean;
+  /** Only where published; a person enables writes in the dashboard, never in a package. */
+  allows_writes?: boolean;
   config_version: number;
   last_test_at?: string | null;
   last_test_outcome?: string | null;
@@ -128,10 +129,10 @@ const FEATURE = "database_connector_enabled";
 const DOCS_PAGE = "administration/database-connectors";
 
 /** The connector's routes answer 404 while it is off: say so instead, where the instance publishes the switch. */
-const connectorOn = (ctx: Context) => requireFeature(ctx, FEATURE, "database_connector_disabled", "the database connector");
+export const connectorOn = (ctx: Context) => requireFeature(ctx, FEATURE, "database_connector_disabled", "the database connector");
 
 /** An answer of 403 with the permission it needs and who holds it, instead of the generic hint. */
-function withPermissionHint(error: unknown, hint: string): unknown {
+export function withPermissionHint(error: unknown, hint: string): unknown {
   if (!(error instanceof CavelonError) || error.status !== 403) return error;
   return new CavelonError(error.exitCode, {
     code: error.code,
@@ -139,6 +140,7 @@ function withPermissionHint(error: unknown, hint: string): unknown {
     message: error.message,
     hint: `${hint} \`${cavelonCommand("whoami")}\` shows the token's role.`,
     docs: error.docs,
+    details: error.details,
   });
 }
 
@@ -150,10 +152,10 @@ const ownerOnly = (error: unknown, what: string) =>
   );
 
 /** Every read needs database_connectors.view, which the tenant roles that see tools hold. */
-const viewerOnly = (error: unknown) =>
+export const viewerOnly = (error: unknown) =>
   withPermissionHint(error, "Reading the database connector needs database_connectors.view, which the tenant roles that see tools hold, and a superadmin in Tenant mode.");
 
-async function read<T>(ctx: Context, path: string, what: string, query?: Record<string, string | undefined>): Promise<T> {
+export async function read<T>(ctx: Context, path: string, what: string, query?: Record<string, string | string[] | undefined>): Promise<T> {
   await connectorOn(ctx);
   try {
     return await callStable<T>(ctx, "GET", path, what, { query });
@@ -168,14 +170,14 @@ const listQueries = (ctx: Context, connectionId?: string) =>
   read<Query[]>(ctx, "/api/v1/database-connectors/queries", "database queries", { connection_id: connectionId });
 
 /** A connection by its name or id. */
-async function resolveConnection(ctx: Context, ref: string): Promise<Connection> {
+export async function resolveConnection(ctx: Context, ref: string): Promise<Connection> {
   const all = await listConnections(ctx);
   const hit = all.find((c) => c.id === ref.toLowerCase()) ?? all.find((c) => c.name === ref) ?? all.find((c) => c.name.toLowerCase() === ref.toLowerCase());
   if (hit) return hit;
   throw new CavelonError(ExitCode.failure, {
     code: "database_connection_not_found",
     message: `No database connection "${ref}" in this tenant.`,
-    hint: `\`${cavelonCommand("db", "connections")}\` lists them${all.length ? ` (${all.map((c) => c.name).slice(0, 10).join(", ")})` : "; a superadmin creates one in the Admin"}.`,
+    hint: `\`${cavelonCommand("db", "connections")}\` lists them${all.length ? ` (${all.map((c) => c.name).slice(0, 10).join(", ")})` : "; the tenant Owner creates one with db connections create or in the Admin"}.`,
   });
 }
 
@@ -200,8 +202,8 @@ async function resolveQuery(ctx: Context, ref: string): Promise<Query> {
 }
 
 /** A connection without its CA certificate's text (its fingerprints and details stay), so a list stays short. */
-function connectionView(c: Connection): Record<string, unknown> {
-  const { ca_certificate_pem: pem, ...rest } = c;
+export function connectionView(c: Connection): Record<string, unknown> {
+  const { ca_certificate_pem: pem, password: _password, ...rest } = c;
   return { ...rest, ca_certificate_set: Boolean(pem) };
 }
 
@@ -230,7 +232,7 @@ function expiryWarnings(connections: Connection[], now: Date): string[] {
           : `expires on ${day(cert.not_after)} (in ${days === 0 ? "less than a day" : `${days} day${days === 1 ? "" : "s"}`})`;
       warnings.push(
         `The CA certificate "${cert.subject}" of the database connection "${c.name}" ${when}: from then its TLS check fails, and with it the connection's queries. ` +
-          `A superadmin uploads the renewed CA in the Admin; then the tenant Owner tests the connection again: ${cavelonCommand("db", "test", c.name)}`,
+          `The tenant Owner uploads the renewed public CA with db connections ca or in the Admin, then tests the connection again: ${cavelonCommand("db", "test", c.name)}`,
       );
     }
   }
@@ -346,7 +348,8 @@ export const dbConnections: CommandSpec = {
   name: "db connections",
   summary: "The tenant's database connections: dialect, target, TLS mode, CA certificates, last test and query count; never a password.",
   description:
-    "A superadmin creates and changes connections in the Admin; a token reads them. A package names a query's connection by\n" +
+    "A token holding database_connectors.manage creates and changes connections; a person sets the password in the Admin.\n" +
+    "allows_writes, when published, is read-only here: enabling writes remains a dashboard action. A package names a connection by\n" +
     "name and dialect, so the same name serves in every tenant and environment. A query tool is ready for agents only while\n" +
     "its connection is enabled and its last test passed; the tenant Owner runs the test with `cavelon db test <connection>`.\n" +
     `It warns of a CA certificate that has expired or expires within ${EXPIRY_WARNING_DAYS} days.`,
@@ -368,6 +371,7 @@ export const dbConnections: CommandSpec = {
         target: `${conn.host}:${conn.port}/${conn.database_name}`,
         tls: conn.tls_mode,
         enabled: conn.is_enabled ? "yes" : "no",
+        ...(typeof conn.allows_writes === "boolean" ? { allows_writes: conn.allows_writes ? "yes" : "no" } : {}),
         last_test: lastTest(conn),
         queries: conn.query_count ?? null,
         id: conn.id,
@@ -380,8 +384,8 @@ export const dbConnections: CommandSpec = {
     return {
       data: page,
       text:
-        (table(rows, ["name", "dialect", "target", "tls", "enabled", "last_test", "queries", "id"]) ||
-          `No database connections. A superadmin creates one in the Admin (\`${cavelonCommand("docs", "get", DOCS_PAGE)}\` says who does what).`) +
+        (table(rows, ["name", "dialect", "target", "tls", "enabled", ...(rows.some(c => "allows_writes" in c) ? ["allows_writes"] : []), "last_test", "queries", "id"]) ||
+          `No database connections. The tenant Owner creates one with db connections create or in the Admin (\`${cavelonCommand("docs", "get", DOCS_PAGE)}\` says who does what).`) +
         caLines(connections).join("\n") +
         moreHint(page.next_cursor, cavelonCommand("db", "connections")) +
         (untested.length ? `\n\nNot tested successfully: ${untested.join(", ")}; its queries are not ready for agents. The Owner tests one with: ${cavelonCommand("db", "test", fill("connection"))}` : "") +

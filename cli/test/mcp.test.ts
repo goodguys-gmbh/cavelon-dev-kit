@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, 
 import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
+import { rootCertificates } from "node:tls";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { bundledSkills, generatedCopy, SKILL_ROOTS } from "../src/agents.js";
@@ -80,6 +81,21 @@ function payload(result: Awaited<ReturnType<Client["callTool"]>>): Record<string
 }
 
 describe("cavelon mcp", () => {
+  it("exposes connection inputs without passwords/write flags and confines public CA uploads", async () => {
+    const { tools } = await client.listTools();
+    const create = tools.find(t => t.name === "db_connection_create")!;
+    expect(create.inputSchema.properties).not.toHaveProperty("password");
+    expect(create.inputSchema.properties).not.toHaveProperty("allows_writes");
+    expect(tools.find(t => t.name === "db_schema")!.annotations?.readOnlyHint).toBe(true);
+    expect(tools.find(t => t.name === "db_connection_delete")!.annotations?.destructiveHint).toBe(true);
+    const outside = mkdtempSync(path.join(os.tmpdir(), "cavelon-ca-"));
+    try {
+      const file = path.join(outside, "ca.pem"); writeFileSync(file, rootCertificates[0]!);
+      const result = await client.callTool({ name: "db_connection_ca", arguments: { connection: "shop-db", file } });
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result.content)).toContain("path_outside_solution");
+    } finally { rmSync(outside, { recursive: true, force: true }); }
+  });
   it("never prompts for a tenant: use_tenant without one returns the choices and changes nothing, and init names them", async () => {
     const globex = server.addTenant("globex-mcp", "Globex");
     const multi = server.addToken({ kind: "pat", tenantIds: [tenant, globex] });
@@ -132,6 +148,12 @@ describe("cavelon mcp", () => {
         "artifacts_export",
         "chat",
         "db_connections",
+        "db_connection_create",
+        "db_connection_update",
+        "db_connection_delete",
+        "db_connection_ca",
+        "db_login_script",
+        "db_schema",
         "db_instance",
         "db_queries",
         "db_runs",

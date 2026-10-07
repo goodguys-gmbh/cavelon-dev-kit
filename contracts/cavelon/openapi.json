@@ -509,6 +509,47 @@
           "403": {},
           "404": {}
         }
+      },
+      "post": {
+        "tags": [
+          "database-connectors"
+        ],
+        "summary": "Create Database Connection",
+        "operationId": "create_database_connection_api_v1_database_connectors_connections_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DatabaseConnectionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseConnectionResponse"
+                }
+              }
+            }
+          },
+          "400": {},
+          "403": {},
+          "404": {},
+          "409": {},
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/database-connectors/connections/{connection_id}": {
@@ -552,6 +593,239 @@
               }
             }
           }
+        }
+      },
+      "delete": {
+        "tags": [
+          "database-connectors"
+        ],
+        "summary": "Delete Database Connection",
+        "operationId": "delete_database_connection_api_v1_database_connectors_connections__connection_id__delete",
+        "parameters": [
+          {
+            "name": "connection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Connection Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {},
+          "400": {},
+          "403": {},
+          "404": {},
+          "409": {},
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "database-connectors"
+        ],
+        "summary": "Update Database Connection",
+        "operationId": "update_database_connection_api_v1_database_connectors_connections__connection_id__patch",
+        "parameters": [
+          {
+            "name": "connection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Connection Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DatabaseConnectionUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseConnectionResponse"
+                }
+              }
+            }
+          },
+          "400": {},
+          "403": {},
+          "404": {},
+          "409": {},
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/database-connectors/connections/{connection_id}/login-script": {
+      "get": {
+        "tags": [
+          "database-connectors"
+        ],
+        "summary": "Read Database Connection Login Script",
+        "operationId": "read_database_connection_login_script_api_v1_database_connectors_connections__connection_id__login_script_get",
+        "parameters": [
+          {
+            "name": "connection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Connection Id"
+            }
+          },
+          {
+            "name": "schema",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Schema"
+            }
+          },
+          {
+            "name": "egress_ips",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 16
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Egress Ips"
+            }
+          },
+          {
+            "name": "connection_limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 10000,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Connection Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseLoginScriptResponse"
+                }
+              }
+            }
+          },
+          "400": {},
+          "403": {},
+          "404": {},
+          "422": {}
+        }
+      }
+    },
+    "/api/v1/database-connectors/connections/{connection_id}/schema": {
+      "post": {
+        "tags": [
+          "database-connectors"
+        ],
+        "summary": "Explore Database Schema",
+        "operationId": "explore_database_schema_api_v1_database_connectors_connections__connection_id__schema_post",
+        "parameters": [
+          {
+            "name": "connection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Connection Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DatabaseSchemaExploreRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseSchemaExploreResponse"
+                }
+              }
+            }
+          },
+          "400": {},
+          "403": {},
+          "404": {},
+          "422": {}
         }
       }
     },
@@ -619,6 +893,136 @@
           "400": {},
           "403": {},
           "404": {}
+        }
+      }
+    },
+    "/api/v1/database-connectors/login-script": {
+      "get": {
+        "tags": [
+          "database-connectors"
+        ],
+        "summary": "Read Database Login Script",
+        "operationId": "read_database_login_script_api_v1_database_connectors_login_script_get",
+        "parameters": [
+          {
+            "name": "dialect",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "enum": [
+                "postgresql",
+                "mysql",
+                "mssql"
+              ],
+              "type": "string",
+              "title": "Dialect"
+            }
+          },
+          {
+            "name": "database_name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "default": "your_database",
+              "title": "Database Name"
+            }
+          },
+          {
+            "name": "username",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "default": "cavelon_ro",
+              "title": "Username"
+            }
+          },
+          {
+            "name": "schema",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Schema"
+            }
+          },
+          {
+            "name": "egress_ips",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 16
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Egress Ips"
+            }
+          },
+          {
+            "name": "connection_limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 10000,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Connection Limit"
+            }
+          },
+          {
+            "name": "require_tls",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Require Tls"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseLoginScriptResponse"
+                }
+              }
+            }
+          },
+          "400": {},
+          "403": {},
+          "404": {},
+          "422": {}
         }
       }
     },
@@ -9474,6 +9878,110 @@
         ],
         "title": "ConversationTraceSpanResponse"
       },
+      "DatabaseConnectionCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "dialect": {
+            "type": "string",
+            "enum": [
+              "postgresql",
+              "mysql",
+              "mssql"
+            ],
+            "title": "Dialect"
+          },
+          "host": {
+            "type": "string",
+            "maxLength": 253,
+            "minLength": 1,
+            "title": "Host"
+          },
+          "port": {
+            "type": "integer",
+            "maximum": 65535,
+            "minimum": 1024,
+            "title": "Port"
+          },
+          "database_name": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Database Name"
+          },
+          "username": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Username"
+          },
+          "password": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password",
+            "writeOnly": true,
+            "x-cavelon-person-only": true,
+            "x-cavelon-person-only-reason": "Sets a database connection's password",
+            "x-cavelon-secret": true
+          },
+          "tls_mode": {
+            "type": "string",
+            "enum": [
+              "verify_full",
+              "require",
+              "disable"
+            ],
+            "title": "Tls Mode",
+            "default": "verify_full"
+          },
+          "ca_certificate_pem": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32768
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ca Certificate Pem"
+          },
+          "statement_timeout_ms": {
+            "type": "integer",
+            "minimum": 100,
+            "title": "Statement Timeout Ms",
+            "default": 5000
+          },
+          "is_enabled": {
+            "type": "boolean",
+            "title": "Is Enabled",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "dialect",
+          "host",
+          "port",
+          "database_name",
+          "username"
+        ],
+        "title": "DatabaseConnectionCreate"
+      },
       "DatabaseConnectionResponse": {
         "properties": {
           "id": {
@@ -9796,6 +10304,173 @@
         ],
         "title": "DatabaseConnectionTestStep"
       },
+      "DatabaseConnectionUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "dialect": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "postgresql",
+                  "mysql",
+                  "mssql"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dialect"
+          },
+          "host": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 253,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host"
+          },
+          "port": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 65535,
+                "minimum": 1024
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Port"
+          },
+          "database_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Database Name"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          },
+          "password": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password",
+            "writeOnly": true,
+            "x-cavelon-person-only": true,
+            "x-cavelon-person-only-reason": "Sets a database connection's password",
+            "x-cavelon-secret": true
+          },
+          "tls_mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "verify_full",
+                  "require",
+                  "disable"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tls Mode"
+          },
+          "ca_certificate_pem": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32768
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ca Certificate Pem"
+          },
+          "statement_timeout_ms": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Statement Timeout Ms"
+          },
+          "is_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Enabled"
+          },
+          "write_privileges_acknowledged": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Write Privileges Acknowledged"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "DatabaseConnectionUpdate"
+      },
       "DatabaseConnectorInstanceResponse": {
         "properties": {
           "runnable_dialects": {
@@ -9867,6 +10542,79 @@
           "queries_written_by"
         ],
         "title": "DatabaseConnectorOffer"
+      },
+      "DatabaseLoginScriptResponse": {
+        "properties": {
+          "dialect": {
+            "type": "string",
+            "enum": [
+              "postgresql",
+              "mysql",
+              "mssql"
+            ],
+            "title": "Dialect"
+          },
+          "kind": {
+            "type": "string",
+            "const": "read_only",
+            "title": "Kind",
+            "default": "read_only"
+          },
+          "database_name": {
+            "type": "string",
+            "title": "Database Name"
+          },
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schema"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "egress_ips": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Egress Ips"
+          },
+          "connection_limit": {
+            "type": "integer",
+            "title": "Connection Limit"
+          },
+          "connection_limit_enforced": {
+            "type": "boolean",
+            "title": "Connection Limit Enforced"
+          },
+          "require_tls": {
+            "type": "boolean",
+            "title": "Require Tls"
+          },
+          "script": {
+            "type": "string",
+            "title": "Script"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dialect",
+          "database_name",
+          "username",
+          "egress_ips",
+          "connection_limit",
+          "connection_limit_enforced",
+          "require_tls",
+          "script"
+        ],
+        "title": "DatabaseLoginScriptResponse"
       },
       "DatabaseQueryResponse": {
         "properties": {
@@ -10305,6 +11053,145 @@
           "params_json_schema"
         ],
         "title": "DatabaseQueryTestRunResponse"
+      },
+      "DatabaseSchemaColumn": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "data_type": {
+            "type": "string",
+            "title": "Data Type"
+          },
+          "nullable": {
+            "type": "boolean",
+            "title": "Nullable"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "data_type",
+          "nullable"
+        ],
+        "title": "DatabaseSchemaColumn"
+      },
+      "DatabaseSchemaExploreRequest": {
+        "properties": {
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schema"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "DatabaseSchemaExploreRequest"
+      },
+      "DatabaseSchemaExploreResponse": {
+        "properties": {
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schema"
+          },
+          "schemas": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Schemas"
+          },
+          "tables": {
+            "items": {
+              "$ref": "#/components/schemas/DatabaseSchemaTable"
+            },
+            "type": "array",
+            "title": "Tables"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated",
+            "default": false
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "driver_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Driver Message"
+          },
+          "duration_ms": {
+            "type": "integer",
+            "title": "Duration Ms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "duration_ms"
+        ],
+        "title": "DatabaseSchemaExploreResponse"
+      },
+      "DatabaseSchemaTable": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/DatabaseSchemaColumn"
+            },
+            "type": "array",
+            "title": "Columns"
+          },
+          "columns_truncated": {
+            "type": "boolean",
+            "title": "Columns Truncated",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "kind",
+          "columns"
+        ],
+        "title": "DatabaseSchemaTable"
       },
       "DocumentActiveUpdate": {
         "properties": {

@@ -92,20 +92,39 @@ use it when you parse the result.
   In their own terminal, a plain `cavelon init` asks them. Ask for the instance
   URL if you do not know it.
 
-- **Database connections are set up by a person.** A database query tool
+- **Connect a database, leaving the password with a person.** A database query tool
   needs a connection of the name and dialect its package names, tested
-  successfully, in every tenant it is applied to. A superadmin creates it in
-  the Admin (Settings › Security & access › Databases), and the tenant Owner tests it
-  (`cavelon db test <connection>`); you never handle its host, user or
-  password. Use the same connection name in every tenant and environment
+  successfully, in every tenant it is applied to. A personal access token
+  holding `database_connectors.manage` (the tenant Owner, legacy Admin, or a
+  superadmin in Tenant mode) may run `cavelon db connections create|update|delete`
+  and upload a public CA with `cavelon db connections ca <connection> <file>`.
+  Create sends no password and prints the Admin step from `needs_a_person`;
+  a person enters it in Settings › Security & access › Databases. Never take
+  a password as an argument, environment value, stdin, file or tool input.
+  Private keys are refused by CA upload. Test with `cavelon db test <connection>`.
+  Use the same connection name in every tenant and environment
   (`env/test.yaml`, `env/prod.yaml`), each pointing at that environment's
   database, so one package serves them all. `cavelon db instance` says which
   dialects this instance runs and the addresses it connects from, which the
   customer allows through their database's firewall; tell the person both
-  before they set up a connection. The dialects are `postgresql`, `mysql` and
+  before setting up a connection. `cavelon db login-script <dialect>` or
+  `cavelon db login-script --connection <connection>` returns the script this
+  build actually publishes (currently `read_only`), never an invented write
+  script. The DBA replaces its password placeholder locally. Explore only
+  the catalog with `cavelon db schema <connection> [schema]`, a read-only
+  operation requiring `database_connectors.manage`. The instance tutorial is
+  `cavelon docs get administration/database-connector-setup`.
+  Keep connection settings outside packages: the query names only name and
+  dialect. `allows_writes`, when published, is read-only kit output;
+  enabling it and acknowledging write privileges stay in the dashboard.
+  A password-bearing target's host, port or dialect change needs a person
+  in the Admin; preserve `credential_required_for_target_change`.
+  Older instances may lack these routes or keep management person-only;
+  follow their published gate and direct a person to their dashboard.
+  The dialects are `postgresql`, `mysql` and
   `mssql` (SQL Server). A SQL Server login that can write keeps the
   connection's queries from running (`write_privileges_unacknowledged`) until
-  it may only read or a superadmin acknowledges it in the Admin, so ask for a
+  it may only read or the Owner acknowledges it in the Admin, so ask for a
   read-only login. A stored-procedure query (`EXEC`, SQL Server only) needs
   one without any write privileges, acknowledged or not
   (`write_privileges_block_procedure`), and a procedure that only reads.
