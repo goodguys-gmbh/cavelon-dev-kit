@@ -27,7 +27,7 @@
     "setting": "DATABASE_CONNECTOR_ENABLED",
     "dialects": [],
     "may_write_queries": false,
-    "queries_written_by": "A superadmin in Tenant mode, signed in to the Admin: under Settings → Databases, or by importing a package from the solution's Agents page (Import JSON). A personal access token or an API key never creates or changes a database query; its import passes while the package's queries match the tenant's."
+    "queries_written_by": "Whoever holds database_connectors.manage in the tenant: its Owner (or Admin) and a superadmin in Tenant mode, under Settings → Databases, by importing a package from the solution's Agents page (Import JSON), or with a personal access token whose role still holds it (cavelon apply). A connection's password is set by a person in the Admin only. An API key never creates or changes a database query; anyone else's import passes while the package's queries match the tenant's."
   },
   "confirmations": {
     "enforced": true,

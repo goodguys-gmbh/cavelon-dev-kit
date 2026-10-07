@@ -9,9 +9,9 @@ import { canonical, settledForm } from "./package-format.js";
  * Database query tools in a package: a tool whose `tool_type` is
  * `database_query` carries its saved query (`database_query`: connection by
  * name and dialect, SQL, parameters, limits). The instance writes a query only
- * for a superadmin in its Admin; a personal access token's import passes only
- * while the package's queries match the tenant's. So the kit checks what it
- * can before the preview does, and remembers the queries as the last pull or
+ * for a credential holding database_connectors.manage, after the person
+ * approves the change. So the kit checks what it can before the preview
+ * does, and remembers the queries as the last pull or
  * apply left them, to say which ones an apply would change.
  *
  * Everything here acts only where the instance's package schema describes the
@@ -26,14 +26,14 @@ const TOOLS_SECTION = "tools";
 
 /** A query tool's fields the instance derives from the query and ignores in a package. */
 const DERIVED_FIELDS = ["params_json_schema", "default_config"] as const;
-/** A query tool's fields that are part of the query: changing one needs a superadmin. */
+/** A query tool's fields that are part of the query: changing one needs the manage permission. */
 const QUERY_FIELDS = ["name", "description", QUERY_FIELD] as const;
 
 /** The kit's own codes for what validate finds about query tools. */
 export const QUERY_CHANGED_CODE = "database_query_changed";
 export const QUERY_FIELDS_IGNORED_CODE = "database_query_fields_ignored";
 
-/** The instance's code of the blocker a token's import gets for a query it would create or change. */
+/** The instance keeps this code for a caller without the query manage permission. */
 export const NEEDS_SUPERADMIN_CODE = "database_query_needs_superadmin";
 
 const BASELINE_FILE = "database-queries.json";
@@ -482,7 +482,7 @@ export function queryChanges(pkg: Json, schema: PackageSchema, baseline: QueryBa
 /**
  * validate's findings for the package's query tools: what the instance would
  * refuse in a query (errors), the query tools an apply would change, which a
- * personal access token cannot (warnings), and fields the instance ignores on
+ * person approves (warnings), and fields the instance ignores on
  * a query tool (warnings).
  */
 export function checkQueryTools(disk: PackageOnDisk, schema: PackageSchema, baseline: QueryBaseline | undefined): Finding[] {
@@ -522,8 +522,8 @@ export function checkQueryTools(disk: PackageOnDisk, schema: PackageSchema, base
       severity: "warning",
       ...locate(disk, `/${TOOLS_SECTION}/${change.index}`),
       message:
-        `Query tool "${change.slug}" ${what} needs a superadmin in the Admin, and the import preview of a personal access token ` +
-        `blocks it (${NEEDS_SUPERADMIN_CODE}). An agent's or skill's override of the tool's name, description or max_calls is no query change.`,
+        `Query tool "${change.slug}" ${what} needs database_connectors.manage (the tenant Owner or a superadmin in Tenant mode) and the person's approval. ` +
+        `The import preview blocks a credential without that permission (${NEEDS_SUPERADMIN_CODE}). An agent's or skill's override of the tool's name, description or max_calls is no query change.`,
     });
   }
   for (const { slug, index, tool } of queryTools(disk.package)) {
@@ -551,7 +551,7 @@ export interface ConnectorOffer {
   enabled?: boolean;
   /** The dialects whose queries it runs. */
   dialects?: string[];
-  /** Whether this credential may create or change a query (never a personal access token). */
+  /** Whether this credential may create or change a query, as its manage permission allows. */
   may_write_queries?: boolean;
   /** The setting that switches the connector on. */
   setting?: string;
@@ -601,7 +601,8 @@ export function applyQueryNotes(pkg: Json, changes: QueryChange[], offer: Connec
     }
   }
   const slugs = changes.map((c) => c.slug);
-  if (slugs.length && offer.may_write_queries === false) {
+  // While the connector is off the capability is false even for a caller holding manage; the preview still decides permission.
+  if (slugs.length && offer.enabled !== false && offer.may_write_queries === false) {
     warnings.push(
       `This apply would ${changes.every((c) => c.created) ? "create" : "create or change"} the database quer${slugs.length === 1 ? "y" : "ies"} ${named(slugs)}, ` +
         `which this credential may not do (may_write_queries is false): the preview blocks ${slugs.length === 1 ? "it" : "them"}, and one blocked query stops the whole import. ` +
@@ -626,8 +627,14 @@ export function queryBlockedHint(files: string[]): string {
   const where = files.length ? ` in ${files.join(", ")}` : "";
   return (
     "A database query the import would create or change stops the whole import: nothing is applied while one blocks. " +
-    "A superadmin applies it in the Admin (the blocker's hint names where); after that, apply passes while the queries match. " +
+    "The blocker's hint names who this instance permits and where they apply it (with the manage gate, the tenant Owner may use a personal access token holding database_connectors.manage); after that, apply passes while the queries match. " +
     `To apply the other changes first, leave each blocked query as the instance holds it${where}: restore the tool's entry as the last pull wrote it, ` +
     "or remove its database_query block (the tool then keeps the instance's query, name and description), and apply again."
   );
+}
+
+/** Only the instance knows whether this import writes a query; local changes since pull are advisory. Older previews may omit the report. */
+export function importWritesQueries(preview: Record<string, unknown>): boolean {
+  const report = preview.database_queries;
+  return isObject(report) && Array.isArray(report.would_write) && report.would_write.length > 0;
 }

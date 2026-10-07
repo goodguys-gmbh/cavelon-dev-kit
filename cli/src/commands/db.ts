@@ -12,9 +12,9 @@ import { isUuid } from "../session.js";
  * dialects and the addresses it connects from), the tenant's connections,
  * saved queries and their runs, as a token may read them, and the two checks
  * the tenant Owner may run with a token: a connection test and a test run of
- * a saved query. Who creates
- * or changes a connection or a query is a superadmin in the Admin; a pull
- * writes the queries into the package. Nothing here prints a password: the
+ * a saved query. A person sets up the connection in the Admin; a pull writes
+ * the queries into the package, and apply writes their definitions under
+ * the manage permission and the person's approval. Nothing here prints a password: the
  * instance never returns one.
  */
 
@@ -398,8 +398,9 @@ export const dbQueries: CommandSpec = {
   name: "db queries",
   summary: "The tenant's saved database queries by tool slug; with a query, its SQL, parameters and limits.",
   description:
-    "Each saved query is one agent tool (tool_type database_query). A superadmin writes it in the Admin; `cavelon pull` writes\n" +
-    "its definition into the package's tools. A parameter filled by end_user.* comes from the signed-in visitor, never from\n" +
+    "Each saved query is one agent tool (tool_type database_query). The tenant Owner or a superadmin in Tenant mode writes\n" +
+    "it with database_connectors.manage: in the Admin or through apply with a personal access token and the person's approval.\n" +
+    "`cavelon pull` writes its definition into the package's tools. A parameter filled by end_user.* comes from the signed-in visitor, never from\n" +
     "the model. Without a query: one line per query. With one (its tool's slug or the query's id): the whole query.",
   readOnly: true,
   idempotent: true,

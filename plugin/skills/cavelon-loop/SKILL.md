@@ -162,13 +162,18 @@ use it when you parse the result.
    code, package file and path, and hint; `cavelon explain <code>` says more.
    A preview that changes nothing says "Nothing to import" and stores no
    preview: there is nothing to confirm.
-   **A database query your package creates or changes stops the whole
-   apply** (`database_query_needs_superadmin`): only a superadmin writes a
-   query, in the Admin, and `apply` says so before it sends. Tell the person;
-   to apply the other changes now, leave the query as the instance holds it
+   **Database query changes need manage permission and the person's yes.**
+   A PAT holding `database_connectors.manage` (the tenant Owner or a
+   superadmin in Tenant mode) may apply them. A nonempty
+   `database_queries.would_write` in the instance's preview needs person
+   approval even on a draft: over MCP the client asks; from an agent's shell
+   the person runs the printed confirm. A credential without that permission
+   gets `database_query_needs_superadmin`, which stops the whole import;
+   the blocker's hint names who this instance permits. To apply the other
+   changes now, leave the query as the instance holds it
    (restore the tool's entry as the last pull wrote it, or remove its
-   `database_query` block) and preview again. Once a superadmin has imported
-   the package in the Admin, `apply` passes while the queries match.
+   `database_query` block) and preview again. Matching definitions need no
+   query confirmation, and a no-op preview stores nothing.
 5. **Confirm** exactly that preview: `cavelon apply --confirm <preview-id>`
    (the line `apply` printed, with the same `--env` and `--tenant`). Exit 4
    means the preview is stale and nothing was imported: the target changed on
@@ -280,6 +285,9 @@ the person when:
   solution of the tenant, reaching the active solutions …`, after
   `--include-tenant-wide` or on an instance that imports them anyway): every
   solution of the tenant sees the change;
+- the instance's preview lists query writes under
+  `database_queries.would_write`: its SQL changes what agents may read from
+  the tenant's database, even on a draft;
 - the preview lists target needs (secrets, grants, identities): only a person
   can provide them, with `cavelon secrets set <name>` or in the Admin, as the
   preview names it.

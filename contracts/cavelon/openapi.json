@@ -178,7 +178,7 @@
           "428": {}
         },
         "x-cavelon-confirmation": "required",
-        "x-cavelon-confirmation-when": "When the import writes tenant-wide sections (include_tenant_wide, or a full_config package that carries them): they change every solution of the tenant."
+        "x-cavelon-confirmation-when": "When the import writes tenant-wide sections (include_tenant_wide, or a full_config package that carries them): they change every solution of the tenant. And when it creates or changes a database query (the preview's database_queries.would_write): its SQL reads the tenant's database."
       }
     },
     "/api/v1/agent-graph/import/preview": {
@@ -675,6 +675,42 @@
             }
           }
         }
+      },
+      "post": {
+        "tags": [
+          "database-connectors"
+        ],
+        "summary": "Create Database Query",
+        "operationId": "create_database_query_api_v1_database_connectors_queries_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DatabaseQueryCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseQueryResponse"
+                }
+              }
+            }
+          },
+          "400": {},
+          "403": {},
+          "404": {},
+          "409": {},
+          "422": {},
+          "428": {}
+        },
+        "x-cavelon-confirmation": "required",
+        "x-cavelon-confirmation-when": "Always: the query becomes a tool that reads the tenant's database for every agent it is assigned to."
       }
     },
     "/api/v1/database-connectors/queries/{query_id}": {
@@ -719,6 +755,99 @@
             }
           }
         }
+      },
+      "patch": {
+        "tags": [
+          "database-connectors"
+        ],
+        "summary": "Update Database Query",
+        "operationId": "update_database_query_api_v1_database_connectors_queries__query_id__patch",
+        "parameters": [
+          {
+            "name": "query_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Query Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DatabaseQueryUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseQueryResponse"
+                }
+              }
+            }
+          },
+          "400": {},
+          "403": {},
+          "404": {},
+          "409": {},
+          "422": {},
+          "428": {}
+        },
+        "x-cavelon-confirmation": "required",
+        "x-cavelon-confirmation-when": "Always: every agent the query is assigned to reads with its new SQL, parameters or limits."
+      },
+      "delete": {
+        "tags": [
+          "database-connectors"
+        ],
+        "summary": "Delete Database Query",
+        "operationId": "delete_database_query_api_v1_database_connectors_queries__query_id__delete",
+        "parameters": [
+          {
+            "name": "query_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Query Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseQueryDeleteResponse"
+                }
+              }
+            }
+          },
+          "400": {},
+          "403": {},
+          "404": {},
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "428": {}
+        },
+        "x-cavelon-confirmation": "required",
+        "x-cavelon-confirmation-when": "Always: the query's tool and its agent and skill assignments are removed."
       }
     },
     "/api/v1/database-connectors/queries/{query_id}/runs": {
@@ -10024,6 +10153,107 @@
         ],
         "title": "DatabaseConnectorOffer"
       },
+      "DatabaseQueryCreate": {
+        "properties": {
+          "slug": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9_-]+$",
+            "title": "Slug"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Description"
+          },
+          "connection_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Connection Id"
+          },
+          "sql_text": {
+            "type": "string",
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Sql Text"
+          },
+          "parameters": {
+            "items": {
+              "$ref": "#/components/schemas/QueryParameter"
+            },
+            "type": "array",
+            "title": "Parameters"
+          },
+          "max_rows": {
+            "type": "integer",
+            "minimum": 1,
+            "title": "Max Rows",
+            "default": 50
+          },
+          "max_result_chars": {
+            "type": "integer",
+            "minimum": 500,
+            "title": "Max Result Chars",
+            "default": 8000
+          },
+          "allows_anonymous": {
+            "type": "boolean",
+            "title": "Allows Anonymous",
+            "default": false
+          },
+          "is_enabled": {
+            "type": "boolean",
+            "title": "Is Enabled",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "slug",
+          "name",
+          "description",
+          "connection_id",
+          "sql_text"
+        ],
+        "title": "DatabaseQueryCreate"
+      },
+      "DatabaseQueryDeleteResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "tool_definition_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Tool Definition Id"
+          },
+          "removed_references": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Removed References"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "tool_definition_id",
+          "removed_references"
+        ],
+        "title": "DatabaseQueryDeleteResponse"
+      },
       "DatabaseQueryResponse": {
         "properties": {
           "id": {
@@ -10461,6 +10691,138 @@
           "params_json_schema"
         ],
         "title": "DatabaseQueryTestRunResponse"
+      },
+      "DatabaseQueryUpdate": {
+        "properties": {
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[a-z0-9_-]+$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "connection_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connection Id"
+          },
+          "sql_text": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sql Text"
+          },
+          "parameters": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/QueryParameter"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parameters"
+          },
+          "max_rows": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Rows"
+          },
+          "max_result_chars": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Result Chars"
+          },
+          "allows_anonymous": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allows Anonymous"
+          },
+          "is_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Enabled"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "DatabaseQueryUpdate"
       },
       "DocumentActiveUpdate": {
         "properties": {
@@ -15360,6 +15722,158 @@
           "quota"
         ],
         "title": "ProcessingStepCapChanged"
+      },
+      "QueryParameter": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,62}$",
+            "title": "Name"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "model",
+              "end_user.id",
+              "end_user.external_subject",
+              "end_user.email"
+            ],
+            "title": "Source",
+            "default": "model"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "string",
+              "integer",
+              "number",
+              "boolean",
+              "date",
+              "datetime"
+            ],
+            "title": "Type",
+            "default": "string"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Description",
+            "default": ""
+          },
+          "required": {
+            "type": "boolean",
+            "title": "Required",
+            "default": true
+          },
+          "max_length": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 2000,
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Length"
+          },
+          "pattern": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pattern"
+          },
+          "enum": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "type": "array",
+                "maxItems": 100,
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enum"
+          },
+          "minimum": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minimum"
+          },
+          "maximum": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "QueryParameter",
+        "examples": [
+          {
+            "max_length": 20,
+            "name": "order_no",
+            "pattern": "^[A-Z]-[0-9]{4,8}$",
+            "source": "model",
+            "type": "string"
+          },
+          {
+            "name": "email",
+            "source": "end_user.email",
+            "type": "string"
+          },
+          {
+            "maximum": 90,
+            "minimum": 1,
+            "name": "days",
+            "type": "integer"
+          }
+        ]
       },
       "QuotaChange": {
         "properties": {
