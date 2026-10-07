@@ -218,9 +218,10 @@ export const KIT_CODES: CatalogEntry[] = [
     code: QUERY_CHANGED_CODE,
     area: "package",
     message:
-      "A database query tool's query (database_query), name or description differs from the last pull or apply, or the tool is new. Only a superadmin in the Admin creates or changes a query; a personal access token's import preview blocks it.",
+      "A database query tool's query (database_query), name or description differs from the last pull or apply, or the tool is new. Creating or changing it needs database_connectors.manage and the person's approval.",
     hint:
-      "Hand the change to a superadmin, who imports the package in the Admin (`cavelon explain database_query_needs_superadmin` names the step); then apply passes while the queries match. " +
+      "Preview with `cavelon apply`: a personal access token holding database_connectors.manage (the tenant Owner or a superadmin in Tenant mode) may import it after the person approves. " +
+      "Over MCP the client asks the person; from an agent's shell the person runs the preview's confirm command in their own terminal. A credential without that permission gets database_query_needs_superadmin; its published hint names who this instance permits. " +
       "To apply the rest first, leave the query as the instance holds it: restore the tool's entry as the last pull wrote it, or remove its database_query block (a query tool without one keeps the instance's query, name and description). " +
       "Rename the tool for one agent with the assignment's config_overrides instead: an override of name, description or max_calls is no query change.",
     docs: DATABASE_DOCS,

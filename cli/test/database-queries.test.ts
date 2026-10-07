@@ -67,7 +67,7 @@ beforeAll(async () => {
   sb = sandbox();
   // On before anything is cached: a test that switches it off reads with a fresh cache.
   connectorOn();
-  await login(sb, server.url, server.addToken({ kind: "pat", tenantIds: [tenant], defaultTenant: tenant }));
+  await login(sb, server.url, server.addToken({ kind: "pat", tenantIds: [tenant], defaultTenant: tenant, permissions: ["agents.view", "agents.edit", "harnesses.manage", "harnesses.view", "settings.view"] }));
   await cli(sb, ["harness", "new", "support", "--name", "Support"]);
   seeded = seedQueryTool(server.state.db, tenant);
   server.editConfig(tenant, (pkg) => {
@@ -156,7 +156,8 @@ describe("validate", () => {
     const changed = result.findings.filter((f) => f.code === "database_query_changed");
     expect(changed).toHaveLength(1);
     expect(changed[0]!.message).toMatch(/^Query tool "order_status" changes its description, query \(database_query\) since the last pull: a query tool's own name and description belong to the query/);
-    expect(changed[0]!.message).toMatch(/blocks it \(database_query_needs_superadmin\)\. An agent's or skill's override of the tool's name, description or max_calls is no query change\.$/);
+    expect(changed[0]!.message).toMatch(/needs database_connectors.manage .*and the person's approval/);
+    expect(changed[0]!.message).toMatch(/blocks a credential without that permission \(database_query_needs_superadmin\)\. An agent's or skill's override of the tool's name, description or max_calls is no query change\.$/);
     expect(changed[0]).toMatchObject({ severity: "warning", file: "package/tools.yaml" });
     expect(changed[0]!.hint).toMatch(/remove its database_query block/);
     const ignored = result.findings.find((f) => f.code === "database_query_fields_ignored")!;
@@ -175,7 +176,7 @@ describe("validate", () => {
     delete tools.find((t) => t.slug === "order_status")!.database_query;
     writeFileSync(toolsFile(dir), stringify(tools));
     const changed = (await validated(dir)).findings.filter((f) => f.code === "database_query_changed");
-    expect(changed.map((f) => f.message)).toEqual([expect.stringMatching(/^Query tool "order_count" is new since the last pull: creating a query needs a superadmin in the Admin/)]);
+    expect(changed.map((f) => f.message)).toEqual([expect.stringMatching(/^Query tool "order_count" is new since the last pull: creating a query needs database_connectors.manage/)]);
   });
 
   it("checks nothing of its own where the instance's schema has no database_query", async () => {
@@ -206,7 +207,7 @@ describe("apply", () => {
     const preview = await cli(sb, ["apply"], { cwd: dir, env: fresh() });
     expect(preview.code, preview.stdout).toBe(3);
     expect(preview.stderr).toMatch(/This apply would create or change the database query "order_status", which this credential may not do \(may_write_queries is false\)/);
-    expect(preview.stderr).toMatch(/one blocked query stops the whole import\. A superadmin in Tenant mode, signed in to the Admin/);
+    expect(preview.stderr).toMatch(/one blocked query stops the whole import\. Whoever holds database_connectors.manage in the tenant: its Owner/);
     expect(preview.stdout).toMatch(/database_query_needs_superadmin/);
     expect(preview.stdout).toMatch(/package\/tools\.yaml:\d+/);
     expect(preview.stdout).toMatch(/hint: A database query the import would create or change stops the whole import: nothing is applied while one blocks\./);
@@ -528,7 +529,7 @@ describe("the flow with a database query", () => {
     const blocked = await cli(sb, ["apply", "--json"], { cwd: dir, env: fresh() });
     expect(blocked.code).toBe(3);
     const hint = blocked.json<{ blocker_details: Array<{ code: string; hint: string }> }>().blocker_details[0]!.hint;
-    expect(hint).toMatch(/imports the same package from the solution's Agents page \(Import JSON\)/);
+    expect(hint).toMatch(/tenant Owner applies the same package .*solution's Agents page \(Import JSON\) in the Admin/);
 
     // A superadmin imports it in the Admin; then the token's apply passes.
     const sentPackage = (server.state.requests.filter((r) => r.path === "/api/v1/agent-graph/import/preview").pop()!.body as { package: Record<string, unknown> }).package;
@@ -569,7 +570,8 @@ describe("skills", () => {
     expect(text("cavelon-authoring")).toContain("cavelon docs get administration/database-connectors");
     expect(text("cavelon-loop")).toMatch(/Connect a database, leaving the password with a person[\s\S]*same connection name in every tenant and environment/);
     expect(text("cavelon-loop")).toMatch(/`cavelon db instance` says which\s+dialects this instance runs and the addresses it connects from/);
-    expect(text("cavelon-loop")).toMatch(/A database query your package creates or changes stops the whole\s+apply/);
+    expect(text("cavelon-loop")).toMatch(/Database query changes need manage permission and the person's yes/);
+    expect(text("cavelon-loop")).toMatch(/database_queries\.would_write[\s\S]*person\s+approval even on a draft/);
     expect(text("cavelon-testing")).toMatch(/## Database query tools[\s\S]*test database[\s\S]*cavelon db test-run/);
     expect(read(path.join(CONTRACTS, "docs", "llms.txt"))).toContain("/api/v1/docs/administration/database-connectors.md)");
   });

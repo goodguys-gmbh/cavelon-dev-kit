@@ -47,7 +47,7 @@ export interface StoredPreview {
   preview: Record<string, unknown>;
   /**
    * Why only a person may confirm it (it reaches live traffic, the whole
-   * tenant, deletes, or goes to env/prod), or null when an agent may; absent
+   * tenant, deletes, goes to env/prod, or writes database queries), or null when an agent may; absent
    * in a preview an older kit stored, which is held to a person.
    */
   person_reason?: string | null;

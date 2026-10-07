@@ -181,13 +181,18 @@ use it when you parse the result.
    code, package file and path, and hint; `cavelon explain <code>` says more.
    A preview that changes nothing says "Nothing to import" and stores no
    preview: there is nothing to confirm.
-   **A database query your package creates or changes stops the whole
-   apply** (`database_query_needs_superadmin`): only a superadmin writes a
-   query, in the Admin, and `apply` says so before it sends. Tell the person;
-   to apply the other changes now, leave the query as the instance holds it
+   **Database query changes need manage permission and the person's yes.**
+   A PAT holding `database_connectors.manage` (the tenant Owner or a
+   superadmin in Tenant mode) may apply them. A nonempty
+   `database_queries.would_write` in the instance's preview needs person
+   approval even on a draft: over MCP the client asks; from an agent's shell
+   the person runs the printed confirm. A credential without that permission
+   gets `database_query_needs_superadmin`, which stops the whole import;
+   the blocker's hint names who this instance permits. To apply the other
+   changes now, leave the query as the instance holds it
    (restore the tool's entry as the last pull wrote it, or remove its
-   `database_query` block) and preview again. Once a superadmin has imported
-   the package in the Admin, `apply` passes while the queries match.
+   `database_query` block) and preview again. Matching definitions need no
+   query confirmation, and a no-op preview stores nothing.
 5. **Confirm** exactly that preview: `cavelon apply --confirm <preview-id>`
    (the line `apply` printed, with the same `--env` and `--tenant`). Exit 4
    means the preview is stale and nothing was imported: the target changed on
@@ -247,6 +252,17 @@ with one solution: its **default route**. A fresh tenant's default is an empty
 `cavelon harness list` marks the default (DEFAULT), and `cavelon activate`
 says when the solution it activated is not the default.
 
+Activation can also take this route without `--make-default`. Read its
+published preview: `takes_default_route: true` needs the person's yes,
+including when `takes_default_route_from` and `_from_name` are both null
+(assigning an unassigned route). False with null/null means no takeover.
+An omitted flag is unknown, even if the schema declares a false default,
+and still needs the person. Never infer the effect from instructions, a
+default slug or other configuration. The preview reserves no state; the
+successful activation's `took_default_route` and corresponding from/name
+fields report the actual effect, which may differ. `status` shows the
+preview too.
+
 - **Ask the person** whether the new solution should become the default. It
   changes live traffic; never decide it yourself.
 - With their yes: `cavelon activate --make-default` (or `cavelon harness
@@ -288,6 +304,9 @@ the person when:
   solution of the tenant, reaching the active solutions …`, after
   `--include-tenant-wide` or on an instance that imports them anyway): every
   solution of the tenant sees the change;
+- the instance's preview lists query writes under
+  `database_queries.would_write`: its SQL changes what agents may read from
+  the tenant's database, even on a draft;
 - the preview lists target needs (secrets, grants, identities): only a person
   can provide them, with `cavelon secrets set <name>` or in the Admin, as the
   preview names it.
@@ -299,6 +318,7 @@ trigger whose solution is not a draft (a run acts as the person and spends
 budget), `limits set`, `models set-limit`, `trigger identity` (standing
 authority for a trigger), `harness default`, `activate --make-default`,
 `activate` of a solution its preview says a channel or trigger reaches,
+whose activation takes the default route, or whose reach or route effect is unknown,
 `deactivate` (they move live traffic), and `api` for any operation that is
 not read-only, `cavelon` does not take your confirm as theirs. Their preview
 says how in `needs_person`:
@@ -314,8 +334,11 @@ says how in `needs_person`:
   in your session. Give them that command and wait; never run it yourself. A
   token is refused (`confirm_needs_person`, exit code 5).
 
-A new variable, and a draft solution no channel or trigger reaches, need no
-confirm.
+A new variable needs no confirm. A solution needs none only when no channel
+or active trigger reaches it and readiness explicitly publishes
+`takes_default_route: false`. If the single read leaves `channel_count`
+null, the kit reads the matching list row; an unreadable list, missing row
+or missing count keeps reach unknown and needs the person.
 
 An instance that publishes `confirmations.enforced` checks the person's yes
 too: after it, `cavelon` asks the instance for a confirmation id for exactly
@@ -328,7 +351,8 @@ dialog or their own terminal), never retry on your own.
 `variables_set` where it replaces a value, `loop_start`, `limits_set`,
 `models_set_limit`, `loop_cancel`, `sandbox_seed`, `trigger_identity`,
 `harness_default`, `deactivate`, `activate` of a solution a channel or
-trigger reaches or with `make_default`, and
+trigger reaches, whose activation takes the default route or whose reach or
+route effect is unknown, or with `make_default`, and
 `kb_upload` where it would deactivate documents return a `confirm_token` with
 their preview. Show
 the preview, then call the tool again with the same arguments and `confirm`

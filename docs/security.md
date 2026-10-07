@@ -105,7 +105,8 @@ activates. Over MCP, `cavelon` limits it further:
   `variables_set` where it replaces another value, `loop_start`,
   `limits_set`, `models_set_limit`, `loop_cancel`, `sandbox_seed`,
   `trigger_identity`, `harness_default`, `activate` of a solution a channel
-  or an active trigger reaches or with `make_default`, `deactivate`,
+  or an active trigger reaches, whose activation takes the default route or
+  whose reach or route effect is unknown, or with `make_default`, `deactivate`,
   `kb_upload` where it would deactivate documents, and `api` (for any
   operation that is not read-only) change nothing without the
   `confirm_token` their preview returned. The token is a hash of the change the preview showed, the tool,
@@ -137,7 +138,8 @@ activates. Over MCP, `cavelon` limits it further:
   `confirmations.enforced` in `/api/v1/meta/capabilities`. A personal access
   token's change to an operation its OpenAPI marks `x-cavelon-confirmation`
   (the default route, activating a solution a channel or an active trigger
-  reaches, deactivating an active one, an import that writes tenant-wide
+  reaches or whose activation takes the default route, deactivating an
+  active one, an import that writes tenant-wide
   sections, deleting a variable, a trigger's execution identity) needs a
   confirmation id that names exactly that change: its method, path and body,
   for this token and tenant, once, within 10 minutes. `cavelon` asks the
@@ -230,7 +232,8 @@ The commands with a `--confirm` flag are held to the same as their MCP tools:
 `tenant create`, `variables set` (replacing a value), `loop start`,
 `limits set`, `models set-limit`, `loop cancel`, `sandbox seed`,
 `trigger identity`, `harness default`, `activate` (of a solution a channel
-or trigger reaches, or with `--make-default`), `deactivate`,
+or trigger reaches, whose activation takes the default route or whose reach
+or route effect is unknown, or with `--make-default`), `deactivate`,
 `kb upload --replace`, `variables delete` and `apply --confirm <preview-id>`.
 A shell has no dialog in which `cavelon` could ask you, so a change that needs
 your own yes (see above) is yours to confirm in your own terminal: run under a
@@ -300,7 +303,7 @@ terminal. The agent shows you every preview first.
 | `loop cancel` | `loop_cancel` | stops a run and its loops | preview, always |
 | `loop pause`, `loop resume` | `loop_pause`, `loop_resume` | asks a loop to pause at its next safe point, or resumes a paused one | at once |
 | `trigger identity` | `trigger_identity` | the API key a trigger's runs act as | preview, always, and your yes |
-| `activate` | `activate` | puts a solution live, through the readiness gate | preview and your yes when a channel or an active trigger reaches it, or the instance does not say; with `--make-default`, also the default route, under the same yes. A draft nothing reaches activates at once |
+| `activate` | `activate` | puts a solution live, through the readiness gate | preview and your yes when a channel or active trigger reaches it, activation takes the default route (including assigning an unassigned route), or reach or route effect is unknown; with `--make-default`, also the explicit route change. Only known no reach and readiness's explicit `takes_default_route: false` activate at once. A missing response flag stays unknown even with a schema default; success reports the actual `took_default_route` effect |
 | `deactivate` | `deactivate` | takes a solution out of live traffic | preview, always, and your yes; the default route is refused |
 | `harness default` | `harness_default` | which solution the tenant's chat and widget answer with | preview, always, and your yes |
 | `harness new`, `harness clone` | `harness_new`, `harness_clone` | a new draft solution | at once (a draft answers no live traffic) |

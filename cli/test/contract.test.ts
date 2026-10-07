@@ -56,6 +56,20 @@ function check(method: string, template: string, status: number, data: unknown) 
 }
 
 describe("contract snapshots", () => {
+  it("publishes activation's preview and actual route effects, including unassigned routes", () => {
+    const schemas = (doc.components as { schemas: Record<string, { properties: Record<string, unknown> }> }).schemas;
+    for (const [name, prefix] of [["HarnessReadinessResponse", "takes"], ["HarnessActivationResponse", "took"]]) {
+      const properties = schemas[name!]!.properties;
+      expect(properties[`${prefix}_default_route`]).toMatchObject({ type: "boolean", default: false });
+      for (const suffix of ["_from", "_from_name"]) {
+        expect(properties[`${prefix}_default_route${suffix}`]).toMatchObject({ anyOf: [{ type: "string" }, { type: "null" }] });
+      }
+    }
+    const activation = operationAt(doc, "POST", "/api/v1/harnesses/{harness_id}/activate")!;
+    expect(activation.responses["200"]!.content!["application/json"]!.schema).toEqual({ $ref: "#/components/schemas/HarnessActivationResponse" });
+    expect(activation.confirmation).toBe(true);
+  });
+
   it("publishes per-request Chat User readers and verified identity listings", async () => {
     for (const [method, route, base] of [
       ["POST", "/api/v1/chat", { message: "My orders" }],
@@ -409,6 +423,35 @@ describe("the routes the commands use", () => {
 });
 
 describe("the fake server answers in the published shapes", () => {
+  it("readiness and activation route effects distinguish assignment, replacement and no change", async () => {
+    try {
+      server.state.singleHarnessWithoutChannelCount = true;
+      server.state.tokens.get(token)!.mayActivate = true;
+      for (const effect of [
+        { takes_default_route: false, takes_default_route_from: null, takes_default_route_from_name: null },
+        { takes_default_route: true, takes_default_route_from: "previous", takes_default_route_from_name: "Previous" },
+        { takes_default_route: true, takes_default_route_from: null, takes_default_route_from_name: null },
+      ]) {
+        server.state.readinessRouteEffect = effect;
+        const created = await call("POST", "/api/v1/harnesses", { slug: `route-${randomUUID()}`, name: "Route" });
+        const id = (created.data as { id: string }).id;
+        const readiness = (await call("GET", `/api/v1/harnesses/${id}/readiness`)).data;
+        check("GET", "/api/v1/harnesses/{harness_id}/readiness", 200, readiness);
+        expect(readiness).toMatchObject(effect);
+        const p = `/api/v1/harnesses/${id}/activate`;
+        const body = { force: false };
+        const result = await call("POST", p, body, effect.takes_default_route ? await confirmed("POST", p, body) : {});
+        check("POST", "/api/v1/harnesses/{harness_id}/activate", 200, result.data);
+        expect(result.data).toMatchObject({ channel_count: null, took_default_route: effect.takes_default_route,
+          took_default_route_from: effect.takes_default_route_from, took_default_route_from_name: effect.takes_default_route_from_name });
+      }
+    } finally {
+      server.state.singleHarnessWithoutChannelCount = false;
+      server.state.readinessRouteEffect = undefined;
+      server.state.tokens.get(token)!.mayActivate = false;
+    }
+  });
+
   it("meta, tenants, harnesses", async () => {
     check("GET", "/api/v1/meta/capabilities", 200, (await call("GET", "/api/v1/meta/capabilities")).data);
     const created = await fetch(`${server.url}/api/v1/tenants`, {
@@ -610,6 +653,37 @@ describe("the fake server answers in the published shapes", () => {
     } finally {
       delete server.state.features.database_connector_enabled;
     }
+  });
+
+  it("query writes publish the person-confirmation marks, request fields and response shapes", async () => {
+    const { connection } = seedQueryTool(server.state.db, tenant);
+    server.state.features.database_connector_enabled = true;
+    try {
+      const route = "/api/v1/database-connectors/queries";
+      const template = `${route}/{query_id}`;
+      for (const [method, path] of [["POST", route], ["PATCH", template], ["DELETE", template]]) {
+        const op = operationAt(doc, method!, path!)!;
+        expect(op.confirmation).toBe(true);
+        expect(op.confirmationWhen).toMatch(/^Always:/);
+        expect(op.responses).toHaveProperty("428");
+        expect(op.personOnly).toBeUndefined();
+      }
+      expect(operationAt(doc, "POST", "/api/v1/agent-graph/import")!.confirmationWhen).toContain("database_queries.would_write");
+      const body = { connection_id: connection.id, slug: "new_query", name: "New query", description: "Read public data.", sql_text: "SELECT 1", parameters: [] };
+      const schema = operationAt(doc, "POST", route)!.requestBody!.content!["application/json"]!.schema!;
+      expect(schemaErrors(doc, schema, body)).toEqual([]);
+      const refused = await call("POST", route, body);
+      expect(refused).toMatchObject({ status: 428, data: { code: "confirmation_required", confirmations: "/api/v1/confirmations", header: "X-Cavelon-Confirmation" } });
+      const created = await call("POST", route, body, await confirmed("POST", route, body));
+      check("POST", route, 201, created.data);
+      const path = `${route}/${(created.data as { id: string }).id}`;
+      const patch = { max_rows: 10 };
+      const id = await confirmed("PATCH", path, patch);
+      expect(await call("PATCH", path, { max_rows: 20 }, id)).toMatchObject({ status: 428, data: { code: "confirmation_invalid", reason: "other_change" } });
+      check("PATCH", template, 200, (await call("PATCH", path, patch, id)).data);
+      expect(await call("PATCH", path, patch, id)).toMatchObject({ status: 428, data: { code: "confirmation_invalid", reason: "used" } });
+      check("DELETE", template, 200, (await call("DELETE", path, undefined, await confirmed("DELETE", path))).data);
+    } finally { delete server.state.features.database_connector_enabled; }
   });
 
   it("triggers, runs, loops, identities, Sandboxes and archive jobs", async () => {

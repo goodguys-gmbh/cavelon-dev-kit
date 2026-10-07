@@ -130,6 +130,20 @@ the docs corpus's renderer; only their index entries change. The catalog's
 generator was checked for connection-specific additions and none were needed.
 Capabilities, package schema, unrelated pages and all defaults stay as recorded.
 
+On 2026-10-07 the query authoring contracts were refreshed from the published
+development build, without running an instance. Its OpenAPI generator adds
+the query create, update and delete operations, their request and response
+schemas, and their `x-cavelon-confirmation` marks and 428 responses. The import's
+confirmation condition now also names `database_queries.would_write`.
+The functions behind `/meta/capabilities`, `/meta/package-schema` and
+`/meta/error-catalog` supply only the connector's query-authoring offer, the
+package query's permission description, and `database_query_needs_superadmin`:
+the tenant Owner's `database_connectors.manage` allows a personal access token
+to write queries after the person's approval. Unrelated snapshots stay as
+recorded; connector and token defaults stay off and `may_write_queries` stays
+false. The tests also play an instance without the new report or confirmation
+metadata.
+
 On 2026-10-07 the snapshot took in Chat User readers from the published
 development build, without running the instance. The OpenAPI generator's
 output matches its `docs/openapi.json` reference; only `ChatRequest` and
@@ -141,6 +155,19 @@ listing route, and its `EndUserListResponse` and `EndUserResponse` (including
 then scrubbed. All other snapshot entries and capability defaults stay as
 recorded. The fake server also plays instances without reader overrides,
 principal permissions, OpenAPI or the email verification flag.
+
+Later on 2026-10-07 the OpenAPI took in activation route effects from the
+instance's merged build, without running it. The source is the immutable
+checked-in output of its OpenAPI generator, verified before selection.
+Only `HarnessReadinessResponse`'s three `takes_default_route` fields,
+`HarnessActivationResponse` (the harness response plus its three
+`took_default_route` fields), the activation's response reference and its
+confirmation condition are taken in, without prose. All other snapshots,
+settings, reader overrides and existing confirmation entries stay as
+recorded. A schema default of false is not a response: an omitted flag
+remains unknown. The fake server plays older schemas and omitted response
+flags, list-only channel counts, and a route effect that changes after its
+preview; readiness reserves no state.
 
 | File | Source |
 |---|---|

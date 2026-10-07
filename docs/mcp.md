@@ -208,8 +208,9 @@ repeat them:
   `confirm` set to that preview's id. `tenant_create`, `variables_set` where
   it replaces another value, `loop_start`, `limits_set`, `models_set_limit`,
   `loop_cancel`, `sandbox_seed`, `trigger_identity`, `harness_default`, `db_connection_delete`,
-  `activate` of a solution a channel or an active trigger reaches (or on an
-  instance that does not say) or with `make_default`, `deactivate`, and `api`
+  `activate` of a solution a channel or an active trigger reaches, whose
+  activation takes the default route or whose reach or route effect is
+  unknown, or with `make_default`, `deactivate`, and `api`
   for any operation that is not
   read-only (anything but GET, HEAD and OPTIONS), return what they would do
   (for `api`: the method, path, parameters and body) and a `confirm_token`,
@@ -230,7 +231,8 @@ repeat them:
   trigger of a draft solution, `limits_set`, `models_set_limit`,
   `trigger_identity`, `harness_default` (which solution the tenant's chat and
   widget answer with), `activate` where it previews (a channel or trigger
-  reaches the solution, or `make_default`), `deactivate` (it takes a solution
+  reaches the solution, activation takes the default route, reach or route
+  effect is unknown, or `make_default`), `deactivate` (it takes a solution
   out of live traffic), `api` for any operation that is not read-only, and
   `apply` where its preview needs a person: it changes the tenant-wide
   sections, reaches an active solution, deletes (or `mode` `replace`), or goes
@@ -292,7 +294,8 @@ repeat them:
   apply left it, unless `force`), and the other tools marked changing act at
   once:
   `use_tenant` (for the session only), `harness_new`, `harness_clone`, `activate`
-  of a draft that no channel or trigger reaches (through the readiness gate),
+  of a solution with known zero channels, no active triggers and readiness's
+  explicit `takes_default_route: false` (through the readiness gate),
   `chat` (one turn of a conversation with the
   solution it names, the way to try one that is not the default route),
   `variables_set` of a new variable (or the same value), `kb_upload` (without

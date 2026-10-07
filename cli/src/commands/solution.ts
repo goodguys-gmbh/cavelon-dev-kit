@@ -13,7 +13,7 @@ import { readTextFile, writeFileAtomic } from "../fsutil.js";
 import { uncommitted } from "../git.js";
 import { callStable, workflowOperation } from "../invoke.js";
 import { deref, jsonBodySchema } from "../openapi.js";
-import { harnessNotFoundError, lookupHarness, SLUG } from "../harness-ref.js";
+import { harnessNotFoundError, listHarnesses, lookupHarness, SLUG } from "../harness-ref.js";
 import { defaultChangeLine, defaultCommands, named, readDefaultRoute, setDefaultRoute } from "../default-route.js";
 import { ceilingHint, LIMIT_ABOVE_CEILING, parseLimits, readLimits, type PublishedLimits } from "../limits.js";
 import {
@@ -37,7 +37,7 @@ import {
   type StoredPreview,
 } from "../local-state.js";
 import { catalogEntry, checkPackage, KIT_CODES, packageVersionOf } from "../package-check.js";
-import { applyQueryNotes, connectorOffer, NEEDS_SUPERADMIN_CODE, queryBlockedHint, queryChanges, readQueryBaseline, rememberQueries } from "../database-queries.js";
+import { applyQueryNotes, connectorOffer, importWritesQueries, NEEDS_SUPERADMIN_CODE, queryBlockedHint, queryChanges, readQueryBaseline, rememberQueries } from "../database-queries.js";
 import { cliFix, similarCodes } from "../code-hints.js";
 import { KIT_ERROR_CODES } from "../kit-codes.js";
 import { confirmationPointer } from "../change-confirmation.js";
@@ -73,6 +73,7 @@ interface Harness {
   slug: string;
   name: string;
   status: string;
+  channel_count?: number | null;
 }
 
 /** The solution folder a command needs; without one, the `init` that makes it, in the tenant this command was given. */
@@ -736,6 +737,7 @@ function sectionsChanging(p: Preview, sections: string[]): string[] | undefined 
  * publishes no summary is taken to change something.
  */
 function changesNothing(p: Preview): boolean {
+  if (importWritesQueries(p)) return false;
   const s = p.summary;
   if (!s || typeof s !== "object") return false;
   return !counts(s.creates) && !counts(s.updates) && !counts(s.deletes) && fieldChanges(p.changes).length === 0;
@@ -979,11 +981,12 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
   const refusal = importNeedsAPerson(await accessFor(client));
   if (refusal) throw refusal;
   const driven = drivenByAgent(ctx);
-  // The instance guards an import that writes what the whole tenant shares; it asks for its confirmation only after the person's yes.
-  const guarded = stored.request[INCLUDE_TENANT_WIDE] === true || (stored.request.package.manifest as Record<string, unknown> | undefined)?.scope === "full_config";
-  if (driven && stored.person_reason !== null) {
+  // The preview's query writes are guarded even on a draft; only the person's yes permits asking for the instance's nonce.
+  const queries = importWritesQueries(stored.preview);
+  const guarded = queries || stored.request[INCLUDE_TENANT_WIDE] === true || (stored.request.package.manifest as Record<string, unknown> | undefined)?.scope === "full_config";
+  if (driven && (queries || stored.person_reason !== null)) {
     const into = stored.harness ? `solution ${stored.harness.slug}` : "the tenant";
-    const reason = stored.person_reason ?? "was stored by an older cavelon, which did not record whether it needs a person";
+    const reason = stored.person_reason ?? (queries ? QUERY_IMPORT_REASON : "was stored by an older cavelon, which did not record whether it needs a person");
     await personApproves(ctx, driven, { tool: "apply", what: `Import preview ${stored.preview_id} into ${into}: it ${reason}.`, command: personApplyCommand(stored), guarded });
   } else if (!driven) ctx.approved = { guarded };
   const acting = await actingTarget(ctx);
@@ -1017,7 +1020,7 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
       ...others.map((p) => ({ preview_id: p.preview_id, reason: "superseded" as const, at: now, by: stored.preview_id })),
     ]);
     await rememberImported(ctx, project, stored, disk, changed);
-    // The instance now holds the package's queries: an import that would have changed one was refused.
+    // Remember the query definitions only once their import succeeded.
     await rememberQueries(project.root, stored.request.package, (await schemaFor(ctx, packageVersionOf(stored.request.package), false)).schema, "apply", ctx.io.now());
     const summary = (result.summary ?? {}) as Preview["summary"];
     const still = setCommands(stored.preview as Preview, stored.env ?? undefined, secretsInAdminOnly((await accessFor(client))?.principal) === true);
@@ -1171,6 +1174,8 @@ function packageHarnessName(pkg: Record<string, unknown>, slug: string): string 
   return name ? name.slice(0, 255) : undefined;
 }
 
+const QUERY_IMPORT_REASON = "creates or changes database queries, whose SQL reads the tenant's database";
+
 /**
  * Whether a preview needs a person's look before it is confirmed, and why; naming the active solutions it reaches. Tenant-wide
  * sections it imports come first: they change every solution of the tenant, active or not.
@@ -1193,6 +1198,7 @@ function personReason(
   if (preview.impact?.active_harnesses?.length) return "reaches an active solution";
   if (counts(preview.summary?.deletes) || mode === "replace") return "deletes";
   if (env === "prod") return "goes to env/prod";
+  if (importWritesQueries(preview)) return QUERY_IMPORT_REASON;
   return undefined;
 }
 
@@ -1208,8 +1214,8 @@ export const apply: CommandSpec = {
     "Where the instance says this credential cannot import (needs_a_person), it still previews but prints no confirm\n" +
     "command: a person imports in the Admin or with their own personal access token. --confirm refuses before sending (exit 5).\n" +
     "Show a preview that reaches an active solution or env/prod to a person before confirming. Such a preview (show_to_person:\n" +
-    "tenant-wide sections, an active solution, deletions, env/prod) a coding agent cannot confirm: over MCP the client asks\n" +
-    "the person, and from an agent's shell the person runs the confirm in their own terminal. A stale preview exits 4 and\n" +
+    "tenant-wide sections, an active solution, deletions, env/prod, or database query writes) a coding agent cannot confirm.\n" +
+    "Over MCP the client asks the person; from an agent's shell the person runs the confirm in their own terminal. A stale preview exits 4 and\n" +
     "imports nothing: one whose target changed on the instance since, one whose package files changed since (what they\n" +
     "hold, not their formatting; --allow-stale imports what the preview showed anyway), and one older than a day. So does\n" +
     "an import its own check refuses when it applies, naming each blocker. --discard <id|all> forgets stored previews;\n" +
@@ -1313,7 +1319,10 @@ export const apply: CommandSpec = {
     // Where the import would go, also for a tenant API key, whose tenant only the instance knows.
     const acting = await actingTarget(ctx);
     const data: Record<string, unknown> = { previewed: true, ...preview, env: envFile?.name ?? null, harness: target, target: acting };
-    if (queries.data) data.database_queries = queries.data;
+    if (queries.data) {
+      const reported = preview.database_queries;
+      data.database_queries = { ...queries.data, ...(reported && typeof reported === "object" && !Array.isArray(reported) ? reported : {}) };
+    }
     // The instance's own report wins where it sends one: it decides what it leaves out, and knows the active solutions it reaches.
     const reported = solutionImport ? tenantWideReport(preview.tenant_wide) : undefined;
     const sections = reported?.sections ?? shared;
@@ -1377,7 +1386,7 @@ export const apply: CommandSpec = {
         ? `A blocker is in ${sectionFiles(disk, blockedShared).join(", ")}, which this import leaves out (tenant-wide); the instance checks it anyway: remove the file, or fix it.`
         : undefined;
       if (sharedHint) data.tenant_wide_hint = sharedHint;
-      // A query only a superadmin may write: the whole import waits for it, unless the query is left as the instance holds it.
+      // A query this credential may not write stops the whole import, unless it stays as the instance holds it.
       const queryBlocked = blockerDetails(preview.blocker_details).some((b) => b.code === NEEDS_SUPERADMIN_CODE);
       const queryHint = queryBlocked ? queryBlockedHint(sectionFiles(disk, ["tools"])) : undefined;
       if (queryHint) data.database_query_hint = queryHint;
@@ -1728,12 +1737,60 @@ interface Readiness {
   warnings?: ReadinessCheck[];
   /** The solution's latest test run; absent on an instance that does not publish it. */
   latest_test_run?: { id?: string; status?: string; summary?: Record<string, unknown> | null; created_at?: string | null; completed_at?: string | null } | null;
+  takes_default_route?: boolean;
+  takes_default_route_from?: string | null;
+  takes_default_route_from_name?: string | null;
+}
+
+interface ActivationResponse extends Harness {
+  took_default_route?: boolean;
+  took_default_route_from?: string | null;
+  took_default_route_from_name?: string | null;
+}
+
+/** Schema defaults cannot tell us the effect of an omitted response field. */
+function previewRouteEffect(readiness: Readiness) {
+  return {
+    takes_default_route: typeof readiness.takes_default_route === "boolean" ? readiness.takes_default_route : null,
+    takes_default_route_from: readiness.takes_default_route_from ?? null,
+    takes_default_route_from_name: readiness.takes_default_route_from_name ?? null,
+  };
+}
+
+function actualRouteEffect(activated: ActivationResponse) {
+  return {
+    took_default_route: typeof activated.took_default_route === "boolean" ? activated.took_default_route : null,
+    took_default_route_from: activated.took_default_route_from ?? null,
+    took_default_route_from_name: activated.took_default_route_from_name ?? null,
+  };
+}
+
+function activationRouteText(harness: Harness, effect: boolean | null, from: string | null, fromName: string | null, actual = false): string {
+  if (effect === null) return actual
+    ? "This instance does not report whether activation changed the tenant's default chat and widget route."
+    : "This instance does not say whether activation takes the tenant's default chat and widget route, so a person must confirm.";
+  if (!effect) return actual
+    ? "Activation did not change the tenant's default chat and widget route."
+    : "Activation would not change the tenant's default chat and widget route.";
+  const previous = from ? named({ slug: from, name: fromName ?? from }) : null;
+  const action = previous
+    ? `${actual ? "replaced" : "would replace"} ${previous} with ${named(harness)} as the tenant's default route`
+    : `${actual ? "assigned" : "would assign"} the tenant's unassigned default route to ${named(harness)}`;
+  return `Activation ${action}. ${actual ? "The" : "This changes live traffic: the"} tenant's chat and widget answer with it where a conversation names no solution.`;
+}
+
+function previewRouteText(harness: Harness, effect: ReturnType<typeof previewRouteEffect>): string {
+  return `${activationRouteText(harness, effect.takes_default_route, effect.takes_default_route_from, effect.takes_default_route_from_name)}\n` +
+    "This preview reserves no route state; activation reports the actual effect.";
 }
 
 /** A solution's state as `status` shows it: draft or active, whether it may activate, and its latest test run. */
 export interface SolutionState {
   harness: { id: string; slug: string; name: string; status: string } | null;
   ready_to_activate?: boolean | null;
+  takes_default_route?: boolean | null;
+  takes_default_route_from?: string | null;
+  takes_default_route_from_name?: string | null;
   blockers?: string[];
   /** Null when the solution has no test run yet; undefined when the instance does not publish it. */
   latest_test_run?: { id: string | null; status: string | null; passed: number | null; failed: number | null; total: number | null; at: string | null } | null;
@@ -1779,6 +1836,7 @@ export async function solutionState(ctx: Context, ref: string): Promise<Solution
       params: { harness_id: [harness.id] },
     });
     state.ready_to_activate = typeof readiness.ready_to_activate === "boolean" ? readiness.ready_to_activate : null;
+    Object.assign(state, previewRouteEffect(readiness));
     state.blockers = (readiness.blockers ?? []).map((b) => clip(String(b.label ?? b.key ?? b.detail ?? "?"), 80));
     const secrets = missingSecrets(readiness.blockers ?? []);
     const principal = await principalOf(await ctx.client());
@@ -1818,6 +1876,11 @@ export function solutionStateLines(state: SolutionState): Array<[string, unknown
           ? `not ready to activate${state.blockers?.length ? ` (${list(state.blockers, 3)})` : ""}`
           : undefined;
   const lines: Array<[string, unknown]> = [["state", [state.harness.status, ready].filter(Boolean).join(", ")]];
+  if (!active && "takes_default_route" in state) lines.push(["activation route", previewRouteText(state.harness, {
+    takes_default_route: state.takes_default_route ?? null,
+    takes_default_route_from: state.takes_default_route_from ?? null,
+    takes_default_route_from_name: state.takes_default_route_from_name ?? null,
+  })]);
   if (state.missing_secrets) lines.push(["secrets", missingSecretsLine(state.missing_secrets.names, state.missing_secrets.may_set, state.missing_secrets.set_in_admin ?? null)]);
   const route = state.default_route;
   if (route) lines.push(["default route", defaultRouteText(state.harness, route, state.may_activate ?? null)]);
@@ -1944,7 +2007,12 @@ interface Reach {
 }
 
 async function reachOf(ctx: Context, harness: Harness & { channel_count?: number | null }): Promise<Reach> {
-  const channels = typeof harness.channel_count === "number" ? harness.channel_count : null;
+  let channels = typeof harness.channel_count === "number" ? harness.channel_count : null;
+  if (channels === null) {
+    // The single read may leave the count to the list; an unreadable or missing row still tells us nothing.
+    const row = await listHarnesses<Harness>(ctx).then((list) => list.find((h) => h.id === harness.id)).catch(() => undefined);
+    channels = typeof row?.channel_count === "number" ? row.channel_count : null;
+  }
   type Trigger = { id: string; slug: string; name: string; trigger_type: string; harness_id?: string | null; is_active: boolean };
   const triggers = await callStable<Trigger[]>(ctx, "GET", "/api/v1/triggers", "listing triggers", { params: { harness_id: [harness.id] } })
     // An instance that ignores the filter lists every trigger; only this solution's active ones start its runs.
@@ -1977,8 +2045,10 @@ export const activate: CommandSpec = {
     "Only when every readiness check passes, and with a personal access token only when it was created with \"may activate\".\n" +
     "Activating without the evidence stays a person's decision in the Admin.\n" +
     "A solution that a channel or an active trigger reaches goes live for them at once, so its activation previews first\n" +
-    "and only --confirm activates it; so does one on an instance that does not say what reaches it. Show the preview to a\n" +
-    "person and confirm only with their yes. A draft that nothing reaches activates without --confirm.\n" +
+    "and only the person's --confirm activates it. Activation that takes the default chat and widget route also needs their\n" +
+    "yes, including assigning an unassigned route. Unknown reach or route effects need their confirmation too. A solution\n" +
+    "nothing reaches activates without --confirm only when readiness explicitly says takes_default_route=false.\n" +
+    "Readiness previews the route effect without reserving state; the activation result reports what actually happened.\n" +
     "Afterwards it says whether the solution is the tenant's default route (the one the tenant's chat and widget answer with\n" +
     "where no solution is named). --make-default previews making it the default; with --confirm as well, it changes it. That\n" +
     "changes live traffic: show the preview to a person and confirm only with their yes. `cavelon harness default` does the\n" +
@@ -1995,7 +2065,7 @@ export const activate: CommandSpec = {
     confirm: {
       type: "boolean",
       mcpToken: true,
-      description: "With --make-default: change the default route; for a solution a channel or trigger reaches: activate it (after a person saw the preview).",
+      description: "With --make-default: the person's yes to change the default route; otherwise, to activate when reach or the activation's route effect is true or unknown.",
     },
   },
   examples: [
@@ -2039,6 +2109,7 @@ export const activate: CommandSpec = {
     });
     const checks = readinessChecks(readiness);
     const warnings = (readiness.warnings ?? []).map(checkLine);
+    const routeEffect = previewRouteEffect(readiness);
     if (!readiness.ready_to_activate) {
       const blockers = readiness.blockers ?? [];
       // A Masterloop parent activated before its iteration solution.
@@ -2054,6 +2125,7 @@ export const activate: CommandSpec = {
           checks,
           warnings,
           readiness,
+          ...routeEffect,
           ...(pair ? { hint: pair.hint } : {}),
           ...(secrets.length ? { missing_secrets: { names: secrets, may_set: maySet, next: secretsLine } } : {}),
         },
@@ -2061,6 +2133,7 @@ export const activate: CommandSpec = {
           `${harness.name} (${harness.slug}) is not ready to activate:`,
           ...blockers.map((b) => `  - ${checkLine(b)}`),
           ...readinessText(checks, warnings),
+          previewRouteText(harness, routeEffect),
           ...(pair ? [`hint: ${pair.hint}`] : []),
           ...(secretsLine ? [secretsLine] : []),
           "Resolve these (often: a passing test run), then activate again. Forcing past the gate is a person's decision in the Admin.",
@@ -2069,9 +2142,9 @@ export const activate: CommandSpec = {
       };
     }
     const reach = await reachOf(ctx, harness);
-    const live = Boolean(reach.channels) || Boolean(reach.triggers?.length) || reach.channels === null || reach.triggers === null;
+    const needsPerson = Boolean(reach.channels) || Boolean(reach.triggers?.length) || reach.channels === null || reach.triggers === null || routeEffect.takes_default_route !== false;
     let defaultConfirmed = false;
-    if (live) {
+    if (needsPerson) {
       // With --make-default, one preview and one token cover the activation and the default route.
       const route = make ? await readDefaultRoute(ctx).catch(() => undefined) : undefined;
       const change = {
@@ -2079,12 +2152,13 @@ export const activate: CommandSpec = {
         activate: true,
         channels: reach.channels,
         triggers: reach.triggers?.map((t) => t.id) ?? null,
+        ...routeEffect,
         ...(make ? { make_default: true, from: route?.current?.id ?? null } : {}),
       };
       const words = ["activate", "--harness", harness.slug, ...(make ? ["--make-default"] : []), "--confirm"];
       const gate = await confirmation(ctx, input, "activate", change, {
         person: {
-          what: [reachText(harness, reach), ...(make && route && route.current?.id !== harness.id ? [defaultChangeLine(harness, route)] : [])].join("\n"),
+          what: [reachText(harness, reach), previewRouteText(harness, routeEffect), ...(make && route && route.current?.id !== harness.id ? [defaultChangeLine(harness, route)] : [])].join("\n"),
           words,
         },
       });
@@ -2100,12 +2174,14 @@ export const activate: CommandSpec = {
             checks,
             warnings,
             readiness,
+            ...routeEffect,
             ...(make ? { default_route: { current: route?.current ? { id: route.current.id, slug: route.current.slug, name: route.current.name } : null, known: route?.known ?? false } } : {}),
             confirm,
             ...gate.fields,
           },
           text: [
             reachText(harness, reach),
+            previewRouteText(harness, routeEffect),
             ...routeLine,
             ...readinessText(checks, warnings),
             gate.where,
@@ -2117,14 +2193,15 @@ export const activate: CommandSpec = {
       }
       defaultConfirmed = make;
     }
-    const activated = await callStable<Harness>(ctx, "POST", "/api/v1/harnesses/{harness_id}/activate", "activating solutions", {
+    const activated = await callStable<ActivationResponse>(ctx, "POST", "/api/v1/harnesses/{harness_id}/activate", "activating solutions", {
       params: { harness_id: [harness.id] },
       body: { force: false },
     });
     const route = await defaultRouteAfterActivation(ctx, activated, input, defaultConfirmed);
+    const actualEffect = actualRouteEffect(activated);
     return {
-      data: { activated: true, harness: activated, ...(live ? { reach } : {}), checks, warnings, readiness, ...route.data },
-      text: [`Activated ${activated.name} (${activated.slug}); status ${activated.status}.`, ...readinessText(checks, warnings), ...route.lines].join("\n"),
+      data: { activated: true, harness: activated, reach, checks, warnings, readiness, ...routeEffect, ...actualEffect, ...route.data },
+      text: [`Activated ${activated.name} (${activated.slug}); status ${activated.status}.`, activationRouteText(activated, actualEffect.took_default_route, actualEffect.took_default_route_from, actualEffect.took_default_route_from_name, true), ...readinessText(checks, warnings), ...route.lines].join("\n"),
       // Activated, but the default route the person asked for did not change.
       ...(route.failed ? { exitCode: ExitCode.failure } : route.exitCode ? { exitCode: route.exitCode } : {}),
     };

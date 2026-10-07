@@ -19,6 +19,16 @@ CLI, the skills and the plugin.
   Includes a [connect-a-database walkthrough](docs/connect-a-database.md),
   connection skill guidance and compatibility with older routes/principals.
 
+- Database query authoring from package files (#169): `pull`, `validate` and
+  `apply` retain published query definitions, and a personal access token
+  holding `database_connectors.manage` may apply them. Query writes always
+  need the person's approval, including on drafts; MCP asks the person and
+  an agent shell prints their terminal command. After approval, the kit sends
+  the instance's nonce for that exact import or API query mutation. Unchanged
+  definitions remain unguarded, and refused credentials get the instance's
+  permission blocker and an actionable next step. Older metadata keeps its
+  fallbacks. Connection commands and write-query semantics are separate.
+
 - `chat --as-chat-user <id>` and `test run --as-chat-user <id>` read
   knowledge and identity-bound database queries as a selected Chat User
   (#172). Test overrides apply to each run and never edit saved suites.
@@ -41,6 +51,17 @@ CLI, the skills and the plugin.
   missing manage permission before offering a preview or confirmation. An
   older principal that omits permissions still leaves the final decision to
   the instance (#170).
+
+- `activate` reads a null single-read `channel_count` from the matching
+  published solution-list row (#174). Unknown reach still needs a person,
+  as does a true or omitted readiness `takes_default_route` flag, including
+  assigning an unassigned route without `--make-default`. Known no reach
+  activates without confirmation only with explicit false. Preview and
+  `status` explain the route effect; success reports the actual
+  `took_default_route` fields because readiness reserves no state. Schema
+  defaults never replace omitted response flags, and person confirmation,
+  server confirmation ids, rights checks and the force refusal remain.
+
 - `apply` still previews with an API key when the instance reserves imports
   for a person, but offers no confirm command and names the Admin or the
   person's own personal access token instead (#173). `apply --confirm`
