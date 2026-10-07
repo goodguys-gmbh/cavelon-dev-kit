@@ -7,6 +7,11 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+## [0.1.14] - 2026-10-07
+
+Database connection and query authoring, Chat User readers, workflow query
+nodes, accurate activation previews and reliable Windows reinstalls.
+
 ### Added
 
 - Database connection management (#170): `db connections create`, `update`,
