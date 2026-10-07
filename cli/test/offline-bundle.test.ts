@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,8 +13,9 @@ import { SUPPORTED_CONTRACTS } from "../src/version.js";
 /**
  * The offline bundle (docs/offline-bundle.md): the same inputs give the same
  * tarball, its manifest validates against the schema in contracts/ and lists
- * every file it carries, its MCP entries start the cavelon on the PATH, and
- * install.sh installs from its bin folder without a network.
+ * every file it carries, its MCP entries and plugin packages start the
+ * cavelon on the PATH, and install.sh installs from its bin folder without a
+ * network.
  */
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -74,13 +75,18 @@ function readTar(gz: Buffer): TarEntry[] {
 
 const sha256 = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 
+/** A copy of what the builder reads from the repository, to change without touching it. */
+function sourceTree(name: string): string {
+  const dir = path.join(temp, name);
+  for (const p of ["plugin", ".claude-plugin", ".agents", "install.sh", "install.ps1", "LICENSE", "packaging/bundle/README.md"]) {
+    cpSync(path.join(ROOT, p), path.join(dir, p), { recursive: true });
+  }
+  return dir;
+}
+
 describe("the offline bundle", () => {
   const bins = executables("release");
-  const packages = path.join(temp, "plugin-packages");
-  mkdirSync(path.join(packages, "gemini"), { recursive: true });
-  writeFileSync(path.join(packages, "cavelon-cursor.zip"), "a cursor package");
-  writeFileSync(path.join(packages, "gemini", "gemini-extension.json"), "{}\n");
-  const options = { version: VERSION, contracts: SUPPORTED_CONTRACTS, executablesDir: bins, pluginPackagesDir: packages };
+  const options = { version: VERSION, contracts: SUPPORTED_CONTRACTS, executablesDir: bins };
   const bundle = buildBundle(options);
   const entries = readTar(bundle.tarball);
   const top = `cavelon-bundle-${VERSION}`;
@@ -150,7 +156,14 @@ describe("the offline bundle", () => {
     for (const p of ["plugin/.claude-plugin/plugin.json", "plugin/.codex-plugin/plugin.json", ".claude-plugin/marketplace.json", ".agents/plugins/marketplace.json", "LICENSE", "README.md"]) {
       expect(paths).toContain(p);
     }
-    expect(paths).toEqual(expect.arrayContaining(["plugin-packages/cavelon-cursor.zip", "plugin-packages/gemini/gemini-extension.json"]));
+    expect(paths.filter((p) => p.startsWith("plugin-packages/"))).toEqual([
+      "plugin-packages/cavelon-agent-plugin-windows.tar.gz",
+      "plugin-packages/cavelon-agent-plugin.tar.gz",
+      "plugin-packages/cavelon-marketplace.tar.gz",
+      "plugin-packages/darwin.cavelon-gemini-extension.tar.gz",
+      "plugin-packages/linux.cavelon-gemini-extension.tar.gz",
+      "plugin-packages/win32.cavelon-gemini-extension.tar.gz",
+    ]);
     const sums = file("bin/checksums.txt")!.content.toString("utf8");
     for (const name of [...PLATFORMS.map(executableName), "install.sh", "install.ps1"]) {
       expect(sums).toContain(`${sha256(file(`bin/${name}`)!.content)}  ${name}\n`);
@@ -165,10 +178,22 @@ describe("the offline bundle", () => {
     expect(bundle.manifest.mcp).toEqual({ plugin: "plugin/.mcp.json", entry: "mcp/cavelon.mcp.json" });
   });
 
-  it("builds without plugin packages", () => {
-    const none = buildBundle({ ...options, pluginPackagesDir: path.join(temp, "no-such-folder") });
-    expect(none.manifest.files.some((f) => f.path.startsWith("plugin-packages/"))).toBe(false);
-    expect(validate(none.manifest)).toBe(true);
+  // The release's own packages fall back to npx, which has no registry offline.
+  it("carries the plugin packages that start the cavelon on the PATH, as render.mjs --server installed writes them", () => {
+    const rendered = path.join(temp, "rendered");
+    const run = spawnSync(process.execPath, ["packaging/render.mjs", "plugins", "--server", "installed", "--out", rendered], { cwd: ROOT, encoding: "utf8" });
+    expect(run.status, run.stderr).toBe(0);
+    const installed = { command: "cavelon", args: ["mcp"], env: { CAVELON_PLUGIN_VERSION: VERSION } };
+    for (const name of ["cavelon-agent-plugin.tar.gz", "cavelon-agent-plugin-windows.tar.gz", "linux.cavelon-gemini-extension.tar.gz", "win32.cavelon-gemini-extension.tar.gz", "cavelon-marketplace.tar.gz"]) {
+      const carried = file(`plugin-packages/${name}`)!.content;
+      expect(carried.equals(readFileSync(path.join(rendered, name))), name).toBe(true);
+      const inner = readTar(carried);
+      const read = (n: string) => JSON.parse(inner.find((e) => e.name === n)!.content.toString("utf8"));
+      if (name.startsWith("cavelon-agent-plugin")) expect(read("mcp.json").mcpServers.cavelon, name).toMatchObject({ type: "stdio", ...installed });
+      else if (name.includes("gemini")) expect(read("gemini-extension.json").mcpServers.cavelon, name).toEqual(installed);
+      else expect(read("plugin/.mcp.json").mcpServers.cavelon, name).toEqual(installed);
+      for (const e of inner.filter((x) => x.name.endsWith(".json"))) expect(e.content.toString("utf8"), `${name}: ${e.name}`).not.toMatch(/\bnpx\b/);
+    }
   });
 
   it("refuses a missing platform unless told, and a name it cannot carry", () => {
@@ -177,18 +202,16 @@ describe("the offline bundle", () => {
     expect(buildBundle({ ...options, executablesDir: some, allowMissingExecutables: true }).manifest.executables).toEqual([
       { platform: "linux-x64", path: "bin/cavelon-linux-x64" },
     ]);
-    const odd = path.join(temp, "odd-packages");
-    mkdirSync(odd, { recursive: true });
-    writeFileSync(path.join(odd, "a name with spaces.zip"), "x");
-    expect(() => buildBundle({ ...options, pluginPackagesDir: odd })).toThrow(/is not a name the bundle takes/);
+    const odd = sourceTree("odd");
+    writeFileSync(path.join(odd, "plugin", "skills", "a name with spaces.md"), "x");
+    expect(() => buildBundle({ ...options, root: odd })).toThrow(/is not a name the bundle takes/);
     expect(() => buildBundle({ ...options, version: "1.2" })).toThrow(/not a release version/);
   });
 
-  it.skipIf(process.platform === "win32")("refuses a symbolic link among the plugin packages", () => {
-    const linked = path.join(temp, "linked-packages");
-    mkdirSync(linked, { recursive: true });
-    symlinkSync("/etc/hostname", path.join(linked, "link.zip"));
-    expect(() => buildBundle({ ...options, pluginPackagesDir: linked })).toThrow(/symbolic link/);
+  it.skipIf(process.platform === "win32")("refuses a symbolic link in the plugin", () => {
+    const linked = sourceTree("linked");
+    symlinkSync("/etc/hostname", path.join(linked, "plugin", "skills", "link.md"));
+    expect(() => buildBundle({ ...options, root: linked })).toThrow(/symbolic link/);
   });
 
   it("has a schema that refuses a path out of the bundle and an unknown platform", () => {

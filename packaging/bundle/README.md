@@ -19,7 +19,7 @@ in the dev-kit's repository.
 | `.claude-plugin/`, `.agents/plugins/` | the marketplaces, so this folder is a local marketplace |
 | `skills/` | the skills, for agents without a plugin |
 | `mcp/cavelon.mcp.json` | the MCP entry for agents without a plugin |
-| `plugin-packages/` | the plugin packages for other clients, when the release built them |
+| `plugin-packages/` | the plugin packages for other clients; their MCP entry is `cavelon mcp`, never npx |
 
 ## Install
 

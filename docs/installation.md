@@ -255,7 +255,8 @@ the alias above need none of this.
 
 Where your machine reaches neither GitHub, npm nor PyPI, install from the
 release's offline bundle, `cavelon-bundle-X.Y.Z.tar.gz`: every platform's
-executable, the plugin, the skills and a manifest of their SHA-256, signed by
+executable, the plugin, the skills, the plugin packages for the other clients
+(with the MCP entry `cavelon mcp`) and a manifest of their SHA-256, signed by
 this repository's release workflow with Sigstore. Someone with internet access
 downloads it with its signature (`cavelon-bundle-X.Y.Z.tar.gz.sigstore.json`)
 from the release and verifies it with [cosign](https://docs.sigstore.dev/cosign/system_config/installation/):

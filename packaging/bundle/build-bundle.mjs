@@ -5,14 +5,14 @@
 // `npm run build` in cli/ (the supported contract versions come from
 // cli/dist/version.js):
 //
-//   node packaging/bundle/build-bundle.mjs --executables release [--plugin-packages plugin-packages]
-//     [--commit <sha>] [--allow-missing-executables]
+//   node packaging/bundle/build-bundle.mjs --executables release [--commit <sha>] [--allow-missing-executables]
 //
 // --executables is a folder holding the release's standalone executables
 // (cavelon-<os>-<arch>[.exe]); every platform must be there unless
 // --allow-missing-executables is given, for a trial build on one machine.
-// --plugin-packages is a folder of plugin packages; every file below it goes
-// into the bundle, and a missing or empty folder is fine.
+// The plugin packages for the other clients are rendered here, in the variant
+// `node packaging/render.mjs plugins --server installed` writes: the release's
+// own packages fall back to npx, which cannot reach the registry offline.
 //
 // It writes packaging-out/bundle/cavelon-bundle-<version>.tar.gz and, beside
 // it, a copy of the manifest (cavelon-bundle-<version>.manifest.json) that the
@@ -21,11 +21,13 @@
 // The same inputs give the same bytes: the entries are sorted, carry one fixed
 // time and no owner, and the gzip header holds no time or system.
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { constants, gzipSync } from "node:zlib";
+import { renderPlugins } from "../plugins.mjs";
 
 export const REPOSITORY = "goodguys-gmbh/cavelon-dev-kit";
 export const BUNDLE_FORMAT = 1;
@@ -142,17 +144,32 @@ function addPlugin(set, root, version) {
 }
 
 /**
+ * The plugin packages for the other clients, with the MCP entry `cavelon mcp`
+ * and the release's file names. renderPlugins also writes each package
+ * unpacked; only the archives go into the bundle.
+ */
+function addPluginPackages(set, root, version) {
+  const out = mkdtempSync(path.join(os.tmpdir(), "cavelon-bundle-plugins-"));
+  try {
+    for (const file of renderPlugins({ root, version, server: "installed", out }).toSorted(byBytes)) {
+      set.add(`plugin-packages/${checkedName(path.basename(file), "plugin packages")}`, readFileSync(file));
+    }
+  } finally {
+    rmSync(out, { recursive: true, force: true });
+  }
+}
+
+/**
  * Build the bundle in memory: { name, tarball, manifest, manifestText }.
  * `contracts` is the kit's SUPPORTED_CONTRACTS; `executablesDir` holds
  * cavelon-<platform>[.exe].
  */
-export function buildBundle({ root = ROOT, version, contracts, executablesDir, pluginPackagesDir, commit, allowMissingExecutables = false }) {
+export function buildBundle({ root = ROOT, version, contracts, executablesDir, commit, allowMissingExecutables = false }) {
   checkOptions({ version, contracts, commit });
   const set = new FileSet();
   const executables = addExecutables(set, root, executablesDir, allowMissingExecutables);
   addPlugin(set, root, version);
-  // Whatever plugin packages the release built for other clients.
-  if (pluginPackagesDir && existsSync(pluginPackagesDir)) set.addTree(pluginPackagesDir, "plugin-packages", "plugin packages");
+  addPluginPackages(set, root, version);
   set.add("README.md", readFileSync(path.join(root, "packaging", "bundle", "README.md")));
   set.add("LICENSE", readFileSync(path.join(root, "LICENSE")));
   const files = set.files;
@@ -265,13 +282,12 @@ async function main() {
   const { values } = parseArgs({
     options: {
       executables: { type: "string" },
-      "plugin-packages": { type: "string" },
       commit: { type: "string" },
       "allow-missing-executables": { type: "boolean", default: false },
     },
   });
   if (!values.executables) {
-    throw new Error("Usage, from the repository's root: node packaging/bundle/build-bundle.mjs --executables <dir> [--plugin-packages <dir>] [--commit <sha>] [--allow-missing-executables]");
+    throw new Error("Usage, from the repository's root: node packaging/bundle/build-bundle.mjs --executables <dir> [--commit <sha>] [--allow-missing-executables]");
   }
   const versionModule = path.join(ROOT, "cli", "dist", "version.js");
   if (!existsSync(versionModule)) throw new Error("Run `npm run build` in cli/ first: cli/dist/version.js is missing.");
@@ -283,7 +299,6 @@ async function main() {
     version,
     contracts: SUPPORTED_CONTRACTS,
     executablesDir: path.resolve(values.executables),
-    pluginPackagesDir: values["plugin-packages"] && path.resolve(values["plugin-packages"]),
     commit: values.commit,
     allowMissingExecutables: values["allow-missing-executables"],
   });

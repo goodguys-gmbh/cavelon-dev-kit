@@ -28,7 +28,6 @@ export declare function buildBundle(options: {
   version: string;
   contracts: { readonly api_versions: readonly string[]; readonly package_versions: readonly string[] };
   executablesDir: string;
-  pluginPackagesDir?: string;
   commit?: string;
   allowMissingExecutables?: boolean;
 }): { name: string; tarball: Buffer; manifest: BundleManifest; manifestText: string };

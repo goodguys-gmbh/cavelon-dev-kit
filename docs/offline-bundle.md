@@ -8,7 +8,7 @@ matches its own version. Then developers install `cavelon`, the plugin and the
 skills from it without a network.
 
 This page describes the bundle's format, how to verify it, and how to install
-from it. The bundle exists for releases after 0.1.11.
+from it. The bundle exists for releases after 0.1.12.
 
 ## The release files
 
@@ -40,7 +40,7 @@ Everything is below one folder, `cavelon-bundle-<version>/`:
 | `.claude-plugin/marketplace.json`, `.agents/plugins/marketplace.json` | the marketplaces of Claude Code and Codex, so the bundle's folder is a local marketplace |
 | `skills/` | the skills, for agents without a plugin |
 | `mcp/cavelon.mcp.json` | the offline MCP entry for agents without a plugin |
-| `plugin-packages/` | the plugin packages the release built for other clients, if any |
+| `plugin-packages/` | the plugin packages for the other clients, in their offline variant ([The plugin packages](#the-plugin-packages)) |
 | `README.md`, `LICENSE` | a short guide, and the license (Apache-2.0) |
 
 **The offline MCP entry.** The plugin you install from GitHub starts the
@@ -63,6 +63,27 @@ the `cavelon` on the PATH, and turn off the update check
 
 So install `cavelon` from `bin/` before the plugin.
 
+### The plugin packages
+
+`plugin-packages/` holds the [plugin packages](install/README.md#the-packages)
+for Cursor, VS Code with GitHub Copilot, Copilot CLI, Kiro and Gemini CLI, and
+the marketplace for Claude Code and Codex, under the same file names as the
+release's own: `cavelon-agent-plugin.tar.gz`,
+`cavelon-agent-plugin-windows.tar.gz`, `darwin.`, `linux.` and
+`win32.cavelon-gemini-extension.tar.gz`, and `cavelon-marketplace.tar.gz`.
+
+They are the **offline variant**, which
+`node packaging/render.mjs plugins --server installed` renders: their MCP entry
+is `cavelon mcp` on every platform, the `cavelon` on the PATH. The packages
+attached to the release start the same `cavelon` when there is one and
+otherwise fall back to `npx -y @cavelon/cli@<minor> mcp` (on Windows always
+`cmd /c npx …`), which needs the npm registry. So a package from the bundle
+and the release's package of the same name differ in their MCP entry, and in
+their SHA-256: check a package from the bundle against `manifest.json`, not
+against the release's `checksums-plugins.txt`. Unlike the bundle's `plugin/`,
+their entry does not turn off the update check; without a network it gives up
+after a moment and says nothing.
+
 ## The manifest
 
 `manifest.json` is the bundle's table of contents. Its schema is
@@ -73,7 +94,7 @@ So install `cavelon` from `bin/` before the plugin.
 {
   "format": 1,
   "name": "cavelon-bundle",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "repository": "goodguys-gmbh/cavelon-dev-kit",
   "commit": "<the commit the release was built from>",
   "instance_contracts": {
@@ -225,8 +246,12 @@ the entry in `mcp/cavelon.mcp.json` into its MCP configuration; the
 where each agent keeps them. `cavelon init --agents` writes both into a
 solution repository, as from any other install.
 
-**The plugin packages** in `plugin-packages/`, when the release built them,
-install as each client's page says for a package file.
+**The plugin packages** in `plugin-packages/` install as each client's page in
+[docs/install/](install/README.md) says for a downloaded package: unpack the
+one for your client and system into a folder and install that folder. Their
+MCP entry is `cavelon mcp`, so install `cavelon` from `bin/` first.
+`cavelon-marketplace.tar.gz` holds the same plugin as the bundle's own folder,
+which already is a marketplace.
 
 ### Updating
 

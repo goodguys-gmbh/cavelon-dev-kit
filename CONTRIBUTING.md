@@ -104,8 +104,9 @@ say in the changelog what users of the old package do.
 Each release also carries `cavelon-bundle-<version>.tar.gz`
 ([docs/offline-bundle.md](docs/offline-bundle.md)), built by
 `packaging/bundle/build-bundle.mjs` from the release's executables and signed
-by the release workflow. To build one from your tree, with the executable for
-your system:
+by the release workflow. The builder renders the plugin packages it carries
+itself, in the offline variant (`plugins.mjs` with `--server installed`). To
+build one from your tree, with the executable for your system:
 
 ```bash
 cd cli && npm run build && npm run build:executable && cd ..
