@@ -637,7 +637,7 @@
       "type": "object"
     },
     "PackageDatabaseQuery": {
-      "description": "A query's definition as a package carries it on its ``database_query`` tool.\n\nThe tool's ``slug`` is the function name the model calls, its ``name`` the\nlabel in the Admin, and its ``description`` what the model reads to decide\nwhen to call it: say what the query returns and for which question. The\ntool's ``params_json_schema`` and ``default_config`` are derived from this\ndefinition on import; the package's copies are ignored. Creating or\nchanging a query on import needs a superadmin in the Admin; a personal\naccess token's import passes only while the queries already match.",
+      "description": "A query's definition as a package carries it on its ``database_query`` tool.\n\nThe tool's ``slug`` is the function name the model calls, its ``name`` the\nlabel in the Admin, and its ``description`` what the model reads to decide\nwhen to call it: say what the query returns and for which question. The\ntool's ``params_json_schema`` and ``default_config`` are derived from this\ndefinition on import; the package's copies are ignored. Creating or\nchanging a query on import needs ``database_connectors.manage`` in the\ntenant (its Owner, or a superadmin), from the Admin or a personal access\ntoken; anyone else's import passes only while the queries already match.",
       "properties": {
         "connection": {
           "$ref": "#/$defs/PackageDatabaseConnectionRef",

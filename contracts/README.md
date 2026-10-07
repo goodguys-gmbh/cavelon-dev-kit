@@ -118,6 +118,20 @@ The tests switch features on in the fake server where a command needs them
 (personal access tokens, the operations API, Sandboxes, Masterloop, archive
 uploads, the database connector); the snapshot keeps the defaults.
 
+On 2026-10-07 the query authoring contracts were refreshed from the published
+development build, without running an instance. Its OpenAPI generator adds
+the query create, update and delete operations, their request and response
+schemas, and their `x-cavelon-confirmation` marks and 428 responses. The import's
+confirmation condition now also names `database_queries.would_write`.
+The functions behind `/meta/capabilities`, `/meta/package-schema` and
+`/meta/error-catalog` supply only the connector's query-authoring offer, the
+package query's permission description, and `database_query_needs_superadmin`:
+the tenant Owner's `database_connectors.manage` allows a personal access token
+to write queries after the person's approval. Unrelated snapshots stay as
+recorded; connector and token defaults stay off and `may_write_queries` stays
+false. The tests also play an instance without the new report or confirmation
+metadata.
+
 | File | Source |
 |---|---|
 | `openapi.json` | `GET /openapi.json`, trimmed by `cli/scripts/trim-openapi.mjs` to the operations listed in [`kit-operations.json`](kit-operations.json) and the components they reference, without prose descriptions |

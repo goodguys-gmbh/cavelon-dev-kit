@@ -50,6 +50,7 @@ export interface FakeQuery {
   max_result_chars: number;
   allows_anonymous: boolean;
   version: number;
+  is_enabled?: boolean;
   /** What a test run returns: columns and rows, or an error code; a notice where the code alone does not say what happened. */
   result?: ({ columns: string[]; rows: unknown[][] } | { error_code: string }) & { notice?: string };
   /** The instance's refusal of a test run before it starts (409), as a stored-procedure query gets it. */
@@ -166,7 +167,7 @@ function queryView(state: DatabaseState, q: FakeQuery) {
     max_rows: q.max_rows,
     max_result_chars: q.max_result_chars,
     allows_anonymous: q.allows_anonymous,
-    is_enabled: true,
+    is_enabled: q.is_enabled ?? true,
     version: q.version,
     created_by_user_id: null,
     updated_by_user_id: null,
@@ -257,6 +258,19 @@ export function handleDatabase(state: DatabaseState, rc: DatabaseRoute): boolean
     );
     return true;
   }
+  if (rc.path === "/api/v1/database-connectors/queries" && rc.method === "POST") {
+    const body = rc.json as Partial<FakeQuery>;
+    const query: FakeQuery = {
+      id: randomUUID(), tenant_id: rc.tenantId, connection_id: String(body.connection_id),
+      slug: String(body.slug), name: String(body.name), description: body.description ?? "",
+      sql_text: String(body.sql_text), parameters: body.parameters ?? [], max_rows: body.max_rows ?? 50,
+      max_result_chars: body.max_result_chars ?? 8000, allows_anonymous: body.allows_anonymous ?? false,
+      is_enabled: body.is_enabled ?? true, version: 1,
+    };
+    state.queries.push(query);
+    rc.send(201, queryView(state, query));
+    return true;
+  }
   m = /^\/api\/v1\/database-connectors\/queries\/([^/]+)(\/runs|\/test-run)?$/.exec(rc.path);
   if (m) {
     const query = own(state.queries).find((q) => q.id === m![1]);
@@ -266,6 +280,16 @@ export function handleDatabase(state: DatabaseState, rc: DatabaseRoute): boolean
     }
     if (!m[2] && rc.method === "GET") {
       rc.send(200, queryView(state, query));
+      return true;
+    }
+    if (!m[2] && rc.method === "PATCH") {
+      Object.assign(query, rc.json, { version: query.version + 1 });
+      rc.send(200, queryView(state, query));
+      return true;
+    }
+    if (!m[2] && rc.method === "DELETE") {
+      state.queries.splice(state.queries.indexOf(query), 1);
+      rc.send(200, { id: query.id, tool_definition_id: query.id, removed_references: {} });
       return true;
     }
     if (m[2] === "/runs" && rc.method === "GET") {
@@ -412,7 +436,7 @@ export function queryBlockers(state: DatabaseState, tenantId: string, pkg: Recor
     if (!mayWrite) {
       out.push({
         code: "database_query_needs_superadmin",
-        message: `This import would ${existing ? "change" : "create"} the database query '${slug}', which only a superadmin in Tenant mode can do, in the Admin.`,
+        message: `This import would ${existing ? "change" : "create"} the database query '${slug}', which needs database_connectors.manage in this tenant (the tenant Owner or a superadmin in Tenant mode).`,
         path: `tools[${index}].database_query`,
         hint: hint("database_query_needs_superadmin"),
       });
@@ -421,7 +445,16 @@ export function queryBlockers(state: DatabaseState, tenantId: string, pkg: Recor
   return out;
 }
 
-/** A superadmin imports the package in the Admin: the tenant's queries become the package's. */
+/** The query writes a preview publishes; an unchanged definition or a tool referring to the saved query writes none. */
+export function queryWrites(state: DatabaseState, tenantId: string, pkg: Record<string, unknown>): Array<{ slug: string; action: string }> {
+  return (Array.isArray(pkg.tools) ? pkg.tools : []).flatMap((tool) => {
+    if (!isObject(tool) || tool.tool_type !== "database_query" || !isObject(tool.database_query)) return [];
+    const existing = state.queries.find((q) => q.tenant_id === tenantId && q.slug === tool.slug);
+    return existing && matches(state, tool, existing) ? [] : [{ slug: String(tool.slug), action: existing ? "change" : "create" }];
+  });
+}
+
+/** A caller holding the manage gate imports: the tenant's queries become the package's. */
 export function adminImport(state: DatabaseState, tenantId: string, pkg: Record<string, unknown>): void {
   for (const tool of Array.isArray(pkg.tools) ? pkg.tools : []) {
     if (!isObject(tool) || tool.tool_type !== "database_query" || !isObject(tool.database_query)) continue;
@@ -429,6 +462,7 @@ export function adminImport(state: DatabaseState, tenantId: string, pkg: Record<
     const connection = state.connections.find((c) => c.tenant_id === tenantId && isObject(definition.connection) && c.name === definition.connection.name);
     if (!connection) throw new Error(`no connection for ${String(tool.slug)}`);
     const existing = state.queries.find((q) => q.tenant_id === tenantId && q.slug === tool.slug);
+    if (existing && matches(state, tool, existing)) continue;
     const fields = {
       name: String(tool.name),
       description: String(tool.description ?? tool.name),

@@ -355,15 +355,25 @@ says who does what on the instance.
     allows_anonymous: false
 ```
 
-- **Who writes a query.** Only a superadmin of the instance creates or changes
-  a query, in the Admin; your token never does. The query's SQL, parameters,
-  limits and `allows_anonymous`, and the tool's own `slug`, `name` and
+- **Who writes a query.** A personal access token whose principal holds
+  `database_connectors.manage` may create or change a query with `cavelon
+  apply`: the tenant Owner (or Admin) and a superadmin in Tenant mode hold
+  that permission. Read `cavelon whoami` and the instance's
+  `database_connector.may_write_queries`; the instance decides. The query's
+  SQL, parameters, limits and `allows_anonymous`, and the tool's own `slug`, `name` and
   `description`, are all part of the query. `cavelon validate` warns
   (`database_query_changed`) for each query tool that differs from the last
-  pull or apply, and the import preview blocks it
-  (`database_query_needs_superadmin`), which stops the whole apply. Propose a
-  query change to the person as a diff of `package/tools.yaml`; they hand it
-  to a superadmin, who imports the package in the Admin. What you may change
+  pull or apply. Edit the definition in `package/tools.yaml`, validate it and
+  preview with `cavelon apply`. If the preview's
+  `database_queries.would_write` is nonempty, the person approves even for a
+  draft: over MCP the client asks them when you confirm the preview id; from
+  an agent's shell they run the printed confirm in their own terminal. Only
+  after their yes does cavelon request the instance's confirmation id and
+  send it with that exact import. An unchanged definition needs no query
+  confirmation. A credential without manage is blocked with
+  `database_query_needs_superadmin`, stopping the whole import; its hint
+  names who this instance permits (older instances can still require a
+  superadmin in the Admin). What you may change
   freely is how agents and skills use the tool: the assignment
   (`tool_assignments` with `config_overrides` `name`, `description` or
   `max_calls`) is no query change. `params_json_schema` and `default_config`

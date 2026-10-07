@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AddressInfo } from "node:net";
 import { handleLongRunning, longRunningState, type LiveView, type LongRunningState } from "./fake-long-running.js";
-import { databaseState, exportQueries, handleDatabase, queryBlockers, type DatabaseState } from "./fake-database.js";
+import { adminImport, databaseState, exportQueries, handleDatabase, queryBlockers, queryWrites, type DatabaseState } from "./fake-database.js";
 import { tenantWideSections } from "../src/package-files.js";
 import type { PackageSchema } from "../src/contracts.js";
 
@@ -604,7 +604,7 @@ const KNOWLEDGE_BASE_KEY_PERMISSIONS = ["knowledge_bases.manage", "knowledge_bas
 
 /** A tenant owner's permissions as the fake knows them; a recent instance adds `harnesses.activate`. */
 function ownerPermissions(recent: boolean): string[] {
-  return [...new Set([...tenantPermissions(), ...WORKFLOW_PERMISSIONS, ...(recent ? ["harnesses.activate"] : [])])].sort();
+  return [...new Set([...tenantPermissions(), ...WORKFLOW_PERMISSIONS, "database_connectors.manage", ...(recent ? ["harnesses.activate"] : [])])].sort();
 }
 
 /** What /meta/principal publishes as the request's permissions. */
@@ -884,7 +884,7 @@ export async function startFakeServer(): Promise<FakeServer> {
 
     if (p === "/api/v1/meta/capabilities") {
       if (!needTenant()) return;
-      return send(res, 200, capabilitiesFor(tenantId!));
+      return send(res, 200, capabilitiesFor(tenantId!, info));
     }
     if (p === "/api/v1/meta/error-catalog") {
       if (!needTenant()) return;
@@ -1019,8 +1019,11 @@ export async function startFakeServer(): Promise<FakeServer> {
     const tid = tenantId!;
 
     if (p === "/api/v1/confirmations" && method === "POST" && state.confirmations) return issueConfirmation(res, token!, info, tid, body.json);
+    const queryMutation = method === "POST" && p === "/api/v1/database-connectors/queries" ||
+      ["PATCH", "DELETE"].includes(method) && /^\/api\/v1\/database-connectors\/queries\/[^/]+$/.test(p);
+    if (queryMutation && !mayWriteQueries(info, tid)) return send(res, 403, { detail: "Missing permission: database_connectors.manage" });
     // A personal access token's guarded change carries its confirmation, checked before the change and used once it succeeds.
-    const guarded = state.confirmations?.enforced && info.kind === "pat" ? guardedChange(method, p, tid, body.json) : undefined;
+    const guarded = state.confirmations?.enforced && info.kind === "pat" ? guardedChange(method, p, tid, body.json, info) : undefined;
     if (guarded) {
       const refused = checkConfirmation(req, res, url, token!, tid, method, body.json);
       if (refused) return send(res, 428, refused);
@@ -1291,7 +1294,7 @@ export async function startFakeServer(): Promise<FakeServer> {
       const config = configFor(tid);
       const pkg = state.exportFillsDefaults ? withSchemaDefaults(packageSchema(), config.pkg) : structuredClone(config.pkg);
       pkg.manifest = { ...(pkg.manifest as object), exported_at: now(), scope };
-      // A query tool's definition comes from the query, which only a superadmin writes.
+      // A query tool's definition comes from its saved query, not from the tool's derived fields.
       exportQueries(state.db, tid, pkg);
       // A recent instance's solution export leaves what the whole tenant shares out unless asked.
       if (state.tenantWideFlag && scope === "agent_graph" && url.searchParams.get("include_tenant_wide") !== "true") {
@@ -1337,10 +1340,10 @@ export async function startFakeServer(): Promise<FakeServer> {
       const previewId = `pv_${createHash("sha256").update(`${tid}:${config.version}:${canonical(request)}`).digest("hex").slice(0, 32)}`;
       const ignored = Object.keys(b.package).filter((k) => !(k in schema.properties));
       // The query gate: what a credential that may not write queries cannot import, coded as the instance codes it.
-      const offer = (capabilitiesFor(tid) as { database_connector?: { may_write_queries?: boolean } }).database_connector;
       const catalogHint = (code: string) =>
         (JSON.parse(readContract("meta-error-catalog.json")) as { api_error_codes: Array<{ code: string; hint: string }> }).api_error_codes.find((e) => e.code === code)?.hint ?? "";
-      const queryBlocked = queryBlockers(state.db, tid, b.package, offer?.may_write_queries === true, catalogHint);
+      const queryBlocked = queryBlockers(state.db, tid, b.package, mayWriteQueries(info, tid), catalogHint);
+      const writes = queryWrites(state.db, tid, b.package);
       const blockers = [...state.previewBlockers, ...queryBlocked.map((q) => q.message)];
       const preview = {
         ready: blockers.length === 0,
@@ -1362,6 +1365,7 @@ export async function startFakeServer(): Promise<FakeServer> {
         loop_budgets: [],
         target_needs: { ...valueNeeds(tid, b.package), oauth_grants: [], runtime_bindings: [], trigger_identities: [] },
         ...tenantWide,
+        ...(writes.length ? { database_queries: { would_write: writes } } : {}),
         ...state.previewExtras,
       };
       if (p.endsWith("/preview")) return send(res, 200, { ...preview, preview_id: previewId });
@@ -1410,6 +1414,7 @@ export async function startFakeServer(): Promise<FakeServer> {
       const kept = Object.fromEntries(Object.entries(b.package).filter(([k]) => k in schema.properties && !sharedKept.includes(k) && !leftOut.includes(k)));
       for (const section of sharedKept) if (section in config.pkg) kept[section] = config.pkg[section];
       state.configs.set(tid, { pkg: kept, version: config.version + 1 });
+      adminImport(state.db, tid, b.package);
       // Like the instance: an import adds the names a package declares, and never forgets one.
       const values = valuesFor(tid);
       for (const kind of ["variables", "secrets"] as const) {
@@ -1485,7 +1490,9 @@ export async function startFakeServer(): Promise<FakeServer> {
    * the operation, when its condition holds; undefined for any other request
    * and for one whose condition does not hold (a draft nothing reaches).
    */
-  function guardedChange(method: string, p: string, tid: string, json: unknown): string | undefined {
+  function guardedChange(method: string, p: string, tid: string, json: unknown, info: TokenInfo): string | undefined {
+    if (method === "POST" && p === "/api/v1/database-connectors/queries" ||
+      ["PATCH", "DELETE"].includes(method) && /^\/api\/v1\/database-connectors\/queries\/[^/]+$/.test(p)) return "query";
     const harnessOf = (re: RegExp) => {
       const m = re.exec(p);
       return m ? state.harnesses.find((h) => h.tenant_id === tid && h.id === m[1]) : undefined;
@@ -1501,8 +1508,9 @@ export async function startFakeServer(): Promise<FakeServer> {
       const deactivated = harnessOf(/^\/api\/v1\/harnesses\/([^/]+)\/deactivate$/);
       if (deactivated) return deactivated.status === "active" && !deactivated.is_default ? "deactivate" : undefined;
       if (p === "/api/v1/agent-graph/import") {
-        const b = (json ?? {}) as { include_tenant_wide?: boolean; package?: { manifest?: { scope?: string } } };
-        return b.include_tenant_wide === true || b.package?.manifest?.scope === "full_config" ? "import" : undefined;
+        const b = (json ?? {}) as { include_tenant_wide?: boolean; package?: Record<string, unknown> & { manifest?: { scope?: string } } };
+        return b.include_tenant_wide === true || b.package?.manifest?.scope === "full_config" ||
+          mayWriteQueries(info, tid) && queryWrites(state.db, tid, b.package ?? {}).length > 0 ? "import" : undefined;
       }
     }
     if (method === "DELETE") {
@@ -1524,6 +1532,9 @@ export async function startFakeServer(): Promise<FakeServer> {
       ["POST", /^\/api\/v1\/agent-graph\/import$/],
       ["DELETE", /^\/api\/v1\/variables\/[^/]+$/],
       ["PUT", /^\/api\/v1\/triggers\/[^/]+\/execution-identity$/],
+      ["POST", /^\/api\/v1\/database-connectors\/queries$/],
+      ["PATCH", /^\/api\/v1\/database-connectors\/queries\/[^/]+$/],
+      ["DELETE", /^\/api\/v1\/database-connectors\/queries\/[^/]+$/],
     ];
     return routes.some(([m, re]) => m === method && re.test(p));
   }
@@ -1560,10 +1571,15 @@ export async function startFakeServer(): Promise<FakeServer> {
     return undefined;
   }
 
+  function mayWriteQueries(info: TokenInfo, tenantId: string): boolean {
+    return info.kind === "pat" && permissionsOf(info, tenantId, state.serveCredentialAccess).includes("database_connectors.manage");
+  }
+
   /** The capabilities snapshot with the test's patch, and the tenant's own limit values in its limits. */
-  function capabilitiesFor(tenantId: string): Record<string, unknown> {
+  function capabilitiesFor(tenantId: string, info?: TokenInfo): Record<string, unknown> {
     const caps = JSON.parse(readContract("meta-capabilities.json"));
     caps.features = { ...caps.features, ...state.features };
+    if (info) caps.database_connector.may_write_queries = caps.features.database_connector_enabled === true && mayWriteQueries(info, tenantId);
     if (state.confirmations) caps.confirmations = { ...caps.confirmations, enforced: state.confirmations.enforced };
     else delete caps.confirmations;
     const merged = { ...caps, ...structuredClone(state.capsPatch) } as Record<string, unknown> & { limits?: { values?: Array<Record<string, unknown>> } };

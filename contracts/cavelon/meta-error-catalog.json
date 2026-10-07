@@ -2905,8 +2905,8 @@
     {
       "code": "database_query_needs_superadmin",
       "area": "package",
-      "message": "The import would create or change a database query. Only a superadmin in Tenant mode does that, in the Admin; a personal access token (cavelon apply) never writes a database query.",
-      "hint": "A superadmin signs in to the Admin, opens this tenant and imports the same package from the solution's Agents page (Import JSON), or saves the query under Settings → Databases. Once the target's queries match the package, cavelon apply passes for every other change.",
+      "message": "The import would create or change a database query, which needs database_connectors.manage in this tenant: the tenant Owner (or Admin) or a superadmin in Tenant mode, signed in to the Admin or through a personal access token whose role still holds it. This caller does not hold it.",
+      "hint": "The tenant Owner applies the same package (cavelon apply with the Owner's token, or the solution's Agents page (Import JSON) in the Admin), or saves the query under Settings → Databases. Once the target's queries match the package, the import passes for anyone who may import.",
       "docs": "/docs/concepts/database-connections#solution-packages"
     },
     {
