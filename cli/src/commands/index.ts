@@ -15,7 +15,7 @@ import { activate, apply, explain, pull, validate } from "./solution.js";
 import { schema } from "./schema.js";
 import { harnessClone, harnessDefault, harnessList, harnessNew, tenantCreate, tenantList } from "./tenants.js";
 import { kbUpload, testRun, trace } from "./work.js";
-import { dbConnections, dbQueries, dbRuns, dbTest, dbTestRun } from "./db.js";
+import { dbConnections, dbInstance, dbQueries, dbRuns, dbTest, dbTestRun } from "./db.js";
 import { secretsDelete, secretsList, secretsSet, variablesDelete, variablesGet, variablesList, variablesSet } from "./values.js";
 import { loopCancel, loopIterations, loopPause, loopResume, loopStart, loopWatch, triggerIdentity } from "./loops.js";
 import {
@@ -119,6 +119,7 @@ export const COMMANDS: CommandSpec[] = [
   kbUpload,
   testRun,
   trace,
+  dbInstance,
   dbConnections,
   dbQueries,
   dbRuns,

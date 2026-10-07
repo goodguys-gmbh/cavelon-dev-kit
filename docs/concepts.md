@@ -230,9 +230,12 @@ change. An apply whose queries match the instance's passes. So:
   query, name and description). Then a superadmin imports the package in the
   Admin (the solution's Agents page, Import JSON), and `apply` passes again.
 
-`cavelon db connections`, `db queries` and `db runs` read the connections, the
-saved queries and each query's runs (outcome, error code and row count; never
-a value or a row). The tenant Owner may also run `cavelon db test <connection>`
+`cavelon db instance` says which dialects the instance runs and the addresses
+it connects to databases from, which a customer allows through their
+database's firewall. `cavelon db connections`, `db queries` and `db runs` read
+the connections (with their CA certificates, warning of one that expires
+within 30 days), the saved queries and each query's runs (outcome, error code
+and row count; never a value or a row). The tenant Owner may also run `cavelon db test <connection>`
 and `cavelon db test-run <query> --value name=value`, which fills the identity
 parameters by hand to check what one customer would get. `trace` shows the
 code a failed query call answered the model with, such as `identity_required`;

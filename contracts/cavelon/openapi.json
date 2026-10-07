@@ -564,6 +564,29 @@
         }
       }
     },
+    "/api/v1/database-connectors/instance": {
+      "get": {
+        "tags": [
+          "database-connectors"
+        ],
+        "summary": "Read Database Connector Instance",
+        "operationId": "read_database_connector_instance_api_v1_database_connectors_instance_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseConnectorInstanceResponse"
+                }
+              }
+            }
+          },
+          "400": {},
+          "403": {},
+          "404": {}
+        }
+      }
+    },
     "/api/v1/database-connectors/queries": {
       "get": {
         "tags": [
@@ -7661,6 +7684,41 @@
         "type": "object",
         "title": "BotPersonaSchema"
       },
+      "CaCertificateDetail": {
+        "properties": {
+          "subject": {
+            "type": "string",
+            "title": "Subject"
+          },
+          "issuer": {
+            "type": "string",
+            "title": "Issuer"
+          },
+          "not_before": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Not Before"
+          },
+          "not_after": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Not After"
+          },
+          "sha256": {
+            "type": "string",
+            "title": "Sha256"
+          }
+        },
+        "type": "object",
+        "required": [
+          "subject",
+          "issuer",
+          "not_before",
+          "not_after",
+          "sha256"
+        ],
+        "title": "CaCertificateDetail"
+      },
       "ChangeLogEntry": {
         "properties": {
           "version": {
@@ -9336,6 +9394,13 @@
             "type": "array",
             "title": "Ca Certificate Sha256"
           },
+          "ca_certificates": {
+            "items": {
+              "$ref": "#/components/schemas/CaCertificateDetail"
+            },
+            "type": "array",
+            "title": "Ca Certificates"
+          },
           "statement_timeout_ms": {
             "type": "integer",
             "title": "Statement Timeout Ms"
@@ -9547,6 +9612,47 @@
           "status"
         ],
         "title": "DatabaseConnectionTestStep"
+      },
+      "DatabaseConnectorInstanceResponse": {
+        "properties": {
+          "runnable_dialects": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Runnable Dialects"
+          },
+          "network": {
+            "$ref": "#/components/schemas/DatabaseConnectorNetwork"
+          }
+        },
+        "type": "object",
+        "required": [
+          "runnable_dialects",
+          "network"
+        ],
+        "title": "DatabaseConnectorInstanceResponse"
+      },
+      "DatabaseConnectorNetwork": {
+        "properties": {
+          "egress_ips": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Egress Ips"
+          },
+          "connections_per_process": {
+            "type": "integer",
+            "title": "Connections Per Process"
+          }
+        },
+        "type": "object",
+        "required": [
+          "egress_ips",
+          "connections_per_process"
+        ],
+        "title": "DatabaseConnectorNetwork"
       },
       "DatabaseConnectorOffer": {
         "properties": {

@@ -7,6 +7,28 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Added
+
+- `cavelon db instance` (`db_instance`) says what the instance offers for
+  database connections (#146): the dialects it runs, and the addresses it
+  connects to databases from (`egress_ips`), which the customer allows through
+  their database's firewall, with how many connections each process opens per
+  connection. Where the operator named no addresses, it says to ask them. An
+  instance older than `GET /api/v1/database-connectors/instance` gets the
+  dialects from its capabilities and a line that it does not publish the rest.
+  The cavelon-loop skill names it where a person sets up a connection.
+- `db connections` shows each connection's CA certificates (subject and
+  expiry, `ca_certificates` in `--json`) and warns of one that has expired or
+  expires within 30 days, since the connection's TLS check and its queries
+  fail from then. An instance that publishes only the fingerprints gets a line
+  that a CA is set.
+
+### Fixed
+
+- The database commands that read name the permission a 403 is missing:
+  `database_connectors.view`, which the tenant roles that see tools hold
+  (#146).
+
 ## [0.1.11] - 2026-10-06
 
 Permissions and safeguards from a review of what a restricted credential may

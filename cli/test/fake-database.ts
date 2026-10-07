@@ -17,6 +17,18 @@ export interface FakeConnection {
   last_test_outcome: string | null;
   /** The steps a test reports; a passing run of every step by default. */
   testSteps?: Array<{ name: string; status: string; code: string | null }>;
+  /** The uploaded CA's certificates. */
+  caCertificates?: FakeCaCertificate[];
+  /** False plays an instance that publishes only the certificates' fingerprints. */
+  caDetails?: false;
+}
+
+export interface FakeCaCertificate {
+  subject: string;
+  issuer: string;
+  not_before: string;
+  not_after: string;
+  sha256: string;
 }
 
 export interface FakeQuery {
@@ -56,10 +68,22 @@ export interface DatabaseState {
   mayTest: boolean;
   /** What a test run was sent, last first. */
   testRuns: Array<{ query_id: string; values: Record<string, unknown> }>;
+  /** Whether the caller holds database_connectors.view, which every read needs. */
+  mayView: boolean;
+  /** What GET /instance answers: the dialects this host runs and its network side. */
+  instance: { runnable_dialects: string[]; network: { egress_ips: string[]; connections_per_process: number } };
 }
 
 export function databaseState(): DatabaseState {
-  return { connections: [], queries: [], runs: [], mayTest: true, testRuns: [] };
+  return {
+    connections: [],
+    queries: [],
+    runs: [],
+    mayTest: true,
+    testRuns: [],
+    mayView: true,
+    instance: { runnable_dialects: ["mysql", "postgresql"], network: { egress_ips: ["203.0.113.10", "203.0.113.11"], connections_per_process: 5 } },
+  };
 }
 
 export interface DatabaseRoute {
@@ -77,6 +101,7 @@ const STEPS = ["dns", "policy", "tcp", "tls", "login", "select_1", "server_versi
 const at = () => new Date().toISOString();
 
 function connectionView(state: DatabaseState, c: FakeConnection) {
+  const certificates = c.caCertificates ?? [];
   return {
     id: c.id,
     name: c.name,
@@ -88,8 +113,9 @@ function connectionView(state: DatabaseState, c: FakeConnection) {
     password_set: true,
     password_changed_at: "2026-10-01T08:00:00Z",
     tls_mode: "verify_full",
-    ca_certificate_pem: null,
-    ca_certificate_sha256: [],
+    ca_certificate_pem: certificates.length ? "-----BEGIN CERTIFICATE-----\nMIIB…\n-----END CERTIFICATE-----\n" : null,
+    ca_certificate_sha256: certificates.map((cert) => cert.sha256),
+    ...(c.caDetails === false ? {} : { ca_certificates: certificates }),
     statement_timeout_ms: 5000,
     is_enabled: true,
     config_version: 1,
@@ -163,6 +189,14 @@ export function handleDatabase(state: DatabaseState, rc: DatabaseRoute): boolean
     return true;
   }
   const own = <T extends { tenant_id: string }>(list: T[]) => list.filter((x) => x.tenant_id === rc.tenantId);
+  if (!state.mayView && rc.method === "GET") {
+    rc.send(403, { detail: "Permission denied: database_connectors.view" });
+    return true;
+  }
+  if (rc.path === "/api/v1/database-connectors/instance" && rc.method === "GET") {
+    rc.send(200, state.instance);
+    return true;
+  }
   if (rc.path === "/api/v1/database-connectors/connections" && rc.method === "GET") {
     rc.send(200, own(state.connections).map((c) => connectionView(state, c)));
     return true;

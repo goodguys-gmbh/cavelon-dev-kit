@@ -43,6 +43,16 @@ the credential's permissions would allow that a person runs instead). Trimmed,
 it differs from the snapshot only there and in `MetaLimits.tenant_quotas`,
 which that build may leave out (null).
 
+On 2026-10-07 the OpenAPI was taken again from the instance's main branch,
+from the reference its generator writes into the repository (`docs/openapi.json`,
+generated from the code without running it), to add
+`GET /api/v1/database-connectors/instance` (the dialects the instance runs and
+its egress addresses). Trimmed, it differs from the snapshot only there and in
+the connections' `ca_certificates` (subject, issuer, validity and fingerprint
+per certificate). The instance's SQL Server support, with its refusal code
+`write_privileges_unacknowledged`, was not on that branch yet, so the error
+catalog and the capabilities stay as they were.
+
 The tests switch features on in the fake server where a command needs them
 (personal access tokens, the operations API, Sandboxes, Masterloop, archive
 uploads, the database connector); the snapshot keeps the defaults.

@@ -32,7 +32,7 @@ the environment over the files. The exit codes are listed in [Troubleshooting](t
 - **Solution as code:** [`init`](#cavelon-init), [`pull`](#cavelon-pull), [`validate`](#cavelon-validate), [`fmt`](#cavelon-fmt), [`schema`](#cavelon-schema), [`apply`](#cavelon-apply), [`activate`](#cavelon-activate), [`explain`](#cavelon-explain)
 - **Tenants and solutions:** [`tenant create`](#cavelon-tenant-create), [`tenant list`](#cavelon-tenant-list), [`harness list`](#cavelon-harness-list), [`harness new`](#cavelon-harness-new), [`harness clone`](#cavelon-harness-clone), [`harness default`](#cavelon-harness-default)
 - **Knowledge, tests and traces:** [`kb upload`](#cavelon-kb-upload), [`test run`](#cavelon-test-run), [`wait`](#cavelon-wait), [`watch`](#cavelon-watch), [`trace`](#cavelon-trace)
-- **Database connections and queries:** [`db connections`](#cavelon-db-connections), [`db queries`](#cavelon-db-queries), [`db runs`](#cavelon-db-runs), [`db test`](#cavelon-db-test), [`db test-run`](#cavelon-db-test-run)
+- **Database connections and queries:** [`db instance`](#cavelon-db-instance), [`db connections`](#cavelon-db-connections), [`db queries`](#cavelon-db-queries), [`db runs`](#cavelon-db-runs), [`db test`](#cavelon-db-test), [`db test-run`](#cavelon-db-test-run)
 - **Variables and secrets:** [`variables list`](#cavelon-variables-list), [`variables get`](#cavelon-variables-get), [`variables set`](#cavelon-variables-set), [`variables delete`](#cavelon-variables-delete), [`secrets list`](#cavelon-secrets-list), [`secrets set`](#cavelon-secrets-set), [`secrets delete`](#cavelon-secrets-delete)
 - **Limits and capacity:** [`limits`](#cavelon-limits), [`limits set`](#cavelon-limits-set), [`models list`](#cavelon-models-list), [`models set-limit`](#cavelon-models-set-limit)
 - **Loops and triggers:** [`loop start`](#cavelon-loop-start), [`loop watch`](#cavelon-loop-watch), [`loop iterations`](#cavelon-loop-iterations), [`loop pause`](#cavelon-loop-pause), [`loop resume`](#cavelon-loop-resume), [`loop cancel`](#cavelon-loop-cancel), [`trigger identity`](#cavelon-trigger-identity)
@@ -671,11 +671,30 @@ cavelon trace <run> --trace <trace_id> --span <span_id>
 
 ## Database connections and queries
 
-Read the connections, saved queries and query runs behind a solution's database query tools; the tenant Owner also tests a connection and test-runs a query. A superadmin creates and changes them in the Admin.
+Read what the instance offers for database connections, and the connections, saved queries and query runs behind a solution's database query tools; the tenant Owner also tests a connection and test-runs a query. A superadmin creates and changes them in the Admin.
+
+### cavelon db instance
+
+What this instance offers for database connections: the dialects it runs, and the addresses a database's firewall lets in.
+
+**read-only** · MCP tool: `db_instance`
+
+```text
+cavelon db instance
+```
+
+Read it before a database connection is set up: a connection of a dialect the instance does not run can be saved, but its test and queries answer unavailable, and the customer's database must let the instance's egress addresses in. An instance older than this route says only its dialects, in its capabilities.
+
+Examples:
+
+```bash
+cavelon db instance
+cavelon db instance --json
+```
 
 ### cavelon db connections
 
-The tenant's database connections: dialect, target, TLS mode, last test and query count; never a password.
+The tenant's database connections: dialect, target, TLS mode, CA certificates, last test and query count; never a password.
 
 **read-only** · MCP tool: `db_connections`
 
@@ -683,7 +702,7 @@ The tenant's database connections: dialect, target, TLS mode, last test and quer
 cavelon db connections [options]
 ```
 
-A superadmin creates and changes connections in the Admin; a token reads them. A package names a query's connection by name and dialect, so the same name serves in every tenant and environment. A query tool is ready for agents only while its connection is enabled and its last test passed; the tenant Owner runs the test with `cavelon db test <connection>`.
+A superadmin creates and changes connections in the Admin; a token reads them. A package names a query's connection by name and dialect, so the same name serves in every tenant and environment. A query tool is ready for agents only while its connection is enabled and its last test passed; the tenant Owner runs the test with `cavelon db test <connection>`. It warns of a CA certificate that has expired or expires within 30 days.
 
 | Option | Description | MCP |
 |---|---|---|

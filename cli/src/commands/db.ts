@@ -1,5 +1,6 @@
 import { CURSOR_OPTION, intOption, LIMIT_OPTION, listOption, pageOf, positional, stringOption, type CommandSpec, type Context } from "../command.js";
 import { CavelonError, ExitCode, usageError } from "../errors.js";
+import { connectorOffer } from "../database-queries.js";
 import { requireFeature } from "../features.js";
 import { clip, keyValues, moreHint, table } from "../format.js";
 import { callStable } from "../invoke.js";
@@ -7,9 +8,11 @@ import { cavelonCommand, fill } from "../printed.js";
 import { isUuid } from "../session.js";
 
 /**
- * `cavelon db`: the tenant's database connections, saved queries and their
- * runs, as a token may read them, and the two checks the tenant Owner may run
- * with a token: a connection test and a test run of a saved query. Who creates
+ * `cavelon db`: what the instance offers for database connections (its
+ * dialects and the addresses it connects from), the tenant's connections,
+ * saved queries and their runs, as a token may read them, and the two checks
+ * the tenant Owner may run with a token: a connection test and a test run of
+ * a saved query. Who creates
  * or changes a connection or a query is a superadmin in the Admin; a pull
  * writes the queries into the package. Nothing here prints a password: the
  * instance never returns one.
@@ -28,6 +31,8 @@ interface Connection {
   tls_mode: string;
   ca_certificate_pem?: string | null;
   ca_certificate_sha256?: string[];
+  /** Per certificate of the uploaded CA bundle; an older instance publishes only the fingerprints. */
+  ca_certificates?: CaCertificate[];
   statement_timeout_ms: number;
   is_enabled: boolean;
   config_version: number;
@@ -36,6 +41,19 @@ interface Connection {
   last_test_detail?: Record<string, unknown> | null;
   query_count?: number;
   [key: string]: unknown;
+}
+
+interface CaCertificate {
+  subject: string;
+  issuer?: string;
+  not_before?: string;
+  not_after: string;
+  sha256?: string;
+}
+
+interface InstanceOffer {
+  runnable_dialects: string[];
+  network: { egress_ips: string[]; connections_per_process: number };
 }
 
 interface QueryParameter {
@@ -93,29 +111,42 @@ const DOCS_PAGE = "administration/database-connectors";
 /** The connector's routes answer 404 while it is off: say so instead, where the instance publishes the switch. */
 const connectorOn = (ctx: Context) => requireFeature(ctx, FEATURE, "database_connector_disabled", "the database connector");
 
-/** An answer of 403: the Owner (or a superadmin in the Admin) runs the checks, not every role that reads. */
-function ownerOnly(error: unknown, what: string): unknown {
+/** An answer of 403 with the permission it needs and who holds it, instead of the generic hint. */
+function withPermissionHint(error: unknown, hint: string): unknown {
   if (!(error instanceof CavelonError) || error.status !== 403) return error;
   return new CavelonError(error.exitCode, {
     code: error.code,
     status: error.status,
     message: error.message,
-    hint:
-      `${what} needs the tenant Owner's permission (database_connectors.test), or a superadmin in the Admin; the roles that read the connections do not hold it. ` +
-      `\`${cavelonCommand("whoami")}\` shows the token's role.`,
+    hint: `${hint} \`${cavelonCommand("whoami")}\` shows the token's role.`,
     docs: error.docs,
   });
 }
 
-async function listConnections(ctx: Context): Promise<Connection[]> {
+/** The Owner (or a superadmin in the Admin) runs the checks, not every role that reads. */
+const ownerOnly = (error: unknown, what: string) =>
+  withPermissionHint(
+    error,
+    `${what} needs the tenant Owner's permission (database_connectors.test), or a superadmin in the Admin; the roles that read the connections do not hold it.`,
+  );
+
+/** Every read needs database_connectors.view, which the tenant roles that see tools hold. */
+const viewerOnly = (error: unknown) =>
+  withPermissionHint(error, "Reading the database connector needs database_connectors.view, which the tenant roles that see tools hold, and a superadmin in Tenant mode.");
+
+async function read<T>(ctx: Context, path: string, what: string, query?: Record<string, string | undefined>): Promise<T> {
   await connectorOn(ctx);
-  return callStable<Connection[]>(ctx, "GET", "/api/v1/database-connectors/connections", "database connections");
+  try {
+    return await callStable<T>(ctx, "GET", path, what, { query });
+  } catch (error) {
+    throw viewerOnly(error);
+  }
 }
 
-async function listQueries(ctx: Context, connectionId?: string): Promise<Query[]> {
-  await connectorOn(ctx);
-  return callStable<Query[]>(ctx, "GET", "/api/v1/database-connectors/queries", "database queries", { query: { connection_id: connectionId } });
-}
+const listConnections = (ctx: Context) => read<Connection[]>(ctx, "/api/v1/database-connectors/connections", "database connections");
+
+const listQueries = (ctx: Context, connectionId?: string) =>
+  read<Query[]>(ctx, "/api/v1/database-connectors/queries", "database queries", { connection_id: connectionId });
 
 /** A connection by its name or id. */
 async function resolveConnection(ctx: Context, ref: string): Promise<Connection> {
@@ -136,7 +167,7 @@ async function resolveQuery(ctx: Context, ref: string): Promise<Query> {
     try {
       return await callStable<Query>(ctx, "GET", "/api/v1/database-connectors/queries/{query_id}", "database queries", { params: { query_id: [ref] } });
     } catch (error) {
-      if (!(error instanceof CavelonError && error.status === 404)) throw error;
+      if (!(error instanceof CavelonError && error.status === 404)) throw viewerOnly(error);
     }
   }
   const all = await listQueries(ctx);
@@ -149,10 +180,56 @@ async function resolveQuery(ctx: Context, ref: string): Promise<Query> {
   });
 }
 
-/** A connection without its CA certificate's text (its fingerprint stays), so a list stays short. */
+/** A connection without its CA certificate's text (its fingerprints and details stay), so a list stays short. */
 function connectionView(c: Connection): Record<string, unknown> {
   const { ca_certificate_pem: pem, ...rest } = c;
   return { ...rest, ca_certificate_set: Boolean(pem) };
+}
+
+const DAY_MS = 86_400_000;
+/** How long before a CA certificate expires the listing warns. */
+const EXPIRY_WARNING_DAYS = 30;
+
+const day = (iso: string) => iso.slice(0, 10);
+
+/**
+ * A warning per CA certificate that has expired or expires within 30 days:
+ * from that day the connection's TLS check fails where it verifies the
+ * server's certificate, and with it every query on the connection.
+ */
+function expiryWarnings(connections: Connection[], now: Date): string[] {
+  const warnings: string[] = [];
+  for (const c of connections) {
+    for (const cert of c.ca_certificates ?? []) {
+      const until = Date.parse(cert.not_after);
+      if (Number.isNaN(until)) continue;
+      const days = Math.floor((until - now.getTime()) / DAY_MS);
+      if (days >= EXPIRY_WARNING_DAYS) continue;
+      const when =
+        until <= now.getTime()
+          ? `expired on ${day(cert.not_after)}`
+          : `expires on ${day(cert.not_after)} (in ${days === 0 ? "less than a day" : `${days} day${days === 1 ? "" : "s"}`})`;
+      warnings.push(
+        `The CA certificate "${cert.subject}" of the database connection "${c.name}" ${when}: from then its TLS check fails, and with it the connection's queries. ` +
+          `A superadmin uploads the renewed CA in the Admin; then the tenant Owner tests the connection again: ${cavelonCommand("db", "test", c.name)}`,
+      );
+    }
+  }
+  return warnings;
+}
+
+/** The CA lines of a listing: subject and expiry per certificate, or that only fingerprints are published. */
+function caLines(connections: Connection[]): string[] {
+  const lines: string[] = [];
+  for (const c of connections) {
+    if (c.ca_certificates?.length) {
+      for (const cert of c.ca_certificates) lines.push(`${c.name}: ${cert.subject}, valid until ${day(cert.not_after)}`);
+    } else if (!c.ca_certificates && c.ca_certificate_sha256?.length) {
+      const n = c.ca_certificate_sha256.length;
+      lines.push(`${c.name}: a CA is set (${n} certificate${n === 1 ? "" : "s"}); this instance does not publish their subject or expiry`);
+    }
+  }
+  return lines.length ? ["", "", "CA certificates:", ...lines] : [];
 }
 
 function lastTest(c: Connection): string {
@@ -185,13 +262,72 @@ function explainLine(codes: Array<string | null | undefined>): string {
   return `\n\nWhat a code means: ${cavelonCommand("explain", fill("code"))} (${distinct.slice(0, 8).join(", ")})`;
 }
 
+/** What a customer's firewall must let through, in a sentence; the text and the JSON say the same. */
+function firewallSentence(offer: InstanceOffer): string {
+  const { egress_ips: ips, connections_per_process: perProcess } = offer.network;
+  const pool = `Each process of the instance that runs agents opens at most ${perProcess} connection${perProcess === 1 ? "" : "s"} per database connection.`;
+  if (!ips.length) {
+    return (
+      "The instance's operator has named no addresses it connects from, so it does not say what to allowlist: " +
+      `ask the operator before opening the database's firewall. ${pool}`
+    );
+  }
+  const these = ips.length === 1 ? "this address" : "these addresses";
+  return `Allow ${ips.join(", ")} through the database's firewall, on the database's port: the instance connects to a customer's database only from ${these}. ${pool}`;
+}
+
+export const dbInstance: CommandSpec = {
+  name: "db instance",
+  summary: "What this instance offers for database connections: the dialects it runs, and the addresses a database's firewall lets in.",
+  description:
+    "Read it before a database connection is set up: a connection of a dialect the instance does not run can be saved, but\n" +
+    "its test and queries answer unavailable, and the customer's database must let the instance's egress addresses in. An\n" +
+    "instance older than this route says only its dialects, in its capabilities.",
+  readOnly: true,
+  idempotent: true,
+  mcpTool: "db_instance",
+  examples: ["cavelon db instance", "cavelon db instance --json"],
+  async run(ctx) {
+    let offer: InstanceOffer;
+    try {
+      offer = await read<InstanceOffer>(ctx, "/api/v1/database-connectors/instance", "the database connector's dialects and network");
+    } catch (error) {
+      const unpublished = error instanceof CavelonError && (error.code === "operation_unavailable" || error.status === 404);
+      if (!unpublished) throw error;
+      // An instance older than the route still names its dialects in its capabilities.
+      const dialects = connectorOffer(await (await ctx.contracts()).capabilities()).dialects;
+      return {
+        data: { published: false, runnable_dialects: dialects ?? null, network: null },
+        text:
+          "This instance does not publish which addresses it connects to databases from (it is older than that); its operator knows them." +
+          (dialects ? `\nDialects it runs: ${dialects.join(", ") || "none"}` : ""),
+      };
+    }
+    const firewall = firewallSentence(offer);
+    return {
+      data: { published: true, ...offer, firewall },
+      text: [
+        keyValues([
+          ["dialects", offer.runnable_dialects.join(", ") || "none"],
+          ["egress_ips", offer.network.egress_ips.join(", ") || "none named"],
+          ["connections_per_process", offer.network.connections_per_process],
+        ]),
+        "",
+        firewall,
+        ...(offer.runnable_dialects.length ? [] : ["", "This instance runs no database dialect: a connection can be saved, but its test and queries answer unavailable."]),
+      ].join("\n"),
+    };
+  },
+};
+
 export const dbConnections: CommandSpec = {
   name: "db connections",
-  summary: "The tenant's database connections: dialect, target, TLS mode, last test and query count; never a password.",
+  summary: "The tenant's database connections: dialect, target, TLS mode, CA certificates, last test and query count; never a password.",
   description:
     "A superadmin creates and changes connections in the Admin; a token reads them. A package names a query's connection by\n" +
     "name and dialect, so the same name serves in every tenant and environment. A query tool is ready for agents only while\n" +
-    "its connection is enabled and its last test passed; the tenant Owner runs the test with `cavelon db test <connection>`.",
+    "its connection is enabled and its last test passed; the tenant Owner runs the test with `cavelon db test <connection>`.\n" +
+    `It warns of a CA certificate that has expired or expires within ${EXPIRY_WARNING_DAYS} days.`,
   readOnly: true,
   idempotent: true,
   mcpTool: "db_connections",
@@ -199,7 +335,9 @@ export const dbConnections: CommandSpec = {
   examples: ["cavelon db connections", "cavelon db connections --json"],
   async run(ctx, input) {
     const limit = intOption(input, "limit", { min: 1, max: 500, fallback: 50 })!;
-    const page = pageOf((await listConnections(ctx)).map(connectionView), limit, stringOption(input, "cursor"));
+    const all = await listConnections(ctx);
+    for (const warning of expiryWarnings(all, ctx.io.now())) ctx.warn(warning);
+    const page = pageOf(all.map(connectionView), limit, stringOption(input, "cursor"));
     const rows = page.items.map((c) => {
       const conn = c as unknown as Connection;
       return {
@@ -219,6 +357,7 @@ export const dbConnections: CommandSpec = {
       text:
         (table(rows, ["name", "dialect", "target", "tls", "enabled", "last_test", "queries", "id"]) ||
           `No database connections. A superadmin creates one in the Admin (\`${cavelonCommand("docs", "get", DOCS_PAGE)}\` says who does what).`) +
+        caLines(page.items as unknown as Connection[]).join("\n") +
         moreHint(page.next_cursor, cavelonCommand("db", "connections")) +
         (untested.length ? `\n\nNot tested successfully: ${untested.join(", ")}; its queries are not ready for agents. The Owner tests one with: ${cavelonCommand("db", "test", fill("connection"))}` : ""),
     };
@@ -317,6 +456,8 @@ export const dbRuns: CommandSpec = {
     const page = await callStable<{ items: Run[]; next_offset?: number | null }>(ctx, "GET", "/api/v1/database-connectors/queries/{query_id}/runs", "database query runs", {
       params: { query_id: [q.id] },
       query: { limit, offset },
+    }).catch((error: unknown) => {
+      throw viewerOnly(error);
     });
     const items = page.items ?? [];
     const next = typeof page.next_offset === "number" ? String(page.next_offset) : null;

@@ -97,10 +97,13 @@ use it when you parse the result.
   (`cavelon db test <connection>`); you never handle its host, user or
   password. Use the same connection name in every tenant and environment
   (`env/test.yaml`, `env/prod.yaml`), each pointing at that environment's
-  database, so one package serves them all. `cavelon db connections` shows
-  which exist and whether their last test passed. A pull writes each query's
-  SQL into `package/tools.yaml`, so the repository holds it: review it like
-  code.
+  database, so one package serves them all. `cavelon db instance` says which
+  dialects this instance runs and the addresses it connects from, which the
+  customer allows through their database's firewall; tell the person both
+  before they set up a connection. `cavelon db connections` shows which exist,
+  whether their last test passed and when their CA certificates expire. A
+  pull writes each query's SQL into `package/tools.yaml`, so the repository
+  holds it: review it like code.
 
 ## The loop
 
