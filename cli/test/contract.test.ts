@@ -40,6 +40,13 @@ async function call(method: string, p: string, body?: unknown, headers: Record<s
   return { status: response.status, data: await response.json() };
 }
 
+/** The header that confirms a personal access token's guarded change, as the published route issues it. */
+async function confirmed(method: string, p: string, body?: unknown): Promise<Record<string, string>> {
+  const issued = await call("POST", "/api/v1/confirmations", { method, path: p, body: body ?? null });
+  check("POST", "/api/v1/confirmations", 201, issued.data);
+  return { "X-Cavelon-Confirmation": (issued.data as { confirmation_id: string }).confirmation_id };
+}
+
 function check(method: string, template: string, status: number, data: unknown) {
   const op = operationAt(doc, method, template);
   expect(op, `${method} ${template} is in the snapshot`).toBeDefined();
@@ -503,7 +510,12 @@ describe("the fake server answers in the published shapes", () => {
     expect(refused.status).toBe(403);
     expect(await refused.json()).toMatchObject({ code: "secret_needs_a_person" });
     expect((await fetch(`${server.url}/api/v1/secrets/crm_api_token`, { method: "DELETE", headers: { Authorization: `Bearer ${token}`, "X-Tenant-Id": tenant } })).status).toBe(204);
-    expect((await fetch(`${server.url}/api/v1/variables/region`, { method: "DELETE", headers: { Authorization: `Bearer ${token}`, "X-Tenant-Id": tenant } })).status).toBe(204);
+    // Deleting a variable is a change a person confirms (x-cavelon-confirmation).
+    expect(operationAt(doc, "DELETE", "/api/v1/variables/{name}")!.responses["428"]).toBeDefined();
+    const deletion = { method: "DELETE", headers: { Authorization: `Bearer ${token}`, "X-Tenant-Id": tenant } };
+    expect((await fetch(`${server.url}/api/v1/variables/region`, deletion)).status).toBe(428);
+    const confirm = await confirmed("DELETE", "/api/v1/variables/region");
+    expect((await fetch(`${server.url}/api/v1/variables/region`, { ...deletion, headers: { ...deletion.headers, ...confirm } })).status).toBe(204);
   });
 
   it("knowledge bases, uploads, test runs, operations, traces", async () => {
@@ -619,7 +631,8 @@ describe("the fake server answers in the published shapes", () => {
     check("GET", "/api/v1/triggers/{trigger_id}", 200, (await call("GET", `/api/v1/triggers/${triggerId}`)).data);
     const identity = `/api/v1/triggers/${triggerId}/execution-identity`;
     check("GET", "/api/v1/triggers/{trigger_id}/execution-identity", 200, (await call("GET", identity)).data);
-    check("PUT", "/api/v1/triggers/{trigger_id}/execution-identity", 200, (await call("PUT", identity, { api_key_id: keyId, expected_version: 1 })).data);
+    const binding = { api_key_id: keyId, expected_version: 1 };
+    check("PUT", "/api/v1/triggers/{trigger_id}/execution-identity", 200, (await call("PUT", identity, binding, await confirmed("PUT", identity, binding))).data);
     check("GET", "/api/v1/tenants/{tenant_id}/api-keys", 200, (await call("GET", `/api/v1/tenants/${tenant}/api-keys`)).data);
 
     const run = (await call("POST", `/api/v1/triggers/${triggerId}/run`, { payload: {} })).data as { id: string; operation_id: string };

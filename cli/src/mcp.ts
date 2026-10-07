@@ -37,7 +37,9 @@ const INSTRUCTIONS =
   "a different change needs a new preview, and confirm: true is refused. A change that reaches live traffic or the whole tenant, " +
   "or that cannot be taken back, is the person's to confirm, and the token alone does not make it: its preview says " +
   "needs_person. With needs_person \"client\", call again with the token and the client asks the person to approve exactly that " +
-  "change; their no, or no answer, changes nothing (confirm_declined). With needs_person \"terminal\" this client cannot ask " +
+  "change; their no, or no answer, changes nothing (confirm_declined). Only after their yes does cavelon ask the instance for " +
+  "the confirmation it checks itself; confirmation_required or confirmation_invalid changed nothing: preview again, never retry " +
+  "on your own. With needs_person \"terminal\" this client cannot ask " +
   "them: give the person the preview's confirm command, which they run in their own terminal, never in yours. These are " +
   "harness_default and activate (the default route and a solution something reaches: live traffic), deactivate, tenant_create, " +
   "variables_set replacing a value (every solution of the tenant reads it), limits_set, models_set_limit, trigger_identity, " +

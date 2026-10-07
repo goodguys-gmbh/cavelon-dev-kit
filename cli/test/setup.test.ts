@@ -377,7 +377,7 @@ describe("asking a person", () => {
     const result = await onPlatform("linux", () => cli(sb, ["setup", "--json"], { env }));
     expect(result.code).toBe(2);
     const error = result.json<any>().error;
-    expect(error.code).toBe("confirmation_required");
+    expect(error.code).toBe("yes_required");
     expect(error.details.agents.find((a: any) => a.name === "cursor").changes[0]).toMatchObject({ kind: "mcp", outcome: "planned", target: layout.cursorMcp });
     expect(existsSync(layout.cursorMcp)).toBe(false);
   });

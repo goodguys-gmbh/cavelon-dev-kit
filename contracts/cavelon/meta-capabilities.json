@@ -29,6 +29,14 @@
     "may_write_queries": false,
     "queries_written_by": "A superadmin in Tenant mode, signed in to the Admin: under Settings → Databases, or by importing a package from the solution's Agents page (Import JSON). A personal access token or an API key never creates or changes a database query; its import passes while the package's queries match the tenant's."
   },
+  "confirmations": {
+    "enforced": true,
+    "setting": "CONFIRMATION_NONCE_REQUIRED",
+    "path": "/api/v1/confirmations",
+    "header": "X-Cavelon-Confirmation",
+    "expires_in_seconds": 600,
+    "docs": "/docs/reference/api-endpoints#changes-a-person-confirms"
+  },
   "sandbox": {
     "execution_modes": []
   },

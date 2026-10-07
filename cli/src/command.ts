@@ -114,6 +114,15 @@ export interface Context {
    * a terminal and for a client that cannot ask.
    */
   askPerson?: (message: string) => Promise<PersonAnswer>;
+  /**
+   * Set once the person approved the change this command makes: in their own
+   * terminal with --confirm, or in the MCP client's dialog. Only then does the
+   * client ask the instance for a confirmation id (change-confirmation.ts).
+   * `guarded`: the change is one the kit asks a person for, so the id is asked
+   * for before a request the instance marks; otherwise only once the instance
+   * asks with 428.
+   */
+  approved?: { guarded: boolean };
 }
 
 /** A person's answer to a change the client showed them; `unanswered` when no answer came in time or the client failed. */

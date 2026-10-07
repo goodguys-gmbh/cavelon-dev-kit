@@ -44,6 +44,12 @@ CLI, the skills and the plugin.
   `forbidden_keyword`, and the connections' `write_privileges_acknowledged`
   and `query_enable_refusal`.
 
+### Changed
+
+- `setup`'s refusal to change something without a terminal to ask is now
+  `yes_required` (was `confirmation_required`, which the instance now uses for
+  its own check of a person's confirmation).
+
 ### Fixed
 
 - The database commands that read name the permission a 403 is missing:
@@ -94,6 +100,30 @@ CLI, the skills and the plugin.
   `apply` and `loop start`, `loop cancel`, `sandbox seed` and `kb upload
   --replace` are confirmed with the token as before, and nothing changes in a
   person's own terminal.
+- The instance's own check of the person's yes (#153). An instance that
+  publishes `confirmations.enforced` in `/meta/capabilities` refuses a
+  personal access token's change to an operation its OpenAPI marks
+  `x-cavelon-confirmation` (the default route, activating a solution a channel
+  or an active trigger reaches, deactivating an active one, an import that
+  writes tenant-wide sections, deleting a variable, a trigger's execution
+  identity) without a confirmation id that names exactly that change. Once the
+  person approved, in their own terminal with `--confirm` or in the MCP
+  client's dialog, and never before, `cavelon` asks the instance for one
+  (`POST /api/v1/confirmations` with the method, path and body) and sends it
+  with exactly that request; an agent's token alone never gets one, and an API
+  key, which the instance does not ask, never asks. Where the kit does not
+  expect the operation to be guarded (`api` from a person's terminal, a
+  change whose condition only the instance knows), it asks only once the
+  instance answers `428 confirmation_required`, and sends the approved
+  request once more. A refusal changes nothing and exits 5:
+  `confirmation_required`, or `confirmation_invalid` with `details.reason`
+  (`unknown`, `expired`, `used`, `other_change`), whose hint says to run the
+  command again; `explain` knows both, with what `cavelon` does about them.
+  `api describe` and an `api` preview name a marked operation and when the
+  instance asks. On an instance that does not publish `confirmations`, or has
+  it off, nothing is asked for. The contract snapshot comes from the
+  instance's next build, which adds the route, the marks, the capabilities'
+  `confirmations` and the four `confirmation` codes of its error catalog.
 
 ## [0.1.11] - 2026-10-06
 

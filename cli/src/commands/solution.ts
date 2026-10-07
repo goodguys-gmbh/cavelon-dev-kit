@@ -40,6 +40,7 @@ import { catalogEntry, checkPackage, KIT_CODES, packageVersionOf } from "../pack
 import { applyQueryNotes, connectorOffer, NEEDS_SUPERADMIN_CODE, queryBlockedHint, queryChanges, readQueryBaseline, rememberQueries } from "../database-queries.js";
 import { cliFix, similarCodes } from "../code-hints.js";
 import { KIT_ERROR_CODES } from "../kit-codes.js";
+import { confirmationPointer } from "../change-confirmation.js";
 import { pairOrderHint, pairOrderPointer } from "../pair-order.js";
 import { readPackage, tenantWideSections, writePackage, type Finding, type ItemFiles, type PackageOnDisk, type WriteOptions } from "../package-files.js";
 import { blockerDetails, blockerLines, changeLines, fieldChanges, locateBlockers, notApplied, notAppliedLines, tenantWideReport } from "../preview-report.js";
@@ -964,11 +965,13 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
   }
   if (stored.tenant_id && session.tokenKind !== "api_key") client.target.tenantId = stored.tenant_id;
   const driven = drivenByAgent(ctx);
+  // The instance guards an import that writes what the whole tenant shares; it asks for its confirmation only after the person's yes.
+  const guarded = stored.request[INCLUDE_TENANT_WIDE] === true || (stored.request.package.manifest as Record<string, unknown> | undefined)?.scope === "full_config";
   if (driven && stored.person_reason !== null) {
     const into = stored.harness ? `solution ${stored.harness.slug}` : "the tenant";
     const reason = stored.person_reason ?? "was stored by an older cavelon, which did not record whether it needs a person";
-    await personApproves(ctx, driven, { tool: "apply", what: `Import preview ${stored.preview_id} into ${into}: it ${reason}.`, command: personApplyCommand(stored) });
-  }
+    await personApproves(ctx, driven, { tool: "apply", what: `Import preview ${stored.preview_id} into ${into}: it ${reason}.`, command: personApplyCommand(stored), guarded });
+  } else if (!driven) ctx.approved = { guarded };
   const acting = await actingTarget(ctx);
   const disk = await readPackage(project.root, project.layout);
   const changed = await filesChangedSince(project, stored, disk);
@@ -1601,7 +1604,7 @@ export const explain: CommandSpec = {
         ? processingStepCapHint(await readLimits(ctx).catch(() => undefined))
         : ceiling
           ? ceilingHint(await readLimits(ctx).catch(() => undefined))
-          : pairOrderPointer(entry.code);
+          : (pairOrderPointer(entry.code) ?? confirmationPointer(entry.code));
     const kitHint = kitText ? spoken(kitText) : undefined;
     // The instance's own pages on capacity, where it lists them; an endpoint's limit is planned in the tutorial.
     const pages = capacity === MODEL_ENDPOINT_BUSY ? [CAPACITY_TUTORIAL_PAGE, CAPACITY_CONCEPT_PAGE] : [CAPACITY_CONCEPT_PAGE, CAPACITY_TUTORIAL_PAGE];
@@ -1630,7 +1633,7 @@ export const explain: CommandSpec = {
         ["meaning", entry.message],
         ["fix", hint ?? undefined],
         ["with the CLI", cli],
-        [capacity || stepCap || ceiling ? "raise" : "order", kitHint],
+        [capacity || stepCap || ceiling ? "raise" : confirmationPointer(entry.code) ? "with cavelon" : "order", kitHint],
         ["why", entry.explanation ? clip(entry.explanation.replace(/\s+/g, " "), 600) : undefined],
         ["docs", docs],
         ["read", read.length ? read.map((r) => r.command).join("; ") : undefined],

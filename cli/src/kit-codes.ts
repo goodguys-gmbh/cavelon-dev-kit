@@ -43,7 +43,7 @@ export const KIT_ERROR_CODES: CatalogEntry[] = [
   { code: "operation_ambiguous", area: "cli", message: "The short name matches several operations.", hint: "Use the full operationId the message lists." },
   { code: "operation_for_a_person", area: "cli", message: "The operation stays with a person (the instance marks it, or it changes a secret, a credential or an approval), so an agent does not send it.", hint: "A person runs it in their own terminal, or in the Admin." },
   { code: "secret_field_for_a_person", area: "cli", message: "The request sets a field the instance marks as a secret value, so an agent does not send it.", hint: "Leave the field out; a person enters the value with `cavelon secrets set <name>` or in the Admin." },
-  { code: "confirmation_required", area: "cli", message: "The command changes something and there is no terminal to ask.", hint: "Read the plan it printed, then run it again with --yes." },
+  { code: "yes_required", area: "cli", message: "setup changes something and there is no terminal to ask.", hint: "Read the plan it printed, then run it again with --yes." },
   // Operations (op_…).
   { code: "operations_unavailable", area: "cli", message: "The instance does not offer the operations API.", hint: "Its operator turns it on with OPERATIONS_API_ENABLED." },
   { code: "not_an_operation_id", area: "cli", message: "That is not an operation id; they start with op_.", hint: "Commands that start work print the operation id; `cavelon status` lists running ones." },

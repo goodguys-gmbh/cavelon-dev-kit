@@ -70,6 +70,23 @@ either) and `approval_needs_a_person`, and the new `person_only_operation`,
 from the instance build that refuses every token and key on what a person runs.
 The rest of the catalog stays as recorded.
 
+Later on 2026-10-07 the snapshot was refreshed from the instance's next
+build, which is not released or deployed anywhere yet, again without running
+it: the change that checks a person's confirmation of a personal access
+token's guarded change on the server. The OpenAPI is the reference that build's
+generator writes (`docs/openapi.json`), trimmed with `POST /api/v1/confirmations`
+added to the list; against the snapshot it differs only in that route, its
+`Confirmation*` schemas, `MetaCapabilities.confirmations`, and
+`x-cavelon-confirmation`, `x-cavelon-confirmation-when` and a `428` response on
+the six guarded operations. The capabilities gain `confirmations` as that
+build's `/meta/capabilities` returns it at its default settings (`enforced`
+true), and the error catalog its four `confirmation` codes, as its
+`/meta/error-catalog` defines them (`confirmation_required`,
+`confirmation_invalid`, `confirmation_not_needed`,
+`confirmation_needs_a_token`). The rest stays as recorded. Until that build is
+released, a deployed instance publishes none of this; the fake server plays
+both (`confirmations: null` is the instance without it).
+
 The tests switch features on in the fake server where a command needs them
 (personal access tokens, the operations API, Sandboxes, Masterloop, archive
 uploads, the database connector); the snapshot keeps the defaults.

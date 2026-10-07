@@ -1,6 +1,7 @@
 import { checkKeyTenant } from "./acting.js";
 import type { Context } from "./command.js";
 import { Contracts } from "./contracts.js";
+import { changeConfirmer } from "./change-confirmation.js";
 import { ApiClient } from "./http.js";
 import { colorEnabled, styleFor, type Io } from "./io.js";
 import { requireInstance, requireToken, resolveSession, resolveTenantId, type GlobalOptions, type Session } from "./session.js";
@@ -36,6 +37,7 @@ export function createContext(io: Io, globals: GlobalOptions, mode: "cli" | "mcp
       clientPromise ??= (async () => {
         const session = await ctx.session();
         const client = new ApiClient({ url: requireInstance(session), token: requireToken(session) }, io.env);
+        client.confirmer = changeConfirmer(ctx, client);
         client.target.tenantId =
           session.tokenKind === "api_key" ? await checkKeyTenant(client, session, (m) => ctx.warn(m)) : await resolveTenantId(io.env, session, client, io.now());
         return client;
