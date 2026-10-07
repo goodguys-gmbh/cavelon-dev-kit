@@ -21,10 +21,10 @@ import { callOperation, previewRequest, type CallArguments } from "../invoke.js"
 import { confinedPath } from "../paths.js";
 import { describeSchema, findOperation, jsonBodySchema, matchedLoosely, operations, schemaTypes, secretFields, secretPaths, type Operation } from "../openapi.js";
 import { harnessNotFoundError, lookupHarness } from "../harness-ref.js";
-import { CONFIRM_TOKEN, confirmToken, confirmTokenRequired, confirmWith } from "../confirm-token.js";
+import { CONFIRM_TOKEN, confirmInTerminal, confirmThroughClient, confirmToken, confirmTokenRequired, personApproves, personRoute } from "../confirm-token.js";
 import { actingTarget, targetLine } from "../acting.js";
 import { accessFor, operationAccess, type CredentialAccess, type OperationAccess } from "../access.js";
-import { cavelonCommand, fill } from "../printed.js";
+import { cavelonCommand, fill, personCommand } from "../printed.js";
 
 /** Said once when `--json` carried the body: the alias goes away in a later release. */
 export const JSON_BODY_DEPRECATED =
@@ -265,8 +265,9 @@ export const api: CommandSpec = {
     "As an MCP tool, or run by a coding agent (" +
     AGENT_VARIABLES.filter((v) => v.variable !== "CAVELON_AGENT").map((v) => (v.value ? `${v.variable}=${v.value}` : v.variable)).join(", ") +
     "\nor CAVELON_AGENT=1 is set), an operation that changes something returns what it would send and a confirm token,\n" +
-    "and sends it only with that token: --confirm <token>, or confirm: \"<token>\" as an MCP tool. A changed request\n" +
-    "needs a new preview; confirm: true is refused.\n" +
+    "and sends it only with that token and the person's yes: as an MCP tool, confirm: \"<token>\", after which the client\n" +
+    "asks the person; from an agent's shell, the person sends it from their own terminal. A changed request needs a new\n" +
+    "preview; confirm: true is refused.\n" +
     "Run by an agent, one the instance marks for a person only (x-cavelon-person-only) is refused, as is a body that\n" +
     "sets a field the instance marks as a secret value (x-cavelon-secret) and a file outside the solution folder. On an\n" +
     "instance that marks no operation, one that changes a secret, creates or revokes a credential or decides an\n" +
@@ -336,7 +337,16 @@ export const api: CommandSpec = {
       if (secrets.length) throw secretRefusal(op, secrets, driven);
     }
     if (driven && !op.readOnly) {
-      const preview = await previewUnlessConfirmed(ctx, input, doc, op, args, driven);
+      // The same call as the person types it in their own terminal, where it sends at once.
+      const words = [
+        "api",
+        name,
+        ...((input.positionals.params as string[] | undefined) ?? []),
+        ...listOption(input, "param").flatMap((p) => ["-p", p]),
+        ...(rawBody !== undefined ? ["--body", rawBody] : []),
+        ...listOption(input, "file").flatMap((f) => ["--file", f]),
+      ];
+      const preview = await previewUnlessConfirmed(ctx, input, doc, op, args, driven, personCommand(...words));
       if (preview) return preview;
     }
     const client = await ctx.client();
@@ -363,6 +373,9 @@ export const api: CommandSpec = {
  * yet; undefined when it has. Over MCP and from an agent's shell alike, only
  * the token of this very request sends it, so the agent has to show the
  * preview before it can send, and cannot send another body than it showed.
+ * `api` reaches every operation, the live and tenant-wide ones too, so the
+ * token is not enough: the person approves in the MCP client's dialog, or
+ * sends it from their own terminal (`command`).
  */
 async function previewUnlessConfirmed(
   ctx: Context,
@@ -371,6 +384,7 @@ async function previewUnlessConfirmed(
   op: Operation,
   args: CallArguments,
   driven: DrivenBy,
+  command: string,
 ): Promise<CommandResult | undefined> {
   const given = input.options.confirm;
   if (given === true) throw confirmTokenRequired("api");
@@ -378,27 +392,35 @@ async function previewUnlessConfirmed(
   const files = (args.files ?? []).map((f) => ({ field: f.field, file: path.relative(ctx.io.cwd, f.path) || f.path }));
   const session = await ctx.session();
   const token = confirmToken({ url: session.url, tenant: session.tenant }, "api", { request, files });
-  if (typeof given === "string" && given === token) return undefined;
+  const route = personRoute(ctx, driven);
+  if (typeof given === "string" && given === token) {
+    await personApproves(ctx, driven, { tool: "api", what: `Send ${request.method} ${request.path} (${op.alias}).`, command });
+    return undefined;
+  }
   const stale = typeof given === "string" && given !== "";
   // `--confirm` alone, which splitConfirm passes on as an empty token: it shows the preview, as in every changing command.
   const bare = given === "" && driven.by === "agent";
-  const confirm =
-    driven.by === "mcp"
-      ? confirmWith("api", token)
-      : `Show the person this request, then run the same command again with --confirm ${token} to send exactly it.`;
+  const confirm = route === "client" ? confirmThroughClient("api", token) : confirmInTerminal(command);
   // Where it would go: the person who approves sees the tenant an agent passed, or that none is chosen.
   const target = await actingTarget(ctx);
   const shown = { operation: op.alias, ...request, ...(files.length ? { files } : {}), target, sent: false };
   const lines = [`Would send ${request.method} ${request.path}. Nothing was sent.`, targetLine(target)];
   if (stale) lines.push("The confirm token is not this request's: the request changed since its preview, or the token is another one's.");
-  if (bare && driven.by === "agent") lines.push("--confirm alone does not send it when a coding agent runs cavelon.");
+  if (bare && driven.by === "agent") lines.push("A coding agent cannot send it: the person sends it from their own terminal.");
   if (Object.keys(request.query).length) lines.push(`Query: ${JSON.stringify(request.query)}`);
   if (Object.keys(request.headers).length) lines.push(`Headers: ${JSON.stringify(request.headers)}`);
   if (request.body !== null) lines.push("Body:", JSON.stringify(request.body, null, 2));
   for (const f of files) lines.push(`File: ${f.field} = ${f.file}`);
   lines.push(confirm);
   return {
-    data: { ...shown, confirm_token: token, confirm, ...(stale ? { token_mismatch: true } : {}), ...(bare ? { token_required: true } : {}) },
+    data: {
+      ...shown,
+      ...(route === "client" ? { confirm_token: token } : {}),
+      confirm,
+      needs_person: route,
+      ...(stale ? { token_mismatch: true } : {}),
+      ...(bare ? { token_required: true } : {}),
+    },
     text: lines.join("\n"),
     ...(stale ? { exitCode: ExitCode.conflict } : bare ? { exitCode: ExitCode.needsAction } : {}),
   };

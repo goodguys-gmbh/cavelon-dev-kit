@@ -1,4 +1,3 @@
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -12,7 +11,7 @@ import { KIT_ERROR_CODES } from "../src/kit-codes.js";
 import { createMcpServer } from "../src/mcp.js";
 import { exportForm, personaYaml, sectionFields } from "../src/package-format.js";
 import { CONTRACTS, startFakeServer, type FakeServer } from "./fake-server.js";
-import { cli, login, sandbox, type Sandbox } from "./helpers.js";
+import { askingClient, cli, login, sandbox, type Sandbox } from "./helpers.js";
 
 /**
  * The persona and the default route in the authoring flow, the smaller
@@ -226,7 +225,7 @@ describe("the default route", () => {
     );
     const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
     await mcp.connect(serverSide);
-    const client = new Client({ name: "test", version: "0" });
+    const client = askingClient();
     await client.connect(clientSide);
     const call = async (name: string, args: Record<string, unknown>) => {
       const result = await client.callTool({ name, arguments: args });

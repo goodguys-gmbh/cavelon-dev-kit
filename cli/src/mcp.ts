@@ -1,8 +1,9 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { CallToolRequestSchema, ListToolsRequestSchema, type Tool } from "@modelcontextprotocol/sdk/types.js";
+import { CallToolRequestSchema, ListToolsRequestSchema, type RequestId, type Tool } from "@modelcontextprotocol/sdk/types.js";
 import { accessFor, allOf, credentialWords, operationAccess, whoInstead, type CredentialAccess } from "./access.js";
-import { formerlyWarning, ownsTenant, propertyName, type CommandSpec, type Input } from "./command.js";
+import { formerlyWarning, ownsTenant, propertyName, type CommandSpec, type Input, type PersonAnswer } from "./command.js";
 import { MCP_MAX_WAIT_MS } from "./commands/async.js";
+import { PERSON_WAIT_MS } from "./confirm-token.js";
 import { createContext, withWarnings } from "./context.js";
 import { asCavelonError, CavelonError, ExitCode, usageError } from "./errors.js";
 import type { Io } from "./io.js";
@@ -33,13 +34,17 @@ const INSTRUCTIONS =
   "and api for an operation that is not read-only, " +
   "return what they would do and a confirm_token, and change nothing until called again with the same arguments and " +
   "confirm set to that token: show the person the preview first. The token confirms exactly the change the preview showed; " +
-  "a different change needs a new preview, and confirm: true is refused. The default route " +
-  "(harness_default, activate's make_default) decides which solution the tenant's chat and widget answer with: live traffic, " +
-  "so ask the person, and confirm only with their yes; the same goes for deactivate, which takes a solution out of live traffic " +
-  "(its status becomes inactive), and for apply with include_tenant_wide, which imports the tenant-wide sections (tenant_settings, " +
-  "model_registry, …) for every solution of the tenant. A new tenant, a replaced variable (every solution of the tenant reads it) and " +
-  "the activation of a solution a channel or trigger reaches are the person's to confirm too; confirm a loop_start on your own " +
-  "only for a trigger of a draft solution in a test environment (a run acts as the person and spends budget). " +
+  "a different change needs a new preview, and confirm: true is refused. A change that reaches live traffic or the whole tenant, " +
+  "or that cannot be taken back, is the person's to confirm, and the token alone does not make it: its preview says " +
+  "needs_person. With needs_person \"client\", call again with the token and the client asks the person to approve exactly that " +
+  "change; their no, or no answer, changes nothing (confirm_declined). With needs_person \"terminal\" this client cannot ask " +
+  "them: give the person the preview's confirm command, which they run in their own terminal, never in yours. These are " +
+  "harness_default and activate (the default route and a solution something reaches: live traffic), deactivate, tenant_create, " +
+  "variables_set replacing a value (every solution of the tenant reads it), limits_set, models_set_limit, trigger_identity, " +
+  "api for an operation that is not read-only, loop_start unless the trigger's solution is a draft (a run acts as the person " +
+  "and spends budget), and apply where its preview says show_to_person (tenant-wide sections, an active solution, deletions, " +
+  "env/prod). A draft's apply, a draft's loop_start, loop_cancel, sandbox_seed and kb_upload's replace you confirm with the " +
+  "token once the person saw the preview. " +
   "chat sends one message to a solution and returns its answer: the way to try one that is not the default route. " +
   "kb_upload names files that match an active document of the knowledge base; with replace it replaces them, and where the " +
   "instance's upload cannot, it returns what it would deactivate and uploads nothing without its confirm_token. " +
@@ -246,6 +251,33 @@ function missingRequired(spec: CommandSpec, args: Record<string, unknown>): stri
     .map((p) => p.name);
 }
 
+/** The one field of the dialog in which the client asks the person; the agent never sees or answers it. */
+const APPROVAL_SCHEMA = {
+  type: "object" as const,
+  properties: { approve: { type: "boolean" as const, title: "Make this change", description: "Yes makes exactly the change shown; no changes nothing." } },
+  required: ["approve"],
+};
+
+/** Whether the client can show the person a form (elicitation); an empty capability means form, as the protocol says. */
+function clientAsks(server: Server): boolean {
+  const elicitation = server.getClientCapabilities()?.elicitation as Record<string, unknown> | undefined;
+  return Boolean(elicitation && (elicitation.form || Object.keys(elicitation).length === 0));
+}
+
+/**
+ * The person's answer to a change, asked through the client, tied to the
+ * tool call that asks. Bounded: no answer within PERSON_WAIT_MS, or a client
+ * that fails to ask, changes nothing.
+ */
+async function askThroughClient(server: Server, message: string, relatedRequestId: RequestId): Promise<PersonAnswer> {
+  try {
+    const result = await server.elicitInput({ mode: "form", message, requestedSchema: APPROVAL_SCHEMA }, { timeout: PERSON_WAIT_MS, relatedRequestId });
+    return result.action === "accept" && result.content?.approve === true ? "approved" : "declined";
+  } catch {
+    return "unanswered";
+  }
+}
+
 /** Commands write nothing to stdout in MCP mode; stdout belongs to the protocol. */
 function mcpIo(io: Io): Io {
   return { ...io, stdout: { write: () => true, isTTY: false } };
@@ -289,7 +321,7 @@ export function createMcpServer(io: Io, commands: CommandSpec[], updates: Sessio
   });
 
   /** The tool's `--json` document, or its error. */
-  async function call(name: string, given: Record<string, unknown>): Promise<{ body: unknown; isError?: true }> {
+  async function call(name: string, given: Record<string, unknown>, requestId: RequestId): Promise<{ body: unknown; isError?: true }> {
     const spec = byName.get(name);
     const fail = (error: unknown) => ({ isError: true as const, body: { error: asCavelonError(error).toJSON() } });
     if (!spec) return fail(new Error(`Unknown tool ${name}.`));
@@ -307,6 +339,7 @@ export function createMcpServer(io: Io, commands: CommandSpec[], updates: Sessio
     const tenant = !ownsTenant(spec) && typeof args.tenant === "string" ? args.tenant : undefined;
     const solutionEnv = spec.options?.env && typeof args.env === "string" ? args.env : undefined;
     const ctx = createContext(mcpIo(io), { json: true, tenant, solutionEnv, sessionTenants }, "mcp");
+    if (clientAsks(server)) ctx.askPerson = (message) => askThroughClient(server, message, requestId);
     for (const message of renamed) ctx.warn(message);
     try {
       // A command a person runs in a terminal knows nothing of this session's tenant, so the lines printed for one name it.
@@ -331,10 +364,10 @@ export function createMcpServer(io: Io, commands: CommandSpec[], updates: Sessio
     }
   }
 
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     // The lookup runs beside the tool; only the session's first call waits for it, and briefly.
     const warning = notice.forCall(() => server.getClientVersion()?.name);
-    const { body, isError } = await call(request.params.name, (request.params.arguments ?? {}) as Record<string, unknown>);
+    const { body, isError } = await call(request.params.name, (request.params.arguments ?? {}) as Record<string, unknown>, extra.requestId);
     // Another tenant may let the credential do other things: the client lists the tools again.
     if (!isError && TENANT_CHOOSERS.has(request.params.name)) void server.sendToolListChanged().catch(() => undefined);
     let out = body;

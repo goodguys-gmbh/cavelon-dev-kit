@@ -1,4 +1,3 @@
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -9,7 +8,7 @@ import { COMMANDS } from "../src/commands/index.js";
 import type { InStream } from "../src/io.js";
 import { createMcpServer } from "../src/mcp.js";
 import { startFakeServer, type FakeServer } from "./fake-server.js";
-import { cli, login, sandbox, type Sandbox } from "./helpers.js";
+import { askingClient, cli, login, sandbox, type PersonAtClient, type Sandbox } from "./helpers.js";
 
 /**
  * Trying a solution that is not the tenant's default route, taking an active
@@ -32,7 +31,7 @@ async function initSolution(harness = "support"): Promise<string> {
   return dir;
 }
 
-function mcpClient(dir: string, env = sb.env) {
+function mcpClient(dir: string, env = sb.env, person?: PersonAtClient) {
   const mcp = createMcpServer(
     {
       stdout: { write: () => true },
@@ -46,8 +45,9 @@ function mcpClient(dir: string, env = sb.env) {
     COMMANDS,
   );
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
-  const client = new Client({ name: "test", version: "0" });
+  const client = askingClient({ person });
   return {
+    asked: client.asked,
     async call(name: string, args: Record<string, unknown>) {
       if (!client.transport) {
         await mcp.connect(serverSide);
@@ -141,16 +141,31 @@ describe("deactivate", () => {
     expect(again.json()).toMatchObject({ changed: false, harness: { status: "inactive" } });
   });
 
-  it("in a coding agent's shell, deactivates only with the preview's token", async () => {
+  it("in a coding agent's shell, never deactivates: the person confirms in their own terminal", async () => {
     solution("support").status = "active";
     const agent = { env: { CLAUDECODE: "1" } };
     const bare = await cli(sb, ["deactivate", "--harness", "support", "--confirm", "--json"], agent);
     expect(bare.code).toBe(5);
-    const shown = bare.json<{ changed: boolean; confirm_token: string; confirm: string }>();
-    expect(shown).toMatchObject({ changed: false, confirm: `cavelon deactivate --harness support --confirm ${shown.confirm_token}` });
+    const shown = bare.json<Record<string, unknown>>();
+    expect(shown).toMatchObject({
+      changed: false,
+      needs_person: "terminal",
+      confirm: "cavelon deactivate --harness support --confirm (the person runs it in their own terminal: a coding agent cannot confirm this change)",
+    });
+    expect(shown.confirm_token).toBeUndefined();
+    // The token an MCP preview hands out does not get an agent's shell past the person either.
+    const mcp = mcpClient(sb.home);
+    const token = (await mcp.call("deactivate", { harness: "support" })).body.confirm_token as string;
+    await mcp.close();
+    const refused = await cli(sb, ["deactivate", "--harness", "support", "--confirm", token, "--json"], agent);
+    expect(refused.code).toBe(5);
+    expect(refused.json<{ error: Record<string, unknown> }>().error).toMatchObject({
+      code: "confirm_needs_person",
+      details: { person_command: "cavelon deactivate --harness support --confirm" },
+    });
     expect(solution("support").status).toBe("active");
-    const done = await cli(sb, ["deactivate", "--harness", "support", "--confirm", shown.confirm_token, "--json"], agent);
-    expect(done.code, done.stdout).toBe(0);
+    const person = await cli(sb, ["deactivate", "--harness", "support", "--confirm", "--json"]);
+    expect(person.code, person.stdout).toBe(0);
     expect(solution("support").status).toBe("inactive");
   });
 
@@ -174,20 +189,51 @@ describe("deactivate", () => {
     expect(solution("support").status).toBe("active");
   });
 
-  it("over MCP, confirms only with its own preview's confirm_token", async () => {
+  it("over MCP, confirms only with its own preview's confirm_token and the person's yes in the client", async () => {
     solution("support").status = "active";
     const mcp = mcpClient(sb.home);
     try {
       const bare = await mcp.call("deactivate", { harness: "support", confirm: true });
       expect(bare.body.error).toMatchObject({ code: "confirm_token_required" });
       const shown = await mcp.call("deactivate", { harness: "support" });
-      expect(shown.body).toMatchObject({ changed: false, confirm_token: expect.stringMatching(/^[0-9a-f]{12}$/) });
+      expect(shown.body).toMatchObject({ changed: false, needs_person: "client", confirm_token: expect.stringMatching(/^[0-9a-f]{12}$/) });
+      expect(mcp.asked).toEqual([]);
       expect(solution("support").status).toBe("active");
       const done = await mcp.call("deactivate", { harness: "support", confirm: shown.body.confirm_token });
       expect(done.body).toMatchObject({ changed: true });
+      expect(mcp.asked).toEqual([expect.stringMatching(/^Deactivate Support \(support\): it goes inactive and out of live traffic\.\n.*acme/)]);
       expect(solution("support").status).toBe("inactive");
     } finally {
       await mcp.close();
+    }
+  });
+
+  it("over MCP, changes nothing when the person declines, or when the client cannot ask them", async () => {
+    solution("support").status = "active";
+    const declines = mcpClient(sb.home, sb.env, "declines");
+    try {
+      const token = (await declines.call("deactivate", { harness: "support" })).body.confirm_token;
+      const refused = await declines.call("deactivate", { harness: "support", confirm: token });
+      expect(refused.isError).toBe(true);
+      expect(refused.body.error).toMatchObject({ code: "confirm_declined", details: { answer: "declined" } });
+      expect(declines.asked).toHaveLength(1);
+      expect(solution("support").status).toBe("active");
+    } finally {
+      await declines.close();
+    }
+    const cannot = mcpClient(sb.home, sb.env, "cannot ask");
+    try {
+      const shown = await cannot.call("deactivate", { harness: "support" });
+      expect(shown.body).toMatchObject({ needs_person: "terminal", confirm: expect.stringMatching(/^cavelon deactivate --harness support --confirm \(the person runs it in their own terminal/) });
+      // An agent that works the token out is refused all the same, and told the person's command.
+      const declined = mcpClient(sb.home);
+      const token = (await declined.call("deactivate", { harness: "support" })).body.confirm_token;
+      await declined.close();
+      const refused = await cannot.call("deactivate", { harness: "support", confirm: token });
+      expect(refused.body.error).toMatchObject({ code: "confirm_needs_person", exit_code: 5, details: { person_command: "cavelon deactivate --harness support --confirm" } });
+      expect(solution("support").status).toBe("active");
+    } finally {
+      await cannot.close();
     }
   });
 });

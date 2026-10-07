@@ -11,7 +11,7 @@ import type { InStream } from "../src/io.js";
 import { createMcpServer } from "../src/mcp.js";
 import { spanAttributes, suggestedSpan } from "../src/trace-view.js";
 import { startFakeServer, traceFixture, type FakeServer } from "./fake-server.js";
-import { cli, login, sandbox, type Sandbox } from "./helpers.js";
+import { askingClient, cli, login, sandbox, type Sandbox } from "./helpers.js";
 import { readFileSync } from "node:fs";
 import { CONTRACTS } from "./fake-server.js";
 
@@ -61,28 +61,24 @@ beforeEach(() => {
 });
 
 describe("--confirm when a coding agent runs cavelon in its shell", () => {
-  it("takes the preview's token: a bare --confirm and another change's token change nothing", async () => {
+  it("leaves a limit to the person's terminal: neither a bare --confirm nor a token changes it", async () => {
     const before = server.state.requests.length;
+    const person = "cavelon limits set agent_max_turns 40 --confirm (the person runs it in their own terminal: a coding agent cannot confirm this change)";
     const preview = await cli(sb, ["limits", "set", "agent_max_turns", "40", "--json"], { env: AGENT });
     expect(preview.code).toBe(0);
-    const shown = preview.json<{ confirm_token: string; confirm: string }>();
-    expect(shown.confirm_token).toMatch(/^[0-9a-f]{12}$/);
-    expect(shown.confirm).toBe(`cavelon limits set agent_max_turns 40 --confirm ${shown.confirm_token}`);
+    const shown = preview.json<Record<string, unknown>>();
+    expect(shown).toMatchObject({ needs_person: "terminal", confirm: person });
+    expect(shown.confirm_token).toBeUndefined();
     const text = await cli(sb, ["limits", "set", "agent_max_turns", "40"], { env: AGENT });
-    expect(text.stdout).toContain(`Change it with: cavelon limits set agent_max_turns 40 --confirm ${shown.confirm_token}`);
+    expect(text.stdout).toContain(`Change it with: ${person}`);
 
     const bare = await cli(sb, ["limits", "set", "agent_max_turns", "40", "--confirm"], { env: AGENT });
     expect(bare.code).toBe(5);
-    expect(bare.stdout).toMatch(/--confirm alone does not confirm when a coding agent runs cavelon\. Nothing was changed/);
-    const other = await cli(sb, ["limits", "set", "agent_max_turns", "41", "--confirm", shown.confirm_token, "--json"], { env: AGENT });
+    expect(bare.stdout).toMatch(/A coding agent cannot confirm this change; nothing was changed: the person confirms it in their own terminal\./);
+    const other = await cli(sb, ["limits", "set", "agent_max_turns", "41", "--confirm", "0123456789ab", "--json"], { env: AGENT });
     expect(other.code).toBe(4);
     expect(other.json()).toMatchObject({ changed: false, token_mismatch: true });
     expect(changes(before)).toEqual([]);
-
-    const done = await cli(sb, ["limits", "set", "agent_max_turns", "40", "--confirm", shown.confirm_token, "--json"], { env: AGENT });
-    expect(done.code, done.stderr).toBe(0);
-    expect(done.json()).toMatchObject({ value: 40, now: 40 });
-    expect(changes(before)).toHaveLength(1);
   });
 
   it("leaves a person's terminal with the plain flag", async () => {
@@ -95,17 +91,17 @@ describe("--confirm when a coding agent runs cavelon in its shell", () => {
 
   it("holds for harness default (--confirm=<token> too), variables delete and activate --make-default", async () => {
     harness("support").status = "active";
-    const shown = (await cli(sb, ["harness", "default", "support", "--json"], { env: AGENT })).json<{ confirm_token: string; confirm: string }>();
-    expect(shown.confirm).toBe(`cavelon harness default support --confirm ${shown.confirm_token}`);
+    const shown = (await cli(sb, ["harness", "default", "support", "--json"], { env: AGENT })).json<{ confirm: string }>();
+    expect(shown.confirm).toMatch(/^cavelon harness default support --confirm \(the person runs it in their own terminal/);
     expect((await cli(sb, ["harness", "default", "support", "--confirm"], { env: AGENT })).code).toBe(5);
+    expect((await cli(sb, ["harness", "default", "support", "--confirm=0123456789ab"], { env: AGENT })).code).toBe(4);
     expect(harness("support").is_default).toBe(false);
-    expect((await cli(sb, ["harness", "default", "support", `--confirm=${shown.confirm_token}`], { env: AGENT })).code).toBe(0);
+    expect((await cli(sb, ["harness", "default", "support", "--confirm"])).code).toBe(0);
     expect(harness("support").is_default).toBe(true);
 
     await cli(sb, ["variables", "set", "crm_url", "https://crm.example.com"]);
-    const variable = (await cli(sb, ["variables", "delete", "crm_url", "--json"], { env: AGENT })).json<{ confirm_token: string }>();
-    expect((await cli(sb, ["variables", "delete", "crm_url", "--confirm", "--json"], { env: AGENT })).json()).toMatchObject({ deleted: false, token_required: true });
-    expect((await cli(sb, ["variables", "delete", "crm_url", "--confirm", variable.confirm_token, "--json"], { env: AGENT })).json()).toMatchObject({ deleted: true });
+    expect((await cli(sb, ["variables", "delete", "crm_url", "--confirm", "--json"], { env: AGENT })).json()).toMatchObject({ deleted: false, needs_person: "terminal" });
+    expect((await cli(sb, ["variables", "delete", "crm_url", "--confirm", "--json"])).json()).toMatchObject({ deleted: true });
 
     // activate refuses a bare --confirm before it activates anything.
     const dir = await initSolution("other");
@@ -132,7 +128,7 @@ describe("MCP tool arguments", () => {
     );
     const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
     await mcp.connect(serverSide);
-    const c = new Client({ name: "test", version: "0" });
+    const c = askingClient();
     await c.connect(clientSide);
     return c;
   }

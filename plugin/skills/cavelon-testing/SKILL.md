@@ -249,10 +249,12 @@ which the tenant's chat and widget never answer with; a draft answers only a
 person's token, as a Playground run. `cavelon api chat` with `harness_id` in
 the body does the same, but needs the id and a confirm. `cavelon deactivate
 --harness <solution>` takes an active solution out of live traffic again; it
-previews first and is the person's decision, so show the preview and confirm
-only with their yes. When every suite passes,
+previews first and is the person's decision: show the preview; over MCP the
+client asks them when you confirm with its token, and from your shell they run
+the confirm command in their own terminal. When every suite passes,
 `cavelon activate --harness <name or slug>` goes through the readiness gate; if the
 token may not activate, a person activates in the Admin. A solution that a
 channel or an active trigger reaches goes live for them at once, so its
-activation previews first and needs the confirm it prints: show it to the
-person and confirm only with their yes.
+activation previews first and needs the person's yes: show it; over MCP the
+client asks them when you confirm with its token, and from your shell they run
+the confirm command in their own terminal.

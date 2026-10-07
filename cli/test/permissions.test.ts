@@ -12,7 +12,7 @@ import type { InStream, Io } from "../src/io.js";
 import { createMcpServer } from "../src/mcp.js";
 import type { MetaPrincipal } from "../src/principal.js";
 import { startFakeServer, type FakeServer } from "./fake-server.js";
-import { cli, login, sandbox, type Sandbox } from "./helpers.js";
+import { askingClient, cli, login, sandbox, type Sandbox } from "./helpers.js";
 
 /**
  * The kit offers and suggests only what the credential may do, as the
@@ -75,7 +75,7 @@ async function mcpFor(sb: Sandbox): Promise<{ client: Client; changed: () => num
   const mcp = createMcpServer(io, COMMANDS);
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
   await mcp.connect(serverSide);
-  const client = new Client({ name: "test", version: "0" });
+  const client = askingClient();
   let changes = 0;
   client.setNotificationHandler(ToolListChangedNotificationSchema, () => {
     changes++;

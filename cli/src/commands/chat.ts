@@ -1,5 +1,5 @@
 import { parseDuration, positional, stringOption, type CommandSpec, type Context, type Input } from "../command.js";
-import { confirmation, confirmTokenRequired } from "../confirm-token.js";
+import { confirmation, confirmTokenRequired, PERSON_CONFIRMS_HELP } from "../confirm-token.js";
 import { named, readDefaultRoute } from "../default-route.js";
 import { CavelonError, ExitCode, usageError } from "../errors.js";
 import { clip } from "../format.js";
@@ -133,7 +133,8 @@ export const deactivate: CommandSpec = {
     "through its readiness gate). Without --confirm nothing changes: the preview says what would stop. Show it to a person\n" +
     "and confirm only with their yes. The tenant's default route is refused before anything is sent: make another solution\n" +
     "the default first (`cavelon harness default <solution>`). An instance that publishes no deactivate route is said so; a\n" +
-    "person deactivates in the Admin there.",
+    "person deactivates in the Admin there.\n" +
+    PERSON_CONFIRMS_HELP,
   readOnly: false,
   destructive: true,
   idempotent: true,
@@ -179,7 +180,9 @@ export const deactivate: CommandSpec = {
       });
     }
     const confirmCommand = cavelonCommand("deactivate", "--harness", harness.slug, "--confirm");
-    const gate = await confirmation(ctx, input, "deactivate", { harness: harness.id, status: harness.status });
+    const gate = await confirmation(ctx, input, "deactivate", { harness: harness.id, status: harness.status }, {
+      person: { what: `Deactivate ${named(harness)}: it goes inactive and out of live traffic.`, words: ["deactivate", "--harness", harness.slug, "--confirm"] },
+    });
     if (!gate.confirmed) {
       const known = route?.known ? "" : " (this instance does not say which solution is the default route)";
       return {

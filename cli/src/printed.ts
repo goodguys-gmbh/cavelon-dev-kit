@@ -82,6 +82,18 @@ export function printedCommand(words: readonly Word[], override: { env?: string 
 }
 
 /**
+ * A command the person runs in their own terminal, where a plain `--confirm`
+ * confirms: a command line even over MCP, with the running command's
+ * `--instance`, `--env` and `--tenant`, never a token. For a change a coding
+ * agent may not confirm (confirm-token.ts, `PersonChange`).
+ */
+export function personCommand(...words: Word[]): string {
+  const target = current.getStore();
+  const spec = target ? commandOf(target.commands, words) : undefined;
+  return commandLine(target && spec ? withTarget(spec, words, target) : words);
+}
+
+/**
  * In a coding agent's shell a bare `--confirm` only shows the preview again
  * (confirm-token.ts), so a confirm line printed before its preview exists
  * names the token it will need.

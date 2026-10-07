@@ -1,3 +1,5 @@
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { ElicitRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -82,4 +84,28 @@ export async function login(sb: Sandbox, url: string, token: string, extra: stri
   const result = await cli(sb, ["login", "--instance", url, "--token-stdin", ...extra], { stdin: `${token}\n` });
   if (result.code !== 0) throw new Error(`login failed (${result.code}): ${result.stderr}${result.stdout}`);
   return result;
+}
+
+/**
+ * How the person behind an MCP client answers a change the server asks them
+ * about (elicitation): they approve, decline, or the client cannot ask.
+ */
+export type PersonAtClient = "approves" | "declines" | "cannot ask";
+
+/**
+ * An MCP client for the tests, by default one that can ask the person and
+ * whose person approves, as a person who saw the preview would. `asked`
+ * holds each message the server showed the person.
+ */
+export function askingClient(options: { name?: string; person?: PersonAtClient } = {}): Client & { asked: string[] } {
+  const person = options.person ?? "approves";
+  const client = new Client({ name: options.name ?? "test", version: "0" }, person === "cannot ask" ? {} : { capabilities: { elicitation: { form: {} } } });
+  const asked: string[] = [];
+  if (person !== "cannot ask") {
+    client.setRequestHandler(ElicitRequestSchema, async (request) => {
+      asked.push(request.params.message);
+      return person === "approves" ? { action: "accept", content: { approve: true } } : { action: "decline" };
+    });
+  }
+  return Object.assign(client, { asked });
 }

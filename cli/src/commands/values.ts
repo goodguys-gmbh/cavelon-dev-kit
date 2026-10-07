@@ -10,7 +10,7 @@ import {
   type Context,
 } from "../command.js";
 import { refuseForAgent } from "../agent-env.js";
-import { confirmation } from "../confirm-token.js";
+import { confirmation, PERSON_CONFIRMS_HELP } from "../confirm-token.js";
 import { CavelonError, ExitCode, usageError, validationError } from "../errors.js";
 import { clip, keyValues, moreHint, table } from "../format.js";
 import { callStable, workflowOperation } from "../invoke.js";
@@ -172,7 +172,8 @@ export const variablesSet: CommandSpec = {
     "use `cavelon secrets set` (a person runs it). --stdin reads the value from standard input instead of the argument.\n" +
     "A new variable is created at once. Replacing another value needs --confirm: without it nothing changes, and the preview\n" +
     "shows the old and the new value. A variable is tenant-wide, so every solution that names it, active ones included, reads\n" +
-    "the new value: show the preview to a person and confirm only with their yes.",
+    "the new value: show the preview to a person and confirm only with their yes.\n" +
+    PERSON_CONFIRMS_HELP,
   readOnly: false,
   idempotent: true,
   mcpTool: "variables_set",
@@ -208,9 +209,15 @@ export const variablesSet: CommandSpec = {
     await checkName(ctx, "PUT", "/api/v1/variables/{name}", "setting tenant variables", name);
     const previous = await readVariable(ctx, name);
     if (previous && previous.value !== value) {
-      const gate = await confirmation(ctx, input, "variables_set", { name, previous: previous.value, value });
+      const words = ["variables", "set", name, ...(fromStdin ? ["--stdin"] : [value]), "--confirm"];
+      const gate = await confirmation(ctx, input, "variables_set", { name, previous: previous.value, value }, {
+        person: {
+          what: `Replace the tenant variable ${name}, which every solution of the tenant reads: ${JSON.stringify(clip(previous.value, LIST_VALUE_CHARS))} → ${JSON.stringify(clip(value, LIST_VALUE_CHARS))}.`,
+          words,
+        },
+      });
       if (!gate.confirmed) {
-        const confirm = gate.confirm(cavelonCommand("variables", "set", name, ...(fromStdin ? ["--stdin"] : [value]), "--confirm"));
+        const confirm = gate.confirm(cavelonCommand(...words));
         return {
           data: { name, changed: false, created: false, would: "replace", previous: previous.value, value, confirm, ...gate.fields },
           text: [
@@ -247,14 +254,17 @@ export const variablesDelete: CommandSpec = {
   mcpTool: false,
   positionals: [{ name: "name", description: "The variable's name.", required: true }],
   options: { confirm: CONFIRM_OPTION, env: ENV_OPTION },
-  examples: ["cavelon variables delete old_url", "cavelon variables delete old_url --confirm", "cavelon variables delete old_url --confirm <token>"],
+  examples: ["cavelon variables delete old_url", "cavelon variables delete old_url --confirm"],
   async run(ctx, input) {
     const name = positional(input, "name")!;
     const current = await readVariable(ctx, name);
     if (!current) return { data: { name, deleted: false, existed: false }, text: `This tenant has no variable "${name}"; nothing to delete.` };
-    const gate = await confirmation(ctx, input, "variables_delete", { name, value: current.value });
+    const words = ["variables", "delete", name, "--confirm"];
+    const gate = await confirmation(ctx, input, "variables_delete", { name, value: current.value }, {
+      person: { what: `Delete the tenant variable ${name}; a prompt or tool that names it gets no value afterwards.`, words },
+    });
     if (!gate.confirmed) {
-      const confirm = gate.confirm(cavelonCommand("variables", "delete", name, "--confirm"));
+      const confirm = gate.confirm(cavelonCommand(...words));
       return {
         data: { name, deleted: false, existed: true, value: current.value, confirm, ...gate.fields },
         text: `Variable ${name} = ${JSON.stringify(clip(current.value, LIST_VALUE_CHARS))}.\n${gate.where}\n${gate.mismatch ? `${gate.mismatch}\n` : ""}Nothing was deleted. Delete it with: ${confirm}`,

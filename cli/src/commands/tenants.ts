@@ -10,7 +10,7 @@ import {
   type Context,
 } from "../command.js";
 import { CavelonError, ExitCode, usageError } from "../errors.js";
-import { confirmation, confirmTokenRequired } from "../confirm-token.js";
+import { confirmation, confirmTokenRequired, PERSON_CONFIRMS_HELP } from "../confirm-token.js";
 import { keyValues, moreHint, table } from "../format.js";
 import { callStable } from "../invoke.js";
 import { formatQuota, limitError, limitsOrWarn, readQuotas } from "../limits.js";
@@ -142,7 +142,8 @@ export const tenantCreate: CommandSpec = {
     "without tenants.manage, is refused with exit 7 and nothing is sent. Without --confirm nothing is created: the preview\n" +
     "names the tenant, its plan and the instance it would be created on. A tenant is a platform change, so show the preview\n" +
     "to a person and confirm only with their yes. With --use, the new tenant is chosen only once the instance confirms the\n" +
-    "token acts in it. Inviting people and assigning roles stay in the Admin.",
+    "token acts in it. Inviting people and assigning roles stay in the Admin.\n" +
+    PERSON_CONFIRMS_HELP,
   readOnly: false,
   mcpTool: "tenant_create",
   positionals: [{ name: "slug", description: "Lower-case letters, digits and dashes.", required: true }],
@@ -157,7 +158,7 @@ export const tenantCreate: CommandSpec = {
     "idempotency-key": IDEMPOTENCY_OPTION,
     confirm: { type: "boolean", mcpToken: true, description: "Create the tenant (after a person saw the preview)." },
   },
-  examples: ["cavelon tenant create newco --name NewCo", "cavelon tenant create newco --name NewCo --confirm", "cavelon tenant create newco --name NewCo --confirm <token>"],
+  examples: ["cavelon tenant create newco --name NewCo", "cavelon tenant create newco --name NewCo --confirm"],
   async run(ctx, input) {
     const session = await ctx.session();
     // Refused before anything is read, as every confirming tool refuses true.
@@ -176,11 +177,14 @@ export const tenantCreate: CommandSpec = {
     const plan = stringOption(input, "plan");
     if (plan) body.plan = plan;
     // A tenant is created outside any tenant, in Platform mode, so the preview names no tenant to act in.
-    const gate = await confirmation(ctx, input, "tenant_create", body, { platform: "outside" });
+    const words = ["tenant", "create", slug, "--name", body.name as string, ...(plan ? ["--plan", plan] : []), ...(boolOption(input, "use") ? ["--use"] : [])];
+    const key = stringOption(input, "idempotency-key");
+    if (key) words.push("--idempotency-key", key);
+    const gate = await confirmation(ctx, input, "tenant_create", body, {
+      platform: "outside",
+      person: { what: `Create the tenant ${body.name as string} (${slug})${plan ? ` on plan ${plan}` : ""} on the platform.`, words: [...words, "--confirm"] },
+    });
     if (!gate.confirmed) {
-      const words = ["tenant", "create", slug, "--name", body.name as string, ...(plan ? ["--plan", plan] : []), ...(boolOption(input, "use") ? ["--use"] : [])];
-      const key = stringOption(input, "idempotency-key");
-      if (key) words.push("--idempotency-key", key);
       const confirm = gate.confirm(cavelonCommand(...words, "--confirm"));
       return {
         data: { created: false, would: "create_tenant", tenant: { slug, name: body.name, plan: plan ?? null }, confirm, ...gate.fields },
@@ -352,7 +356,8 @@ export const harnessDefault: CommandSpec = {
     "tenant's default is an empty `default` solution, so a solution built beside it answers nobody there until it becomes the\n" +
     "default. Without --confirm nothing changes: the preview names the current default and the one that would replace it.\n" +
     "This changes live traffic, so show the preview to a person and confirm only with their yes. `is_default` in\n" +
-    "harnesses.yaml is not applied by `apply`; this is the way to set it.",
+    "harnesses.yaml is not applied by `apply`; this is the way to set it.\n" +
+    PERSON_CONFIRMS_HELP,
   readOnly: false,
   idempotent: true,
   mcpTool: "harness_default",
@@ -361,7 +366,7 @@ export const harnessDefault: CommandSpec = {
   options: {
     confirm: { type: "boolean", mcpToken: true, description: "Change the default route (after a person saw the preview)." },
   },
-  examples: ["cavelon harness default support", "cavelon harness default support --confirm", "cavelon harness default support --confirm <token>"],
+  examples: ["cavelon harness default support", "cavelon harness default support --confirm"],
   async run(ctx, input) {
     const session = await ctx.session();
     const ref = positional(input, "solution") ?? session.envFile?.harness ?? session.project?.harness;
@@ -390,7 +395,9 @@ export const harnessDefault: CommandSpec = {
         details: { harness: target, default_route: current },
       });
     }
-    const gate = await confirmation(ctx, input, "harness_default", { harness: harness.id, from: current?.id ?? null });
+    const gate = await confirmation(ctx, input, "harness_default", { harness: harness.id, from: current?.id ?? null }, {
+      person: { what: defaultChangeLine(harness, route), words: ["harness", "default", harness.slug, "--confirm"] },
+    });
     if (!gate.confirmed) {
       return {
         data: {
