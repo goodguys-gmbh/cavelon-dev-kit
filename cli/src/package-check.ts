@@ -7,6 +7,7 @@ import { checkQueryTools, QUERY_CHANGED_CODE, QUERY_FIELDS_IGNORED_CODE, type Qu
 import { locate, schemaSections, tenantWideSections, type Finding, type PackageOnDisk } from "./package-files.js";
 import { MANIFEST_SECTION, PERSONA_SECTION, sectionFields } from "./package-format.js";
 import { kitErrorEntry } from "./kit-codes.js";
+import { checkWorkflowQueries } from "./workflow-queries.js";
 import { cavelonCommand, fill, folderCommand } from "./printed.js";
 import {
   branches,
@@ -433,6 +434,7 @@ export function checkPackage(disk: PackageOnDisk, options: CheckOptions): Findin
   findings.push(...checkSolutionSlug(disk, options.solution));
   findings.push(...checkTenantWide(disk, options.schema, options.solution));
   findings.push(...checkQueryTools(disk, options.schema, options.queryBaseline));
+  findings.push(...checkWorkflowQueries(disk, options.schema, options.inventory, options.queryBaseline));
   noteTenantWide(findings, options.schema, options.solution);
 
   for (const finding of findings) {

@@ -207,7 +207,7 @@ async function acceptedVersions(ctx: Context, offline: boolean): Promise<string[
 }
 
 /** Warnings about what the import preview blocks on: a name it cannot resolve on the instance. */
-const BLOCKING_WARNINGS = new Set([REFERENCE_UNKNOWN_CODE, MODEL_UNKNOWN_CODE]);
+const BLOCKING_WARNINGS = new Set([REFERENCE_UNKNOWN_CODE, MODEL_UNKNOWN_CODE, "tool_call_database_query_missing"]);
 
 function findingLine(f: Finding): string {
   const where = f.file ? `${f.file}${f.line ? `:${f.line}` : ""}` : "";
@@ -447,9 +447,9 @@ interface SkippedCheck {
  * kinds the package needs and no pull or `models list` has read yet; never
  * offline. What still lacks a list is a check skipped, and said.
  */
-async function inventoryFor(ctx: Context, project: ProjectConfig, disk: PackageOnDisk, offline: boolean) {
+async function inventoryFor(ctx: Context, project: ProjectConfig, disk: PackageOnDisk, offline: boolean, schema: PackageSchema) {
   let inventory = await readInventory(project.root);
-  const missing = missingInventory(disk, inventory);
+  const missing = missingInventory(disk, inventory, schema);
   let failed = missing;
   if (missing.length && !offline) {
     failed = await readInventoryKinds(ctx, project.root, missing, ctx.io.now());
@@ -482,7 +482,7 @@ async function validatePackage(
         : "The instance does not publish its package schema (/api/v1/meta/package-schema).",
     });
   }
-  const { inventory, skipped } = await inventoryFor(ctx, project, disk, offline);
+  const { inventory, skipped } = await inventoryFor(ctx, project, disk, offline, schema);
   const findings = checkPackage(disk, {
     schema,
     catalog: await catalogFor(ctx, offline),

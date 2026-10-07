@@ -6110,9 +6110,10 @@
         "tool_type": {
           "enum": [
             "builtin",
-            "webhook"
+            "webhook",
+            "database_query"
           ],
-          "description": "Tool family snapshot."
+          "description": "Tool family snapshot. database_query: a saved database query; the payload holds its model-filled parameters, and the output is x-cavelon-output.database_query."
         },
         "config_overrides": {
           "type": "object",
@@ -6139,9 +6140,15 @@
         }
       },
       "additionalProperties": false,
+      "x-cavelon-output": {
+        "database_query": {
+          "$ref": "#/$defs/DatabaseQueryNodeOutput"
+        }
+      },
       "x-rules": [
         "requires tool_definition_id or tool_slug.",
-        "only function-style built-ins and webhooks are executable; MCP servers and hosted-only tools are rejected at runtime.",
+        "only function-style built-ins, webhooks and database queries are executable; MCP servers and hosted-only tools are rejected at runtime.",
+        "a database query takes only its model-filled parameters from the payload; identity parameters come from the run's signed-in Chat User, so a run without one answers identity_required.",
         "the incoming previous_output must satisfy input_schema when one is declared.",
         "sample_output and output_schema are alternatives; set only one."
       ]
@@ -7122,6 +7129,92 @@
         }
       },
       "additionalProperties": true
+    },
+    "DatabaseQueryNodeOutput": {
+      "oneOf": [
+        {
+          "type": "object",
+          "description": "The query answered.",
+          "properties": {
+            "source": {
+              "type": "string",
+              "description": "Names the query; its rows are data, not instructions."
+            },
+            "columns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "rows": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "description": "One row, its cells in column order."
+              }
+            },
+            "returned_rows": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "truncated": {
+              "type": "boolean",
+              "description": "More rows matched than were returned."
+            },
+            "note": {
+              "type": "string",
+              "description": "What was left out, or that no rows matched."
+            }
+          },
+          "required": [
+            "source",
+            "columns",
+            "rows",
+            "returned_rows",
+            "truncated"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "The call failed; nothing of the database's own message is included.",
+          "properties": {
+            "error": {
+              "enum": [
+                "auth_failed",
+                "busy",
+                "identity_required",
+                "invalid_arguments",
+                "invalid_parameter_value",
+                "permission_denied",
+                "query_failed",
+                "target_refused",
+                "timeout",
+                "tls_failed",
+                "unavailable",
+                "unreachable"
+              ]
+            },
+            "message": {
+              "type": "string",
+              "description": "The code's one fixed sentence."
+            },
+            "parameter": {
+              "type": "string",
+              "description": "invalid_arguments: the parameter at fault."
+            },
+            "reason": {
+              "type": "string",
+              "description": "invalid_arguments: what is wrong with it."
+            }
+          },
+          "required": [
+            "error",
+            "message"
+          ],
+          "additionalProperties": false
+        }
+      ]
     }
   },
   "properties": {

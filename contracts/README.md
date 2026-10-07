@@ -103,6 +103,17 @@ the database connector's changes: the new `procedure_call_form`,
 in only the new description of a query's `sql_text`, which names the
 procedure call. The Database Connectors page did not change.
 
+Later on 2026-10-07 the package schema and error catalog took in workflow
+Tool Call database queries from the instance's main branch, without running
+it. They were generated from the functions behind `/meta/package-schema`
+(`package_schema("v3")`) and `/meta/error-catalog` (`error_catalog()`), using
+that branch's source and existing Python environment. Only the
+`NodeConfig_tool_call` and `DatabaseQueryNodeOutput` definitions and the
+`tool_call_database_query_missing` catalog entry are taken in, then scrubbed
+as below; unrelated changes stay as recorded. The output publishes both the
+query's column/row result and its `{error, message}` failure. No new API
+operation is called by the kit, so the operation list and OpenAPI stay.
+
 The tests switch features on in the fake server where a command needs them
 (personal access tokens, the operations API, Sandboxes, Masterloop, archive
 uploads, the database connector); the snapshot keeps the defaults.

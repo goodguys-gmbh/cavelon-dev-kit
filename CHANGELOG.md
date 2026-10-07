@@ -7,6 +7,17 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Added
+
+- Workflow Tool Call nodes for saved database queries (part of #171):
+  `validate` checks model-sourced argument names, explains missing queries
+  with `tool_call_database_query_missing`, and warns when a trigger path
+  reaches an identity-bound or non-anonymous query. The published schema and
+  error catalog, authoring skill and docs include a Transform feeding the
+  query and a Router branching on `{error, message}`. Checks follow each
+  instance's schema; dynamic payloads still need runtime validation. The
+  write-query half remains pending its instance contract.
+
 ### Fixed
 
 - `apply` still previews with an API key when the instance reserves imports

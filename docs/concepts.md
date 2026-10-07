@@ -303,6 +303,87 @@ code a failed query call answered the model with, such as `identity_required`;
 `cavelon explain <code>` says what it means. The instance's page
 `cavelon docs get administration/database-connectors` describes the screens.
 
+### Query nodes in workflows
+
+A workflow `tool_call` node can call the same saved query by `tool_slug` and
+`tool_type: database_query` where the instance's package schema supports it.
+Its incoming payload is the query's arguments. Use a Transform beforehand to
+emit only model-sourced parameter names; identity names and unknown names
+answer `invalid_arguments` and run nothing. There is no per-node JSONPath
+argument mapping, and `config_overrides` do not apply to a query node.
+
+For the `order_status` query above, this fragment of
+`package/registry_entities.yaml` maps an incoming order number, calls the
+query and sends failures to an existing `query_failed` agent and successes
+to an existing `show_order` agent. Connect the workflow's entry to
+`query_arguments` and keep the nodes and edges in the same solution.
+
+```yaml
+orchestration_nodes:
+  - slug: query_arguments
+    node_type: transform
+    config:
+      mode: json_mapping
+      mapping: { order_no: $.previous_output.order_number }
+  - slug: lookup_order
+    node_type: tool_call
+    config:
+      tool_slug: order_status
+      tool_type: database_query
+      input_schema:
+        type: object
+        properties: { order_no: { type: string, maxLength: 20 } }
+        required: [order_no]
+        additionalProperties: false
+      output_format: auto
+  - slug: query_result
+    node_type: router
+    config: { strategy: condition }
+graph_edges:
+  - from_node_ref: { kind: orchestration, slug: query_arguments }
+    to_node_ref: { kind: orchestration, slug: lookup_order }
+    edge_type: pipeline
+  - from_node_ref: { kind: orchestration, slug: lookup_order }
+    to_node_ref: { kind: orchestration, slug: query_result }
+    edge_type: pipeline
+  - from_node_ref: { kind: orchestration, slug: query_result }
+    to_node_ref: { kind: agent, slug: query_failed }
+    edge_type: condition
+    config:
+      branch_key: failed
+      priority: 0
+      condition: { source: previous_output, path: error, operator: exists }
+  - from_node_ref: { kind: orchestration, slug: query_result }
+    to_node_ref: { kind: agent, slug: show_order }
+    edge_type: condition
+    config: { branch_key: answered, default: true }
+```
+
+Success contains `columns`, `rows` (arrays of cells in column order),
+`returned_rows`, `truncated`, an optional `note`, and the query's `source`.
+Read a cell by position, for example `$.previous_output.rows[0][1]` when a
+second column exists. Failure contains `{error, message}`; the message is
+the code's fixed sentence, never a database driver's text. The node records
+the failure code and preserves that output so the Router can branch on
+`error`. The published shape is `x-cavelon-output.database_query` on the
+Tool Call config schema.
+
+`validate` checks statically visible argument names in `input_schema` and a
+directly preceding Transform's flat JSON mapping. The query's parameters
+decide the accepted arguments at runtime; an input schema is only a snapshot,
+and dynamic payloads still need a test. A missing query is a warning with
+`tool_call_database_query_missing` against the tenant's last tools list;
+`--strict` fails, and the import preview resolves it again on the instance.
+
+A conversation-bound run fills identity parameters from its signed-in Chat
+User. Trigger, schedule and inbound-email runs have no Chat User; an
+identity-bound query or one without `allows_anonymous: true` answers
+`identity_required`. `validate` warns when a trigger path reaches such a
+query. A trigger execution identity supplies no Chat User. For a trigger,
+use only a public-data query without identity parameters that allows
+anonymous calls. Older instances keep their own published schema rules;
+the new local query checks run only where that schema supports query nodes.
+
 ## The solution folder
 
 A solution lives in a folder with a `cavelon.yaml`, usually a git repository
