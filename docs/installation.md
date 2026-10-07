@@ -174,8 +174,7 @@ pip install cavelon                # into the active environment
 
 `uv tool install` and `pipx install` put `cavelon` on your PATH in an
 environment of its own; `cavelon --version` names the tool that installed it,
-and the update notice its upgrade command. `python -m cavelon` runs it too,
-from the environment it was installed in. Wheels exist for Linux (x64 and
+and the update notice its upgrade command. Wheels exist for Linux (x64 and
 arm64, glibc 2.17 or newer), macOS 13 or newer (Apple silicon and Intel) and
 Windows x64; on any other platform (Alpine's musl, for example) pip finds no
 matching wheel, and the one-line install or `npx` are the way in. The wheels

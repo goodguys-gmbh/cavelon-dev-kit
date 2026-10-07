@@ -188,7 +188,6 @@ jobs:
           test "$(head -n 1 version.txt)" = "$VERSION"
           grep -q "^installed with: pip " version.txt
           grep -q "^update with: pip install --upgrade cavelon" version.txt
-          test "$("$RUNNER_TEMP/venv/$bin/python" -I -m cavelon --version | head -n 1)" = "$VERSION"
           "$RUNNER_TEMP/venv/$bin/python" -I -m pip uninstall --yes --quiet cavelon
           test ! -e "$RUNNER_TEMP/venv/$bin/$exe"
       - name: The winget manifest

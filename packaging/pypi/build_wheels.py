@@ -5,9 +5,12 @@
 One wheel per executable the release folder holds (or per asset named), each
 tagged for the platform the executable runs on and carrying it as the script
 `cavelon`, as ruff and uv ship theirs: pip, pipx and uv put it on the PATH, and
-Python is not needed to run it. The wheel also holds a small `cavelon` package
-for `python -m cavelon`, and a marker in the environment's data folder from
-which `cavelon` tells that a wheel installed it (cli/src/install.ts).
+Python is not needed to run it. The wheel holds no Python package, only the
+script and a marker in the environment's data folder from which `cavelon`
+tells that a wheel installed it (cli/src/install.ts).
+
+The folders it reads and writes must lie inside the folder it runs in (the
+repository's checkout in CI), and the version must be a release version.
 
 Standard library only, and deterministic: the same executables and version give
 the same bytes.
@@ -103,8 +106,6 @@ def build(executable: Path, version: str, out: Path) -> Path:
     data_dir = f"{NAME}-{version}.data"
     dist_info = f"{NAME}-{version}.dist-info"
     files: list[tuple[str, bytes, int]] = [
-        (f"{NAME}/__init__.py", (HERE / NAME / "__init__.py").read_bytes(), 0o644),
-        (f"{NAME}/__main__.py", (HERE / NAME / "__main__.py").read_bytes(), 0o644),
         (f"{data_dir}/scripts/{script}", executable.read_bytes(), 0o755),
         (f"{data_dir}/data/share/{NAME}/pypi", MARKER_TEXT.encode("utf-8"), 0o644),
         (f"{dist_info}/METADATA", metadata(version).encode("utf-8"), 0o644),
@@ -123,10 +124,19 @@ def build(executable: Path, version: str, out: Path) -> Path:
     return target
 
 
+def inside_cwd(given: str, what: str) -> Path:
+    """`given` resolved, refused unless it lies inside the folder the script runs in."""
+    base = Path.cwd().resolve()
+    path = (base / given).resolve()
+    if path != base and base not in path.parents:
+        raise SystemExit(f"The {what} {given!r} is outside {base}; name a folder inside it.")
+    return path
+
+
 def main(argv: list[str]) -> None:
     if len(argv) < 3:
         raise SystemExit(__doc__)
-    release, version, out = Path(argv[0]), pep440(argv[1].removeprefix("v")), Path(argv[2])
+    release, version, out = inside_cwd(argv[0], "release folder"), pep440(argv[1].removeprefix("v")), inside_cwd(argv[2], "out folder")
     named = argv[3:]
     unknown = [asset for asset in named if asset not in PLATFORM_TAGS]
     if unknown:
