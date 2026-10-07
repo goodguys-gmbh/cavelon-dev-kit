@@ -59,6 +59,11 @@ CLI, the skills and the plugin.
 
 ### Fixed
 
+- MCP session guidance follows the instance's published database manage
+  permissions, including authorized personal access tokens. Query approval
+  remains required; passwords and enabling writes stay with a person in the
+  Admin (#186).
+
 - Connection deletion checks published person-only restrictions and known
   missing manage permission before offering a preview or confirmation. An
   older principal that omits permissions still leaves the final decision to
