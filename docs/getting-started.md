@@ -617,8 +617,9 @@ cavelon deactivate
 cavelon deactivate --harness support-faq --confirm
 ```
 
-Run by a coding agent, the confirm takes the token the preview printed
-(`--confirm <token>`), as for `activate --make-default`.
+A coding agent cannot confirm it: over MCP your agent client asks you, and
+from the agent's shell the preview names the command you run in your own
+terminal, as for `activate --make-default`.
 
 Deactivating is a person's decision. A solution that is the tenant's default
 route is refused before anything is sent: make another solution the default

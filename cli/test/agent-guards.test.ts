@@ -14,7 +14,7 @@ import { createMcpServer } from "../src/mcp.js";
 import { secretFields } from "../src/openapi.js";
 import { setupAgents } from "../src/setup-agents.js";
 import { modelRow, startFakeServer, type FakeServer } from "./fake-server.js";
-import { cli, login, sandbox, type Sandbox } from "./helpers.js";
+import { askingClient, cli, login, sandbox, type Sandbox } from "./helpers.js";
 
 /**
  * The guards of the MCP `api` tool, and `cavelon api` run by a coding agent:
@@ -156,7 +156,7 @@ describe("cavelon api and the api tool, run by an agent and by a person", () => 
     };
     const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
     await createMcpServer(io, COMMANDS).connect(serverSide);
-    const client = new Client({ name: "test", version: "0" });
+    const client = askingClient();
     await client.connect(clientSide);
     clients.push(client);
     return client;
@@ -198,7 +198,7 @@ describe("cavelon api and the api tool, run by an agent and by a person", () => 
   describe("a changing operation", () => {
     const setVariable = (value: string) => ["set_variable", "name=region", "--body", JSON.stringify({ value })];
 
-    it("shows the request under an agent and sends exactly it only with its token", async () => {
+    it("shows the request under an agent, and leaves sending it to the person's own terminal", async () => {
       const before = server.state.requests.length;
       const preview = await api(setVariable("eu"), AGENT);
       expect(preview.code).toBe(0);
@@ -209,41 +209,51 @@ describe("cavelon api and the api tool, run by an agent and by a person", () => 
         path: "/api/v1/variables/region",
         body: { value: "eu" },
         sent: false,
-        confirm_token: expect.stringMatching(/^[0-9a-f]{12}$/),
-        confirm: expect.stringMatching(/^Show the person this request, then run the same command again with --confirm [0-9a-f]{12}/),
+        needs_person: "terminal",
+        confirm: `cavelon api set_variable name=region --body '{"value":"eu"}' (the person runs it in their own terminal: a coding agent cannot confirm this change)`,
       });
-      // The text shows the person the request.
+      expect(shown.confirm_token).toBeUndefined();
+      // The text shows the person the request, and the command they send it with.
       const text = await cli(sb, ["api", ...setVariable("eu")], { env: { ...fresh(), ...AGENT } });
       expect(text.stdout).toMatch(/^Would send PUT \/api\/v1\/variables\/region\. Nothing was sent\.\nacts on: http:\/\/127\.0\.0\.1:\d+, tenant .+, tenant mode\nBody:\n\{\n {2}"value": "eu"\n\}\n/);
-      expect(text.stdout).toContain(`--confirm ${shown.confirm_token}`);
+      expect(text.stdout).toContain(`cavelon api set_variable name=region --body '{"value":"eu"}' (the person runs it in their own terminal`);
       expect(changes(before)).toEqual([]);
 
-      // A bare --confirm (exit 5: a person has to see the preview), another request's token, or the token for a changed body sends nothing.
+      // A bare --confirm (exit 5), another request's token, or even this request's own token sends nothing from an agent's shell.
       const bare = await api([...setVariable("eu"), "--confirm"], AGENT);
       expect(bare.code).toBe(5);
-      expect(bare.json()).toMatchObject({ sent: false, token_required: true, confirm_token: shown.confirm_token });
-      const changed = await api([...setVariable("us"), "--confirm", shown.confirm_token], AGENT);
+      expect(bare.json()).toMatchObject({ sent: false, token_required: true, needs_person: "terminal" });
+      const client = await mcp();
+      const token = (await tool(client, { operation: "set_variable", params: ["name=region"], body: JSON.stringify({ value: "eu" }) })).body.confirm_token as string;
+      await client.close();
+      const changed = await api([...setVariable("us"), "--confirm", token], AGENT);
       expect(changed.code).toBe(4);
       expect(changed.json()).toMatchObject({ sent: false, token_mismatch: true, body: { value: "us" } });
+      const own = await api([...setVariable("eu"), "--confirm", token], AGENT);
+      expect(own.code).toBe(5);
+      expect(own.json<{ error: Record<string, unknown> }>().error).toMatchObject({
+        code: "confirm_needs_person",
+        details: { person_command: `cavelon api set_variable name=region --body '{"value":"eu"}'` },
+      });
       expect(changes(before)).toEqual([]);
-
-      const sent = await api([...setVariable("eu"), "--confirm", shown.confirm_token], AGENT);
-      expect(sent.code).toBe(0);
-      expect(changes(before)).toEqual([expect.objectContaining({ method: "PUT", path: "/api/v1/variables/region", body: { value: "eu" } })]);
     });
 
-    it("binds the MCP tool's confirm to the same token as the shell's, for the same request", async () => {
-      const shell = (await api(setVariable("fr"), AGENT)).json<{ confirm_token: string }>().confirm_token;
-      const client = await mcp();
+    it("over MCP, binds the confirm to exactly the request, and sends it with the person's yes in the client", async () => {
+      const client = (await mcp()) as ReturnType<typeof askingClient>;
       try {
         const args = { operation: "set_variable", params: ["name=region"], body: JSON.stringify({ value: "fr" }) };
         const before = server.state.requests.length;
         const shown = await tool(client, args);
-        expect(shown.body).toMatchObject({ sent: false, confirm_token: shell });
-        expect(shown.body.confirm).toBe(`Show the person this, then call api again with the same arguments and confirm: "${shell}" to make exactly this change.`);
+        const token = shown.body.confirm_token as string;
+        expect(shown.body).toMatchObject({ sent: false, needs_person: "client", confirm_token: expect.stringMatching(/^[0-9a-f]{12}$/) });
+        expect(shown.body.confirm).toBe(
+          `Show the person this, then call api again with the same arguments and confirm: "${token}": the client then asks the person to approve exactly this change, and nothing changes without their yes.`,
+        );
         expect((await tool(client, { ...args, confirm: "000000000000" })).body).toMatchObject({ sent: false, token_mismatch: true, exit_code: 4 });
+        expect(client.asked).toEqual([]);
         expect(changes(before)).toEqual([]);
-        expect((await tool(client, { ...args, confirm: shell })).isError).toBe(false);
+        expect((await tool(client, { ...args, confirm: token })).isError).toBe(false);
+        expect(client.asked).toEqual([expect.stringMatching(/^Send PUT \/api\/v1\/variables\/region \(set_variable\)\.\n/)]);
         expect(changes(before)).toEqual([expect.objectContaining({ method: "PUT", body: { value: "fr" } })]);
       } finally {
         await client.close();

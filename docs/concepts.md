@@ -374,6 +374,19 @@ a bare `--confirm` only shows the preview again (exit 5). Over MCP, their tools
 return a `confirm_token` with the preview and act only when `confirm` is that
 token, which confirms exactly the change shown.
 
+The token only proves that a preview came first. A change that reaches live
+traffic, the whole tenant, or cannot be taken back (`limits set`, `models
+set-limit`, `variables delete`, `trigger identity`, `harness default`,
+`activate` where it previews, `deactivate`, `tenant create`, `variables set`
+replacing a value, `loop start` unless the solution is a draft, `api` for a
+changing operation, and an `apply` whose preview says to show it to a person)
+also needs the person's own yes, which an agent cannot give. Over
+MCP, the agent's client asks the person in its own dialog when the agent
+confirms with the token, and changes nothing without their yes. A client that
+cannot ask, and an agent's shell, leave the confirm to the person's own
+terminal: the preview's `needs_person` is `"terminal"`, and its `confirm` is
+the command they run there.
+
 ## Operations and waiting
 
 Work that takes time on the instance, such as ingesting a document or running a

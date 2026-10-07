@@ -311,7 +311,7 @@ Preview the package files against the instance and print a preview id; --confirm
 cavelon apply [options]
 ```
 
-Without --confirm nothing is imported: the preview shows what changes, which active solutions it reaches, what the target still needs (secrets and variables with the command that sets each, grants, runtime bindings, trigger identities), loop budgets and ignored sections, and is stored in .cavelon/. A preview never creates the solution: one the env file names that is not on the instance yet gets the `cavelon harness new` command that creates it as a draft. A person sets the secrets (`cavelon secrets set <name>`), never the agent. Show a preview that reaches an active solution or env/prod to a person before confirming. A stale preview exits 4 and imports nothing: one whose target changed on the instance since, one whose package files changed since (what they hold, not their formatting; --allow-stale imports what the preview showed anyway), and one older than a day. So does an import its own check refuses when it applies, naming each blocker. --discard &lt;id\|all&gt; forgets stored previews; `cavelon status` lists them with when each expires. A solution's import leaves the package's tenant-wide sections (tenant_settings, model_registry, …) out; --include-tenant-wide imports them, for every solution of the tenant. An instance that does not publish include_tenant_wide imports them with every solution's package, and apply says so.
+Without --confirm nothing is imported: the preview shows what changes, which active solutions it reaches, what the target still needs (secrets and variables with the command that sets each, grants, runtime bindings, trigger identities), loop budgets and ignored sections, and is stored in .cavelon/. A preview never creates the solution: one the env file names that is not on the instance yet gets the `cavelon harness new` command that creates it as a draft. A person sets the secrets (`cavelon secrets set <name>`), never the agent. Show a preview that reaches an active solution or env/prod to a person before confirming. Such a preview (show_to_person: tenant-wide sections, an active solution, deletions, env/prod) a coding agent cannot confirm: over MCP the client asks the person, and from an agent's shell the person runs the confirm in their own terminal. A stale preview exits 4 and imports nothing: one whose target changed on the instance since, one whose package files changed since (what they hold, not their formatting; --allow-stale imports what the preview showed anyway), and one older than a day. So does an import its own check refuses when it applies, naming each blocker. --discard &lt;id\|all&gt; forgets stored previews; `cavelon status` lists them with when each expires. A solution's import leaves the package's tenant-wide sections (tenant_settings, model_registry, …) out; --include-tenant-wide imports them, for every solution of the tenant. An instance that does not publish include_tenant_wide imports them with every solution's package, and apply says so.
 
 | Option | Description | MCP |
 |---|---|---|
@@ -343,7 +343,7 @@ Activate a solution through the readiness gate (never by force); says whether it
 cavelon activate [options]
 ```
 
-Only when every readiness check passes, and with a personal access token only when it was created with "may activate". Activating without the evidence stays a person's decision in the Admin. A solution that a channel or an active trigger reaches goes live for them at once, so its activation previews first and only --confirm activates it; so does one on an instance that does not say what reaches it. Show the preview to a person and confirm only with their yes. A draft that nothing reaches activates without --confirm. Afterwards it says whether the solution is the tenant's default route (the one the tenant's chat and widget answer with where no solution is named). --make-default previews making it the default; with --confirm as well, it changes it. That changes live traffic: show the preview to a person and confirm only with their yes. `cavelon harness default` does the same for an active solution.
+Only when every readiness check passes, and with a personal access token only when it was created with "may activate". Activating without the evidence stays a person's decision in the Admin. A solution that a channel or an active trigger reaches goes live for them at once, so its activation previews first and only --confirm activates it; so does one on an instance that does not say what reaches it. Show the preview to a person and confirm only with their yes. A draft that nothing reaches activates without --confirm. Afterwards it says whether the solution is the tenant's default route (the one the tenant's chat and widget answer with where no solution is named). --make-default previews making it the default; with --confirm as well, it changes it. That changes live traffic: show the preview to a person and confirm only with their yes. `cavelon harness default` does the same for an active solution. A coding agent cannot confirm it: over MCP the client asks the person, and from an agent's shell the person runs the confirm in their own terminal.
 
 | Option | Description | MCP |
 |---|---|---|
@@ -392,7 +392,7 @@ Create a tenant (personal access token in Platform mode with tenants.manage); pr
 cavelon tenant create <slug> [options]
 ```
 
-A tenant API key never can. Before sending, the token is checked: one that may not enter Platform mode, or enters it without tenants.manage, is refused with exit 7 and nothing is sent. Without --confirm nothing is created: the preview names the tenant, its plan and the instance it would be created on. A tenant is a platform change, so show the preview to a person and confirm only with their yes. With --use, the new tenant is chosen only once the instance confirms the token acts in it. Inviting people and assigning roles stay in the Admin.
+A tenant API key never can. Before sending, the token is checked: one that may not enter Platform mode, or enters it without tenants.manage, is refused with exit 7 and nothing is sent. Without --confirm nothing is created: the preview names the tenant, its plan and the instance it would be created on. A tenant is a platform change, so show the preview to a person and confirm only with their yes. With --use, the new tenant is chosen only once the instance confirms the token acts in it. Inviting people and assigning roles stay in the Admin. A coding agent cannot confirm it: over MCP the client asks the person, and from an agent's shell the person runs the confirm in their own terminal.
 
 | Argument | Description |
 |---|---|
@@ -411,7 +411,6 @@ Examples:
 ```bash
 cavelon tenant create newco --name NewCo
 cavelon tenant create newco --name NewCo --confirm
-cavelon tenant create newco --name NewCo --confirm <token>
 ```
 
 ### cavelon tenant list
@@ -504,7 +503,7 @@ Make a solution the tenant's default route; previews first, --confirm changes it
 cavelon harness default [solution] [options]
 ```
 
-The default route is the solution that answers where a conversation names none: the tenant's chat and widget. A new tenant's default is an empty `default` solution, so a solution built beside it answers nobody there until it becomes the default. Without --confirm nothing changes: the preview names the current default and the one that would replace it. This changes live traffic, so show the preview to a person and confirm only with their yes. `is_default` in harnesses.yaml is not applied by `apply`; this is the way to set it.
+The default route is the solution that answers where a conversation names none: the tenant's chat and widget. A new tenant's default is an empty `default` solution, so a solution built beside it answers nobody there until it becomes the default. Without --confirm nothing changes: the preview names the current default and the one that would replace it. This changes live traffic, so show the preview to a person and confirm only with their yes. `is_default` in harnesses.yaml is not applied by `apply`; this is the way to set it. A coding agent cannot confirm it: over MCP the client asks the person, and from an agent's shell the person runs the confirm in their own terminal.
 
 | Argument | Description |
 |---|---|
@@ -519,7 +518,6 @@ Examples:
 ```bash
 cavelon harness default support
 cavelon harness default support --confirm
-cavelon harness default support --confirm <token>
 ```
 
 ## Knowledge, tests and traces
@@ -863,7 +861,7 @@ Create a tenant variable, or replace one (previews first, --confirm replaces it)
 cavelon variables set <name> [value] [options]
 ```
 
-The value is plain text that anyone who may view the tenant's settings reads; never put a credential into a variable, use `cavelon secrets set` (a person runs it). --stdin reads the value from standard input instead of the argument. A new variable is created at once. Replacing another value needs --confirm: without it nothing changes, and the preview shows the old and the new value. A variable is tenant-wide, so every solution that names it, active ones included, reads the new value: show the preview to a person and confirm only with their yes.
+The value is plain text that anyone who may view the tenant's settings reads; never put a credential into a variable, use `cavelon secrets set` (a person runs it). --stdin reads the value from standard input instead of the argument. A new variable is created at once. Replacing another value needs --confirm: without it nothing changes, and the preview shows the old and the new value. A variable is tenant-wide, so every solution that names it, active ones included, reads the new value: show the preview to a person and confirm only with their yes. A coding agent cannot confirm it: over MCP the client asks the person, and from an agent's shell the person runs the confirm in their own terminal.
 
 | Argument | Description |
 |---|---|
@@ -911,7 +909,6 @@ Examples:
 ```bash
 cavelon variables delete old_url
 cavelon variables delete old_url --confirm
-cavelon variables delete old_url --confirm <token>
 ```
 
 ### cavelon secrets list
@@ -1035,7 +1032,7 @@ Change a limit through the operation the instance names: a tenant's, or an opera
 cavelon limits set <key> <value> [options]
 ```
 
-Reads the limit's published change (operation, body field, bounds, permissions, roles) and checks the value against it before sending. Without --confirm, shows the old and new value, the operation and who may run it, and changes nothing. Also changes the tenant quotas in tenant_quotas.changes (the inference budget, the monthly Processing Step cap). An operator's change (a run cap) is sent only with a personal access token in Platform mode of a role it names, without X-Tenant-Id; --tenant &lt;id\|slug&gt; then sets one tenant's own run cap. An environment or licence limit, a value out of bounds, an instance that does not publish how to change the limit, and a credential without the permission or the role are refused before anything is sent. Propose the change to the person; never raise a limit on your own.
+Reads the limit's published change (operation, body field, bounds, permissions, roles) and checks the value against it before sending. Without --confirm, shows the old and new value, the operation and who may run it, and changes nothing. Also changes the tenant quotas in tenant_quotas.changes (the inference budget, the monthly Processing Step cap). An operator's change (a run cap) is sent only with a personal access token in Platform mode of a role it names, without X-Tenant-Id; --tenant &lt;id\|slug&gt; then sets one tenant's own run cap. An environment or licence limit, a value out of bounds, an instance that does not publish how to change the limit, and a credential without the permission or the role are refused before anything is sent. Propose the change to the person; never raise a limit on your own. A coding agent cannot confirm it: over MCP the client asks the person, and from an agent's shell the person runs the confirm in their own terminal.
 
 | Argument | Description |
 |---|---|
@@ -1052,7 +1049,6 @@ Examples:
 ```bash
 cavelon limits set kb_upload_max_file_size_mb 50
 cavelon limits set kb_upload_max_file_size_mb 50 --confirm
-cavelon limits set kb_upload_max_file_size_mb 50 --confirm <token>
 cavelon limits set rate_limit_chat_rpm none --confirm
 cavelon limits set monthly_inference_token_budget 2000000
 cavelon limits set monthly_processing_step_cap none --confirm
@@ -1095,7 +1091,7 @@ Set or clear how many requests a Model Registry row's endpoint gets at once (nee
 cavelon models set-limit <model> <limit> [options]
 ```
 
-Sets the row's max_concurrent_requests to &lt;n&gt;, or clears it with none. Without --confirm, shows the old and new value and changes nothing. A row without a base_url is refused before anything is sent: it reaches its provider through the platform's routes, which have their own limits. Every row with the same base_url shares the count. Propose a value to the person and let them decide; the instance's capacity tutorial says how to find it.
+Sets the row's max_concurrent_requests to &lt;n&gt;, or clears it with none. Without --confirm, shows the old and new value and changes nothing. A row without a base_url is refused before anything is sent: it reaches its provider through the platform's routes, which have their own limits. Every row with the same base_url shares the count. Propose a value to the person and let them decide; the instance's capacity tutorial says how to find it. A coding agent cannot confirm it: over MCP the client asks the person, and from an agent's shell the person runs the confirm in their own terminal.
 
 | Argument | Description |
 |---|---|
@@ -1112,7 +1108,6 @@ Examples:
 ```bash
 cavelon models set-limit llama-70b 8
 cavelon models set-limit llama-70b 8 --confirm
-cavelon models set-limit llama-70b 8 --confirm <token>
 cavelon models set-limit llama-70b none --confirm
 ```
 
@@ -1130,7 +1125,7 @@ Start a loop through its trigger, as you; previews first, --confirm starts it an
 cavelon loop start <trigger> [options]
 ```
 
-Calls the trigger's run-now route. The run (and its loop) acts as the caller: with a personal access token, the person. It runs on its own and spends the tenant's model budget, so without --confirm nothing starts: the preview names the trigger, its solution and the payload. Show it to a person and confirm only with their yes; for a trigger of a draft solution in a test environment an agent may confirm on its own. Follow the run with `loop watch <run>`, or `wait <operation>`; `loop cancel <run>` stops it.
+Calls the trigger's run-now route. The run (and its loop) acts as the caller: with a personal access token, the person. It runs on its own and spends the tenant's model budget, so without --confirm nothing starts: the preview names the trigger, its solution and the payload. Show it to a person and confirm only with their yes. For a trigger of a draft solution an agent confirms with the preview's token (--confirm &lt;token&gt;, or confirm over MCP); for any other, a coding agent cannot confirm it: over MCP the client asks the person, and from an agent's shell the person runs the confirm in their own terminal. Follow the run with `loop watch <run>`, or `wait <operation>`; `loop cancel <run>` stops it.
 
 | Argument | Description |
 |---|---|
@@ -1305,7 +1300,7 @@ Show, bind or clear the API key a trigger's unattended runs act as (binding need
 cavelon trigger identity <trigger> [key] [options]
 ```
 
-Without &lt;key&gt; or --clear, shows the binding. Binding gives the trigger standing authority, so it is never part of `apply`: show the person, then run it with --confirm. It needs settings.manage and triggers.manage. Creating keys and Sandbox Access stay in the Admin. A personal access token is never an execution identity.
+Without &lt;key&gt; or --clear, shows the binding. Binding gives the trigger standing authority, so it is never part of `apply`: show the person, then run it with --confirm. It needs settings.manage and triggers.manage. Creating keys and Sandbox Access stay in the Admin. A personal access token is never an execution identity. A coding agent cannot confirm it: over MCP the client asks the person, and from an agent's shell the person runs the confirm in their own terminal.
 
 | Argument | Description |
 |---|---|
@@ -1322,7 +1317,6 @@ Examples:
 ```bash
 cavelon trigger identity orders
 cavelon trigger identity orders loop-runner --confirm
-cavelon trigger identity orders loop-runner --confirm <token>
 cavelon trigger identity orders --clear --confirm
 ```
 
@@ -1660,7 +1654,7 @@ Call any operation the instance publishes in its OpenAPI.
 cavelon api <operation> [params...] [options]
 ```
 
-The operation is its operationId or the short name before FastAPI's path suffix (list_harnesses). Parameters: -p name=value or name=value (not --name). Body: --body '&lt;json&gt;', --body @file.json or --body - (stdin); --json &lt;body&gt; still works for now but is deprecated: --json alone prints JSON, as on every command. The body is checked against the operation's schema before it is sent. As an MCP tool, or run by a coding agent (CLAUDECODE, CODEX_THREAD_ID, CODEX_CI, CODEX_SANDBOX, CURSOR_AGENT, GEMINI_CLI, COPILOT_CLI, COPILOT_AGENT, AGENT_CONTEXT_OUT, TERM_PROGRAM=kiro, OPENCODE, GROK_AGENT, AI_AGENT or CAVELON_AGENT=1 is set), an operation that changes something returns what it would send and a confirm token, and sends it only with that token: --confirm &lt;token&gt;, or confirm: "&lt;token&gt;" as an MCP tool. A changed request needs a new preview; confirm: true is refused. Run by an agent, one the instance marks for a person only (x-cavelon-person-only) is refused, as is a body that sets a field the instance marks as a secret value (x-cavelon-secret) and a file outside the solution folder. On an instance that marks no operation, one that changes a secret, creates or revokes a credential or decides an approval is refused. A person's own terminal sends at once. In a solution folder, the persona operations (get_bot_persona, upsert_bot_persona, …) get the folder's solution as harness_id when none is passed, since without it they reach the tenant's default route.
+The operation is its operationId or the short name before FastAPI's path suffix (list_harnesses). Parameters: -p name=value or name=value (not --name). Body: --body '&lt;json&gt;', --body @file.json or --body - (stdin); --json &lt;body&gt; still works for now but is deprecated: --json alone prints JSON, as on every command. The body is checked against the operation's schema before it is sent. As an MCP tool, or run by a coding agent (CLAUDECODE, CODEX_THREAD_ID, CODEX_CI, CODEX_SANDBOX, CURSOR_AGENT, GEMINI_CLI, COPILOT_CLI, COPILOT_AGENT, AGENT_CONTEXT_OUT, TERM_PROGRAM=kiro, OPENCODE, GROK_AGENT, AI_AGENT or CAVELON_AGENT=1 is set), an operation that changes something returns what it would send and a confirm token, and sends it only with that token and the person's yes: as an MCP tool, confirm: "&lt;token&gt;", after which the client asks the person; from an agent's shell, the person sends it from their own terminal. A changed request needs a new preview; confirm: true is refused. Run by an agent, one the instance marks for a person only (x-cavelon-person-only) is refused, as is a body that sets a field the instance marks as a secret value (x-cavelon-secret) and a file outside the solution folder. On an instance that marks no operation, one that changes a secret, creates or revokes a credential or decides an approval is refused. A person's own terminal sends at once. In a solution folder, the persona operations (get_bot_persona, upsert_bot_persona, …) get the folder's solution as harness_id when none is passed, since without it they reach the tenant's default route.
 
 | Argument | Description |
 |---|---|
@@ -1761,7 +1755,7 @@ Take an active solution out of service (status inactive); previews first, --conf
 cavelon deactivate [options]
 ```
 
-An active solution answers live traffic: the conversations, channels and API keys that name it. Deactivating sets its status to inactive, not back to draft (a draft has not been activated yet; an inactive solution was taken out of service). It keeps its configuration and answers no live traffic until it is activated again (`cavelon activate`, through its readiness gate). Without --confirm nothing changes: the preview says what would stop. Show it to a person and confirm only with their yes. The tenant's default route is refused before anything is sent: make another solution the default first (`cavelon harness default <solution>`). An instance that publishes no deactivate route is said so; a person deactivates in the Admin there.
+An active solution answers live traffic: the conversations, channels and API keys that name it. Deactivating sets its status to inactive, not back to draft (a draft has not been activated yet; an inactive solution was taken out of service). It keeps its configuration and answers no live traffic until it is activated again (`cavelon activate`, through its readiness gate). Without --confirm nothing changes: the preview says what would stop. Show it to a person and confirm only with their yes. The tenant's default route is refused before anything is sent: make another solution the default first (`cavelon harness default <solution>`). An instance that publishes no deactivate route is said so; a person deactivates in the Admin there. A coding agent cannot confirm it: over MCP the client asks the person, and from an agent's shell the person runs the confirm in their own terminal.
 
 | Option | Description | MCP |
 |---|---|---|
