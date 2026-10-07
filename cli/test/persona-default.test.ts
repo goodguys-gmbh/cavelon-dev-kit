@@ -5,11 +5,13 @@ import { Readable } from "node:stream";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import { editDistance, similarCodes } from "../src/code-hints.js";
+import type { ErrorCatalog } from "../src/contracts.js";
 import { COMMANDS } from "../src/commands/index.js";
 import type { InStream } from "../src/io.js";
 import { KIT_ERROR_CODES } from "../src/kit-codes.js";
 import { createMcpServer } from "../src/mcp.js";
 import { exportForm, personaYaml, sectionFields } from "../src/package-format.js";
+import { KIT_CODES } from "../src/package-check.js";
 import { CONTRACTS, startFakeServer, type FakeServer } from "./fake-server.js";
 import { askingClient, cli, login, sandbox, type Sandbox } from "./helpers.js";
 
@@ -351,10 +353,10 @@ describe("explain", () => {
       }
     };
     walk(src);
-    const known = new Set([...KIT_ERROR_CODES.map((e) => e.code)]);
-    // validate's findings are explained by package-check's own list.
-    const findings = ["package_file_invalid", "package_file_duplicate", "package_section_unknown"];
-    expect([...raised].filter((c) => !known.has(c) && !findings.includes(c)).sort()).toEqual([]);
+    // Validation can report the instance's published codes as well as the kit's own.
+    const catalog = JSON.parse(read(path.join(CONTRACTS, "meta-error-catalog.json"))) as ErrorCatalog;
+    const known = new Set([...KIT_ERROR_CODES, ...KIT_CODES, ...catalog.rule_codes, ...catalog.api_error_codes].map((e) => e.code));
+    expect([...raised].filter((c) => !known.has(c)).sort()).toEqual([]);
   });
 });
 
