@@ -170,13 +170,32 @@ the Admin. Then:
   Owner runs it once with `cavelon db test-run <query> --value <name>=<value>`,
   identity parameters included; it shows what the model would see. Never put
   a real customer's data into a test file.
-- A stored-procedure query (SQL Server) is test-run the same way; the
+- A read stored-procedure query (SQL Server) is test-run the same way; the
   instance refuses the run while the connection's login can write or the
   procedure's definition writes or cannot be read, with a code
   `cavelon explain` explains. A run whose procedure committed or rolled back
   fails with `query_failed` and a `notice`: the query is switched off, and a
   person fixes the procedure. `cavelon db test <connection>` lists the
   procedure queries whose procedure no longer passes (`procedure_findings`).
+- For a write query, `cavelon db test-run` is a dry run that rolls back,
+  provided the connection permits writes. Check the returned `kind`,
+  `dry_run`, `rolled_back`, `affected_rows` and `committed`; missing fields
+  on older instances and null commit evidence are unknown, never proof of
+  rollback. Check `writes_not_allowed`, `too_many_rows_affected` and
+  save-time `write_statement_refused`/`write_procedure_definition_refused`
+  with `cavelon explain`. Never retry `write_outcome_unknown`; a person
+  checks the database before any repetition. Query-definition approval and
+  `requires_confirmation` before executing a chat write are separate.
+- A direct workflow Tool Call write with confirmation enabled answers
+  `confirmation_unavailable`. For an intended unattended write only, turn
+  that query setting off and retain model-only arguments and trigger
+  identity checks. The current direct-node `max_calls` budget counts across
+  nodes, `for_each`, concurrent branches and resume; expect
+  `tool_call_limit_reached` on the next call, a failed node and `refused`
+  run evidence. Read queries have no run cap. Agent-stage workflow calls
+  still use per-turn counting; shared Agent/direct enforcement is a server
+  acceptance gate. Ordinary chat limits are unchanged. Fake kit tests prove
+  response handling, not this shared runtime budget or workflow acceptance.
 - `cavelon db runs <query>` lists each run's outcome and error code (never a
   value or a row), and `cavelon trace` shows the code a failed call answered
   the model with on the tool's span (`error_code`); `cavelon explain <code>`

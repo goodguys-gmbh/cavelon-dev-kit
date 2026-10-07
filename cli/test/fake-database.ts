@@ -1,4 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+
+const QUERY_SCHEMA = JSON.parse(readFileSync(new URL("../../contracts/cavelon/meta-package-schema-v3.json", import.meta.url), "utf8")).$defs.PackageDatabaseQuery.properties as Record<string, { default?: unknown }>;
 
 /**
  * The fake instance's database connections, saved queries and their runs, and
@@ -54,8 +57,12 @@ export interface FakeQuery {
   allows_anonymous: boolean;
   version: number;
   is_enabled?: boolean;
+  kind?: "read" | "write";
+  max_affected_rows?: number;
+  requires_confirmation?: boolean;
+  max_calls?: number;
   /** What a test run returns: columns and rows, or an error code; a notice where the code alone does not say what happened. */
-  result?: ({ columns: string[]; rows: unknown[][] } | { error_code: string }) & { notice?: string };
+  result?: ({ columns: string[]; rows: unknown[][] } | { error_code: string }) & { notice?: string; outcome?: string; writeEvidence?: Record<string, unknown> };
   /** The instance's refusal of a test run before it starts (409), as a stored-procedure query gets it. */
   refusal?: { code: string; message: string };
 }
@@ -70,6 +77,7 @@ export interface FakeQueryRun {
   error_code: string | null;
   row_count: number | null;
   created_at: string;
+  writeEvidence?: Record<string, unknown>;
 }
 
 export interface DatabaseState {
@@ -84,8 +92,10 @@ export interface DatabaseState {
   mayView: boolean;
   /** False plays an instance older than stored-procedure queries: no procedure_call_refusal, procedure_findings or notice. */
   procedureFields: boolean;
+  /** False plays an older response without write-query fields. Fixtures supply write evidence explicitly. */
+  writeFields: boolean;
   /** What GET /instance answers: the dialects this host runs and its network side. */
-  instance: { runnable_dialects: string[]; network: { egress_ips: string[]; connections_per_process: number } };
+  instance: { runnable_dialects: string[]; network: { egress_ips: string[]; connections_per_process: number }; write_queries?: boolean; max_affected_rows_limit?: number };
 }
 
 export function databaseState(): DatabaseState {
@@ -97,6 +107,7 @@ export function databaseState(): DatabaseState {
     testRuns: [],
     mayView: true,
     procedureFields: true,
+    writeFields: true,
     instance: { runnable_dialects: ["mssql", "mysql", "postgresql"], network: { egress_ips: ["203.0.113.10", "203.0.113.11"], connections_per_process: 5 } },
   };
 }
@@ -175,6 +186,7 @@ function queryView(state: DatabaseState, q: FakeQuery) {
     allows_anonymous: q.allows_anonymous,
     is_enabled: q.is_enabled ?? true,
     version: q.version,
+    ...(state.writeFields ? queryWriteFields(q) : {}),
     created_by_user_id: null,
     updated_by_user_id: null,
     created_at: "2026-10-01T08:00:00Z",
@@ -200,6 +212,7 @@ function runView(r: FakeQueryRun) {
     truncated: false,
     result_chars: r.row_count === null ? null : 120,
     created_at: r.created_at,
+    ...r.writeEvidence,
   };
 }
 
@@ -340,6 +353,7 @@ export function handleDatabase(state: DatabaseState, rc: DatabaseRoute): boolean
       sql_text: String(body.sql_text), parameters: body.parameters ?? [], max_rows: body.max_rows ?? 50,
       max_result_chars: body.max_result_chars ?? 8000, allows_anonymous: body.allows_anonymous ?? false,
       is_enabled: body.is_enabled ?? true, version: 1,
+      ...queryWriteFields(body),
     };
     state.queries.push(query);
     rc.send(201, queryView(state, query));
@@ -400,10 +414,11 @@ export function handleDatabase(state: DatabaseState, rc: DatabaseRoute): boolean
         connection_id: query.connection_id,
         query_version: query.version,
         source: "test",
-        outcome: failed ? "error" : "ok",
+        outcome: result.outcome ?? (failed ? "error" : "ok"),
         error_code: failed ? result.error_code : null,
         row_count: failed ? null : result.rows.length,
         created_at: at(),
+        writeEvidence: state.writeFields && result.writeEvidence ? Object.fromEntries(Object.entries(result.writeEvidence).filter(([key]) => key !== "rolled_back")) : undefined,
       };
       state.runs.push(run);
       rc.send(200, {
@@ -423,6 +438,7 @@ export function handleDatabase(state: DatabaseState, rc: DatabaseRoute): boolean
         run_id: run.id,
         ...(state.procedureFields ? { notice: result.notice ?? null } : {}),
         params_json_schema: queryView(state, query).params_json_schema,
+        ...(state.writeFields ? result.writeEvidence : {}),
       });
       return true;
     }
@@ -432,6 +448,14 @@ export function handleDatabase(state: DatabaseState, rc: DatabaseRoute): boolean
 }
 
 const isObject = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === "object" && !Array.isArray(v);
+
+/** Explicit query settings, without simulating the server's kind-dependent defaults or runtime. */
+function queryWriteFields(q: object): Record<string, unknown> {
+  return Object.fromEntries(["kind", "max_affected_rows", "requires_confirmation", "max_calls"].flatMap(key => {
+    const value = (q as Record<string, unknown>)[key];
+    return value === undefined ? [] : [[key, value]];
+  }));
+}
 
 /** A package query's parameters as the instance stores them: every field, the defaults filled in. */
 function stored(parameters: unknown): Array<Record<string, unknown>> {
@@ -462,7 +486,9 @@ function matches(state: DatabaseState, tool: Record<string, unknown>, query: Fak
     JSON.stringify(stored(definition.parameters)) === JSON.stringify(stored(query.parameters)) &&
     (definition.max_rows ?? 50) === query.max_rows &&
     (definition.max_result_chars ?? 8000) === query.max_result_chars &&
-    (definition.allows_anonymous ?? false) === query.allows_anonymous
+    (definition.allows_anonymous ?? false) === query.allows_anonymous &&
+    ["kind", "max_affected_rows", "requires_confirmation", "max_calls"].every(key =>
+      (definition[key] ?? QUERY_SCHEMA[key]?.default) === (queryWriteFields(query)[key] ?? QUERY_SCHEMA[key]?.default))
   );
 }
 
@@ -546,6 +572,7 @@ export function adminImport(state: DatabaseState, tenantId: string, pkg: Record<
       max_rows: Number(definition.max_rows ?? 50),
       max_result_chars: Number(definition.max_result_chars ?? 8000),
       allows_anonymous: definition.allows_anonymous === true,
+      ...queryWriteFields(definition),
     };
     if (existing) Object.assign(existing, fields, { version: existing.version + 1 });
     else state.queries.push({ id: randomUUID(), tenant_id: tenantId, slug: String(tool.slug), version: 1, ...fields });
@@ -610,6 +637,7 @@ export function exportQueries(state: DatabaseState, tenantId: string, pkg: Recor
       max_rows: query.max_rows,
       max_result_chars: query.max_result_chars,
       allows_anonymous: query.allows_anonymous,
+      ...(state.writeFields ? queryWriteFields(query) : {}),
     };
   }
 }

@@ -12,11 +12,11 @@ The section appears only on instances where the connector is switched on.
 
 | Role | In Settings › Databases |
 |---|---|
-| Owner | Creates, changes and deletes connections and queries; sets and replaces a connection's password; tests connections and sees the database driver's own error message; test-runs saved queries and unsaved drafts; uses the schema explorer. See [Database Connector Setup](/docs/administration/database-connector-setup) |
+| Owner (and Admin) | Decides whether a connection's write queries may run (**Allow write queries**). Creates, changes and deletes connections and queries; sets and replaces a connection's password; tests connections and sees the database driver's own error message; test-runs saved queries and unsaved drafts; uses the schema explorer. See [Database Connector Setup](/docs/administration/database-connector-setup) |
 | Builder, Observer and the other roles that see tools | Read everything, SQL included, with all fields disabled. A Builder assigns the query tools to agents |
 | Platform Admin | Reads everything; neither changes nor tests |
-| Superadmin, in Tenant mode | The same as the Owner |
-| Tenant API key | Never writes |
+| Superadmin, in Tenant mode | The same as the Owner, except **Allow write queries**, which needs the Owner role in this workspace |
+| Tenant API key | With the `admin` scope and no workflow restriction: reads everything, tests connections and test-runs saved queries, for example from CI. Never writes, explores the schema, allows write queries or sets a password |
 
 Where you may not change something, the page says **Database connections and queries are set up by the tenant Owner.** The target, the database user and the SQL decide which data leaves your database, so give the Owner role only to people who may decide that. Every change is recorded in the audit log: the Owner's under their own name, a superadmin's as an operator action. Deciding which assistant uses a query is open to Builders too. Your database administrator prepares the database side with the [Database Administrator Checklist](/docs/administration/database-connector-checklist).
 
@@ -50,11 +50,25 @@ The next tool call signs in with the new password: the platform opens new connec
 
 **A new server needs the password again.** When you move a connection to another host, port or database type, the stored password is not sent to the new server: the change must carry the new server's password. A new database name or user on the same server keeps it.
 
+## Allow write queries
+
+A query of the kind **Write** changes rows in your database: it cancels an order, saves a callback request. Whether your assistant may do that is your decision, per connection. As an Owner or Admin, open the connection and switch on **Allow write queries**; switch it off to stop every write on it at once. Each change is recorded in the audit log with your name. Read queries are not affected.
+
+Before you switch it on:
+
+- Check which write queries use the connection: the queries list marks them **Writes**, and each shows its statement, the most rows one call may change, and whether the person confirms first.
+- Prefer a connection with its own login that may write only what those queries need ([checklist](/docs/administration/database-connector-checklist#optional-a-login-for-write-queries)). With writes allowed, the connection test lists the login's write privileges instead of warning about them.
+- Read [Write queries](/docs/concepts/database-connections#write-queries): every write is capped, never retried, and by default confirmed by the signed-in person in the chat.
+
+While it is off, a write query's test run and every agent call answer `writes_not_allowed`. A solution package never switches it on; an import tells you when a write query waits for it.
+
 ## Test the connection
 
 **Test connection** runs DNS, network policy, TCP, TLS, login, `SELECT 1`, server version and write privileges, and shows each step's result with its code. A red write-privileges finding means the database user can write: ask your database administrator for a read-only user. The result becomes the connection's last test; a query tool is ready for agents only while its connection is enabled and its last test passed. For a failed step you also see the database driver's own message, with the password and user name removed. What every step and code means is in [Connection test](/docs/troubleshooting/database-connections#connection-test).
 
 ## Test-run a saved query
+
+A write query's test run is a dry run: the change is rolled back and nothing is saved. The result shows how many rows it would change.
 
 The **Test run** panel of an open query runs it once against the database, read-only and under the same limits as an agent's call:
 

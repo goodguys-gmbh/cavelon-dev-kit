@@ -9,6 +9,19 @@ CLI, the skills and the plugin.
 
 ### Added
 
+- Write-query interfaces (implementation target #171): query packages retain
+  published `kind`, `max_affected_rows`, `requires_confirmation` and
+  `max_calls`; validation warns on explicitly disabled connection writes
+  and confirmation-required workflow nodes. Query and run output carries
+  the instance's write settings, dry-run/rollback and commit evidence,
+  without inventing omitted values. The published refusal catalog includes
+  `tool_call_limit_reached` and ambiguous outcomes are never retried.
+  Passwords, privilege acknowledgment and enabling writes stay in the Admin.
+  Workflow Tool Call argument/identity checks are preserved. The current
+  budget covers direct nodes; Agent-stage workflow calls still count per
+  turn, and ordinary chat limits are unchanged. Final workflow acceptance
+  and release remain gated on a shared Agent/direct run counter on the server.
+
 - Database connection management (#170): `db connections create`, `update`,
   `delete` and `ca` follow `database_connectors.manage`, validate published
   fields and upload only public certificates. Passwords stay in the Admin;

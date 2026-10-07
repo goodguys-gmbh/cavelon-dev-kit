@@ -327,7 +327,7 @@ schema has them: `cavelon validate` reports an unknown section):
 ## Database query tools
 
 A database query tool lets an agent answer from a customer's live database. A
-saved, read-only query is one tool (`tool_type: database_query` in
+saved query of explicit `kind: read` or `kind: write` is one tool (`tool_type: database_query` in
 `package/tools.yaml`); the model only calls it and fills the parameters it is
 given, and never writes SQL. `cavelon schema tools.database_query` lists the
 fields this instance takes; `cavelon docs get administration/database-connectors`
@@ -389,7 +389,7 @@ says who does what on the instance.
 - **`allows_anonymous`.** Set it to true only for public data (stock, prices,
   opening hours) and only on a query without an identity parameter; the
   instance refuses it otherwise (`anonymous_with_context_parameter`).
-- **Safe query design.** One `SELECT` or `WITH` statement; select only the
+- **Read query design.** One `SELECT` or `WITH` statement; select only the
   columns the answer needs (never `SELECT *`); always bound the rows (`LIMIT`,
   `TOP`, `FETCH FIRST`) and keep `max_rows` small; constrain every model
   parameter (`pattern`, `max_length`, `enum`, `minimum`/`maximum`) and
@@ -398,7 +398,7 @@ says who does what on the instance.
   postal code) rather than one guessable key. Each `:name` in the SQL needs
   exactly one parameter of that name (a literal colon is `\:`); validate checks
   this (`bind_mismatch`) and each parameter's type and constraints.
-- **Stored procedures (SQL Server only).** On an `mssql` connection the SQL
+- **Read stored procedures (SQL Server only).** On an `mssql` connection the SQL
   may instead be exactly one call, `EXEC [schema].[procedure] @p1 = :p1, @p2 =
   :p2`: every argument a placeholder with a declared parameter, no literal,
   `OUTPUT`, option or dynamic SQL (`procedure_call_form`; on another dialect
@@ -413,6 +413,48 @@ says who does what on the instance.
 - `cavelon explain <code>` explains every code the connector uses: what
   `validate` and the preview name, the codes of a failed call (`timeout`,
   `identity_required`, …) and of a connection test.
+
+### Authoring a write query
+
+Read the instance's schema before using these fields. Set `kind: write`
+explicitly, keep `max_affected_rows` small (default 1, at most 100), and keep
+`requires_confirmation: true` (the default) so the signed-in person confirms
+in chat before execution. `max_calls` takes 1–1000; omitted, the instance
+uses 1 for a write and 5 for a read. For the example above, keep its
+parameters and replace the SQL and write settings with:
+
+```yaml
+    kind: write
+    sql_text: UPDATE orders SET status = 'cancelled' WHERE number = :order_no AND email = :email
+    max_affected_rows: 1
+    requires_confirmation: true
+    max_calls: 1
+```
+
+One `INSERT`, `UPDATE` or `DELETE`; `UPDATE`/`DELETE` need a parameterized
+`WHERE`. Upserts and `RETURNING`/`OUTPUT` are allowed, a leading `WITH` and
+multiple statements are not (`write_statement_refused`). On SQL Server one
+`EXEC` of a writing procedure is allowed, subject to the instance's
+`write_procedure_definition_refused` checks, including no transaction
+control or `SET NOCOUNT ON`. Local validation cannot prove a procedure's
+behavior; read the server's preview and test results.
+
+Use a dedicated least-privilege write login. A tenant Owner or Admin enables
+writes in the Admin with `database_connectors.allow_writes` from a tenant
+membership; a global role alone does not grant it. `allows_writes`,
+passwords and privilege acknowledgment remain person-only Admin actions,
+never query or connection package fields. `db connections` displays the
+published flag; validation warns on explicit false (`writes_not_allowed`)
+and treats omission or an unreadable/offline list as unknown. Tokens get
+`person_only_operation` and tenant API keys get `key_needs_a_person` on
+the password and write-enable routes; follow `needs_a_person`.
+
+The import/API approval of a query definition is separate from its
+`requires_confirmation` chat execution prompt. Test writes against a test
+database: `db test-run` is a dry run that rolls back and prints only the
+returned evidence. Never retry `write_outcome_unknown`; ask a person to
+check the database before any repetition. `cavelon explain <code>` reads
+the instance's published catalog.
 
 ### Calling a query from a workflow
 
@@ -484,6 +526,18 @@ graph_edges:
   queries. A trigger execution identity is not a Chat User; use only a
   public-data query with no identity parameters and `allows_anonymous: true`
   in such a run.
+- **Write confirmation and budget.** Every direct Tool Call node refuses a
+  write with `requires_confirmation: true` (`confirmation_unavailable`),
+  because it cannot wait for the person's click; `validate` warns. Turn it
+  off only for an intended unattended write. The current direct-node cap
+  counts the query's saved `max_calls` across a workflow run's Tool Call
+  nodes, `for_each` iterations and concurrent branches, and persists on
+  resume. The next call is refused with `tool_call_limit_reached`, the node
+  fails with that code and evidence records `refused`. Read queries have no
+  run cap. Agent-stage workflow calls still count per turn; a shared
+  Agent/direct counter remains the server acceptance gate. Ordinary chat
+  per-turn limits stay as they are. Do not infer runtime acceptance from kit
+  fixtures, or raise a node's cap with assignment `config_overrides`.
 - **Validation.** `validate` checks argument names in `input_schema` and a
   directly preceding Transform's flat JSON mapping, using the query's
   parameters (or the remembered query when its definition is left out).

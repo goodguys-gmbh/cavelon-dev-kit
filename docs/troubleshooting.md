@@ -224,18 +224,27 @@ used: cached or read now, when, and its hash.
 | `package_files_differ` | 4 | `init --from` would change or remove package files that hold something else. The files are listed; `--force` replaces them. |
 
 **A database query blocks the apply.** `database_query_needs_superadmin` means
-the package would create or change a saved query (its SQL, parameters or
-limits, or the query tool's own name or description), which only a superadmin
-does, in the Admin; a personal access token never does, and one such blocker
-stops the whole import. `validate` names those tools beforehand
-(`database_query_changed`). Hand the change to a superadmin, who imports the
-package from the solution's Agents page; to apply the rest now, restore the
-tool's entry as the last pull wrote it, or remove its `database_query` block.
-`database_connection_missing` or `database_connection_untested` mean the
-target tenant has no tested connection of the name the query gives: a
-superadmin creates it, and the tenant Owner tests it with
-`cavelon db test <connection>`. `database_connector_disabled` means the
-instance's operator has not switched the connector on.
+the credential lacks permission to create or change the query's SQL,
+parameters, limits, kind, confirmation setting or tool name/description.
+The current manage gate permits the tenant Owner's personal access token
+after the person's approval; follow the instance's hint because older builds
+can still require a superadmin in the Admin. One such blocker stops the
+whole import. Restore that tool as the last pull wrote it or remove its
+`database_query` block to apply the rest. A missing or untested connection
+needs the tenant Owner's setup and `cavelon db test <connection>`.
+
+For writes, `writes_not_allowed` includes dry-run tests: a person enables
+writes on the connection in the Admin. Omitted `allows_writes` is unknown.
+`too_many_rows_affected` means the transaction rolled back.
+`write_outcome_unknown` means the commit outcome is unknown: never retry;
+check the database before any repetition. `write_statement_refused` and
+`write_procedure_definition_refused` are save-time checks; use `cavelon
+explain <code>` for the instance's rules. A confirmation-required direct
+query node answers `confirmation_unavailable`. Its per-run budget refusal
+is `tool_call_limit_reached`, counted across direct nodes and iterations.
+Agent-stage workflow calls still count per turn in this build; shared
+Agent/direct counting remains a server acceptance gate. Ordinary chat
+per-turn limits are unchanged. See [write queries](connect-a-database.md#write-queries).
 
 **A query tool answers `identity_required` in a test.** The query reads a
 signed-in visitor's identity (`end_user.*`), or does not allow anonymous

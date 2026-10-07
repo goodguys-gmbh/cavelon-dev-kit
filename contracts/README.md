@@ -114,6 +114,26 @@ as below; unrelated changes stay as recorded. The output publishes both the
 query's column/row result and its `{error, message}` failure. No new API
 operation is called by the kit, so the operation list and OpenAPI stay.
 
+Later on 2026-10-07 the snapshot took write-query interfaces from an
+immutable merged instance build, without running it. The checked-in output
+of its OpenAPI generator was verified before selection; only the connection's
+four write-status/count fields, the instance's write offer, the query
+create/update/response write fields and the test/run evidence fields are
+taken in. The functions behind `/meta/package-schema` and
+`/meta/error-catalog`, read through the build's existing Python environment,
+supply only the query's `kind`, `max_affected_rows`, `requires_confirmation`,
+`max_calls` and SQL description, the workflow query output's published error
+enum, and eight codes (`writes_not_allowed`, `too_many_rows_affected`,
+`write_outcome_unknown`, `confirmation_unavailable`, `write_statement_refused`,
+`write_procedure_definition_refused`, `tool_call_limit_reached`,
+`key_needs_a_person`). Only the Database Connectors docs page is refreshed,
+from its corpus renderer. Texts are scrubbed as below. Connection management,
+reader overrides, query confirmation/nonce and activation entries, unrelated
+schemas, capabilities and all recorded defaults stay as they were. A
+response field absent on an older instance stays unknown. The direct-node
+budget is published; shared Agent/direct workflow counting remains a server
+acceptance and release gate, which these snapshots and fake tests do not prove.
+
 The tests switch features on in the fake server where a command needs them
 (personal access tokens, the operations API, Sandboxes, Masterloop, archive
 uploads, the database connector); the snapshot keeps the defaults.

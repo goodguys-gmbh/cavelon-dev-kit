@@ -10350,6 +10350,40 @@
             "type": "string",
             "format": "date-time",
             "title": "Updated At"
+          },
+          "allows_writes": {
+            "type": "boolean",
+            "title": "Allows Writes",
+            "default": false
+          },
+          "allows_writes_changed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allows Writes Changed At"
+          },
+          "allows_writes_changed_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allows Writes Changed By User Id"
+          },
+          "write_query_count": {
+            "type": "integer",
+            "title": "Write Query Count",
+            "default": 0
           }
         },
         "type": "object",
@@ -10496,6 +10530,16 @@
           },
           "network": {
             "$ref": "#/components/schemas/DatabaseConnectorNetwork"
+          },
+          "write_queries": {
+            "type": "boolean",
+            "title": "Write Queries",
+            "default": true
+          },
+          "max_affected_rows_limit": {
+            "type": "integer",
+            "title": "Max Affected Rows Limit",
+            "default": 100
           }
         },
         "type": "object",
@@ -10617,6 +10661,40 @@
             "type": "boolean",
             "title": "Is Enabled",
             "default": true
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "read",
+              "write"
+            ],
+            "title": "Kind",
+            "default": "read"
+          },
+          "max_affected_rows": {
+            "type": "integer",
+            "maximum": 100,
+            "minimum": 1,
+            "title": "Max Affected Rows",
+            "default": 1
+          },
+          "requires_confirmation": {
+            "type": "boolean",
+            "title": "Requires Confirmation",
+            "default": true
+          },
+          "max_calls": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1000,
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Calls"
           }
         },
         "additionalProperties": false,
@@ -10775,6 +10853,30 @@
             "type": "string",
             "format": "date-time",
             "title": "Updated At"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "default": "read"
+          },
+          "max_affected_rows": {
+            "type": "integer",
+            "maximum": 100,
+            "minimum": 1,
+            "title": "Max Affected Rows",
+            "default": 1
+          },
+          "requires_confirmation": {
+            "type": "boolean",
+            "title": "Requires Confirmation",
+            "default": true
+          },
+          "max_calls": {
+            "type": "integer",
+            "maximum": 1000,
+            "minimum": 1,
+            "title": "Max Calls",
+            "default": 5
           }
         },
         "type": "object",
@@ -10953,6 +11055,38 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "default": "read"
+          },
+          "affected_rows": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Affected Rows"
+          },
+          "committed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Committed"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run",
+            "default": false
           }
         },
         "type": "object",
@@ -11085,6 +11219,43 @@
             "additionalProperties": true,
             "type": "object",
             "title": "Params Json Schema"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "default": "read"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run",
+            "default": false
+          },
+          "rolled_back": {
+            "type": "boolean",
+            "title": "Rolled Back",
+            "default": false
+          },
+          "affected_rows": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Affected Rows"
+          },
+          "committed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Committed"
           }
         },
         "type": "object",
@@ -11222,6 +11393,58 @@
               }
             ],
             "title": "Is Enabled"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "read",
+                  "write"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "max_affected_rows": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 100,
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Affected Rows"
+          },
+          "requires_confirmation": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requires Confirmation"
+          },
+          "max_calls": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1000,
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Calls"
           }
         },
         "additionalProperties": false,
