@@ -10,7 +10,7 @@ import {
   type Context,
 } from "../command.js";
 import { CavelonError, ExitCode, usageError, type ExitCodeValue } from "../errors.js";
-import { confirmation, confirmTokenRequired } from "../confirm-token.js";
+import { confirmation, confirmTokenRequired, PERSON_CONFIRMS_HELP } from "../confirm-token.js";
 import { idempotencyKey, requireFeature, UUID_KEY_OPTION, withRetryKey } from "../features.js";
 import { clip, keyValues, moreHint, table } from "../format.js";
 import type { ErrorCatalog } from "../contracts.js";
@@ -319,9 +319,10 @@ export const loopStart: CommandSpec = {
   description:
     "Calls the trigger's run-now route. The run (and its loop) acts as the caller: with a personal access token, the person.\n" +
     "It runs on its own and spends the tenant's model budget, so without --confirm nothing starts: the preview names the\n" +
-    "trigger, its solution and the payload. Show it to a person and confirm only with their yes; for a trigger of a draft\n" +
-    "solution in a test environment an agent may confirm on its own. Follow the run with `loop watch <run>`, or\n" +
-    "`wait <operation>`; `loop cancel <run>` stops it.",
+    "trigger, its solution and the payload. Show it to a person and confirm only with their yes. For a trigger of a draft\n" +
+    "solution an agent confirms with the preview's token (--confirm <token>, or confirm over MCP); for any other,\n" +
+    "a coding agent cannot confirm it: over MCP the client asks the person, and from an agent's shell the person runs the\n" +
+    "confirm in their own terminal. Follow the run with `loop watch <run>`, or `wait <operation>`; `loop cancel <run>` stops it.",
   readOnly: false,
   mcpTool: "loop_start",
   operations: ["POST /api/v1/triggers/{trigger_id}/run"],
@@ -347,11 +348,16 @@ export const loopStart: CommandSpec = {
     const raw = stringOption(input, "input");
     const payload = raw === undefined ? {} : await readBody(ctx, raw);
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw usageError("--input must be a JSON object.");
-    const gate = await confirmation(ctx, input, "loop_start", { trigger: trigger.id, payload });
+    const solution = await triggerSolution(ctx, trigger);
+    const given = stringOption(input, "idempotency-key");
+    const words = ["loop", "start", trigger.slug, ...(raw !== undefined ? ["--input", raw] : []), ...(given ? ["--idempotency-key", given] : [])];
+    // A trigger of a draft solution is the fast loop an agent confirms on its own; any other run acts as the person on their budget.
+    const gate = await confirmation(ctx, input, "loop_start", { trigger: trigger.id, payload }, {
+      ...(solution?.status === "draft"
+        ? {}
+        : { person: { what: `Start a run of the trigger ${trigger.slug}, which acts as the person and spends the tenant's model budget.`, words: [...words, "--confirm"] } }),
+    });
     if (!gate.confirmed) {
-      const solution = await triggerSolution(ctx, trigger);
-      const given = stringOption(input, "idempotency-key");
-      const words = ["loop", "start", trigger.slug, ...(raw !== undefined ? ["--input", raw] : []), ...(given ? ["--idempotency-key", given] : [])];
       const confirm = gate.confirm(cavelonCommand(...words, "--confirm"));
       const payloadText = clip(JSON.stringify(payload), 500);
       return {
@@ -1078,7 +1084,8 @@ export const triggerIdentity: CommandSpec = {
   description:
     "Without <key> or --clear, shows the binding. Binding gives the trigger standing authority, so it is never part of\n" +
     "`apply`: show the person, then run it with --confirm. It needs settings.manage and triggers.manage. Creating keys\n" +
-    "and Sandbox Access stay in the Admin. A personal access token is never an execution identity.",
+    "and Sandbox Access stay in the Admin. A personal access token is never an execution identity.\n" +
+    PERSON_CONFIRMS_HELP,
   readOnly: false,
   destructive: true,
   idempotent: true,
@@ -1095,7 +1102,6 @@ export const triggerIdentity: CommandSpec = {
   examples: [
     "cavelon trigger identity orders",
     "cavelon trigger identity orders loop-runner --confirm",
-    "cavelon trigger identity orders loop-runner --confirm <token>",
     "cavelon trigger identity orders --clear --confirm",
   ],
   async run(ctx, input) {
@@ -1115,9 +1121,12 @@ export const triggerIdentity: CommandSpec = {
     }
     const keyName = key && "name" in key ? key.name : wanted;
     const change = wanted ? `bind API key "${keyName}"` : "clear the binding";
-    const gate = await confirmation(ctx, input, "trigger_identity", { trigger: trigger.id, from: current.api_key_id ?? null, to: wanted });
+    const words = ["trigger", "identity", trigger.slug, keyRef ?? "--clear", "--confirm"];
+    const gate = await confirmation(ctx, input, "trigger_identity", { trigger: trigger.id, from: current.api_key_id ?? null, to: wanted }, {
+      person: { what: `Trigger ${trigger.slug}: ${change}, which its runs act as.`, words },
+    });
     if (!gate.confirmed) {
-      const confirm = gate.confirm(cavelonCommand("trigger", "identity", trigger.slug, keyRef ?? "--clear", "--confirm"));
+      const confirm = gate.confirm(cavelonCommand(...words));
       return {
         data: { trigger: trigger.slug, changed: false, would: change, current: view, confirm, ...gate.fields },
         text: `${identityText(trigger, view)}\n\n${gate.where}\n${gate.mismatch ? `${gate.mismatch}\n` : ""}Nothing changed. To ${change}: ${confirm}`,

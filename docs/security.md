@@ -88,7 +88,8 @@ It does **not** see:
 
 - **secret values** (`{{secret:…}}`): `secrets list` shows only names and
   whether each is set; a value is set by a person with `cavelon secrets set`
-  in their own terminal, and is never printed, written to a file or read back;
+  in their own terminal, or in the Admin where the instance lets no token set
+  one, and is never printed, written to a file or read back;
 - the **keys of model endpoints**: `models list` shows the endpoint and the
   key's kind, never the key;
 - **API keys** a trigger runs as: they are named by name or id, never by value.
@@ -112,9 +113,26 @@ activates. Over MCP, `cavelon` limits it further:
   confirm another change than the one it showed; `confirm: true` is refused.
   The other changing tools act at once; the
   [table below](#every-changing-command-and-its-guard) lists every changing
-  command and its guard. The Cavelon
-  skills tell the agent to show you any preview that reaches an active
-  solution or production first.
+  command and its guard.
+- The token only proves that a preview came first: the agent holds it, and
+  could work it out. So a change that reaches live traffic, the whole tenant,
+  or cannot be taken back also needs **your own yes**, through a channel the
+  agent cannot answer. These are `tenant_create`, `variables_set` where it
+  replaces a value, `loop_start` (except for a trigger of a draft solution),
+  `limits_set`, `models_set_limit`, `trigger_identity`, `harness_default`,
+  `activate` where it previews, `deactivate`, `api` for any operation that is
+  not read-only, and `apply` where its preview needs a person (it changes the
+  tenant-wide sections, reaches an active solution, deletes, or goes to
+  `env/prod`). When the agent confirms one with its token, `cavelon` asks you
+  in your agent client's own dialog (MCP elicitation: **Make this change**,
+  yes or no) and changes nothing without your yes; no answer within
+  10 minutes is a no (`confirm_declined`). For `apply`, the preview id goes to
+  the instance only after your yes. A client that cannot ask you gets a
+  preview with `needs_person: "terminal"` and the command you run in your own
+  terminal; its token is refused there (`confirm_needs_person`). A draft in a
+  test environment stays the agent's fast loop: `apply` of a preview that
+  needs no person, `loop_start` of a draft's trigger, `loop_cancel`,
+  `sandbox_seed` and `kb_upload` with `replace` confirm with the token alone.
 - `api` refuses, even with `confirm`, an operation the instance keeps for a
   person: one its OpenAPI marks with `x-cavelon-person-only` (setting or
   deleting a secret value, issuing, resetting or revoking a credential,
@@ -149,12 +167,13 @@ guards as the `api` tool:
   (`operation_for_a_person`, `secret_field_for_a_person`).
   `cavelon api describe` shows both marks before anything is tried;
 - an operation that is not read-only prints the request it would send
-  (method, path, query, headers, body, files) and a confirm token, and sends
-  nothing (`sent: false`). Run again with `--confirm <token>`, it sends exactly
-  that request. The token is a hash of the request, the instance and the
-  tenant, so a changed body, parameter or file needs a new preview; a token
-  that does not match sends nothing and exits 4, and `--confirm` without a
-  token sends nothing and exits 5;
+  (method, path, query, headers, body, files) and the command you run in your
+  own terminal to send it (`needs_person: "terminal"`), and sends nothing
+  (`sent: false`). The agent cannot send it: `--confirm` without a token exits
+  5, a token of another request exits 4, and even the token the MCP `api`
+  tool returns for this request is refused (`confirm_needs_person`, exit 5).
+  Over MCP, the `api` tool sends it with the preview's token after your yes in
+  the client;
 - the body `@file`, `--file` attachments and `--output` stay inside the
   solution folder, never in `cavelon`'s config or cache directory
   (`path_outside_solution`, `path_in_kit_directory`).
@@ -197,11 +216,25 @@ The commands with a `--confirm` flag are held to the same as their MCP tools:
 `limits set`, `models set-limit`, `loop cancel`, `sandbox seed`,
 `trigger identity`, `harness default`, `activate` (of a solution a channel
 or trigger reaches, or with `--make-default`), `deactivate`,
-`kb upload --replace` and `variables delete`.
-Run under a coding agent, each prints its preview with a confirm token and
-the command that confirms exactly that change (`--confirm <token>`, the same token the MCP
-tool returns). A bare `--confirm` changes nothing: it shows the preview and
-exits 5, and `activate --confirm` refuses before it activates.
+`kb upload --replace`, `variables delete` and `apply --confirm <preview-id>`.
+A shell has no dialog in which `cavelon` could ask you, so a change that needs
+your own yes (see above) is yours to confirm in your own terminal: run under a
+coding agent, its preview says `needs_person: "terminal"`, shows no token, and
+ends with the command you run, such as
+`cavelon harness default support --confirm (the person runs it in their own terminal: a coding agent cannot confirm this change)`.
+A bare `--confirm` changes nothing and exits 5, and a token, even the one an
+MCP preview returned for the same change, is refused with
+`confirm_needs_person` (exit 5), which names your command in
+`details.person_command`. For `cavelon api` that command has no `--confirm`,
+since your terminal sends at once. A command you type with `!` in Claude
+Code, Codex or Gemini CLI runs in the agent's environment, so use another
+terminal.
+The others (`loop start` of a draft's trigger, `loop cancel`, `sandbox seed`,
+`kb upload --replace`, `apply` of a preview that needs no person) print their
+preview with a confirm token and the command that confirms exactly that
+change (`--confirm <token>`, the same token the MCP tool returns). A bare
+`--confirm` changes nothing: it shows the preview and exits 5, and
+`activate --confirm` refuses before it activates.
 A confirm line printed before its preview exists (`activate`'s default route,
 the stop command of a running loop, a hint) names the token it needs:
 `--confirm <confirm_token of its preview>`.
@@ -211,16 +244,21 @@ confirms, as before; a token given there is checked too.
 `secrets set` and `secrets delete` are refused under a coding agent, with or
 without `--confirm`, before a value is read or anything is sent
 (`operation_for_a_person`, exit 5), as `cavelon api` refuses the same
-operations. You run them in your own terminal.
+operations. You run them in your own terminal. Where the instance lets only a
+person signed in to the Admin set or delete a secret (its `/meta/principal`
+lists them in `needs_a_person`), they are refused for every token before a
+value is read (`secret_needs_a_person`, exit 5), and you set it in the Admin
+under Settings › Secrets.
 
 A refusal says who runs the command instead, never which variable made
 `cavelon` take the shell for an agent's.
 
 These guards keep an agent from doing by mistake what is meant for a person;
-they are not a boundary. An agent that unsets the variable, or calls the API
-some other way, has whatever your shell and the token allow it. Your agent
-client's permission settings decide what it may run, and the instance enforces
-the token's role and ceiling on every request.
+they are not a boundary. The client's dialog is a channel the agent cannot
+answer, but an agent that unsets the variable, or calls the API some other
+way, has whatever your shell and the token allow it. Your agent client's
+permission settings decide what it may run, and the instance enforces the
+token's role and ceiling on every request.
 
 ### Every changing command and its guard
 
@@ -228,36 +266,36 @@ Every command that changes something, on the instance or on your machine, and
 what holds it back. **Preview** means: without `--confirm` the command shows
 what it would do and changes nothing; with `--confirm` it does it. Under a
 coding agent and over MCP, only the `confirm_token` of that very preview
-confirms (see above). The rule of the Cavelon skills stays: an agent confirms
-on its own only for a draft solution in a test environment, and shows you
-every other preview first.
+confirms (see above). **Your yes** means: over MCP the client asks you before
+the change is made, and from an agent's shell you run the command in your own
+terminal. The agent shows you every preview first.
 
 | Command | MCP tool | What it changes | Guard |
 |---|---|---|---|
-| `tenant create` | `tenant_create` | adds a tenant to the platform (Platform mode) | preview, always |
-| `variables set` | `variables_set` | a tenant-wide `{{var:…}}` value every solution reads | preview when it replaces another value; a new variable is created at once |
-| `variables delete` | none | removes a tenant variable | preview, always |
-| `secrets set` | none | a secret's value | a person only: refused under a coding agent; the value is read from a terminal or stdin |
+| `tenant create` | `tenant_create` | adds a tenant to the platform (Platform mode) | preview, always, and your yes |
+| `variables set` | `variables_set` | a tenant-wide `{{var:…}}` value every solution reads | preview and your yes when it replaces another value; a new variable is created at once |
+| `variables delete` | none | removes a tenant variable | preview, always, and your yes |
+| `secrets set` | none | a secret's value | a person only: refused under a coding agent, and for every token where the instance lets only the Admin set it; the value is read from a terminal or stdin |
 | `secrets delete` | none | removes a secret's value | a person only, and a preview |
-| `loop start` | `loop_start` | starts a run that acts as you and spends budget | preview, always (an agent may confirm a trigger of a draft solution in a test environment) |
+| `loop start` | `loop_start` | starts a run that acts as you and spends budget | preview, always, and your yes, except for a trigger of a draft solution, which an agent confirms with the token |
 | `loop cancel` | `loop_cancel` | stops a run and its loops | preview, always |
 | `loop pause`, `loop resume` | `loop_pause`, `loop_resume` | asks a loop to pause at its next safe point, or resumes a paused one | at once |
-| `trigger identity` | `trigger_identity` | the API key a trigger's runs act as | preview, always |
-| `activate` | `activate` | puts a solution live, through the readiness gate | preview when a channel or an active trigger reaches it, or the instance does not say; with `--make-default`, also the default route. A draft nothing reaches activates at once |
-| `deactivate` | `deactivate` | takes a solution out of live traffic | preview, always; the default route is refused |
-| `harness default` | `harness_default` | which solution the tenant's chat and widget answer with | preview, always |
+| `trigger identity` | `trigger_identity` | the API key a trigger's runs act as | preview, always, and your yes |
+| `activate` | `activate` | puts a solution live, through the readiness gate | preview and your yes when a channel or an active trigger reaches it, or the instance does not say; with `--make-default`, also the default route, under the same yes. A draft nothing reaches activates at once |
+| `deactivate` | `deactivate` | takes a solution out of live traffic | preview, always, and your yes; the default route is refused |
+| `harness default` | `harness_default` | which solution the tenant's chat and widget answer with | preview, always, and your yes |
 | `harness new`, `harness clone` | `harness_new`, `harness_clone` | a new draft solution | at once (a draft answers no live traffic) |
-| `apply` | `apply` | imports the package into a solution | preview, always; confirmed with the preview's id |
+| `apply` | `apply` | imports the package into a solution | preview, always; confirmed with the preview's id, and your yes when the preview changes the tenant-wide sections, reaches an active solution, deletes or goes to `env/prod` |
 | `kb upload` | `kb_upload` | adds documents to a knowledge base | at once; with `--replace` on an instance that cannot replace a document itself, a preview of what it would deactivate |
 | `test run` | `test_run` | runs test suites, which spends budget | at once |
 | `chat` | `chat` | one turn of a conversation, which spends budget | at once |
-| `limits set` | `limits_set` | a limit of the tenant or the platform | preview, always |
-| `models set-limit` | `models_set_limit` | a model endpoint's concurrency limit | preview, always |
+| `limits set` | `limits_set` | a limit of the tenant or the platform | preview, always, and your yes |
+| `models set-limit` | `models_set_limit` | a model endpoint's concurrency limit | preview, always, and your yes |
 | `db test`, `db test-run` | `db_test`, `db_test_run` | a tenant Owner's connection test (stored as the connection's last test), or one run of a saved query with the values given (the rows come back once; the instance keeps counts only) | at once; read-only on the database, and the instance refuses anyone but the tenant Owner |
 | `sandbox seed` | `sandbox_seed` | replaces a Sandbox's workspace | preview, always |
 | `sandbox validate`, `sandbox refresh` | `sandbox_validate`, `sandbox_refresh` | runs a Sandbox's readiness checks, or accepts a customer VM's workspace as it is now | at once |
 | `artifacts export` | `artifacts_export` | takes files out of an isolated container as a tar archive | at once; never writes over an existing file |
-| `api` | `api` | any operation of the instance | preview for every operation that is not read-only under a coding agent and over MCP; operations kept for a person are refused |
+| `api` | `api` | any operation of the instance | preview and your yes for every operation that is not read-only under a coding agent and over MCP; operations kept for a person are refused |
 | `use` | `use_tenant` | the tenant your commands act in (over MCP: for the session only) | at once, on your machine |
 | `init`, `pull`, `fmt` | `init`, `pull`, `fmt` | files in the solution folder; `init` may create a draft solution from a shell | at once; `pull` refuses to replace a file that changed and is not committed, unless `--force` |
 | `login`, `logout` | none | the stored token | a person only: the token is read from a terminal or stdin |

@@ -50,6 +50,51 @@ CLI, the skills and the plugin.
   `database_connectors.view`, which the tenant roles that see tools hold
   (#146).
 
+- An instance that lets only a person signed in to the Admin set or delete a
+  secret refuses every personal access token there, not only a tenant API key
+  (#149). `cavelon secrets set` then failed after asking for the value, and
+  `apply`, `activate`, `status` and `secrets list` sent the person to that
+  command. The kit now reads it from `/meta/principal`, whose `needs_a_person`
+  lists both operations for the credential:
+  - `secrets set` and `secrets delete` refuse before they read a value or send
+    anything (`secret_needs_a_person`, exit 5), naming the Admin's Settings ›
+    Secrets page;
+  - `apply`'s needs and `set_commands`, the reminder after an import,
+    `activate`, `status`, `secrets list` and `whoami` ("may set secrets") name
+    that page instead of the command, and so does the hint for a role that may
+    not set secrets;
+  - the MCP server's instructions, the skills and the docs say both ways.
+  An instance that does not publish `needs_a_person` takes a personal access
+  token there, and nothing changes for it. The contract snapshot carries the
+  instance's new wording of `secret_needs_a_person` and
+  `approval_needs_a_person`, and `person_only_operation`.
+
+### Security
+
+- A coding agent could confirm a live, tenant-wide or destructive change on
+  its own: the preview handed it the confirm token (or preview id), and the
+  token is a hash it could even compute, so nothing made a person take part
+  (#134). These changes now need the person's own yes on top of the token:
+  `harness default`, `activate` where it previews (a solution something
+  reaches, or `--make-default`), `deactivate`, `tenant create`, `variables
+  set` replacing a value, `variables delete`, `limits set`, `models
+  set-limit`, `trigger identity`, `api` for an operation that is not
+  read-only, `loop start` unless the trigger's solution is a draft, and
+  `apply` of a preview that `show_to_person` marks (tenant-wide sections, an
+  active solution, deletions, env/prod; a preview an older cavelon stored is
+  held to the person too). Over MCP, once the agent confirms with the token,
+  the client asks the person (MCP elicitation) to approve exactly that change,
+  and waits up to 10 minutes; a no or no answer changes nothing
+  (`confirm_declined`, exit 5), and `apply` sends the preview id to the
+  instance only after the yes. A client that cannot ask, and a coding agent's
+  shell, leave the confirm to the person's own terminal: the preview says
+  `needs_person: "terminal"` and names the command, and a confirm with the
+  token is refused (`confirm_needs_person`, exit 5). A preview says
+  `needs_person` (`client` or `terminal`) wherever this applies. A draft's
+  `apply` and `loop start`, `loop cancel`, `sandbox seed` and `kb upload
+  --replace` are confirmed with the token as before, and nothing changes in a
+  person's own terminal.
+
 ## [0.1.11] - 2026-10-06
 
 Permissions and safeguards from a review of what a restricted credential may

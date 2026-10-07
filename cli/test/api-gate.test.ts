@@ -8,7 +8,7 @@ import type { InStream, Io } from "../src/io.js";
 import { createMcpServer } from "../src/mcp.js";
 import type { Operation } from "../src/openapi.js";
 import { startFakeServer, type FakeServer } from "./fake-server.js";
-import { cli, login, sandbox, type Sandbox } from "./helpers.js";
+import { askingClient, cli, login, sandbox, type Sandbox } from "./helpers.js";
 
 function op(method: string, path: string, personOnly?: Operation["personOnly"]): Operation {
   return {
@@ -120,7 +120,7 @@ describe("api over MCP with the instance's person-only marker", () => {
     const mcp = createMcpServer(io, COMMANDS);
     const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
     await mcp.connect(serverSide);
-    const client = new Client({ name: "test", version: "0" });
+    const client = askingClient();
     await client.connect(clientSide);
     open.push({ client, sb });
     return { client, sb };

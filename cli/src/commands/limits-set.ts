@@ -2,7 +2,7 @@ import { originText } from "../capacity.js";
 import { positional, type CommandSpec, type Context } from "../command.js";
 import type { OpenApiDoc } from "../contracts.js";
 import { CavelonError, ExitCode, usageError } from "../errors.js";
-import { confirmation } from "../confirm-token.js";
+import { confirmation, PERSON_CONFIRMS_HELP } from "../confirm-token.js";
 import type { ApiClient } from "../http.js";
 import { callOperation, openapiOrWarn, workflowOperation } from "../invoke.js";
 import {
@@ -587,7 +587,8 @@ export const limitsSet: CommandSpec = {
     "An operator's change (a run cap) is sent only with a personal access token in Platform mode of a role it names, without\n" +
     "X-Tenant-Id; --tenant <id|slug> then sets one tenant's own run cap. An environment or licence limit, a value out of bounds,\n" +
     "an instance that does not publish how to change the limit, and a credential without the permission or the role are refused\n" +
-    "before anything is sent. Propose the change to the person; never raise a limit on your own.",
+    "before anything is sent. Propose the change to the person; never raise a limit on your own.\n" +
+    PERSON_CONFIRMS_HELP,
   readOnly: false,
   destructive: true,
   idempotent: true,
@@ -607,7 +608,6 @@ export const limitsSet: CommandSpec = {
   examples: [
     "cavelon limits set kb_upload_max_file_size_mb 50",
     "cavelon limits set kb_upload_max_file_size_mb 50 --confirm",
-    "cavelon limits set kb_upload_max_file_size_mb 50 --confirm <token>",
     "cavelon limits set rate_limit_chat_rpm none --confirm",
     "cavelon limits set monthly_inference_token_budget 2000000",
     "cavelon limits set monthly_processing_step_cap none --confirm",
@@ -699,6 +699,10 @@ export const limitsSet: CommandSpec = {
     const gate = await confirmation(ctx, input, "limits_set", { key, value, previous: previous ?? null, operation }, {
       // An operator's change goes out in Platform mode: for the one tenant it names, or for every tenant.
       platform: operator ? (target.scope === "one_tenant" ? "tenant" : "outside") : undefined,
+      person: {
+        what: `${key}: ${from} → ${to}${target.scope === "platform" ? ", the platform's cap for every tenant without its own" : ""}.`,
+        words: ["limits", "set", key, argText(value), "--confirm"],
+      },
     });
     if (!gate.confirmed) {
       const confirm = gate.confirm(cavelonCommand("limits", "set", key, argText(value), "--confirm"));

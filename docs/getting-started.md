@@ -391,7 +391,9 @@ A solution that uses a secret (`{{secret:<name>}}`, declared in
 manage secrets runs that, such as the tenant's Owner: with a Builder's token
 `secrets set` is refused and names who sets it instead (a tenant Owner, in the
 Admin under Settings › Secrets or with their own token). `cavelon whoami` shows
-whether your token may ("may set secrets").
+whether your token may ("may set secrets"). Where the instance lets no token
+set a secret, the preview names the Admin page instead of the command: set it
+there, signed in.
 
 `apply` previews into a solution that exists and never creates one. If
 `env/test.yaml` names a solution that is not on the instance (you skipped
@@ -617,8 +619,9 @@ cavelon deactivate
 cavelon deactivate --harness support-faq --confirm
 ```
 
-Run by a coding agent, the confirm takes the token the preview printed
-(`--confirm <token>`), as for `activate --make-default`.
+A coding agent cannot confirm it: over MCP your agent client asks you, and
+from the agent's shell the preview names the command you run in your own
+terminal, as for `activate --make-default`.
 
 Deactivating is a person's decision. A solution that is the tenant's default
 route is refused before anything is sent: make another solution the default

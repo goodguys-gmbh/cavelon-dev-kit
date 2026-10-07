@@ -2135,8 +2135,8 @@
     {
       "code": "approval_needs_a_person",
       "area": "approval",
-      "message": "This API key cannot decide or cancel an approval.",
-      "hint": "A person decides, in the Admin or with their personal access token, or a key the tenant owner issued with the `approvals.decide` scope; `admin` does not include it.",
+      "message": "This credential cannot decide or cancel an approval.",
+      "hint": "A person decides, signed in to the Admin, or a key the tenant owner issued with the `approvals.decide` scope; `admin` does not include it, and a personal access token never decides.",
       "docs": "/docs/reference/api-endpoints#errors-and-retries"
     },
     {
@@ -2317,8 +2317,15 @@
     {
       "code": "secret_needs_a_person",
       "area": "secrets",
-      "message": "A tenant API key cannot set or delete a secret value.",
-      "hint": "A person sets it: in the Admin under Settings › Secrets, or with a personal access token.",
+      "message": "A personal access token or an API key cannot set or delete a secret value.",
+      "hint": "A person sets it, signed in to the Admin under Settings › Secrets.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "person_only_operation",
+      "area": "auth",
+      "message": "Only a person runs this operation; a personal access token or an API key cannot.",
+      "hint": "A person does it signed in to the Admin. `x-cavelon-person-only-reason` in the OpenAPI document names why.",
       "docs": "/docs/reference/api-endpoints#errors-and-retries"
     },
     {

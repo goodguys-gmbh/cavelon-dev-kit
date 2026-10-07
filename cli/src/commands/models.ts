@@ -2,7 +2,7 @@ import { CAPACITY_TUTORIAL_PAGE } from "../capacity.js";
 import { CURSOR_OPTION, intOption, LIMIT_OPTION, pageOf, positional, stringOption, type CommandSpec, type Context } from "../command.js";
 import type { OpenApiDoc } from "../contracts.js";
 import { CavelonError, ExitCode, usageError } from "../errors.js";
-import { confirmation } from "../confirm-token.js";
+import { confirmation, PERSON_CONFIRMS_HELP } from "../confirm-token.js";
 import { moreHint, table } from "../format.js";
 import { callStable, workflowOperation } from "../invoke.js";
 import { deref, jsonBodySchema, validateBody, type Operation } from "../openapi.js";
@@ -180,7 +180,8 @@ export const modelsSetLimit: CommandSpec = {
     "Sets the row's max_concurrent_requests to <n>, or clears it with none. Without --confirm, shows the old and new value\n" +
     "and changes nothing. A row without a base_url is refused before anything is sent: it reaches its provider through the\n" +
     "platform's routes, which have their own limits. Every row with the same base_url shares the count. Propose a value to\n" +
-    "the person and let them decide; the instance's capacity tutorial says how to find it.",
+    "the person and let them decide; the instance's capacity tutorial says how to find it.\n" +
+    PERSON_CONFIRMS_HELP,
   readOnly: false,
   destructive: true,
   idempotent: true,
@@ -194,8 +195,7 @@ export const modelsSetLimit: CommandSpec = {
     confirm: { type: "boolean", mcpToken: true, description: "Change it; without this nothing is changed." },
     env: ENV_OPTION,
   },
-  examples: ["cavelon models set-limit llama-70b 8", "cavelon models set-limit llama-70b 8 --confirm",
-    "cavelon models set-limit llama-70b 8 --confirm <token>", "cavelon models set-limit llama-70b none --confirm"],
+  examples: ["cavelon models set-limit llama-70b 8", "cavelon models set-limit llama-70b 8 --confirm", "cavelon models set-limit llama-70b none --confirm"],
   async run(ctx, input) {
     const ref = positional(input, "model")!;
     const limit = parseLimit(positional(input, "limit")!);
@@ -224,7 +224,12 @@ export const modelsSetLimit: CommandSpec = {
       return { data: { ...base, changed: false, sent: false }, text: `${label} already has max_concurrent_requests ${limitText(limit)}; nothing to change.` };
     }
     const sharing = model.shares_endpoint_with?.length ? ` It shares the count with ${model.shares_endpoint_with.join(", ")} (same endpoint).` : "";
-    const gate = await confirmation(ctx, input, "models_set_limit", { row: row.id, previous, limit });
+    const gate = await confirmation(ctx, input, "models_set_limit", { row: row.id, previous, limit }, {
+      person: {
+        what: `${label}: max_concurrent_requests ${limitText(previous)} → ${limitText(limit)}.${sharing}`,
+        words: ["models", "set-limit", row.model_id, limitText(limit), "--confirm"],
+      },
+    });
     if (!gate.confirmed) {
       const confirm = gate.confirm(cavelonCommand("models", "set-limit", row.model_id, limitText(limit), "--confirm"));
       return {

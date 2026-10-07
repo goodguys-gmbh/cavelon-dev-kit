@@ -35,7 +35,9 @@ use it when you parse the result.
 - **Secrets are set by a person.** When a preview or `cavelon secrets list`
   names a secret that is not set, tell the person the exact command to run in
   their terminal, `cavelon secrets set <name>` (as `apply` prints it, with its
-  `--env` and `--tenant`). Never ask for the value, never pipe or pass one yourself; there is
+  `--env` and `--tenant`). Where the instance lets no token set a secret,
+  `apply`, `activate`, `status` and `secrets list` name the Admin page
+  (Settings › Secrets) instead: tell the person that, not the command. Never ask for the value, never pipe or pass one yourself; there is
   no MCP tool for it. Plain-text variables you may set with `cavelon variables
   set <name> <value>` when the value is not a credential and your role may
   manage the tenant's settings, as for a secret: a Builder's may not, and
@@ -226,9 +228,10 @@ says when the solution it activated is not the default.
 - **Ask the person** whether the new solution should become the default. It
   changes live traffic; never decide it yourself.
 - With their yes: `cavelon activate --make-default` (or `cavelon harness
-  default <solution>`) shows the change, naming the current default; show it,
-  then run the confirm command it printed (from your shell it carries the
-  change's token: `--confirm <token>`). `harness default` refuses a draft
+  default <solution>`) shows the change, naming the current default; show it.
+  You cannot confirm it yourself: over MCP the client asks the person when you
+  call the tool with the preview's token; from your shell the person runs the
+  confirm command it printed in their own terminal. `harness default` refuses a draft
   (`solution_not_active`, exit 4): only an active solution can be the
   default, so use `cavelon activate --make-default`.
 - `is_default` in `harnesses.yaml` is not applied by `apply`; the preview
@@ -248,8 +251,12 @@ says when the solution it activated is not the default.
 
 ## Show the person before confirming
 
-Confirm on your own only for a draft solution in a test environment. Stop and
-show the preview to the person, and confirm only after they agree, when:
+Show every preview to the person. Confirm on your own only a preview that
+needs no person: `apply` to a draft solution in a test environment (the
+preview says nothing about showing it to a person), `loop start` of a trigger
+of a draft solution, `loop cancel` and `sandbox seed` of a test run or Sandbox
+you started, and `kb upload --replace`. Stop, show the preview, and wait for
+the person when:
 
 - the preview lists an active solution under "reaches active", or the target
   solution is active;
@@ -260,24 +267,33 @@ show the preview to the person, and confirm only after they agree, when:
   `--include-tenant-wide` or on an instance that imports them anyway): every
   solution of the tenant sees the change;
 - the preview lists target needs (secrets, grants, identities): only a person
-  can provide them, with `cavelon secrets set <name>` or in the Admin.
+  can provide them, with `cavelon secrets set <name>` or in the Admin, as the
+  preview names it.
 
-The same holds for the other commands that take `--confirm`: without it they
-only show what would happen. Show it to the person before `cavelon trigger
-identity <trigger> <key> --confirm` (it gives a trigger standing authority),
-before `cavelon harness default … --confirm`, `cavelon activate
---make-default --confirm` or `cavelon deactivate --confirm` (they move live
-traffic), before `cavelon activate --confirm` of a solution its preview says a
-channel or trigger reaches (it goes live for them at once), before
-`cavelon tenant create … --confirm` (a new tenant on the platform) and
-`cavelon variables set … --confirm` that replaces a value (every solution of
-the tenant reads it, active ones too), and
-before `cavelon sandbox seed … --confirm` or `cavelon loop cancel … --confirm` on
-anything but a test Sandbox or a run you started yourself. `cavelon loop start
-<trigger>` previews too, because a run acts as the person and spends budget:
-confirm it on your own only for a trigger of a draft solution in a test
-environment, and show the person every other one. A new variable, and a draft
-solution no channel or trigger reaches, need no confirm.
+**The person's yes is theirs to give.** For these, and for `tenant create` (a
+new tenant on the platform), `variables set` that replaces a value (every
+solution of the tenant reads it) and `variables delete`, `loop start` of a
+trigger whose solution is not a draft (a run acts as the person and spends
+budget), `limits set`, `models set-limit`, `trigger identity` (standing
+authority for a trigger), `harness default`, `activate --make-default`,
+`activate` of a solution its preview says a channel or trigger reaches,
+`deactivate` (they move live traffic), and `api` for any operation that is
+not read-only, `cavelon` does not take your confirm as theirs. Their preview
+says how in `needs_person`:
+
+- `"client"` (over MCP, where your client can ask the person): show the
+  preview, then call the tool again with the same arguments and `confirm` set
+  to its token (for `apply`, the preview id). The client then asks the person
+  to approve exactly that change, and nothing changes without their yes. A no,
+  or no answer within 10 minutes, returns `confirm_declined` (exit code 5):
+  ask the person what they want instead of trying again.
+- `"terminal"` (your shell, or a client that cannot ask): the preview's
+  `confirm` is the command the person runs in their own terminal, not with `!`
+  in your session. Give them that command and wait; never run it yourself. A
+  token is refused (`confirm_needs_person`, exit code 5).
+
+A new variable, and a draft solution no channel or trigger reaches, need no
+confirm.
 
 **Over MCP, confirm with the preview's token.** `api`, `tenant_create`,
 `variables_set` where it replaces a value, `loop_start`, `limits_set`,
@@ -287,7 +303,8 @@ trigger reaches or with `make_default`, and
 `kb_upload` where it would deactivate documents return a `confirm_token` with
 their preview. Show
 the preview, then call the tool again with the same arguments and `confirm`
-set to that token; it makes exactly the change shown. `confirm: true` is
+set to that token; it makes exactly the change shown, after the person's yes
+where the preview says `needs_person`. `confirm: true` is
 refused (`confirm_token_required`), and a token of another change returns the
 new preview with `token_mismatch` (exit code 4): show that one instead. Tool
 arguments are spelled in snake_case (`make_default`, `keep_both`, `dry_run`);
@@ -297,14 +314,12 @@ closest one named. Over MCP the next steps a tool returns (hints, `next`,
 make the call as written, filling a value in angle brackets (a
 `confirm_token` comes from that tool's preview).
 
-**From your shell, `--confirm` takes the same token.** Run by a coding agent,
-`tenant create`, `variables set` (replacing a value), `loop start`,
-`limits set`, `models set-limit`, `loop cancel`, `sandbox seed`,
-`trigger identity`, `harness default`, `activate` (of a solution a channel or
-trigger reaches, or with `--make-default`),
-`deactivate`, `kb upload --replace` and `variables delete`
-print their preview with a confirm token and the command that confirms it
-(`… --confirm <token>`). Show the preview, then run exactly that command. A
+**From your shell, `--confirm` takes the same token, where you may confirm.**
+Run by a coding agent, `loop start` of a draft's trigger, `loop cancel`,
+`sandbox seed` and `kb upload --replace` print their preview with a confirm
+token and the command that confirms it (`… --confirm <token>`). Show the
+preview, then run exactly that command. The changes that need the person's yes
+print no token and name the command the person runs in their own terminal. A
 bare `--confirm`, as the docs show it for a person's terminal, changes nothing
 from your shell and exits 5; a token of another change exits 4 with the new
 preview. A line printed before its preview exists ends in
@@ -314,10 +329,11 @@ preview. A line printed before its preview exists ends in
 **`cavelon api` from your shell has the guards of the MCP `api` tool**, since
 `cavelon` sees that a coding agent runs it:
 
-- For an operation that is not read-only, it prints the request and a confirm
-  token and sends nothing. Show the request to the person when the rules above
-  say so, then run the same command again with `--confirm <token>`; it sends
-  exactly that request. A changed body or parameter needs a new preview (exit 4).
+- For an operation that is not read-only, it prints the request and the
+  command the person runs in their own terminal to send it, and sends nothing.
+  Show both to the person; you cannot send it yourself, with or without a
+  token (`confirm_needs_person`). Over MCP the `api` tool sends it after the
+  person's yes in the client.
 - It refuses an operation the instance keeps for a person
   (`operation_for_a_person`) and a body that sets a field the instance marks as
   a secret value (`secret_field_for_a_person`), with or without `--confirm`,

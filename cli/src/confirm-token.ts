@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
 import { actingTarget, targetLine, type ActingTarget, type PlatformTarget } from "./acting.js";
-import { drivenByAgent } from "./agent-env.js";
+import { drivenByAgent, type DrivenBy } from "./agent-env.js";
 import type { Context, Input } from "./command.js";
 import { CavelonError, ExitCode, type ExitCodeValue } from "./errors.js";
 import { canonical } from "./package-files.js";
-import { PREVIEW_TOKEN } from "./printed.js";
+import { personCommand, PREVIEW_TOKEN, type Word } from "./printed.js";
 
 /** The token a preview returns for confirming exactly it: 12 hex digits of the change's hash. */
 export const CONFIRM_TOKEN = /^[0-9a-f]{12}$/;
@@ -34,7 +34,7 @@ export interface Confirmation {
    * What a preview adds: where the change would go (`target`), and for an
    * agent the token and whether the confirm given was not this change's.
    */
-  fields: { target?: ActingTarget; confirm_token?: string; token_mismatch?: true; token_required?: true };
+  fields: { target?: ActingTarget; confirm_token?: string; token_mismatch?: true; token_required?: true; needs_person?: PersonRoute };
   /** The preview's line naming the instance, tenant and mode the change acts on; empty once confirmed. */
   where: string;
   /** The line a preview's text adds when a confirm was given but did not confirm: another change's token, or a bare flag. */
@@ -60,6 +60,31 @@ export function withToken(printed: string, token: string): string {
 }
 
 /**
+ * A change a coding agent may not confirm on its own, even with its
+ * preview's token: one that reaches live traffic, the whole tenant, or that
+ * cannot be taken back. The token only proves a preview came first, and an
+ * agent holds it (or could compute it), so the person's yes has to come
+ * through a channel the agent cannot answer: over MCP the client asks the
+ * person (elicitation) once the agent confirms with the token; a client that
+ * cannot ask, and an agent's shell, leave the confirm to the person's own
+ * terminal. A person's terminal confirms as before.
+ */
+export interface PersonChange {
+  /** One line saying what would change, which the person approves. */
+  what: string;
+  /** The confirming command's words (with `--confirm`), as the person runs it in their own terminal. */
+  words: Word[];
+}
+
+/** What the help of a command whose change is a `PersonChange` says about who confirms it. */
+export const PERSON_CONFIRMS_HELP =
+  "A coding agent cannot confirm it: over MCP the client asks the person, and from an agent's shell the person runs the\n" +
+  "confirm in their own terminal.";
+
+/** How the person confirms a `PersonChange`: in the client's dialog, or in their own terminal. */
+export type PersonRoute = "client" | "terminal";
+
+/**
  * Whether a changing command was confirmed. In a person's terminal
  * `--confirm` is enough: whoever runs the command typed the change. Over MCP
  * `confirm` takes the `confirm_token` the tool's preview returned for exactly
@@ -68,7 +93,8 @@ export function withToken(printed: string, token: string): string {
  * agent's shell (`drivenByAgent`) is held to the same: `--confirm <token>`
  * confirms, and a bare `--confirm` only shows the preview, so an agent with a
  * shell cannot skip what the MCP tool asks of it. A token given in a person's
- * terminal is checked too.
+ * terminal is checked too. A `person` change needs the person's own yes on
+ * top of the token (`PersonChange`).
  *
  * `tool` names the kind of change, so a token of one tool confirms nothing
  * else; `change` is what the preview shows would happen, without what varies
@@ -76,15 +102,27 @@ export function withToken(printed: string, token: string): string {
  * also names the instance, tenant and mode it acts on (`target`, `where`);
  * `platform` marks a change sent in Platform mode.
  */
-export async function confirmation(ctx: Context, input: Input, tool: string, change: unknown, options: PlatformTarget = {}): Promise<Confirmation> {
-  const gate = await gateOf(ctx, input, tool, change);
+export async function confirmation(
+  ctx: Context,
+  input: Input,
+  tool: string,
+  change: unknown,
+  options: PlatformTarget & { person?: PersonChange } = {},
+): Promise<Confirmation> {
+  const gate = await gateOf(ctx, input, tool, change, options);
   if (gate.confirmed) return { ...gate, where: "" };
   // A preview names where the change goes, so the person who approves sees the tenant an agent passed, or that none is chosen.
   const target = await actingTarget(ctx, options);
   return { ...gate, fields: { target, ...gate.fields }, where: targetLine(target) };
 }
 
-async function gateOf(ctx: Context, input: Input, tool: string, change: unknown): Promise<Omit<Confirmation, "where">> {
+async function gateOf(
+  ctx: Context,
+  input: Input,
+  tool: string,
+  change: unknown,
+  options: PlatformTarget & { person?: PersonChange },
+): Promise<Omit<Confirmation, "where">> {
   const given = input.options.confirm;
   const driven = drivenByAgent(ctx);
   const tokenGiven = typeof given === "string" && given !== "";
@@ -92,6 +130,33 @@ async function gateOf(ctx: Context, input: Input, tool: string, change: unknown)
   if (driven?.by === "mcp" && given === true) throw confirmTokenRequired(tool);
   const session = await ctx.session();
   const token = confirmToken({ url: session.url, tenant: session.tenant }, tool, change);
+  const person = driven && options.person ? { ...options.person, route: personRoute(ctx, driven) } : undefined;
+  if (person) {
+    const command = personCommand(...person.words);
+    const confirm = () => (person.route === "client" ? confirmThroughClient(tool, token) : confirmInTerminal(command));
+    const fields = { ...(person.route === "client" ? { confirm_token: token } : {}), needs_person: person.route };
+    if (given === true || given === "") {
+      return {
+        confirmed: false,
+        fields,
+        confirm,
+        mismatch: "A coding agent cannot confirm this change; nothing was changed: the person confirms it in their own terminal.",
+        exitCode: ExitCode.needsAction,
+      };
+    }
+    if (!tokenGiven) return { confirmed: false, fields, confirm };
+    if (given === token) {
+      await personApproves(ctx, driven!, { tool, what: person.what, command }, options);
+      return { confirmed: true, fields: {}, confirm };
+    }
+    return {
+      confirmed: false,
+      fields: { ...fields, token_mismatch: true },
+      confirm,
+      mismatch: "The confirm token is not this change's: the change differs from its preview, or the token is another one's. Nothing was changed.",
+      exitCode: ExitCode.conflict,
+    };
+  }
   const confirm = (command: string) => (driven?.by === "mcp" ? confirmWith(tool, token) : driven ? withToken(command, token) : command);
   if (given === true && driven?.by === "agent") {
     return {
@@ -111,6 +176,63 @@ async function gateOf(ctx: Context, input: Input, tool: string, change: unknown)
     mismatch: "The confirm token is not this change's: the change differs from its preview, or the token is another one's. Nothing was changed.",
     exitCode: ExitCode.conflict,
   };
+}
+
+/** Where the person confirms a change an agent may not: the MCP client's dialog when it can ask, else their own terminal. */
+export function personRoute(ctx: Context, driven: DrivenBy): PersonRoute {
+  return driven.by === "mcp" && ctx.askPerson ? "client" : "terminal";
+}
+
+/** How long a person may take to answer the client's dialog before nothing is changed. */
+export const PERSON_WAIT_MS = 10 * 60_000;
+
+/**
+ * The person's own yes to a change an agent confirmed with its token: over
+ * MCP the client asks them; without a client that can ask, or in an agent's
+ * shell, it is refused, naming the command the person runs in their own
+ * terminal. Returns only when the person approved.
+ */
+export async function personApproves(
+  ctx: Context,
+  driven: DrivenBy,
+  change: { tool: string; what: string; command: string },
+  target: PlatformTarget = {},
+): Promise<void> {
+  if (personRoute(ctx, driven) === "terminal") throw needsPerson(change.command);
+  const where = targetLine(await actingTarget(ctx, target));
+  const answer = await ctx.askPerson!(
+    [change.what, where, `A coding agent asks to make this change through cavelon (${change.tool}). Approve only this exact change.`].filter(Boolean).join("\n"),
+  );
+  if (answer === "approved") return;
+  throw new CavelonError(ExitCode.needsAction, {
+    code: "confirm_declined",
+    message:
+      answer === "declined"
+        ? "The person did not approve the change; nothing was changed."
+        : `The person did not answer within ${PERSON_WAIT_MS / 60_000} minutes, or the client could not ask; nothing was changed.`,
+    hint: `Ask the person whether they want it. With their yes, call ${change.tool} again with the same confirm token, or they run ${change.command} in their own terminal.`,
+    details: { answer, person_command: change.command },
+  });
+}
+
+/** A change only the person confirms, refused for a coding agent; the command is in the message and details, not as a backticked hint a tool call would replace. */
+export function needsPerson(command: string): CavelonError {
+  return new CavelonError(ExitCode.needsAction, {
+    code: "confirm_needs_person",
+    message: `A coding agent cannot confirm this change; nothing was changed. The person confirms it in their own terminal: ${command}`,
+    hint: "Show the person the preview and the command; they run it themselves, outside the agent.",
+    details: { person_command: command },
+  });
+}
+
+/** A preview's `confirm` over MCP when the client asks the person. */
+export function confirmThroughClient(tool: string, token: string): string {
+  return `Show the person this, then call ${tool} again with the same arguments and confirm: "${token}": the client then asks the person to approve exactly this change, and nothing changes without their yes.`;
+}
+
+/** A preview's `confirm` when only the person's own terminal confirms the change. */
+export function confirmInTerminal(command: string): string {
+  return `${command} (the person runs it in their own terminal: a coding agent cannot confirm this change)`;
 }
 
 /**

@@ -6,7 +6,7 @@ import type { WarningEntry } from "../context.js";
 import { Contracts, type CachedContract, type ErrorCatalog, type PackageSchema } from "../contracts.js";
 import { CavelonError, ExitCode, usageError, type ExitCodeValue } from "../errors.js";
 import { drivenByAgent } from "../agent-env.js";
-import { confirmation, confirmTokenRequired, shellTokenRequired } from "../confirm-token.js";
+import { confirmation, confirmInTerminal, confirmTokenRequired, PERSON_CONFIRMS_HELP, personApproves, personRoute, shellTokenRequired } from "../confirm-token.js";
 import { actingTarget, targetLine, targetText } from "../acting.js";
 import { clip, keyValues } from "../format.js";
 import { readTextFile, writeFileAtomic } from "../fsutil.js";
@@ -51,9 +51,9 @@ import { isUuid, requireInstance, type Session } from "../session.js";
 import { listedPages } from "./docs.js";
 import { readInventory, readInventoryKinds, writeInventory, type InventoryKind } from "./inventory.js";
 import { checkedBy, MODEL_UNKNOWN_CODE, missingInventory, REFERENCE_UNKNOWN_CODE } from "../package-references.js";
-import { cavelonCommand, printedCommand, spoken } from "../printed.js";
-import { secretSetCommand, variableSetCommand } from "./values.js";
-import { maySetSecrets, SECRET_SETTER, VARIABLE_SETTER } from "../secret-access.js";
+import { cavelonCommand, personCommand, printedCommand, spoken } from "../printed.js";
+import { secretStep, variableSetCommand } from "./values.js";
+import { maySetSecrets, SECRET_SETTER, SECRET_SETTER_IN_ADMIN, secretsInAdminOnly, VARIABLE_SETTER } from "../secret-access.js";
 import { ACTIVATOR, accessFor, accessOf, mayActivate, operationAccess, principalOf, type CredentialAccess } from "../access.js";
 
 /**
@@ -640,11 +640,15 @@ function valueNeeds(list: Array<ValueNeed | string> | undefined): ValueNeed[] {
   return (list ?? []).map((n) => (typeof n === "string" ? { name: n } : n)).filter((n) => typeof n.name === "string" && n.name !== "");
 }
 
-/** The commands that set what the target still lacks: a person runs the secret ones, never the agent. */
-function setCommands(preview: Preview, env?: string | null): { secrets: string[]; variables: string[] } {
+/**
+ * The commands that set what the target still lacks: a person runs the secret
+ * ones, never the agent; where only a person signed in to the Admin sets a
+ * secret (`inAdmin`), each names the Admin page instead.
+ */
+function setCommands(preview: Preview, env?: string | null, inAdmin = false): { secrets: string[]; variables: string[] } {
   const needs = preview.target_needs ?? {};
   return {
-    secrets: valueNeeds(needs.secrets).map((n) => secretSetCommand(n.name!, env)),
+    secrets: valueNeeds(needs.secrets).map((n) => secretStep(n.name!, inAdmin, env)),
     variables: valueNeeds(needs.variables).map((n) => variableSetCommand(n.name!, env)),
   };
 }
@@ -676,8 +680,10 @@ function needsLines(needs: NonNullable<Preview["target_needs"]>, access?: Creden
   const lines: Array<[string, unknown]> = [];
   const secrets = valueNeeds(needs.secrets);
   if (secrets.length) {
-    const each = needLines(secrets, (name) => secretSetCommand(name), cavelonCommand("secrets", "list", "--missing"));
-    lines.push(["needs secrets", `${each}\n  (a person runs these in a terminal, or sets them in the Admin; never the agent)`]);
+    const inAdmin = secretsInAdminOnly(access?.principal) === true;
+    const each = needLines(secrets, (name) => secretStep(name, inAdmin), cavelonCommand("secrets", "list", "--missing"));
+    const who = inAdmin ? "a person sets them, signed in to the Admin; never the agent" : "a person runs these in a terminal, or sets them in the Admin; never the agent";
+    lines.push(["needs secrets", `${each}\n  (${who})`]);
   }
   const variables = valueNeeds(needs.variables);
   if (variables.length) {
@@ -914,6 +920,11 @@ async function instanceHolds(ctx: Context, project: ProjectConfig, stored: Store
   return new Set(planned.unchanged);
 }
 
+/** The confirm a person runs in their own terminal, in the solution folder, for a preview an agent may not confirm. */
+function personApplyCommand(stored: Pick<StoredPreview, "preview_id" | "env">): string {
+  return personCommand("apply", ...(stored.env ? ["--env", stored.env] : []), "--confirm", stored.preview_id);
+}
+
 async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: string, allowStale: boolean) {
   const stored = await loadPreview(project.root, previewId);
   const session = await ctx.session();
@@ -952,6 +963,12 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
     });
   }
   if (stored.tenant_id && session.tokenKind !== "api_key") client.target.tenantId = stored.tenant_id;
+  const driven = drivenByAgent(ctx);
+  if (driven && stored.person_reason !== null) {
+    const into = stored.harness ? `solution ${stored.harness.slug}` : "the tenant";
+    const reason = stored.person_reason ?? "was stored by an older cavelon, which did not record whether it needs a person";
+    await personApproves(ctx, driven, { tool: "apply", what: `Import preview ${stored.preview_id} into ${into}: it ${reason}.`, command: personApplyCommand(stored) });
+  }
   const acting = await actingTarget(ctx);
   const disk = await readPackage(project.root, project.layout);
   const changed = await filesChangedSince(project, stored, disk);
@@ -986,7 +1003,7 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
     // The instance now holds the package's queries: an import that would have changed one was refused.
     await rememberQueries(project.root, stored.request.package, (await schemaFor(ctx, packageVersionOf(stored.request.package), false)).schema, "apply", ctx.io.now());
     const summary = (result.summary ?? {}) as Preview["summary"];
-    const still = setCommands(stored.preview as Preview, stored.env ?? undefined);
+    const still = setCommands(stored.preview as Preview, stored.env ?? undefined, secretsInAdminOnly((await accessFor(client))?.principal) === true);
     // The tenant-wide sections this import took along: as its result says on a recent instance, else as its preview reported them.
     const sharedSent = stored.request[INCLUDE_TENANT_WIDE] === true;
     const resultReport = tenantWideReport(result.tenant_wide);
@@ -1170,8 +1187,10 @@ export const apply: CommandSpec = {
     "still needs (secrets and variables with the command that sets each, grants, runtime bindings, trigger identities), loop\n" +
     "budgets and ignored sections, and is stored in .cavelon/. A preview never creates the solution: one the env file names\n" +
     "that is not on the instance yet gets the `cavelon harness new` command that creates it as a draft. A person sets the\n" +
-    "secrets (`cavelon secrets set <name>`), never the agent.\n" +
-    "Show a preview that reaches an active solution or env/prod to a person before confirming. A stale preview exits 4 and\n" +
+    "secrets (`cavelon secrets set <name>`, or in the Admin where the instance lets no token set one), never the agent.\n" +
+    "Show a preview that reaches an active solution or env/prod to a person before confirming. Such a preview (show_to_person:\n" +
+    "tenant-wide sections, an active solution, deletions, env/prod) a coding agent cannot confirm: over MCP the client asks\n" +
+    "the person, and from an agent's shell the person runs the confirm in their own terminal. A stale preview exits 4 and\n" +
     "imports nothing: one whose target changed on the instance since, one whose package files changed since (what they\n" +
     "hold, not their formatting; --allow-stale imports what the preview showed anyway), and one older than a day. So does\n" +
     "an import its own check refuses when it applies, naming each blocker. --discard <id|all> forgets stored previews;\n" +
@@ -1316,9 +1335,10 @@ export const apply: CommandSpec = {
         : sharedLeftOut.length
           ? `tenant-wide: ${sharedLeftOut.join(", ")} left out (\`${cavelonCommand("apply", "--include-tenant-wide")}\` imports them, for every solution of the tenant${reachText ? `; they would reach ${reachText}` : ""})`
           : undefined;
-    const commands = setCommands(preview);
+    const access = await accessFor(await ctx.client());
+    const commands = setCommands(preview, undefined, secretsInAdminOnly(access?.principal) === true);
     if (commands.secrets.length || commands.variables.length) data.set_commands = commands;
-    const context: PreviewContext = { disk, harness: harness?.slug, access: await accessFor(await ctx.client()) };
+    const context: PreviewContext = { disk, harness: harness?.slug, access };
     Object.assign(data, previewReport(preview, context));
     // A blocked preview has no id on recent instances: its blockers come first, never a call to update the instance.
     if (!preview.ready) {
@@ -1372,6 +1392,7 @@ export const apply: CommandSpec = {
     if (!preview.preview_id) {
       ctx.warn("This instance's preview returns no preview id, so `apply --confirm` cannot import exactly it; update the instance.");
     }
+    const reason = personReason(preview, harness, mode, envFile?.name, sharedImported, reaches);
     if (preview.preview_id) {
       const stored: StoredPreview = {
         preview_id: preview.preview_id,
@@ -1384,6 +1405,7 @@ export const apply: CommandSpec = {
         file_digests: await fileDigests(project.root, sourceFiles(disk)),
         request,
         preview,
+        person_reason: reason ?? null,
       };
       await savePreview(project.root, stored);
       // An expired preview can no longer be confirmed; it would only pile up for a later agent to find.
@@ -1391,9 +1413,18 @@ export const apply: CommandSpec = {
       const expired = (await listPreviews(project.root, ctx.io.now())).filter((old) => old.expired);
       await retirePreviews(project.root, expired.map((old) => ({ preview_id: old.preview_id, reason: "expired" as const, at })));
     }
-    const reason = personReason(preview, harness, mode, envFile?.name, sharedImported, reaches);
     data.show_to_person = Boolean(reason);
-    const confirmLine = preview.preview_id ? cavelonCommand("apply", "--confirm", preview.preview_id) : undefined;
+    // An agent may not confirm what the person has to see: the client asks them, or they confirm in their own terminal.
+    const driven = drivenByAgent(ctx);
+    const route = driven && reason && preview.preview_id ? personRoute(ctx, driven) : undefined;
+    if (route) data.needs_person = route;
+    const confirmLine = !preview.preview_id
+      ? undefined
+      : route === "terminal"
+        ? confirmInTerminal(personApplyCommand({ preview_id: preview.preview_id, env: envFile?.name ?? null }))
+        : route === "client"
+          ? `${cavelonCommand("apply", "--confirm", preview.preview_id)}; the client then asks the person to approve it`
+          : cavelonCommand("apply", "--confirm", preview.preview_id);
     const text = [
       `Preview of ${project.layout.package}/ for ${harness ? `solution ${harness.slug}${harness.status ? ` (${harness.status})` : ""}` : "the tenant"}${envFile ? ` [env ${envFile.name}]` : ""}:`,
       previewText(preview, context),
@@ -1645,11 +1676,24 @@ function missingSecrets(blockers: ReadinessCheck[]): string[] {
   return [...names];
 }
 
-/** What to do about secrets the gate names as not set: who sets each, by whether this credential may. */
-function missingSecretsLine(names: string[], may: boolean | null): string {
+/**
+ * What to do about secrets the gate names as not set: who sets each, by
+ * whether this credential may, and where. `inAdmin` is `secretsInAdminOnly`:
+ * true where only a person signed in to the Admin sets one; false on an
+ * instance that says so for other credentials (it publishes `needs_a_person`,
+ * and refuses every token on a secret since the same release), so whoever
+ * sets it for a role that may not does so in the Admin; null on an older
+ * instance, where a person's own token sets it too.
+ */
+function missingSecretsLine(names: string[], may: boolean | null, inAdmin: boolean | null): string {
   const which = `Secret${names.length === 1 ? "" : "s"} ${names.join(", ")} ${names.length === 1 ? "is" : "are"} not set`;
-  const commands = names.map((n) => secretSetCommand(n)).join("; ");
-  if (may === false) return `${which}, and this token's role cannot set secrets. ${SECRET_SETTER}: ${commands}`;
+  if (inAdmin === true) return `${which}: ${SECRET_SETTER_IN_ADMIN} (never the agent).`;
+  const commands = names.map((n) => secretStep(n, false)).join("; ");
+  if (may === false) {
+    return inAdmin === false
+      ? `${which}, and this token's role cannot set secrets. ${SECRET_SETTER_IN_ADMIN}.`
+      : `${which}, and this token's role cannot set secrets. ${SECRET_SETTER}: ${commands}`;
+  }
   return `${which}: a person sets ${names.length === 1 ? "it" : "each"} (never the agent): ${commands}`;
 }
 
@@ -1676,7 +1720,8 @@ export interface SolutionState {
    */
   default_route?: { is_default: boolean | null; current: { id: string; slug: string; name: string } | null };
   /** The secrets readiness names as not set, and whether this credential may set them (null: the instance does not say). */
-  missing_secrets?: { names: string[]; may_set: boolean | null };
+  /** `set_in_admin`: whether only a person signed in to the Admin sets them; null where the instance does not say. */
+  missing_secrets?: { names: string[]; may_set: boolean | null; set_in_admin?: boolean | null };
   /** Whether this credential may activate it; null where the instance does not say. */
   may_activate?: boolean | null;
   /** Why part of it could not be read; the rest stands. */
@@ -1714,7 +1759,7 @@ export async function solutionState(ctx: Context, ref: string): Promise<Solution
     state.blockers = (readiness.blockers ?? []).map((b) => clip(String(b.label ?? b.key ?? b.detail ?? "?"), 80));
     const secrets = missingSecrets(readiness.blockers ?? []);
     const principal = await principalOf(await ctx.client());
-    if (secrets.length) state.missing_secrets = { names: secrets, may_set: maySetSecrets(principal) };
+    if (secrets.length) state.missing_secrets = { names: secrets, may_set: maySetSecrets(principal), set_in_admin: secretsInAdminOnly(principal) };
     if (harness.status !== "active") state.may_activate = mayActivate(accessOf(principal));
     if ("latest_test_run" in readiness) {
       const run = readiness.latest_test_run;
@@ -1750,7 +1795,7 @@ export function solutionStateLines(state: SolutionState): Array<[string, unknown
           ? `not ready to activate${state.blockers?.length ? ` (${list(state.blockers, 3)})` : ""}`
           : undefined;
   const lines: Array<[string, unknown]> = [["state", [state.harness.status, ready].filter(Boolean).join(", ")]];
-  if (state.missing_secrets) lines.push(["secrets", missingSecretsLine(state.missing_secrets.names, state.missing_secrets.may_set)]);
+  if (state.missing_secrets) lines.push(["secrets", missingSecretsLine(state.missing_secrets.names, state.missing_secrets.may_set, state.missing_secrets.set_in_admin ?? null)]);
   const route = state.default_route;
   if (route) lines.push(["default route", defaultRouteText(state.harness, route, state.may_activate ?? null)]);
   const run = state.latest_test_run;
@@ -1826,7 +1871,12 @@ async function defaultRouteAfterActivation(
   if (route.current?.id === harness.id) return { data: { default_route: { is_default: true, current } }, lines: [`${named(harness)} is the tenant's default route.`] };
   const commands = defaultCommands(harness.slug);
   // An activation whose preview named the default route too was confirmed with it, by one token.
-  const gate = make && !defaultConfirmed ? await confirmation(ctx, input, "activate", { harness: harness.id, from: current?.id ?? null }) : undefined;
+  const gate =
+    make && !defaultConfirmed
+      ? await confirmation(ctx, input, "activate", { harness: harness.id, from: current?.id ?? null }, {
+          person: { what: defaultChangeLine(harness, route), words: ["activate", "--harness", harness.slug, "--make-default", "--confirm"] },
+        })
+      : undefined;
   if (gate?.confirmed || (make && defaultConfirmed)) {
     try {
       await setDefaultRoute(ctx, harness.id);
@@ -1909,7 +1959,8 @@ export const activate: CommandSpec = {
     "Afterwards it says whether the solution is the tenant's default route (the one the tenant's chat and widget answer with\n" +
     "where no solution is named). --make-default previews making it the default; with --confirm as well, it changes it. That\n" +
     "changes live traffic: show the preview to a person and confirm only with their yes. `cavelon harness default` does the\n" +
-    "same for an active solution.",
+    "same for an active solution.\n" +
+    PERSON_CONFIRMS_HELP,
   readOnly: false,
   idempotent: true,
   mcpTool: "activate",
@@ -1972,7 +2023,7 @@ export const activate: CommandSpec = {
       // A secret the package declares is a person's to set, and with a role that may not, someone else's.
       const secrets = missingSecrets(blockers);
       const maySet = maySetSecrets(principal);
-      const secretsLine = secrets.length ? missingSecretsLine(secrets, maySet) : undefined;
+      const secretsLine = secrets.length ? missingSecretsLine(secrets, maySet, secretsInAdminOnly(principal)) : undefined;
       return {
         data: {
           activated: false,
@@ -2007,9 +2058,15 @@ export const activate: CommandSpec = {
         triggers: reach.triggers?.map((t) => t.id) ?? null,
         ...(make ? { make_default: true, from: route?.current?.id ?? null } : {}),
       };
-      const gate = await confirmation(ctx, input, "activate", change);
+      const words = ["activate", "--harness", harness.slug, ...(make ? ["--make-default"] : []), "--confirm"];
+      const gate = await confirmation(ctx, input, "activate", change, {
+        person: {
+          what: [reachText(harness, reach), ...(make && route && route.current?.id !== harness.id ? [defaultChangeLine(harness, route)] : [])].join("\n"),
+          words,
+        },
+      });
       if (!gate.confirmed) {
-        const confirm = gate.confirm(cavelonCommand("activate", "--harness", harness.slug, ...(make ? ["--make-default"] : []), "--confirm"));
+        const confirm = gate.confirm(cavelonCommand(...words));
         const routeLine = make && route && route.current?.id !== harness.id ? [defaultChangeLine(harness, route)] : [];
         return {
           data: {

@@ -476,7 +476,7 @@ export const whoami: CommandSpec = {
         ["credential", `${session.tokenKind === "api_key" ? "tenant API key" : session.tokenKind === "personal_access_token" ? "personal access token" : "token"}${tokenName} from ${credentialSource(session)}`],
         ["expires", expires],
         ["may activate", activateText(data.credential.may_activate, access)],
-        ["may set secrets", secretsText(data.credential.may_set_secrets)],
+        ["may set secrets", secretsText(data.credential.may_set_secrets, access?.complete === true)],
         ["may set variables", variablesText(data.credential.may_set_variables)],
         ["scopes", data.credential.scopes ? data.credential.scopes.join(", ") || "none" : undefined],
         ["permissions", permissionsText(access)],
@@ -525,9 +525,11 @@ function needsAPersonText(access: CredentialAccess | undefined): string | undefi
   return `${all.length} operation${all.length === 1 ? "" : "s"} a person runs, not this credential:${shown.join("")}${all.length > LISTED ? `\n  … ${all.length - LISTED} more (--json)` : ""}`;
 }
 
-function secretsText(may: boolean | null): string | undefined {
+/** `inAdmin`: the instance publishes `needs_a_person`, and since that release lets only a person signed in to the Admin set a secret. */
+function secretsText(may: boolean | null, inAdmin: boolean): string | undefined {
   if (may === null) return undefined;
-  return may ? "yes" : "no (a tenant Owner sets them, in the Admin or with their own token)";
+  if (may) return "yes";
+  return inAdmin ? "no (a tenant Owner sets them, signed in to the Admin under Settings › Secrets)" : "no (a tenant Owner sets them, in the Admin or with their own token)";
 }
 
 export const use: CommandSpec = {

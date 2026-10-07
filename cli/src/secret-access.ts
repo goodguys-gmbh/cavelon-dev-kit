@@ -1,3 +1,4 @@
+import { pathMatches } from "./access.js";
 import { CavelonError, ExitCode } from "./errors.js";
 import type { MetaPrincipal } from "./principal.js";
 import { cavelonCommand, fill } from "./printed.js";
@@ -15,6 +16,28 @@ export const SECRETS_PERMISSIONS = ["settings.secrets.manage", "settings.manage"
 /** Who sets a secret when this credential cannot, for a hint. */
 export const SECRET_SETTER = "A tenant Owner (or another role allowed to manage secrets) sets it, in the Admin under Settings › Secrets or with their own token";
 
+/** Who sets a secret on an instance where only a person signed in to the Admin does (`secretsInAdminOnly`). */
+export const SECRET_SETTER_IN_ADMIN = "A tenant Owner (or another role allowed to manage secrets) sets it, signed in to the Admin under Settings › Secrets";
+
+/** Where a person sets a secret where no token may: the Admin page, which works on every instance. */
+export const SECRETS_IN_ADMIN = "in the Admin under Settings › Secrets";
+
+/** The route that sets (PUT) and deletes (DELETE) a secret's value. */
+const SECRET_ROUTE = "/api/v1/secrets/{name}";
+
+/**
+ * Whether only a person signed in to the Admin may set (PUT) or delete
+ * (DELETE) a secret with this credential, as the instance says: it lists the
+ * operation in `/meta/principal`'s `needs_a_person`, as an instance does that
+ * refuses every token and key on what a person runs. False where it publishes
+ * the list without it; null where it does not publish the list (an older
+ * instance, where a personal access token sets secrets).
+ */
+export function secretsInAdminOnly(principal: MetaPrincipal | undefined, method: "PUT" | "DELETE" = "PUT"): boolean | null {
+  if (!principal || !Array.isArray(principal.needs_a_person)) return null;
+  return principal.needs_a_person.some((o) => o.method === method && pathMatches(o.path, SECRET_ROUTE));
+}
+
 /**
  * Whether the credential may set the tenant's secrets: never a tenant API key;
  * a person's token when the permissions the instance publishes for it in the
@@ -23,7 +46,7 @@ export const SECRET_SETTER = "A tenant Owner (or another role allowed to manage 
  */
 export function maySetSecrets(principal: MetaPrincipal | undefined): boolean | null {
   if (!principal) return null;
-  if (principal.kind === "api_key") return false;
+  if (principal.kind === "api_key" || secretsInAdminOnly(principal)) return false;
   if (!principal.permissions || principal.mode !== "tenant") return null;
   return SECRETS_PERMISSIONS.some((p) => principal.permissions!.includes(p));
 }
@@ -56,19 +79,23 @@ export function variablesPermissionMissing(verb: "set" | "delete", name: string,
   });
 }
 
-/** What a person whose credential may not set it does: who sets it instead, and the command they run. */
-export function secretSetterHint(name: string): string {
-  return `${SECRET_SETTER}: \`${cavelonCommand("secrets", "set", name)}\`.`;
+/**
+ * What a person whose credential may not set it does: who sets it instead,
+ * and the command they run; `inAdmin` where the instance publishes
+ * `needs_a_person` and so lets only a person signed in to the Admin set one.
+ */
+export function secretSetterHint(name: string, inAdmin = false): string {
+  return inAdmin ? `${SECRET_SETTER_IN_ADMIN}.` : `${SECRET_SETTER}: \`${cavelonCommand("secrets", "set", name)}\`.`;
 }
 
 /** The instance's refusal of a credential that may not set or delete secrets, with who sets it instead. */
-export function secretsPermissionMissing(verb: "set" | "delete", name: string, permissions: string[]): CavelonError {
+export function secretsPermissionMissing(verb: "set" | "delete", name: string, permissions: string[], inAdmin = false): CavelonError {
   const needs = permissions.length ? permissions.join(" or ") : "a permission to manage secrets";
   return new CavelonError(ExitCode.unauthorized, {
     code: "permission_missing",
     status: 403,
     message: `This token's role may not ${verb} secrets: the instance refused it, as that needs ${needs}. Secret ${name} is unchanged.`,
-    hint: secretSetterHint(name),
+    hint: secretSetterHint(name, inAdmin),
     details: { name, permissions, sent: true },
   });
 }

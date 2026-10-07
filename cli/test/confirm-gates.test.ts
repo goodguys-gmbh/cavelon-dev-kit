@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Readable } from "node:stream";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -7,14 +6,16 @@ import { COMMANDS } from "../src/commands/index.js";
 import type { InStream } from "../src/io.js";
 import { createMcpServer } from "../src/mcp.js";
 import { startFakeServer, type FakeServer } from "./fake-server.js";
-import { cli, login, sandbox, type Sandbox } from "./helpers.js";
+import { askingClient, cli, login, sandbox, type Sandbox } from "./helpers.js";
 
 /**
  * The commands that change state outside a draft (a new tenant, a replaced
  * tenant variable, a loop run, the activation of a solution something already
  * reaches) preview first and change only with --confirm, as deactivate and
- * harness default do: in a person's terminal the flag, under a coding agent
- * and over MCP only the token of that very preview.
+ * harness default do: in a person's terminal the flag, over MCP only the
+ * token of that very preview, and for what only a person may confirm (all but
+ * a loop of a draft) also their yes in the client. From a coding agent's
+ * shell those are left to the person's own terminal.
  */
 
 let server: FakeServer;
@@ -46,7 +47,11 @@ function addTrigger(slug: string, harnessId: string, isActive = true): void {
 }
 
 /** An MCP client on the person's stored token, as an agent's client is. */
-async function mcpClient(home: Sandbox): Promise<{ call: (name: string, args: Record<string, unknown>) => Promise<{ isError: boolean; body: Record<string, any> }>; close: () => Promise<void> }> {
+async function mcpClient(home: Sandbox): Promise<{
+  call: (name: string, args: Record<string, unknown>) => Promise<{ isError: boolean; body: Record<string, any> }>;
+  close: () => Promise<void>;
+  asked: string[];
+}> {
   const mcp = createMcpServer(
     {
       stdout: { write: () => true },
@@ -61,15 +66,36 @@ async function mcpClient(home: Sandbox): Promise<{ call: (name: string, args: Re
   );
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
   await mcp.connect(serverSide);
-  const client = new Client({ name: "test", version: "0" });
+  const client = askingClient();
   await client.connect(clientSide);
   return {
+    asked: client.asked,
     async call(name, args) {
       const result = await client.callTool({ name, arguments: args });
       return { isError: Boolean(result.isError), body: JSON.parse((result.content as Array<{ text: string }>)[0]!.text) as Record<string, any> };
     },
     close: () => client.close(),
   };
+}
+
+/**
+ * A change only the person confirms, tried from a coding agent's shell: a bare
+ * --confirm shows the preview with the person's command and no token, and
+ * even the preview's token (as MCP hands it out) changes nothing.
+ */
+async function personOnlyFromShell(home: Sandbox, args: string[], tool: { name: string; args: Record<string, unknown> }, command: string): Promise<void> {
+  const bare = await cli(home, [...args, "--confirm", "--json"], { env: AGENT });
+  expect(bare.code, bare.stdout).toBe(5);
+  const shown = bare.json<Record<string, unknown>>();
+  expect(shown).toMatchObject({ needs_person: "terminal", confirm: `${command} (the person runs it in their own terminal: a coding agent cannot confirm this change)` });
+  expect(shown.confirm_token).toBeUndefined();
+  const mcp = await mcpClient(home);
+  const token = (await mcp.call(tool.name, tool.args)).body.confirm_token as string;
+  await mcp.close();
+  expect(token).toMatch(TOKEN);
+  const refused = await cli(home, [...args, "--confirm", token, "--json"], { env: AGENT });
+  expect(refused.code).toBe(5);
+  expect(refused.json<{ error: Record<string, unknown> }>().error).toMatchObject({ code: "confirm_needs_person", details: { person_command: command } });
 }
 
 beforeAll(async () => {
@@ -118,21 +144,9 @@ describe("tenant create", () => {
     expect(posts("/api/v1/tenants")).toHaveLength(1);
   });
 
-  it("under a coding agent, only the preview's token creates it", async () => {
-    const bare = await cli(platformSb, ["tenant", "create", "agent-co", "--confirm", "--json"], { env: AGENT });
-    expect(bare.code).toBe(5);
-    expect(bare.json()).toMatchObject({ created: false, token_required: true, confirm_token: expect.stringMatching(TOKEN) });
-    const token = bare.json<{ confirm_token: string }>().confirm_token;
-    expect(bare.json<{ confirm: string }>().confirm).toBe(`cavelon tenant create agent-co --name agent-co --confirm ${token}`);
-    // A token of another change (another name) creates nothing.
-    const other = await cli(platformSb, ["tenant", "create", "agent-co", "--name", "Other", "--confirm", token, "--json"], { env: AGENT });
-    expect(other.code).toBe(4);
-    expect(other.json()).toMatchObject({ created: false, token_mismatch: true });
+  it("under a coding agent, leaves creating it to the person's own terminal", async () => {
+    await personOnlyFromShell(platformSb, ["tenant", "create", "agent-co"], { name: "tenant_create", args: { slug: "agent-co" } }, "cavelon tenant create agent-co --name agent-co --confirm");
     expect(posts("/api/v1/tenants")).toHaveLength(0);
-
-    const created = await cli(platformSb, ["tenant", "create", "agent-co", "--confirm", token, "--json"], { env: AGENT });
-    expect(created.code, created.stderr + created.stdout).toBe(0);
-    expect(posts("/api/v1/tenants")).toHaveLength(1);
   });
 
   it("over MCP, refuses true and creates with the preview's confirm_token", async () => {
@@ -142,9 +156,10 @@ describe("tenant create", () => {
       expect(refused.body.error).toMatchObject({ code: "confirm_token_required", exit_code: 2 });
       const shown = await mcp.call("tenant_create", { slug: "mcp-co" });
       expect(shown.body).toMatchObject({ created: false, confirm_token: expect.stringMatching(TOKEN) });
-      expect(shown.body.confirm).toMatch(/^Show the person this, then call tenant_create again with the same arguments and confirm: "[0-9a-f]{12}"/);
+      expect(shown.body.confirm).toMatch(/^Show the person this, then call tenant_create again with the same arguments and confirm: "[0-9a-f]{12}": the client then asks the person/);
       expect(posts("/api/v1/tenants")).toHaveLength(0);
       const done = await mcp.call("tenant_create", { slug: "mcp-co", confirm: shown.body.confirm_token });
+      expect(mcp.asked).toEqual([expect.stringMatching(/^Create the tenant mcp-co \(mcp-co\) on the platform\.\n/)]);
       expect(done.isError, JSON.stringify(done.body)).toBe(false);
       expect(done.body).toMatchObject({ slug: "mcp-co" });
       expect(posts("/api/v1/tenants")).toHaveLength(1);
@@ -187,23 +202,27 @@ describe("variables set", () => {
     expect(piped.json()).toMatchObject({ would: "replace", confirm: "cavelon variables set gate_url --stdin --confirm" });
   });
 
-  it("under a coding agent and over MCP, only the preview's token replaces it", async () => {
+  it("under a coding agent leaves replacing it to the person's terminal; over MCP the person's yes in the client replaces it", async () => {
     await cli(sb, ["variables", "set", "gate_region", "eu"]);
-    const bare = await cli(sb, ["variables", "set", "gate_region", "us", "--confirm", "--json"], { env: AGENT });
-    expect(bare.code).toBe(5);
-    const token = bare.json<{ confirm_token: string }>().confirm_token;
-    expect(bare.json<{ confirm: string }>().confirm).toBe(`cavelon variables set gate_region us --confirm ${token}`);
-    // The token holds the value it showed: another value needs another preview.
-    expect((await cli(sb, ["variables", "set", "gate_region", "ap", "--confirm", token, "--json"], { env: AGENT })).code).toBe(4);
+    await personOnlyFromShell(
+      sb,
+      ["variables", "set", "gate_region", "us"],
+      { name: "variables_set", args: { name: "gate_region", value: "us" } },
+      "cavelon variables set gate_region us --confirm",
+    );
     expect(server.state.values.get(tenant)!.variables.get("gate_region")).toBe("eu");
-    expect((await cli(sb, ["variables", "set", "gate_region", "us", "--confirm", token, "--json"], { env: AGENT })).code).toBe(0);
-    expect(server.state.values.get(tenant)!.variables.get("gate_region")).toBe("us");
+    // A new variable is still set at once from an agent's shell.
+    expect((await cli(sb, ["variables", "set", "gate_shell_new", "x", "--json"], { env: AGENT })).json()).toMatchObject({ created: true });
+    await cli(sb, ["variables", "set", "gate_region", "us", "--confirm"]);
 
     const mcp = await mcpClient(sb);
     try {
       expect((await mcp.call("variables_set", { name: "gate_region", value: "eu", confirm: true })).body.error).toMatchObject({ code: "confirm_token_required" });
       const shown = await mcp.call("variables_set", { name: "gate_region", value: "eu" });
       expect(shown.body).toMatchObject({ changed: false, previous: "us", value: "eu", confirm_token: expect.stringMatching(TOKEN) });
+      // The token holds the value it showed: another value needs another preview.
+      expect((await mcp.call("variables_set", { name: "gate_region", value: "ap", confirm: shown.body.confirm_token })).body).toMatchObject({ token_mismatch: true, exit_code: 4 });
+      expect(mcp.asked).toEqual([]);
       expect(server.state.values.get(tenant)!.variables.get("gate_region")).toBe("us");
       const done = await mcp.call("variables_set", { name: "gate_region", value: "eu", confirm: shown.body.confirm_token });
       expect(done.body).toMatchObject({ changed: true, previous: "us" });
@@ -272,6 +291,29 @@ describe("loop start", () => {
   });
 });
 
+describe("loop start of a solution that is not a draft", () => {
+  beforeAll(async () => {
+    await cli(sb, ["harness", "new", "loop-live", "--name", "Loop Live"]);
+    harness("loop-live").status = "active";
+    addTrigger("live-loop", harness("loop-live").id);
+  });
+
+  it("is the person's to confirm: their terminal from an agent's shell, their yes in the client over MCP", async () => {
+    await personOnlyFromShell(sb, ["loop", "start", "live-loop"], { name: "loop_start", args: { trigger: "live-loop" } }, "cavelon loop start live-loop --confirm");
+    expect(posts(/\/triggers\/[^/]+\/run$/)).toHaveLength(0);
+    const mcp = await mcpClient(sb);
+    try {
+      const shown = await mcp.call("loop_start", { trigger: "live-loop" });
+      expect(shown.body).toMatchObject({ started: false, needs_person: "client", solution: { slug: "loop-live", status: "active" } });
+      const done = await mcp.call("loop_start", { trigger: "live-loop", confirm: shown.body.confirm_token });
+      expect(done.body).toMatchObject({ run_id: expect.any(String) });
+      expect(mcp.asked).toEqual([expect.stringMatching(/^Start a run of the trigger live-loop, which acts as the person/)]);
+    } finally {
+      await mcp.close();
+    }
+  });
+});
+
 describe("activate", () => {
   const activations = () => posts(/\/harnesses\/[^/]+\/activate$/);
 
@@ -324,7 +366,7 @@ describe("activate", () => {
     expect((await cli(sb, ["activate", "--harness", "unsaid", "--confirm", "--json"])).json()).toMatchObject({ activated: true });
   });
 
-  it("under a coding agent, refuses a bare --confirm before it activates, and takes the preview's token", async () => {
+  it("under a coding agent, refuses a bare --confirm before it activates, and leaves the activation to the person", async () => {
     await cli(sb, ["harness", "new", "agent-reached"]);
     harness("agent-reached").channel_count = 1;
     const bare = await cli(sb, ["activate", "--harness", "agent-reached", "--confirm", "--json"], { env: AGENT });
@@ -332,15 +374,21 @@ describe("activate", () => {
     expect(bare.json<{ error: { code: string } }>().error.code).toBe("confirm_token_required");
     expect(activations()).toHaveLength(0);
     const shown = await cli(sb, ["activate", "--harness", "agent-reached", "--json"], { env: AGENT });
-    const token = shown.json<{ confirm_token: string }>().confirm_token;
-    expect(shown.json<{ confirm: string }>().confirm).toBe(`cavelon activate --harness agent-reached --confirm ${token}`);
-    // A channel added since the preview is another change.
+    expect(shown.json()).toMatchObject({
+      needs_person: "terminal",
+      confirm: "cavelon activate --harness agent-reached --confirm (the person runs it in their own terminal: a coding agent cannot confirm this change)",
+    });
+    const mcp = await mcpClient(sb);
+    const token = (await mcp.call("activate", { harness: "agent-reached" })).body.confirm_token as string;
+    await mcp.close();
+    // A channel added since the preview is another change; the preview's own token is the person's to use, not the agent's.
     harness("agent-reached").channel_count = 2;
     expect((await cli(sb, ["activate", "--harness", "agent-reached", "--confirm", token, "--json"], { env: AGENT })).code).toBe(4);
-    expect(activations()).toHaveLength(0);
     harness("agent-reached").channel_count = 1;
-    expect((await cli(sb, ["activate", "--harness", "agent-reached", "--confirm", token, "--json"], { env: AGENT })).code).toBe(0);
-    expect(harness("agent-reached").status).toBe("active");
+    const refused = await cli(sb, ["activate", "--harness", "agent-reached", "--confirm", token, "--json"], { env: AGENT });
+    expect(refused.json<{ error: { code: string } }>().error.code).toBe("confirm_needs_person");
+    expect(activations()).toHaveLength(0);
+    expect(harness("agent-reached").status).toBe("draft");
   });
 
   it("over MCP, one token from the preview activates it and, with make_default, changes the default route", async () => {
@@ -359,6 +407,9 @@ describe("activate", () => {
 
       const done = await mcp.call("activate", { harness: "mcp-reached", make_default: true, confirm: shown.body.confirm_token });
       expect(done.body).toMatchObject({ activated: true, default_route: { is_default: true, changed: true } });
+      // One yes covers both: the activation and the default route it names.
+      expect(mcp.asked).toHaveLength(1);
+      expect(mcp.asked[0]).toMatch(/channel[\s\S]*would become mcp-reached/);
       expect(harness("mcp-reached")).toMatchObject({ status: "active", is_default: true });
     } finally {
       await mcp.close();

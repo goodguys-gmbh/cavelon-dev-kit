@@ -51,11 +51,12 @@ for a public widget), **propose the change; the person decides.**
   without `confirm`). It changes nothing and shows the old and the new value,
   the operation it would send and the permissions it needs. Show that to the
   person with your reason (what fails or waits now), and wait for their answer.
-- Only after they agreed, run the confirm command it printed (the `confirm`
-  field in `--json`) as it stands: it keeps the `--env` and `--tenant` of the
-  preview, so it changes the limit the preview showed. Over MCP, call
-  `limits_set` again with the same arguments and `confirm` set to the
-  preview's `confirm_token`. Never raise a limit on
+- The confirm is the person's. Over MCP, call `limits_set` again with the
+  same arguments and `confirm` set to the preview's `confirm_token`: the
+  client then asks the person, and nothing changes without their yes. From
+  your shell, the preview's `confirm` is the command the person runs in their
+  own terminal: give it to them as it stands (it keeps the `--env` and
+  `--tenant` of the preview). Never raise a limit on
   your own, never pick a value higher than the need you named, and never change
   one without telling them.
 - The same goes for the tenant's monthly inference budget
@@ -109,8 +110,9 @@ endpoint.
 - On rows that already exist, `cavelon models list` shows each row's endpoint
   and `max_concurrent_requests` (never a key). `cavelon models set-limit
   <model_id> <n|none>` shows the old and the new value and changes nothing;
-  the confirm command it prints changes the row (from your shell it carries the
-  preview's token, `--confirm <token>`). It refuses a row without a `base_url`.
+  the confirm changes the row, with the person's yes (over MCP the client asks
+  them; from your shell they run the confirm command in their own terminal).
+  It refuses a row without a `base_url`.
   Where this instance's package format does not carry the field, `validate`
   warns that the import ignores it; set it this way instead.
 - `model_registry` is tenant-wide: in a solution's folder, `cavelon apply`
@@ -303,8 +305,9 @@ schema has them: `cavelon validate` reports an unknown section):
   token. `cavelon variables list` shows them. A variable
   is tenant-wide: replacing a value previews the old and the new one and
   changes nothing without `--confirm` (the `confirm_token` over MCP); every
-  solution of the tenant reads it, active ones too, so show the person that
-  preview and confirm only with their yes. A new variable is set at once.
+  solution of the tenant reads it, active ones too, so the confirm needs the
+  person's yes: over MCP the client asks them, and from your shell they run
+  the confirm command in their own terminal. A new variable is set at once.
 - **Secrets are set by a person, never by you.** Tell the person the exact
   command `apply` printed, `cavelon secrets set <name>` (with the `--env` and
   `--tenant` it printed), to run in their own terminal; it asks for the value
@@ -316,7 +319,10 @@ schema has them: `cavelon validate` reports an unknown section):
   says "may set secrets: no", and `secrets set`, `activate` and `status` then
   name who does instead. Tell the person that a tenant Owner sets it, in the
   Admin under Settings › Secrets or with their own token; do not suggest the
-  command to someone whose role cannot run it.
+  command to someone whose role cannot run it. Where the instance lets no
+  token set a secret (`secret_needs_a_person`; the preview names the Admin
+  instead of the command), the person sets it signed in to the Admin under
+  Settings › Secrets.
 
 ## Database query tools
 

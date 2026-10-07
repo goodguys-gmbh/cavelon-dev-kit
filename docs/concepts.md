@@ -168,7 +168,15 @@ the target tenant has not set yet. Setting a secret takes a role allowed to
 manage secrets, such as the tenant's Owner: a Builder's token cannot, and
 `cavelon whoami` says whether yours may ("may set secrets"). When it may not,
 `secrets set`, `activate` and `status` name who sets it instead: a tenant Owner,
-in the Admin under Settings › Secrets or with their own token. Setting a
+in the Admin under Settings › Secrets or with their own token.
+
+An instance can let only a person signed in to the Admin set or delete a
+secret, refusing every token and key there. It says so in what it publishes
+about the credential (`/meta/principal` lists both operations in
+`needs_a_person`). There `secrets set` and `secrets delete` refuse before they
+read a value or send anything (`secret_needs_a_person`, exit 5), and `apply`,
+`activate`, `status` and `secrets list` name the Admin page, Settings ›
+Secrets, instead of the command. Setting a
 variable takes the same permission ("may set variables"): with a Builder's
 token `variables set` is refused and names who sets it, and `apply` says so
 under "needs variables".
@@ -314,7 +322,7 @@ the folder; a name close to an existing solution's is refused as a likely
 typo, and `--new` creates it anyway. A typical flow applies to
 `test`, runs the tests, then applies the same files to `prod`. Environment
 files never hold a token or a secret value; a secret is set in each tenant with
-`cavelon secrets set`.
+`cavelon secrets set`, or in the Admin where the instance lets no token set one.
 
 ## Preview and confirm
 
@@ -380,6 +388,19 @@ the preview prints the confirm command with a token (`--confirm <token>`), and
 a bare `--confirm` only shows the preview again (exit 5). Over MCP, their tools
 return a `confirm_token` with the preview and act only when `confirm` is that
 token, which confirms exactly the change shown.
+
+The token only proves that a preview came first. A change that reaches live
+traffic, the whole tenant, or cannot be taken back (`limits set`, `models
+set-limit`, `variables delete`, `trigger identity`, `harness default`,
+`activate` where it previews, `deactivate`, `tenant create`, `variables set`
+replacing a value, `loop start` unless the solution is a draft, `api` for a
+changing operation, and an `apply` whose preview says to show it to a person)
+also needs the person's own yes, which an agent cannot give. Over
+MCP, the agent's client asks the person in its own dialog when the agent
+confirms with the token, and changes nothing without their yes. A client that
+cannot ask, and an agent's shell, leave the confirm to the person's own
+terminal: the preview's `needs_person` is `"terminal"`, and its `confirm` is
+the command they run there.
 
 ## Operations and waiting
 

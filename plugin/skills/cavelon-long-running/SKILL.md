@@ -58,7 +58,7 @@ Do not work around it; use the other column.
 
 ```bash
 cavelon loop start <trigger> --input @request.json   # previews: the trigger, its solution, the payload
-cavelon loop start <trigger> --input @request.json --confirm <token>   # starts it: the run id and an operation id
+cavelon loop start <trigger> --input @request.json --confirm <token>   # a draft's trigger: starts it, the run id and an operation id
 cavelon loop watch <run> --timeout 5m                # each iteration's verdict, then the loop's outcome
 cavelon loop iterations <run>                        # state, budget, iterations (a page at a time)
 cavelon wait <operation-id> --timeout 90s            # exit 0 done, 1 failed, 5 needs a person, 6 still running
@@ -66,11 +66,12 @@ cavelon wait <operation-id> --timeout 90s            # exit 0 done, 1 failed, 5 
 
 A loop started from `cavelon` runs **as the person whose token it is**, checked
 again on every iteration, and spends the tenant's budget. So `loop start`
-previews first and starts nothing without `--confirm`: run the confirm command
-it prints (from your shell it carries the preview's token; over MCP call
-`loop_start` again with `confirm` set to its `confirm_token`). Confirm on your
-own only for a trigger of a draft solution in a test environment; show the
-person the preview of any other. If `loop start` exits 8 (a timeout, a cut
+previews first and starts nothing without `--confirm`. For a trigger of a
+draft solution, run the confirm command it prints (from your shell it carries
+the preview's token; over MCP call `loop_start` again with `confirm` set to its
+`confirm_token`). Any other run needs the person's yes (`needs_person` in the
+preview): over MCP the client asks them when you confirm with the token; from
+your shell the preview names the command they run in their own terminal. If `loop start` exits 8 (a timeout, a cut
 connection), the run may have started: retry only with the
 `--idempotency-key <key>` its error names, never without it, or a second run
 starts and spends the budget again. `cavelon trace <operation-id>` reads the
@@ -130,8 +131,9 @@ Two reasons end work for capacity; each has its code in `cavelon explain`:
   `model_endpoint_slot_wait_seconds`. Retry later, or, if the endpoint can serve
   more, propose raising the Model Registry row's `max_concurrent_requests`
   (`cavelon models list` shows it). The person decides; only then run
-  `cavelon models set-limit <model_id> <n>` and the confirm command it prints
-  (`--confirm <token>` from your shell).
+  `cavelon models set-limit <model_id> <n>`: over MCP the client asks the person
+  when you confirm with the token; from your shell the person runs the confirm
+  command it prints in their own terminal.
 
 `cavelon limits` shows the caps, their source and origin, the slot waits, and
 branch concurrency (how many items of a Map loop run at once, and whether they
@@ -166,12 +168,14 @@ its trigger. `apply` never binds one; it lists unbound triggers in the preview.
 
 ```bash
 cavelon trigger identity <trigger>                            # who it runs as, what the key must reach
-cavelon trigger identity <trigger> <key-name>                 # shows the change and its confirm token
-cavelon trigger identity <trigger> <key-name> --confirm <token>   # from your shell; a person's terminal takes a bare --confirm
+cavelon trigger identity <trigger> <key-name>                 # shows the change
+cavelon trigger identity <trigger> <key-name> --confirm       # the person, in their own terminal
 ```
 
-Binding gives the trigger standing authority over its Sandboxes: show the person
-first and confirm only after they agree. Name the key by its name or id, never
+Binding gives the trigger standing authority over its Sandboxes, so the person
+confirms it: over MCP the client asks them when you call `trigger_identity`
+with the preview's token; from your shell they run the confirm command in their
+own terminal. Name the key by its name or id, never
 its value. A personal access token is never an execution identity. Creating keys
 and adding a key to a Sandbox's Access stay in the Admin; the output says when
 that is still missing.
