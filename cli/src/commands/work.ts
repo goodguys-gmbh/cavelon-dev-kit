@@ -28,6 +28,7 @@ import { caseCounts, caseLabel, countsText, failedCase, caseKnowledgeOutcomes, N
 import { isUuid } from "../session.js";
 import { cavelonCommand } from "../printed.js";
 import { readZipSummary, ZipError, type ZipSummary } from "../zip.js";
+import { AS_CHAT_USER_OPTION, chatUserReader, chatUserReaderError } from "../chat-reader.js";
 import { TIMEOUT_OPTION, timeoutMs, waitAndReport } from "./async.js";
 import { stageErrors, stageErrorText, type StageError } from "./loops.js";
 import { resolveHarnessId } from "../harness-ref.js";
@@ -856,13 +857,17 @@ export const testRun: CommandSpec = {
   description:
     "Without --suite, runs every suite of the solution (--harness, or cavelon.yaml's harness).\n" +
     "With --wait, exits 1 when a case failed or a run measured nothing comparable (cases not run, technical errors),\n" +
-    "5 when answers wait for a manual verdict or a value a case needs.",
+    "5 when answers wait for a manual verdict or a value a case needs.\n" +
+    "--as-chat-user chooses a Chat User reader for these runs only, for knowledge and identity-bound database queries;\n" +
+    "it never edits a saved suite. Without the option, uses each suite's saved reader. Choose an id with\n" +
+    "`cavelon api list_chat_users -p tenant_id=<tenant_id>`; check email_verified for email-bound queries.",
   readOnly: false,
   mcpTool: "test_run",
   operations: ["POST /api/v1/test-suites/{suite_id}/runs"],
   options: {
     suite: { type: "string", multiple: true, value: "<suite>", description: "Suite name or id." },
     harness: { type: "string", value: "<harness>", description: "The solution to run against: its name, slug or id." },
+    "as-chat-user": AS_CHAT_USER_OPTION,
     wait: WAIT_OPTION,
     timeout: TIMEOUT_OPTION,
     "idempotency-key": { type: "string", value: "<key>", description: "Send an Idempotency-Key with each start." },
@@ -870,6 +875,7 @@ export const testRun: CommandSpec = {
   examples: ["cavelon test run --suite smoke --wait --timeout 10m", "cavelon test run --harness support --json"],
   async run(ctx, input) {
     const session = await ctx.session();
+    const reader = await chatUserReader(ctx, input, "/api/v1/test-suites/{suite_id}/runs");
     const harnessRef = stringOption(input, "harness") ?? session.project?.harness;
     const harnessId = harnessRef ? await resolveHarnessId(ctx, harnessRef) : undefined;
     const suites = await callStable<Suite[]>(ctx, "GET", "/api/v1/test-suites", "test suites", {
@@ -902,14 +908,14 @@ export const testRun: CommandSpec = {
     const key = stringOption(input, "idempotency-key");
     const runs: TestRun[] = [];
     for (const suite of chosen) {
-      const body: Record<string, unknown> = {};
+      const body: Record<string, unknown> = { ...reader };
       if (harnessId) body.harness_id = harnessId;
       runs.push(
         await callStable<TestRun>(ctx, "POST", "/api/v1/test-suites/{suite_id}/runs", "test runs", {
           params: { suite_id: [suite.id] },
           body,
           headers: key ? { "Idempotency-Key": `${key}:${suite.id}` } : undefined,
-        }),
+        }).catch((error: unknown) => { throw chatUserReaderError(error, reader); }),
       );
     }
     const operationIds = runs.map((r) => r.operation_id).filter((id): id is string => Boolean(id));
@@ -942,11 +948,12 @@ export const testRun: CommandSpec = {
         ...results.map((r) => `${r.suite}: ${r.status}  ${summaryText(r.summary)}`),
         ...(resume ? ["", `${waited.why} after the timeout; the runs go on. Resume: ${resume}`] : []),
       ].join("\n");
-      return { data: { runs: results, failed_cases: failedCases, ...waited.data, ...(resume ? { resume } : {}) }, text, exitCode };
+      return { data: { runs: results, failed_cases: failedCases, ...waited.data, ...reader, ...(resume ? { resume } : {}) }, text: reader ? `Reading as Chat User ${reader.reader_chat_user_id} for these runs only.\n${text}` : text, exitCode };
     }
     return {
-      data: { runs: started, operation_ids: operationIds },
+      data: { runs: started, operation_ids: operationIds, ...reader },
       text:
+        (reader ? `Reading as Chat User ${reader.reader_chat_user_id} for these runs only.\n` : "") +
         table(started, ["suite", "run_id", "status", "operation_id"]) +
         (operationIds.length ? `\n\nWait with: ${cavelonCommand("wait", ...operationIds)}` : ""),
     };

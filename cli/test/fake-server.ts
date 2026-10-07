@@ -104,6 +104,27 @@ function withConfirmations(text: string, on: boolean): string {
   }
   return JSON.stringify(doc);
 }
+
+/** Older instances may have neither reader overrides nor the verified-address flag. */
+function withChatReaders(text: string, readers: boolean, verified: boolean): string {
+  if (readers && verified) return text;
+  const doc = JSON.parse(text) as { components: { schemas: Record<string, { properties: Record<string, unknown> }> } };
+  if (!readers) {
+    for (const name of ["ChatRequest", "TestRunCreate"]) {
+      delete doc.components.schemas[name]!.properties.reader_mode;
+      delete doc.components.schemas[name]!.properties.reader_chat_user_id;
+    }
+  }
+  if (!verified) delete doc.components.schemas.EndUserResponse!.properties.email_verified;
+  return JSON.stringify(doc);
+}
+
+export interface FakeChatUser {
+  id: string;
+  tenant_id: string;
+  email: string | null;
+  email_verified: boolean;
+}
 /** The OpenAPI without these operations ("METHOD /path"), as an instance older than them publishes it. */
 function withoutOperations(text: string, operations: string[]): string {
   if (!operations.length) return text;
@@ -273,7 +294,10 @@ export interface FakeState {
    * naming what changed when the list is not empty.
    */
   staleChanged: string[] | null;
-  suites: Array<{ id: string; tenant_id: string; name: string; harness_id: string | null; archived_at: string | null }>;
+  suites: Array<{ id: string; tenant_id: string; name: string; harness_id: string | null; archived_at: string | null; settings?: Record<string, unknown> }>;
+  chatUsers: FakeChatUser[];
+  readerOverrides: boolean;
+  chatUserEmailVerified: boolean;
   runs: Array<{ id: string; tenant_id: string; suite_id: string; summary: Record<string, unknown>; harness_id?: string | null }>;
   operations: Map<string, FakeOperation>;
   /** By "trigger:<run id>" or "conversation:<conversation id>". */
@@ -331,7 +355,7 @@ export interface FakeState {
    */
   interruptions: Array<{ method: string; path: RegExp; mode: "cut" | "stall"; skip?: number }>;
   /** Routes that answer this status instead, as a failing route of an otherwise working instance. */
-  failures: Array<{ method: string; path: RegExp; status: number }>;
+  failures: Array<{ method: string; path: RegExp; status: number; detail?: string; code?: string }>;
   /** Uploads after this many succeed answer 500 (for partial failures). */
   uploadsBeforeFailure: number;
   /** Event streams to cut off after their first frame. */
@@ -592,6 +616,8 @@ const WORKFLOW_PERMISSIONS = [
   "harnesses.view",
   "knowledge_bases.manage_documents",
   "knowledge_bases.view",
+  "end_users.read",
+  "chat_users.view",
   "playground.use",
   "sandboxes.manage",
   "sandboxes.write",
@@ -715,6 +741,9 @@ export async function startFakeServer(): Promise<FakeServer> {
     runResults: null,
     rootPathsReachApi: true,
     serveOpenapi: true,
+    chatUsers: [],
+    readerOverrides: true,
+    chatUserEmailVerified: true,
     personOnly: {},
     openapiWithout: [],
     chats: [],
@@ -792,7 +821,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     const body = method === "GET" ? { raw: Buffer.alloc(0) } : await readBody(req);
     state.requests.push({ method, path: p, query: url.searchParams, headers: req.headers, body: body.json ?? (body.form ? "multipart" : undefined) });
     const failure = state.failures.find((f) => f.method === method && f.path.test(p));
-    if (failure) return send(res, failure.status, { detail: "Internal Server Error" });
+    if (failure) return send(res, failure.status, { detail: failure.detail ?? "Internal Server Error", ...(failure.code ? { code: failure.code } : {}) });
     const interruption = state.interruptions.find((i) => i.method === method && i.path.test(p));
     if (interruption && (interruption.skip ?? 0) > 0) interruption.skip!--;
     else if (interruption) {
@@ -815,7 +844,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     }
     if (p === "/openapi.json" || (p === "/api/v1/openapi.json" && !state.rootPathsReachApi)) {
       res.writeHead(200, { "content-type": "application/json" });
-      const marked = withConfirmations(withMarkers(state.personOnly, state.secretFields), state.confirmations !== null);
+      const marked = withChatReaders(withConfirmations(withMarkers(state.personOnly, state.secretFields), state.confirmations !== null), state.readerOverrides, state.chatUserEmailVerified);
       return res.end(withoutOperations(withTenantWideFlag(withUploadReplace(marked, state.uploadReplace), state.tenantWideFlag), state.openapiWithout));
     }
 
@@ -1018,6 +1047,23 @@ export async function startFakeServer(): Promise<FakeServer> {
     if (!needTenant()) return;
     const tid = tenantId!;
 
+    const chatUserList = /^\/api\/v1\/tenants\/([^/]+)\/chat-users$/.exec(p);
+    if (chatUserList && method === "GET") {
+      if (chatUserList[1] !== tid) return send(res, 403, { detail: "The Chat User directory belongs to the acting tenant." });
+      if (!permissionsOf(info, tid, true).includes("chat_users.view")) return send(res, 403, { detail: "Missing permission: chat_users.view" });
+      const search = url.searchParams.get("search")?.toLowerCase();
+      const users = state.chatUsers.filter((u) => u.tenant_id === tid && (!search || u.email?.toLowerCase().includes(search)));
+      const limit = Number(url.searchParams.get("limit") ?? 50);
+      const offset = Number(url.searchParams.get("offset") ?? 0);
+      return send(res, 200, {
+        items: users.slice(offset, offset + limit).map(({ email_verified, ...u }) => ({
+          ...u, display_name: null, issuer: null, external_subject: null, source: "manual", created_at: "2026-10-07T00:00:00Z", updated_at: "2026-10-07T00:00:00Z",
+          ...(state.chatUserEmailVerified ? { email_verified } : {}),
+        })),
+        total: users.length, limit, offset,
+      });
+    }
+
     if (p === "/api/v1/confirmations" && method === "POST" && state.confirmations) return issueConfirmation(res, token!, info, tid, body.json);
     // A personal access token's guarded change carries its confirmation, checked before the change and used once it succeeds.
     const guarded = state.confirmations?.enforced && info.kind === "pat" ? guardedChange(method, p, tid, body.json) : undefined;
@@ -1081,6 +1127,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     }
     if (p === "/api/v1/chat" && method === "POST") {
       const b = (body.json ?? {}) as { message?: string; harness_id?: string | null; session_id?: string | null };
+      if (!admitReader(res, info, tid, body.json, true)) return;
       if (!b.message) return send(res, 422, { detail: [{ loc: ["body", "message"], msg: "Field required", type: "missing" }] });
       const h = b.harness_id
         ? state.harnesses.find((x) => x.tenant_id === tid && x.id === b.harness_id)
@@ -1217,6 +1264,8 @@ export async function startFakeServer(): Promise<FakeServer> {
     if (m && method === "POST") {
       const suite = state.suites.find((s) => s.tenant_id === tid && s.id === m![1]);
       if (!suite) return send(res, 404, { detail: "Suite not found" });
+      const readerRequest = body.json as { reader_mode?: string } | undefined;
+      if (!admitReader(res, info, tid, readerRequest?.reader_mode ? body.json : suite.settings)) return;
       const id = randomUUID();
       const asked = (body.json as { harness_id?: unknown } | undefined)?.harness_id;
       const run = { id, tenant_id: tid, suite_id: suite.id, summary: { ...state.runSummary }, harness_id: typeof asked === "string" ? asked : suite.harness_id };
@@ -1471,6 +1520,31 @@ export async function startFakeServer(): Promise<FakeServer> {
     }
 
     return send(res, 404, { detail: "Not Found" });
+  }
+
+  /** The chosen reader is admitted inside the acting tenant, as on the instance. */
+  function admitReader(res: http.ServerResponse, info: TokenInfo, tid: string, body: unknown, chat = false): boolean {
+    const reader = body as { reader_mode?: string; reader_chat_user_id?: string } | undefined;
+    if (!reader?.reader_mode) return true;
+    if (reader.reader_mode !== "as_chat_user") return true;
+    if (!state.readerOverrides) {
+      send(res, 422, { detail: "Reader overrides are not supported." });
+      return false;
+    }
+    if (chat && info.kind !== "pat") {
+      send(res, 403, { detail: "Only an operator test surface may choose its reader; omit reader_mode." });
+      return false;
+    }
+    const missing = ["knowledge_bases.view", "end_users.read"].filter((p) => !permissionsOf(info, tid, true).includes(p));
+    if (missing.length) {
+      send(res, 403, { detail: `Reading as a Chat User needs: ${missing.join(", ")}` });
+      return false;
+    }
+    if (!state.chatUsers.some((u) => u.tenant_id === tid && u.id === reader.reader_chat_user_id)) {
+      send(res, 422, { detail: "reader_chat_user_id names no Chat User of this tenant." });
+      return false;
+    }
+    return true;
   }
 
   /** A coded refusal as the instance sends one: the fields beside its code, message, catalog hint and docs link. */
