@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/goodguys-gmbh/cavelon-dev-kit/blob/main/contracts/offline-bundle-manifest.schema.json",
+  "title": "Cavelon dev-kit offline bundle manifest",
+  "description": "manifest.json at the top of cavelon-bundle-<version>.tar.gz (docs/offline-bundle.md). Format 1. A reader ignores members it does not know; a new format number means a change a reader of format 1 cannot follow.",
+  "type": "object",
+  "required": ["format", "name", "version", "repository", "instance_contracts", "executables", "mcp", "files"],
+  "properties": {
+    "format": { "const": 1, "description": "The bundle format's version." },
+    "name": { "const": "cavelon-bundle" },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.]+)?$",
+      "description": "The kit's release version: the CLI's, the plugin's and the skills'."
+    },
+    "repository": { "const": "goodguys-gmbh/cavelon-dev-kit", "description": "The repository whose release workflow built and signed the bundle." },
+    "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$", "description": "The commit the release was built from, when the builder was told." },
+    "instance_contracts": {
+      "type": "object",
+      "description": "The instance contract versions this release understands, as it compares them with an instance's /api/v1/meta/capabilities (contracts.api_version, contracts.package_versions).",
+      "required": ["api_versions", "package_versions"],
+      "properties": {
+        "api_versions": { "$ref": "#/$defs/contractVersions" },
+        "package_versions": { "$ref": "#/$defs/contractVersions" }
+      }
+    },
+    "executables": {
+      "type": "array",
+      "description": "The standalone executable for each platform the bundle carries.",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["platform", "path"],
+        "properties": {
+          "platform": { "enum": ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64", "windows-x64"] },
+          "path": { "$ref": "#/$defs/path" }
+        }
+      }
+    },
+    "mcp": {
+      "type": "object",
+      "description": "The offline MCP entries: they start the cavelon on the PATH, never npx.",
+      "required": ["plugin", "entry"],
+      "properties": {
+        "plugin": { "$ref": "#/$defs/path", "description": "The plugin's .mcp.json." },
+        "entry": { "$ref": "#/$defs/path", "description": "The entry for agents without a plugin." }
+      }
+    },
+    "files": {
+      "type": "array",
+      "description": "Every file of the bundle but manifest.json itself, sorted by path, relative to the bundle's top folder.",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["path", "size", "sha256"],
+        "additionalProperties": false,
+        "properties": {
+          "path": { "$ref": "#/$defs/path" },
+          "size": { "type": "integer", "minimum": 0 },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "contractVersions": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^v[0-9]+$" }
+    },
+    "path": {
+      "type": "string",
+      "description": "Relative, with forward slashes, no empty, \".\" or \"..\" part.",
+      "pattern": "^[A-Za-z0-9._+/-]+$",
+      "allOf": [
+        { "not": { "pattern": "^/" } },
+        { "not": { "pattern": "/$" } },
+        { "not": { "pattern": "//" } },
+        { "not": { "pattern": "(^|/)\\.\\.?(/|$)" } }
+      ]
+    }
+  }
+}

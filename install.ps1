@@ -16,7 +16,8 @@ updates cavelon. It sends nothing anywhere but the downloads.
 Piped into iex it takes its options from environment variables:
 CAVELON_VERSION, CAVELON_INSTALL_DIR, CAVELON_NO_MODIFY_PATH=1, and
 CAVELON_DOWNLOAD_URL, a folder that holds the release's files instead of the
-GitHub release, such as a mirror.
+GitHub release: a mirror's URL, or a local folder such as the bin folder of the
+offline bundle.
 
 .PARAMETER Version
 A given release, such as 0.1.2, instead of the latest.
@@ -72,11 +73,19 @@ function Install-Cavelon {
   # --- where from -------------------------------------------------------------
 
   if ($env:CAVELON_DOWNLOAD_URL) {
-    $base = $env:CAVELON_DOWNLOAD_URL.TrimEnd('/')
+    $base = $env:CAVELON_DOWNLOAD_URL.TrimEnd('/', '\')
   } elseif ($Version) {
     $base = "https://github.com/$repository/releases/download/v$Version"
   } else {
     $base = "https://github.com/$repository/releases/latest/download"
+  }
+
+  # A local folder (the offline bundle's bin) is copied from; PowerShell 7's
+  # Invoke-WebRequest takes no file: URL.
+  $local = $base -notmatch '^[A-Za-z][A-Za-z0-9+.-]*://'
+  function Get-ReleaseFile([string]$Name, [string]$OutFile) {
+    if ($local) { Copy-Item -LiteralPath (Join-Path $base $Name) -Destination $OutFile }
+    else { Invoke-WebRequest -UseBasicParsing -Uri "$base/$Name" -OutFile $OutFile }
   }
 
   # Windows PowerShell 5.1 may still offer TLS 1.0 only; GitHub needs 1.2.
@@ -91,14 +100,14 @@ function Install-Cavelon {
     $suffix = if ($Version) { " $Version" } else { '' }
     Write-Host "Downloading $asset$suffix from $base ..."
     try {
-      Invoke-WebRequest -UseBasicParsing -Uri "$base/checksums.txt" -OutFile (Join-Path $tmp 'checksums.txt')
+      Get-ReleaseFile 'checksums.txt' (Join-Path $tmp 'checksums.txt')
     } catch {
       $hint = if ($Version) { " (is $Version a released version?)" } else { '' }
       throw "Could not download $base/checksums.txt$hint`: $($_.Exception.Message)"
     }
     $download = Join-Path $tmp $asset
     try {
-      Invoke-WebRequest -UseBasicParsing -Uri "$base/$asset" -OutFile $download
+      Get-ReleaseFile $asset $download
     } catch {
       throw "Could not download $base/$asset`: $($_.Exception.Message)"
     }

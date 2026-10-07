@@ -7,6 +7,27 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Added
+
+- An offline bundle per release (#156), for instances whose developers reach
+  neither GitHub, npm nor PyPI: `cavelon-bundle-<version>.tar.gz` holds every
+  platform's executable, the install scripts, the plugin for Claude Code and
+  Codex with an MCP entry that starts the `cavelon` on the PATH (never npx, no
+  update check), the skills, the plugin packages for the other clients in
+  their offline variant (`cavelon mcp`, never npx), and a
+  `manifest.json` listing every file with its size and SHA-256, the version
+  and the instance contract versions the release understands (schema:
+  `contracts/offline-bundle-manifest.schema.json`). The release workflow signs
+  the bundle and its manifest keylessly with Sigstore (`cosign sign-blob`,
+  bundle format), so no signing secret exists, and anyone can verify them
+  against this repository's release workflow, also offline with Sigstore's
+  trusted root. The same inputs build the same bytes.
+  [docs/offline-bundle.md](docs/offline-bundle.md) describes the format,
+  verifying, installing, and how an instance chooses and serves the bundle
+  that fits it.
+- `install.sh` and `install.ps1` take a local folder in `CAVELON_DOWNLOAD_URL`
+  (such as the offline bundle's `bin`), not only a URL.
+
 ### Fixed
 
 - `cavelon --version` and the update notice named pip, with `pip install
