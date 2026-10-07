@@ -52,15 +52,24 @@ try {
   Write-Host '== run again while cavelon runs: an update, nothing added twice'
   # In a console of its own, `cavelon mcp` waits for input and keeps its file open.
   $running = Start-Process -FilePath $exe -ArgumentList 'mcp' -PassThru -WindowStyle Hidden
+  $locked = $null
   try {
     Start-Sleep -Seconds 2
     Assert (-not $running.HasExited) 'cavelon mcp is running'
+    # Make the file-sharing boundary deterministic: an identical download
+    # must leave the executable in place, even when Windows denies renaming it.
+    $locked = [IO.File]::Open($exe, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    $before = (Get-FileHash $exe).Hash
     $out = Install-Piped
     Write-Host $out
     Assert ($out -match 'up to date') 'said it is up to date'
     Assert ((Count-InUserPath $dir) -eq 1) 'the user PATH still names the folder once'
     Assert (@(& $exe --version)[0] -eq $Version) 'the new cavelon runs'
+    Assert ((Get-FileHash $exe).Hash -eq $before) 'the identical executable is unchanged'
+    Assert (-not (Test-Path "$exe.old")) 'the identical executable was not renamed'
+    Assert (-not $running.HasExited) 'the running MCP process was left alone'
   } finally {
+    if ($locked) { $locked.Dispose() }
     Stop-Process -Id $running.Id -Force -ErrorAction SilentlyContinue
   }
 
