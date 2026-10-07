@@ -388,7 +388,7 @@ export interface FakeState {
   serveCredentialAccess: boolean;
   /**
    * Whether the instance refuses a personal access token, as it does a key, on
-   * setting or deleting a secret (ChatFlow #4881): only a person signed in to
+   * setting or deleting a secret: only a person signed in to
    * the Admin does it, and /meta/principal lists both operations in a token's
    * `needs_a_person` too. Off by default, so a token sets secrets as on an
    * instance before it.
