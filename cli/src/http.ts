@@ -1,5 +1,6 @@
 import { accessFor, forbiddenHint, type RefusedCredential } from "./access.js";
 import { capacityCodeIn, capacityHint } from "./capacity.js";
+import { CONFIRMATION_REQUIRED, confirmationRefused } from "./change-confirmation.js";
 import { ceilingRefusal, LIMIT_ABOVE_CEILING } from "./limits.js";
 import { CavelonError, ExitCode, type ExitCodeValue } from "./errors.js";
 import { blockerDetails, type BlockerDetail } from "./preview-report.js";
@@ -41,7 +42,26 @@ export interface RequestOptions {
   accept?: string;
   /** Statuses returned to the caller instead of thrown. */
   allow?: number[];
+  /** False sends the request as it is, without asking for a confirmation id (the request for one, and the request sent again with it). */
+  confirmation?: false;
 }
+
+/** A change as the client is about to send it, for the instance's confirmation id. */
+export interface ConfirmedRequest {
+  method: string;
+  path: string;
+  query?: Record<string, QueryValue>;
+  /** The JSON body; undefined for none. */
+  body: unknown;
+}
+
+/**
+ * Returns the header that carries the instance's confirmation id for exactly
+ * this request, or undefined where it needs none or the person did not approve
+ * it (change-confirmation.ts). `asked` is the body of the instance's
+ * `428 confirmation_required` when it asked for one the client did not send.
+ */
+export type ChangeConfirmer = (request: ConfirmedRequest, asked?: Record<string, unknown>) => Promise<Record<string, string> | undefined>;
 
 export interface ApiResponse<T = unknown> {
   status: number;
@@ -92,6 +112,8 @@ export class ApiClient {
    * request in that tenant calls it.
    */
   revalidateTenant?: () => Promise<boolean>;
+  /** Adds the instance's confirmation id to a change the person approved; set by the command's context. */
+  confirmer?: ChangeConfirmer;
 
   constructor(
     readonly target: Target,
@@ -167,10 +189,12 @@ export class ApiClient {
   }
 
   async request<T = unknown>(method: string, path: string, options: RequestOptions = {}): Promise<ApiResponse<T>> {
+    const { change, confirmed } = await this.confirmationBefore(method, path, options);
+    const sentHeaders = confirmed ? { ...options.headers, ...confirmed } : options.headers;
     const timeoutMs = options.timeoutMs ?? (Number(this.env.CAVELON_HTTP_TIMEOUT_MS) || DEFAULT_TIMEOUT_MS);
     const timeout = AbortSignal.timeout(timeoutMs);
     const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
-    const response = await this.fetchRaw(method, path, { ...options, signal });
+    const response = await this.fetchRaw(method, path, { ...options, headers: sentHeaders, signal });
     let text: string;
     try {
       text = await response.text();
@@ -187,13 +211,41 @@ export class ApiClient {
     }
     if (!response.ok && !options.allow?.includes(response.status)) {
       if (await this.tenantMoved(method, path, response.status, options)) return this.request<T>(method, path, options);
+      const late = await this.confirmationAsked(response.status, data, change, confirmed);
+      if (late) return this.request<T>(method, path, { ...options, headers: { ...options.headers, ...late }, confirmation: false });
       // A tenant call sent without a tenant, because none is chosen: a token without Platform mode is refused for that alone.
       const tenantless = options.sendTenant !== false && !this.headers(options)["X-Tenant-Id"] && Boolean(this.target.token?.startsWith("cvpat_"));
       const pathname = new URL(response.url || this.resolve(path)).pathname;
       const platform = options.sendTenant === false || isPlatformRoute(pathname);
-      throw await this.refusal(response.status, data, `${method} ${pathname}`, response.headers, { tenantless, platform, method, path: pathname });
+      const error = await this.refusal(response.status, data, `${method} ${pathname}`, response.headers, { tenantless, platform, method, path: pathname });
+      throw confirmationRefused(error, Boolean(confirmed) || options.confirmation === false);
     }
     return { status: response.status, headers: response.headers, data: data as T, text };
+  }
+
+  /**
+   * A change the person approved carries the instance's confirmation id,
+   * asked for right before it is sent: the change as the confirmer sees it,
+   * and the header, where it added one.
+   */
+  async confirmationBefore(
+    method: string,
+    path: string,
+    options: Pick<RequestOptions, "query" | "json" | "form" | "bytes" | "confirmation">,
+  ): Promise<{ change?: ConfirmedRequest; confirmed?: Record<string, string> }> {
+    if (!this.confirmer || options.confirmation === false || method === "GET" || method === "HEAD" || options.form || options.bytes) return {};
+    const change = { method, path, query: options.query, body: options.json };
+    return { change, confirmed: await this.confirmer(change) };
+  }
+
+  /**
+   * The header for a change the instance refused with `428
+   * confirmation_required` although the kit sent none, when the person
+   * approved it: a 428 changed nothing, so the change goes once more with it.
+   */
+  async confirmationAsked(status: number, data: unknown, change: ConfirmedRequest | undefined, confirmed: Record<string, string> | undefined): Promise<Record<string, string> | undefined> {
+    const asked = status === 428 && change && !confirmed ? askedFor(data) : undefined;
+    return asked ? this.confirmer!(change!, asked) : undefined;
   }
 
   /**
@@ -263,6 +315,14 @@ export class ApiClient {
   get<T = unknown>(path: string, options?: RequestOptions): Promise<ApiResponse<T>> {
     return this.request<T>("GET", path, options);
   }
+}
+
+/** The body of a `428 confirmation_required`, which names where the id is issued and its header; undefined for any other answer. */
+function askedFor(data: unknown): Record<string, unknown> | undefined {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return undefined;
+  const body = data as Record<string, unknown>;
+  const inner = body.detail && typeof body.detail === "object" && !Array.isArray(body.detail) ? (body.detail as Record<string, unknown>) : {};
+  return body.code === CONFIRMATION_REQUIRED || inner.code === CONFIRMATION_REQUIRED ? { ...inner, ...body } : undefined;
 }
 
 function parseBody(text: string, contentType: string | null): unknown {
@@ -417,6 +477,9 @@ export function errorFromResponse(status: number, body: unknown, what: string, h
     details = details && typeof details === "object" ? { ...(details as Record<string, unknown>), ...ceiling.details } : ceiling.details;
   }
   if (changed) details = details && typeof details === "object" && !Array.isArray(details) ? { ...(details as Record<string, unknown>), changed } : { changed };
+  // A refused confirmation names why: unknown, expired, used or another change's.
+  const reason = status === 428 && body && typeof body === "object" ? (body as Record<string, unknown>).reason : undefined;
+  if (typeof reason === "string") details = details && typeof details === "object" && !Array.isArray(details) ? { ...(details as Record<string, unknown>), reason } : { reason };
   if (status === 400 && !hint && message && /select a tenant|tenant context|X-Tenant-Id/i.test(message)) {
     hint = `Choose a tenant with \`${cavelonCommand("use")}\` (it lists your tenants), --tenant or CAVELON_TENANT.`;
   }
@@ -453,6 +516,8 @@ export function exitCodeForStatus(status: number): ExitCodeValue {
   if (status === 401 || status === 403) return ExitCode.unauthorized;
   if (status === 400 || status === 422) return ExitCode.validation;
   if (status === 409 || status === 412) return ExitCode.conflict;
+  // A change that waits for a person's confirmation (428 Precondition Required).
+  if (status === 428) return ExitCode.needsAction;
   if (status === 408 || status === 429 || status >= 500) return ExitCode.server;
   return ExitCode.failure;
 }
@@ -471,6 +536,8 @@ function defaultCode(status: number): string {
       return "conflict";
     case 412:
       return "precondition_failed";
+    case 428:
+      return "precondition_required";
     case 422:
       return "validation_failed";
     case 429:

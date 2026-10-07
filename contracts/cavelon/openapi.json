@@ -174,8 +174,11 @@
               }
             }
           },
-          "422": {}
-        }
+          "422": {},
+          "428": {}
+        },
+        "x-cavelon-confirmation": "required",
+        "x-cavelon-confirmation-when": "When the import writes tenant-wide sections (include_tenant_wide, or a full_config package that carries them): they change every solution of the tenant."
       }
     },
     "/api/v1/agent-graph/import/preview": {
@@ -351,6 +354,38 @@
           "403": {},
           "404": {},
           "409": {},
+          "422": {}
+        }
+      }
+    },
+    "/api/v1/confirmations": {
+      "post": {
+        "tags": [
+          "confirmations"
+        ],
+        "summary": "Create Confirmation",
+        "operationId": "create_confirmation_api_v1_confirmations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfirmationResponse"
+                }
+              }
+            }
+          },
+          "400": {},
           "422": {}
         }
       }
@@ -1111,8 +1146,11 @@
                 }
               }
             }
-          }
-        }
+          },
+          "428": {}
+        },
+        "x-cavelon-confirmation": "required",
+        "x-cavelon-confirmation-when": "When a channel or an active trigger reaches the solution: activating it puts it live for them. A draft nothing reaches activates without one."
       }
     },
     "/api/v1/harnesses/{harness_id}/clone": {
@@ -1221,8 +1259,11 @@
                 }
               }
             }
-          }
-        }
+          },
+          "428": {}
+        },
+        "x-cavelon-confirmation": "required",
+        "x-cavelon-confirmation-when": "When the solution is active: deactivating it takes it out of live traffic."
       }
     },
     "/api/v1/harnesses/{harness_id}/default": {
@@ -1263,8 +1304,11 @@
                 }
               }
             }
-          }
-        }
+          },
+          "428": {}
+        },
+        "x-cavelon-confirmation": "required",
+        "x-cavelon-confirmation-when": "When the solution is not the default route yet: the tenant's chat and widget answer with it."
       }
     },
     "/api/v1/harnesses/{harness_id}/readiness": {
@@ -4958,8 +5002,11 @@
                 }
               }
             }
-          }
-        }
+          },
+          "428": {}
+        },
+        "x-cavelon-confirmation": "required",
+        "x-cavelon-confirmation-when": "When the API key the trigger's runs act as changes: binding, replacing or clearing it."
       }
     },
     "/api/v1/triggers/{trigger_id}/run": {
@@ -5167,8 +5214,11 @@
                 }
               }
             }
-          }
-        }
+          },
+          "428": {}
+        },
+        "x-cavelon-confirmation": "required",
+        "x-cavelon-confirmation-when": "When the variable exists: every solution of the tenant reads it."
       }
     }
   },
@@ -8411,6 +8461,98 @@
           "content"
         ],
         "title": "ChunkResponse"
+      },
+      "ConfirmationOffer": {
+        "properties": {
+          "enforced": {
+            "type": "boolean",
+            "title": "Enforced"
+          },
+          "setting": {
+            "type": "string",
+            "title": "Setting"
+          },
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "header": {
+            "type": "string",
+            "title": "Header"
+          },
+          "expires_in_seconds": {
+            "type": "integer",
+            "title": "Expires In Seconds"
+          },
+          "docs": {
+            "type": "string",
+            "title": "Docs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "enforced",
+          "setting",
+          "path",
+          "header",
+          "expires_in_seconds",
+          "docs"
+        ],
+        "title": "ConfirmationOffer"
+      },
+      "ConfirmationRequest": {
+        "properties": {
+          "method": {
+            "type": "string",
+            "enum": [
+              "POST",
+              "PUT",
+              "PATCH",
+              "DELETE"
+            ],
+            "title": "Method"
+          },
+          "path": {
+            "type": "string",
+            "maxLength": 2048,
+            "minLength": 1,
+            "pattern": "^/",
+            "title": "Path"
+          },
+          "body": {
+            "title": "Body"
+          }
+        },
+        "type": "object",
+        "required": [
+          "method",
+          "path"
+        ],
+        "title": "ConfirmationRequest"
+      },
+      "ConfirmationResponse": {
+        "properties": {
+          "confirmation_id": {
+            "type": "string",
+            "title": "Confirmation Id"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "confirmation_id",
+          "expires_at",
+          "summary"
+        ],
+        "title": "ConfirmationResponse"
       },
       "ContextSourceKind": {
         "type": "string",
@@ -13283,6 +13425,9 @@
           "database_connector": {
             "$ref": "#/components/schemas/DatabaseConnectorOffer"
           },
+          "confirmations": {
+            "$ref": "#/components/schemas/ConfirmationOffer"
+          },
           "masterloop": {
             "$ref": "#/components/schemas/MasterloopLimits"
           },
@@ -13304,6 +13449,7 @@
           "features",
           "sandbox",
           "database_connector",
+          "confirmations",
           "masterloop",
           "experimental_tools",
           "limits"

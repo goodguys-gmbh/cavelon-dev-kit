@@ -9,6 +9,7 @@
     "GET /api/v1/bot-persona",
     "PUT /api/v1/bot-persona",
     "POST /api/v1/chat",
+    "POST /api/v1/confirmations",
     "GET /api/v1/conversations/{conversation_id}/traces",
     "GET /api/v1/conversations/{conversation_id}/traces/{trace_id}",
     "GET /api/v1/database-connectors/connections",

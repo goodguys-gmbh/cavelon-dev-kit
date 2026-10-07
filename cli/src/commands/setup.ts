@@ -128,7 +128,7 @@ async function confirm(ctx: Context, question: string, defaultYes: boolean): Pro
 
 function confirmationRequired(what: string, details: unknown): CavelonError {
   return new CavelonError(ExitCode.usage, {
-    code: "confirmation_required",
+    code: "yes_required",
     message: `Nothing was changed: ${what}, and there is no terminal to ask.`,
     hint: "Read the plan in details, then run the same command with --yes.",
     details,

@@ -60,6 +60,7 @@ beforeEach(() => {
 });
 
 /** The export and import requests this test made, with what they asked about the tenant-wide sections. */
+const confirmationsAsked = () => server.state.requests.filter((r) => r.method === "POST" && r.path === "/api/v1/confirmations").map((r) => r.body);
 const exportsAsked = () => server.state.requests.filter((r) => r.method === "GET" && r.path === "/api/v1/agent-graph/export").map((r) => r.query.get("include_tenant_wide"));
 const importBodies = () =>
   server.state.requests.filter((r) => r.method === "POST" && r.path.startsWith("/api/v1/agent-graph/import")).map((r) => r.body as Record<string, unknown>);
@@ -250,8 +251,11 @@ describe("tenant-wide sections", () => {
     expect(left.show_to_person).toBe(false);
     const text = await cli(sb, ["apply"], { cwd: dir });
     expect(text.stdout).toMatch(/tenant-wide: .*tenant_settings.* left out \(`cavelon apply --include-tenant-wide` imports them, for every solution of the tenant\)/);
+    server.state.requests.length = 0;
     const kept = await cli(sb, ["apply", "--confirm", left.preview_id], { cwd: dir });
     expect(kept.code, kept.stderr).toBe(0);
+    // An import that leaves the tenant-wide sections out is not one the instance guards: no confirmation is asked for.
+    expect(confirmationsAsked()).toEqual([]);
     expect(server.state.configs.get(tenant)!.pkg.tenant_settings).toEqual({ default_guardrail_slugs: [] });
 
     server.state.requests.length = 0;
@@ -266,10 +270,15 @@ describe("tenant-wide sections", () => {
     expect(asked.stderr).toMatch(/package\/tenant_settings\.yaml.* the whole tenant shares: this import sends .*tenant_settings.*, and what in them differs from the instance changes for every solution of the tenant\./);
     const human = await cli(sb, ["apply", "--include-tenant-wide"], { cwd: dir });
     expect(human.stdout).toMatch(/This changes what the whole tenant shares \(.*tenant_settings.*\): show this preview to a person before confirming\./);
+    server.state.requests.length = 0;
     const done = await cli(sb, ["apply", "--confirm", shown.preview_id], { cwd: dir });
     expect(done.code, done.stderr).toBe(0);
     expect(importBodies().at(-1)).toMatchObject({ include_tenant_wide: true, preview_id: shown.preview_id });
     expect(server.state.configs.get(tenant)!.pkg.tenant_settings).toEqual({ default_guardrail_slugs: ["pii"] });
+    // The person's confirm of an import that writes them: the instance's confirmation names exactly that import's body.
+    const imported = server.state.requests.filter((r) => r.method === "POST" && r.path === "/api/v1/agent-graph/import");
+    expect(confirmationsAsked()).toEqual([{ method: "POST", path: "/api/v1/agent-graph/import", body: imported[0]!.body }]);
+    expect(imported[0]!.headers["x-cavelon-confirmation"]).toMatch(/^cfm_/);
   });
 
   it("shows the preview's own tenant_wide report: left out, or applied with the active solutions it reaches; confirm replays the flag", async () => {

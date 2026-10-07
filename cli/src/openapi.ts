@@ -40,6 +40,13 @@ export interface Operation {
    * `x-cavelon-person-only-reason`.
    */
   personOnly?: { marked: boolean; reason?: string };
+  /**
+   * `x-cavelon-confirmation: required`: a personal access token sends the
+   * change with a confirmation id the person's yes gets (change-confirmation.ts),
+   * when `x-cavelon-confirmation-when` holds.
+   */
+  confirmation?: true;
+  confirmationWhen?: string;
 }
 
 /**
@@ -82,6 +89,7 @@ export function operations(doc: OpenApiDoc): Operation[] {
         responses: (raw.responses as Operation["responses"]) ?? {},
         readOnly: method === "get" || method === "head" || method === "options",
         personOnly: personOnlyOf(raw),
+        ...confirmationOf(raw),
       });
     }
   }
@@ -96,6 +104,12 @@ function personOnlyOf(raw: Record<string, unknown>): Operation["personOnly"] {
     marked: raw["x-cavelon-person-only"] === true,
     ...(typeof reason === "string" && reason.trim() ? { reason: reason.trim() } : {}),
   };
+}
+
+function confirmationOf(raw: Record<string, unknown>): Pick<Operation, "confirmation" | "confirmationWhen"> {
+  if (raw["x-cavelon-confirmation"] !== "required") return {};
+  const when = raw["x-cavelon-confirmation-when"];
+  return { confirmation: true, ...(typeof when === "string" && when.trim() ? { confirmationWhen: when.trim() } : {}) };
 }
 
 export function deref(doc: OpenApiDoc, value: unknown): unknown {
