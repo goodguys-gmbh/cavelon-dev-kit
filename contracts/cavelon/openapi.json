@@ -1261,7 +1261,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HarnessResponse"
+                  "$ref": "#/components/schemas/HarnessActivationResponse"
                 }
               }
             }
@@ -1279,7 +1279,7 @@
           "428": {}
         },
         "x-cavelon-confirmation": "required",
-        "x-cavelon-confirmation-when": "When a channel or an active trigger reaches the solution: activating it puts it live for them. A draft nothing reaches activates without one."
+        "x-cavelon-confirmation-when": "When a channel or an active trigger reaches the solution, or activation takes the default route (readiness.takes_default_route): activating it puts it live, including for the tenant's chat and widget. A draft nothing reaches that does not take the default route activates without one."
       }
     },
     "/api/v1/harnesses/{harness_id}/clone": {
@@ -11686,6 +11686,195 @@
         "type": "object",
         "title": "HarnessActivate"
       },
+      "HarnessActivationResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "is_default": {
+            "type": "boolean",
+            "title": "Is Default"
+          },
+          "harness_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness Type"
+          },
+          "global_instructions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Global Instructions"
+          },
+          "run_state_model_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run State Model Id"
+          },
+          "memory_config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Memory Config"
+          },
+          "settings": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Settings"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "agent_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Count"
+          },
+          "channel_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Count"
+          },
+          "readiness": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HarnessReadinessSummaryResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "order_binding": {
+            "items": {
+              "$ref": "#/components/schemas/OrderHarnessClaimResponse"
+            },
+            "type": "array",
+            "title": "Order Binding"
+          },
+          "iteration_of": {
+            "items": {
+              "$ref": "#/components/schemas/HarnessReferenceResponse"
+            },
+            "type": "array",
+            "title": "Iteration Of"
+          },
+          "took_default_route": {
+            "type": "boolean",
+            "title": "Took Default Route",
+            "default": false
+          },
+          "took_default_route_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Took Default Route From"
+          },
+          "took_default_route_from_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Took Default Route From Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "slug",
+          "name",
+          "status",
+          "is_default",
+          "memory_config",
+          "settings"
+        ],
+        "title": "HarnessActivationResponse"
+      },
       "HarnessClone": {
         "properties": {
           "slug": {
@@ -11881,6 +12070,33 @@
                 "type": "null"
               }
             ]
+          },
+          "takes_default_route": {
+            "type": "boolean",
+            "title": "Takes Default Route",
+            "default": false
+          },
+          "takes_default_route_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Takes Default Route From"
+          },
+          "takes_default_route_from_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Takes Default Route From Name"
           }
         },
         "type": "object",

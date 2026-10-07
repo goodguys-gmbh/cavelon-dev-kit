@@ -676,6 +676,7 @@ function limitsLine(state: LimitsState, near: Quota[]): string {
 export const status: CommandSpec = {
   name: "status",
   summary: "Show the instance, tenant, solution, running operations and quotas close to full for this directory.",
+  description: "For the folder's solution, shows readiness and whether activation would take the default chat and widget route. An omitted route flag is unknown. Readiness reserves no route state; activation reports the actual effect.",
   readOnly: true,
   idempotent: true,
   mcpTool: "status",

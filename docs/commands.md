@@ -160,6 +160,8 @@ Show the instance, tenant, solution, running operations and quotas close to full
 cavelon status [options]
 ```
 
+For the folder's solution, shows readiness and whether activation would take the default chat and widget route. An omitted route flag is unknown. Readiness reserves no route state; activation reports the actual effect.
+
 | Option | Description | MCP |
 |---|---|---|
 | `--offline` | Do not contact the instance. | yes |
@@ -343,14 +345,14 @@ Activate a solution through the readiness gate (never by force); says whether it
 cavelon activate [options]
 ```
 
-Only when every readiness check passes, and with a personal access token only when it was created with "may activate". Activating without the evidence stays a person's decision in the Admin. A solution that a channel or an active trigger reaches goes live for them at once, so its activation previews first and only --confirm activates it; so does one on an instance that does not say what reaches it. Show the preview to a person and confirm only with their yes. A draft that nothing reaches activates without --confirm. Afterwards it says whether the solution is the tenant's default route (the one the tenant's chat and widget answer with where no solution is named). --make-default previews making it the default; with --confirm as well, it changes it. That changes live traffic: show the preview to a person and confirm only with their yes. `cavelon harness default` does the same for an active solution. A coding agent cannot confirm it: over MCP the client asks the person, and from an agent's shell the person runs the confirm in their own terminal.
+Only when every readiness check passes, and with a personal access token only when it was created with "may activate". Activating without the evidence stays a person's decision in the Admin. A solution that a channel or an active trigger reaches goes live for them at once, so its activation previews first and only the person's --confirm activates it. Activation that takes the default chat and widget route also needs their yes, including assigning an unassigned route. Unknown reach or route effects need their confirmation too. A solution nothing reaches activates without --confirm only when readiness explicitly says takes_default_route=false. Readiness previews the route effect without reserving state; the activation result reports what actually happened. Afterwards it says whether the solution is the tenant's default route (the one the tenant's chat and widget answer with where no solution is named). --make-default previews making it the default; with --confirm as well, it changes it. That changes live traffic: show the preview to a person and confirm only with their yes. `cavelon harness default` does the same for an active solution. A coding agent cannot confirm it: over MCP the client asks the person, and from an agent's shell the person runs the confirm in their own terminal.
 
 | Option | Description | MCP |
 |---|---|---|
 | `--harness <harness>` | The solution (harness): its name, slug or id; default: env file, then cavelon.yaml. | yes |
 | `--env <name>` | Use env/&lt;name&gt;.yaml: its tenant, solution and runtime bindings. | yes |
 | `--make-default` | Also make it the tenant's default route: previews the change; with --confirm, makes it. | yes |
-| `--confirm [<token>]` | With --make-default: change the default route; for a solution a channel or trigger reaches: activate it (after a person saw the preview). In a person's terminal the flag alone confirms; run by a coding agent, `--confirm <token>` with the token its preview printed (the bare flag only shows the preview there, exit 5). | yes |
+| `--confirm [<token>]` | With --make-default: the person's yes to change the default route; otherwise, to activate when reach or the activation's route effect is true or unknown. In a person's terminal the flag alone confirms; run by a coding agent, `--confirm <token>` with the token its preview printed (the bare flag only shows the preview there, exit 5). | yes |
 
 Examples:
 

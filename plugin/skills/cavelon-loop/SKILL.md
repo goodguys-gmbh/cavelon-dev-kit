@@ -233,6 +233,17 @@ with one solution: its **default route**. A fresh tenant's default is an empty
 `cavelon harness list` marks the default (DEFAULT), and `cavelon activate`
 says when the solution it activated is not the default.
 
+Activation can also take this route without `--make-default`. Read its
+published preview: `takes_default_route: true` needs the person's yes,
+including when `takes_default_route_from` and `_from_name` are both null
+(assigning an unassigned route). False with null/null means no takeover.
+An omitted flag is unknown, even if the schema declares a false default,
+and still needs the person. Never infer the effect from instructions, a
+default slug or other configuration. The preview reserves no state; the
+successful activation's `took_default_route` and corresponding from/name
+fields report the actual effect, which may differ. `status` shows the
+preview too.
+
 - **Ask the person** whether the new solution should become the default. It
   changes live traffic; never decide it yourself.
 - With their yes: `cavelon activate --make-default` (or `cavelon harness
@@ -288,6 +299,7 @@ trigger whose solution is not a draft (a run acts as the person and spends
 budget), `limits set`, `models set-limit`, `trigger identity` (standing
 authority for a trigger), `harness default`, `activate --make-default`,
 `activate` of a solution its preview says a channel or trigger reaches,
+whose activation takes the default route, or whose reach or route effect is unknown,
 `deactivate` (they move live traffic), and `api` for any operation that is
 not read-only, `cavelon` does not take your confirm as theirs. Their preview
 says how in `needs_person`:
@@ -303,8 +315,11 @@ says how in `needs_person`:
   in your session. Give them that command and wait; never run it yourself. A
   token is refused (`confirm_needs_person`, exit code 5).
 
-A new variable, and a draft solution no channel or trigger reaches, need no
-confirm.
+A new variable needs no confirm. A solution needs none only when no channel
+or active trigger reaches it and readiness explicitly publishes
+`takes_default_route: false`. If the single read leaves `channel_count`
+null, the kit reads the matching list row; an unreadable list, missing row
+or missing count keeps reach unknown and needs the person.
 
 An instance that publishes `confirmations.enforced` checks the person's yes
 too: after it, `cavelon` asks the instance for a confirmation id for exactly
@@ -317,7 +332,8 @@ dialog or their own terminal), never retry on your own.
 `variables_set` where it replaces a value, `loop_start`, `limits_set`,
 `models_set_limit`, `loop_cancel`, `sandbox_seed`, `trigger_identity`,
 `harness_default`, `deactivate`, `activate` of a solution a channel or
-trigger reaches or with `make_default`, and
+trigger reaches, whose activation takes the default route or whose reach or
+route effect is unknown, or with `make_default`, and
 `kb_upload` where it would deactivate documents return a `confirm_token` with
 their preview. Show
 the preview, then call the tool again with the same arguments and `confirm`

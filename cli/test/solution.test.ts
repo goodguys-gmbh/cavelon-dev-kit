@@ -1888,6 +1888,7 @@ describe("activate shows the readiness it went through", () => {
     expect(text.stdout).toBe(
       [
         "Activated checked (checked); status active.",
+        "Activation did not change the tenant's default chat and widget route.",
         "Readiness checks:",
         "  complete  A passing test run: smoke passed.",
         "  complete  Models configured: Every agent has a model.",
