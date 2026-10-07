@@ -17,9 +17,9 @@ issue.
 | `cli/scripts/` | build helpers: copying the skills into the package, building the standalone executable, trimming and cleaning the contract snapshots, generating `docs/commands.md` |
 | `plugin/` | the Cavelon plugin: `skills/` (the one source of the skills), `.mcp.json`, and a manifest each for Claude Code and Codex |
 | `.claude-plugin/`, `.agents/plugins/` | the marketplaces of Claude Code and Codex, naming `plugin/` |
-| `contracts/` | snapshots of what an instance publishes, and the list of operations the kit uses |
+| `contracts/` | snapshots of what an instance publishes, the list of operations the kit uses, and the schema of the offline bundle's manifest |
 | `install.sh`, `install.ps1` | the one-line installers of the standalone executable, published with each release |
-| `packaging/` | what the release workflow writes for Homebrew and winget, the PyPI wheel builder (`pypi/`, standard-library Python), and the macOS signing entitlements |
+| `packaging/` | what the release workflow writes for Homebrew and winget, the PyPI wheel builder (`pypi/`, standard-library Python), the offline bundle builder (`bundle/`, standard-library Node.js), and the macOS signing entitlements |
 | `examples/` | solution repositories to copy: `support-faq/` (one agent and a knowledge base) and `expense-approval/` (a pipeline with an approval); the tests validate them |
 | `docs/` | the user documentation |
 
@@ -77,6 +77,26 @@ through the system's credential store against the fake server, `init --agents`
 with the embedded skills, and an MCP handshake), and tests `install.sh` and
 `install.ps1` (Windows PowerShell 5.1 and PowerShell 7) and the Homebrew
 formula against them, served from a local folder: nothing is published.
+
+### The offline bundle
+
+Each release also carries `cavelon-bundle-<version>.tar.gz`
+([docs/offline-bundle.md](docs/offline-bundle.md)), built by
+`packaging/bundle/build-bundle.mjs` from the release's executables and signed
+by the release workflow. To build one from your tree, with the executable for
+your system:
+
+```bash
+cd cli && npm run build && npm run build:executable && cd ..
+node packaging/bundle/build-bundle.mjs --executables cli/build --allow-missing-executables
+# packaging-out/bundle/cavelon-bundle-<version>.tar.gz and .manifest.json
+```
+
+The same inputs give the same bytes; `offline-bundle.test.ts` checks that, the
+manifest against `contracts/offline-bundle-manifest.schema.json`, and an
+install from the extracted bundle with `install.sh`. CI's install job builds
+it from the five executables and installs from its `bin/` with `install.sh`
+and `install.ps1`.
 
 ## How the kit is built
 

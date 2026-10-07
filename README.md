@@ -45,6 +45,8 @@ With Homebrew (macOS, Linux): `brew install goodguys-gmbh/cavelon/cavelon`.
 With Python: `uv tool install cavelon` or `pipx install cavelon` (`uvx cavelon`
 runs it without installing).
 [Installation](docs/installation.md) has the details, npm, and how to remove it.
+Where machines reach neither GitHub, npm nor PyPI, install from the signed
+[offline bundle](docs/offline-bundle.md) each release carries.
 
 *With Node.js instead:* if you have Node.js 20.3 or newer, `npx -y @cavelon/cli`
 runs the same `cavelon` without installing it: type `npx -y @cavelon/cli setup`
@@ -191,6 +193,7 @@ how to review and test its work.
 | [Limits](docs/limits.md) | reading and changing limits, and who may change what |
 | [Troubleshooting](docs/troubleshooting.md) | exit codes and error codes, with what to do |
 | [Security](docs/security.md) | where the token lives, what the agent sees, what is sent where |
+| [Offline bundle](docs/offline-bundle.md) | installing without internet access: the signed bundle each release carries, its format, verifying it with cosign |
 | [FAQ](docs/faq.md) | common questions |
 
 ## Exit codes
@@ -217,13 +220,13 @@ Details in [Troubleshooting](docs/troubleshooting.md#exit-codes).
 |---|---|
 | [`cli/`](cli/) | the `cavelon` CLI and MCP server (TypeScript, Node.js 20.3+), published as `@cavelon/cli` and as standalone executables |
 | [`install.sh`](install.sh), [`install.ps1`](install.ps1) | the one-line installers for macOS and Linux, and for Windows |
-| [`packaging/`](packaging/) | the Homebrew formula and winget manifest the release workflow writes, the PyPI wheels it builds (`pypi/`), and the macOS signing entitlements |
+| [`packaging/`](packaging/) | the Homebrew formula and winget manifest the release workflow writes, the PyPI wheels (`pypi/`) and the offline bundle (`bundle/`) it builds, and the macOS signing entitlements |
 | [`plugin/`](plugin/) | the Cavelon plugin: the skills, the MCP entry, and a manifest each for Claude Code and Codex |
 | `.claude-plugin/`, `.agents/plugins/` | the plugin marketplaces of Claude Code and Codex |
 | [`examples/support-faq/`](examples/support-faq/) | a small solution to copy and try: one agent answering from a knowledge base |
 | [`examples/expense-approval/`](examples/expense-approval/) | a pipeline to copy and try: chat, agents, routers, an approval by a person, and its test suite |
 | [`docs/`](docs/) | the documentation |
-| [`contracts/`](contracts/) | snapshots of what an instance publishes; the tests run against them |
+| [`contracts/`](contracts/) | snapshots of what an instance publishes, which the tests run against, and the schema of the offline bundle's manifest |
 
 ## Contributing and support
 

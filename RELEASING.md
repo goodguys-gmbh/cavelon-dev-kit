@@ -8,9 +8,12 @@ or typed for it anywhere.
 
 The same run then builds the standalone executables, attests them, and
 creates the GitHub release that the one-line install downloads from: the five
-executables, `checksums.txt`, `install.sh` and `install.ps1`. It publishes the
-PyPI package `cavelon` (one wheel per executable), updates the Homebrew tap and
-writes the winget manifest when those are set up
+executables, `checksums.txt`, `install.sh` and `install.ps1`. It adds the
+[offline bundle](docs/offline-bundle.md) (`cavelon-bundle-X.Y.Z.tar.gz`, its
+manifest, and their Sigstore signatures, signed keylessly as this workflow, so
+no signing secret exists), publishes the PyPI package `cavelon` (one wheel per
+executable), updates the Homebrew tap and writes the winget manifest when
+those are set up
 ([One-time setup](#one-time-setup)). Unlike npm, PyPI has no staging: the
 wheels are public as soon as the `pypi` job uploads them, so pushing the tag is
 the approval there.
@@ -50,7 +53,13 @@ The CLI, the skills and the plugin share one version.
    executable on its platform, signs it where the signing secrets are set, and
    runs its smoke test; `attest` writes `checksums.txt` and the build
    provenance attestations; `github-release` creates the release (a re-run
-   replaces its files); `pypi`, `homebrew` and `winget` follow. `pypi` builds
+   replaces its files); `offline-bundle`, `pypi`, `homebrew` and `winget`
+   follow. `offline-bundle` builds the bundle from the release's executables
+   and every `plugin-package*` artifact of the run
+   (`packaging/bundle/build-bundle.mjs`), signs the bundle and its manifest
+   with `cosign sign-blob` (Sigstore keyless, bundle format), verifies both
+   against this workflow's identity, attests them, and adds the four files to
+   the release (a re-run replaces them). `pypi` builds
    the wheels from the release's executables
    (`packaging/pypi/build_wheels.py`) and uploads them through PyPI's trusted
    publishing, with attestations. A re-run cannot replace a file PyPI already
@@ -84,6 +93,19 @@ The CLI, the skills and the plugin share one version.
    ```bash
    gh release view vX.Y.Z --json assets --jq '.assets[].name'
    gh release download vX.Y.Z -p cavelon-linux-x64 && gh attestation verify cavelon-linux-x64 --repo goodguys-gmbh/cavelon-dev-kit
+   ```
+
+   It also has the offline bundle, its manifest and their `.sigstore.json`
+   signatures, and the bundle verifies as [docs/offline-bundle.md](docs/offline-bundle.md)
+   says, against this workflow's identity:
+
+   ```bash
+   gh release download vX.Y.Z -p 'cavelon-bundle-*'
+   cosign verify-blob cavelon-bundle-X.Y.Z.tar.gz \
+     --bundle cavelon-bundle-X.Y.Z.tar.gz.sigstore.json \
+     --certificate-identity https://github.com/goodguys-gmbh/cavelon-dev-kit/.github/workflows/release.yml@refs/tags/vX.Y.Z \
+     --certificate-oidc-issuer https://token.actions.githubusercontent.com
+   tar -tzf cavelon-bundle-X.Y.Z.tar.gz | head    # cavelon-bundle-X.Y.Z/ and its files
    ```
 
 8. **Check the PyPI release** has a wheel for each executable and runs:

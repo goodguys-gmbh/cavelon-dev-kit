@@ -156,6 +156,47 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: .github/scripts/test-install-ps1.ps1 -Base http://127.0.0.1:8931 -Version $env:VERSION
+      # --- offline bundle (docs/offline-bundle.md) ---------------------------------
+      # Built from this platform's executable, checked against its manifest, and
+      # installed from its bin folder as the docs say, with no server.
+      - name: The offline bundle builds, matches its manifest, and installs from its bin folder
+        shell: bash
+        run: |
+          (cd cli && npm ci --ignore-scripts && npm run build)
+          node packaging/bundle/build-bundle.mjs --executables release --out bundle-out
+          mkdir bundle-x && tar -xzf "bundle-out/cavelon-bundle-$VERSION.tar.gz" -C bundle-x
+          cd "bundle-x/cavelon-bundle-$VERSION"
+          cmp manifest.json "../../bundle-out/cavelon-bundle-$VERSION.manifest.json"
+          node -e '
+            const { createHash } = require("node:crypto");
+            const fs = require("node:fs");
+            const manifest = JSON.parse(fs.readFileSync("manifest.json", "utf8"));
+            for (const f of manifest.files) {
+              const bytes = fs.readFileSync(f.path);
+              if (bytes.length !== f.size || createHash("sha256").update(bytes).digest("hex") !== f.sha256) throw new Error(`${f.path} does not match the manifest`);
+            }
+            console.log(`${manifest.files.length} files match the manifest`);
+          '
+          # PowerShell needs the Windows form of the path.
+          if [ "$RUNNER_OS" = Windows ]; then bin="$(cygpath -w "$PWD/bin")"; else bin="$PWD/bin"; fi
+          echo "BUNDLE_BIN=$bin" >> "$GITHUB_ENV"
+          if [ "$RUNNER_OS" != Windows ]; then
+            CAVELON_DOWNLOAD_URL="$PWD/bin" sh bin/install.sh --dir "$RUNNER_TEMP/offline" --no-modify-path
+            test "$("$RUNNER_TEMP/offline/cavelon" --version | head -n 1)" = "$VERSION"
+          fi
+      - name: install.ps1 from the offline bundle (Windows PowerShell 5.1 and PowerShell 7)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:CAVELON_DOWNLOAD_URL = $env:BUNDLE_BIN
+          foreach ($shell in 'powershell', 'pwsh') {
+            $dir = Join-Path $env:RUNNER_TEMP "offline-$shell"
+            & $shell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $env:CAVELON_DOWNLOAD_URL 'install.ps1') -InstallDir $dir -NoModifyPath
+            if ($LASTEXITCODE -ne 0) { exit 1 }
+            $ran = & (Join-Path $dir 'cavelon.exe') --version
+            if (($ran | Select-Object -First 1) -ne $env:VERSION) { throw "$shell installed $ran" }
+          }
+      # --- end of the offline bundle ---------------------------------------------------
       - name: The Homebrew formula installs and passes its test
         if: runner.os == 'macOS'
         env:
