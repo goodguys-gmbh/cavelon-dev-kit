@@ -4,15 +4,21 @@ The Cavelon dev-kit has two parts, and you can use either without the other:
 
 - **`cavelon`**, a command-line tool that is also a local MCP server. You or your
   coding agent run it to build, test and activate Cavelon solutions.
-- **The Cavelon plugin** for Claude Code and Codex: four skills that teach the
-  agent the development loop, and the `cavelon` MCP server. Other agents get
-  the same skills and server in their own settings.
+- **The Cavelon plugin**: four skills that teach the agent the development
+  loop, and the `cavelon` MCP server. Claude Code and Codex install it from
+  this repository's marketplace, Gemini CLI as an extension; each release also
+  carries it as a package for Cursor, VS Code with GitHub Copilot and Kiro.
+  Agents can also get the same skills and server in their own settings.
 
 Install `cavelon`, then run `cavelon setup`: it sets up every coding agent on
 your computer and logs you in ([Set up your coding agents](#set-up-your-coding-agents)).
 This page covers that, the ways to do each part by hand, updating and
-removing. When you are done, continue with [Getting started](getting-started.md)
-or [Building a solution with a coding agent](coding-agents.md).
+removing. [Install the kit in your coding agent](install/README.md) has one page
+per client (Claude Code, Codex, Cursor, VS Code with GitHub Copilot, Kiro,
+Gemini CLI, and cloud agents and CI), each with its install, first login,
+check, update and removal. When you are done, continue with
+[Getting started](getting-started.md) or
+[Building a solution with a coding agent](coding-agents.md).
 
 ## Requirements
 
@@ -268,11 +274,17 @@ What it changes, per agent, for your user only (never a project's files):
 | Codex | `codex plugin marketplace add goodguys-gmbh/cavelon-dev-kit`, then `codex plugin add cavelon@cavelon-dev-kit` | from the plugin | from the plugin |
 | Cursor | files | `~/.cursor/mcp.json` | `~/.cursor/skills/` |
 | GitHub Copilot in VS Code | files | VS Code's user `mcp.json`: `~/.config/Code/User/` on Linux, `~/Library/Application Support/Code/User/` on macOS, `%APPDATA%\Code\User\` on Windows | `~/.copilot/skills/` |
-| Gemini CLI | files | `~/.gemini/settings.json` | `~/.gemini/skills/` |
+| Gemini CLI | `gemini extensions install https://github.com/goodguys-gmbh/cavelon-dev-kit --ref v<this version> --consent`, run in an empty folder of `cavelon`'s cache, which Gemini CLI then trusts; files when that release has no extension | from the extension, else `~/.gemini/settings.json` | from the extension, else `~/.gemini/skills/` |
 | Kiro | files | `~/.kiro/settings/mcp.json` | `~/.kiro/skills/` |
 
-`~` is your home folder (`%USERPROFILE%` on Windows). Where Claude Code or
-Codex is there but its command is not on the `PATH` (for example only as an
+`~` is your home folder (`%USERPROFILE%` on Windows). Cursor, VS Code and Kiro
+keep the files although their plugin packages exist: Cursor and VS Code install
+plugins only from their own window (VS Code's are off until a setting turns
+them on), and a Kiro power loads only when a prompt names its keywords, while
+the files always work ([Install the kit in your coding agent](install/README.md)
+shows the plugins). When `setup` installs Gemini CLI's extension, it takes out
+the files an earlier `setup` wrote there. Where Claude Code, Codex or Gemini
+CLI is there but its command is not on the `PATH` (for example only as an
 editor extension), `setup` writes its files instead: the server in
 `~/.claude.json` or `~/.codex/config.toml`, the skills in `~/.claude/skills/`
 or `~/.agents/skills/`. It follows `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and
@@ -331,7 +343,11 @@ To install it by hand instead of `cavelon setup`, or for a project instead of
 for you. The plugin adds four skills (`cavelon-loop`, `cavelon-authoring`,
 `cavelon-testing`, `cavelon-long-running`) and the `cavelon` MCP server to your
 agent. The repository [goodguys-gmbh/cavelon-dev-kit](https://github.com/goodguys-gmbh/cavelon-dev-kit)
-is the plugin marketplace for both clients.
+is the plugin marketplace for Claude Code and Codex (and for Copilot CLI and
+VS Code, which read the same format). For the other clients, see
+[Cursor](install/cursor.md), [VS Code and Copilot CLI](install/vscode-copilot.md),
+[Kiro](install/kiro.md) and [Gemini CLI](install/gemini-cli.md); each release
+carries their packages ([The packages](install/README.md#the-packages)).
 
 ### Claude Code
 
@@ -393,8 +409,9 @@ shows how to brief the agent and review its work.
 
 ## Agents without a plugin
 
-`cavelon setup` gives Cursor, GitHub Copilot in VS Code, Gemini CLI and Kiro
-the skills and the MCP server for your user, in every folder. To put them into
+`cavelon setup` gives Cursor, GitHub Copilot in VS Code and Kiro (and Gemini
+CLI while its extension cannot be installed) the skills and the MCP server for
+your user, in every folder. To put them into
 one solution's repository instead, so everyone who clones it gets them, or for
 Pi or any other agent that reads `AGENTS.md` and runs shell commands,
 `cavelon init` writes the skills and the MCP entry into the solution folder
@@ -490,8 +507,10 @@ It names what is behind, each with its update:
   above). Not for `npx`, which already starts the newest release of its range.
 - **The Cavelon plugin**, whose skills and MCP entry change only when you update
   it: its MCP entry tells the server the plugin's version
-  (`CAVELON_PLUGIN_VERSION`), and the warning names the update commands of the
-  agent that started the server (Claude Code or Codex). A plugin from 0.1.8 or
+  (`CAVELON_PLUGIN_VERSION`), and the warning names how the agent that started
+  the server updates it: the commands of Claude Code, Codex, Gemini CLI or
+  Copilot CLI, or for Cursor, VS Code and Kiro the update section of its
+  [install page](install/README.md). A plugin from 0.1.8 or
   older does not set that; in Claude Code the server then reads the version
   from the plugin's own manifest (`.claude-plugin/plugin.json` in the folder
   Claude Code names in `CLAUDE_PLUGIN_ROOT`), so you hear of it even through
@@ -529,6 +548,7 @@ claude plugin marketplace update cavelon-dev-kit       # Claude Code
 claude plugin update cavelon@cavelon-dev-kit
 codex plugin marketplace upgrade cavelon-dev-kit        # Codex
 codex plugin add cavelon@cavelon-dev-kit
+gemini extensions update cavelon                        # Gemini CLI
 cavelon init --update                                   # in a solution set up with --agents
 ```
 
@@ -551,7 +571,11 @@ cavelon setup --remove                        # what setup changed in your agent
 cavelon logout --all                          # deletes every stored token
 claude plugin uninstall cavelon@cavelon-dev-kit
 codex plugin remove cavelon@cavelon-dev-kit
+gemini extensions uninstall cavelon
 ```
+
+A plugin you installed in another client by hand comes out as its page says
+([Install the kit in your coding agent](install/README.md)).
 
 Then remove `cavelon` the way it came. Installed with the one-line install, on
 macOS or Linux:

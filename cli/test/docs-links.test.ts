@@ -19,6 +19,9 @@ const PAGES = [
   ...readdirSync(path.join(ROOT, "docs"))
     .filter((f) => f.endsWith(".md"))
     .map((f) => `docs/${f}`),
+  ...readdirSync(path.join(ROOT, "docs", "install"))
+    .filter((f) => f.endsWith(".md"))
+    .map((f) => `docs/install/${f}`),
 ];
 
 /** GitHub's anchor for a heading: lower case, punctuation dropped, spaces as dashes. */
@@ -46,6 +49,20 @@ describe("documentation links", () => {
     for (const page of ["installation", "getting-started", "coding-agents", "concepts", "commands", "mcp", "limits", "troubleshooting", "security", "faq"]) {
       expect(readme, page).toContain(`(docs/${page}.md)`);
       expect(existsSync(path.join(ROOT, "docs", `${page}.md`)), page).toBe(true);
+    }
+  });
+
+  it("have an install page per client, each with the same sections, linked from the README and the installation page", () => {
+    const readme = readFileSync(path.join(ROOT, "README.md"), "utf8");
+    const installation = readFileSync(path.join(ROOT, "docs", "installation.md"), "utf8");
+    const index = readFileSync(path.join(ROOT, "docs", "install", "README.md"), "utf8");
+    expect(readme).toContain("(docs/install/README.md)");
+    expect(installation).toContain("(install/README.md)");
+    for (const page of ["claude-code", "codex", "cursor", "vscode-copilot", "kiro", "gemini-cli", "cloud-and-ci"]) {
+      expect(index, page).toContain(`(${page}.md)`);
+      // The update notice links to #update (update-check.ts).
+      const headings = anchors(path.join(ROOT, "docs", "install", `${page}.md`));
+      for (const section of ["install", "log-in", "check", "update", "remove"]) expect(headings.has(section), `${page}: ${section}`).toBe(true);
     }
   });
 

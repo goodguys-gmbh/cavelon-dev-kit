@@ -448,8 +448,9 @@ export const setup: CommandSpec = {
   summary: "Set up your coding agents for Cavelon and log in, in one guided step.",
   description:
     "Finds Claude Code, Codex, Cursor, VS Code with GitHub Copilot, Gemini CLI and Kiro, shows what it will change for each, asks once\n" +
-    "and does it: Claude Code and Codex get the Cavelon plugin through their own plugin command; the others get the `cavelon` MCP\n" +
-    "server in their user MCP configuration and the skills in their user skills folder. It touches nothing else in those files and\n" +
+    "and does it: Claude Code and Codex get the Cavelon plugin through their own plugin command, Gemini CLI the extension of this\n" +
+    "release (or the files, when the release has none); the others get the `cavelon` MCP server in their user MCP configuration\n" +
+    "and the skills in their user skills folder. It touches nothing else in those files and\n" +
     "records what it did, so --remove undoes exactly that. Then it logs in if needed, choosing the tenant by name as `login` does.\n" +
     "The server starts as `cavelon mcp` when cavelon is installed, otherwise through npx. --check reports what is set up and\n" +
     "working: each agent's entry, the MCP server starting, and the login. An agent found but never set up for Cavelon is\n" +

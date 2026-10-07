@@ -1,20 +1,25 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { bundledSkills, generatedCopy, INSTALLED_MCP_COMMAND, mcpCommand, type Skill } from "./agents.js";
-import { readTextFile, writeFileAtomic } from "./fsutil.js";
+import { readJsonFile, readTextFile, writeFileAtomic } from "./fsutil.js";
 import { findProgram } from "./git.js";
 import { isGenerated, removeBlock, removeJsonEntry, upsertBlock, upsertJsonEntry, type BlockResult } from "./markers.js";
-import { homeDir } from "./paths.js";
+import { cacheDir, homeDir } from "./paths.js";
 import { runProgram } from "./run-program.js";
+import { KIT_VERSION } from "./version.js";
 
 /**
  * The coding agents `cavelon setup` sets up for the person, at user level:
- * through the agent's own plugin command where there is one (Claude Code and
- * Codex), otherwise with the `cavelon` MCP server in the agent's user MCP
- * configuration and the skills in its user skills folder. Every change is one
- * the kit can find and undo again: a JSON entry it recognises as its own, a
- * TOML block between its markers, skill files marked as generated, a plugin it
- * installed. Where each agent keeps these is in its own documentation, cited
+ * through the agent's own plugin command where it installs without asking
+ * (Claude Code, Codex, and Gemini CLI from the release's extension), otherwise
+ * with the `cavelon` MCP server in the agent's user MCP configuration and the
+ * skills in its user skills folder. Cursor, VS Code and Kiro keep the files:
+ * their plugins install only through their own window (Cursor, and VS Code,
+ * where plugins are off until a setting turns them on), or load only when a
+ * prompt names the power's keywords (Kiro), while the files always work.
+ * Every change is one the kit can find and undo again: a JSON entry it
+ * recognises as its own, a TOML block between its markers, skill files marked
+ * as generated, a plugin it installed. Where each agent keeps these is in its own documentation, cited
  * in docs/installation.md.
  */
 
@@ -24,6 +29,11 @@ type Env = Record<string, string | undefined>;
 export const MARKETPLACE_SOURCE = "goodguys-gmbh/cavelon-dev-kit";
 export const MARKETPLACE = "cavelon-dev-kit";
 export const PLUGIN_ID = "cavelon@cavelon-dev-kit";
+/** Gemini CLI installs extensions from a GitHub repository's release, by the tag. */
+export const GEMINI_EXTENSION = "cavelon";
+export const GEMINI_SOURCE = `https://github.com/${MARKETPLACE_SOURCE}`;
+
+type PluginKind = "claude" | "codex" | "gemini";
 
 export type McpFile =
   | { file: string; format: "json"; keys: string[]; extra: Record<string, unknown> }
@@ -37,7 +47,7 @@ export interface SetupAgent {
   /** User folders that show it is installed. */
   folders: string[];
   /** The agent installs plugins itself. */
-  plugin?: "claude" | "codex";
+  plugin?: PluginKind;
   /** Its user-level MCP configuration. */
   mcp: McpFile;
   /** Its user-level skills folder. */
@@ -54,11 +64,16 @@ function vscodeUserDir(env: Env, platform: NodeJS.Platform): string {
 
 const json = (file: string, key = "mcpServers", extra: Record<string, unknown> = {}): McpFile => ({ file, format: "json", keys: [key, "cavelon"], extra });
 
+/** Gemini CLI's user folder. */
+function geminiHome(env: Env): string {
+  return path.join(env.GEMINI_CLI_HOME || homeDir(env), ".gemini");
+}
+
 export function setupAgents(env: Env, platform: NodeJS.Platform = process.platform): SetupAgent[] {
   const home = homeDir(env);
   const claudeDir = env.CLAUDE_CONFIG_DIR || path.join(home, ".claude");
   const codexDir = env.CODEX_HOME || path.join(home, ".codex");
-  const geminiDir = path.join(env.GEMINI_CLI_HOME || home, ".gemini");
+  const geminiDir = geminiHome(env);
   const vscode = vscodeUserDir(env, platform);
   return [
     {
@@ -101,6 +116,7 @@ export function setupAgents(env: Env, platform: NodeJS.Platform = process.platfo
       label: "Gemini CLI",
       commands: ["gemini"],
       folders: [geminiDir],
+      plugin: "gemini",
       mcp: json(path.join(geminiDir, "settings.json")),
       skills: path.join(geminiDir, "skills"),
     },
@@ -261,7 +277,7 @@ function display(program: string, args: string[]): string {
 }
 
 /** The plugin's state as the agent reports it, or why it could not be read. */
-async function pluginState(kind: "claude" | "codex", program: string, env: Env): Promise<{ marketplace: boolean; installed: boolean; enabled: boolean } | { error: string }> {
+async function pluginState(kind: PluginKind, program: string, env: Env): Promise<{ marketplace: boolean; installed: boolean; enabled: boolean } | { error: string }> {
   const read = async (args: string[]): Promise<{ value: unknown } | { error: string }> => {
     const result = await runProgram(program, args, { env, timeoutMs: LIST_TIMEOUT_MS });
     if (result.code !== 0) return { error: result.error ?? `\`${display(program, args)}\` failed: ${firstLine(result.stderr || result.stdout)}` };
@@ -271,6 +287,12 @@ async function pluginState(kind: "claude" | "codex", program: string, env: Env):
       return { error: `\`${display(program, args)}\` did not answer in JSON` };
     }
   };
+  if (kind === "gemini") {
+    // Read where Gemini CLI's docs keep extensions: `extensions list` writes its JSON to stderr, cut off at 64 KiB through a pipe.
+    const manifest = await readJsonFile<{ name?: unknown }>(path.join(geminiHome(env), "extensions", GEMINI_EXTENSION, "gemini-extension.json"));
+    // Gemini CLI has no marketplace: the extension names its source itself.
+    return { marketplace: true, installed: manifest?.name === GEMINI_EXTENSION, enabled: true };
+  }
   const plugins = await read(["plugin", "list", "--json"]);
   if ("error" in plugins) return { error: plugins.error };
   const markets = await read(["plugin", "marketplace", "list", "--json"]);
@@ -292,7 +314,31 @@ function firstLine(text: string): string {
   return (text.split(/\r?\n/).find((l) => l.trim()) ?? "").trim().slice(0, 300);
 }
 
-function pluginCommands(kind: "claude" | "codex") {
+function lastLine(text: string): string {
+  return (text.split(/\r?\n/).findLast((l) => l.trim()) ?? "").trim().slice(0, 300);
+}
+
+/**
+ * The folder Gemini CLI's commands run in: `extensions install` trusts the
+ * folder it runs in, so that is an empty one of the kit's, never the person's.
+ */
+async function geminiFolder(kind: PluginKind, env: Env): Promise<string | undefined> {
+  if (kind !== "gemini") return undefined;
+  const dir = path.join(cacheDir(env), "gemini");
+  await fs.mkdir(dir, { recursive: true, mode: 0o700 });
+  return dir;
+}
+
+function pluginCommands(kind: PluginKind) {
+  if (kind === "gemini") {
+    return {
+      marketplaceAdd: [],
+      marketplaceRemove: [],
+      // This release's extension, so the skills match this cavelon; --consent is the person's yes to setup's plan.
+      install: ["extensions", "install", GEMINI_SOURCE, "--ref", `v${KIT_VERSION}`, "--consent"],
+      uninstall: ["extensions", "uninstall", GEMINI_EXTENSION],
+    };
+  }
   return {
     marketplaceAdd: ["plugin", "marketplace", "add", MARKETPLACE_SOURCE],
     marketplaceRemove: ["plugin", "marketplace", "remove", MARKETPLACE],
@@ -308,23 +354,23 @@ function pluginCommands(kind: "claude" | "codex") {
  */
 export async function planAgent(agent: SetupAgent, found: Found, env: Env, command: ServerCommand, skills: Skill[], platform: NodeJS.Platform = process.platform): Promise<AgentPlan> {
   const usePlugin = Boolean(agent.plugin && found.program);
+  const state = usePlugin ? await pluginState(agent.plugin!, found.program!, env) : undefined;
   const plan: AgentPlan = { agent, found, method: usePlugin ? "plugin" : "files", changes: [] };
-  if (usePlugin) {
+  if (usePlugin && state) {
     const kind = agent.plugin!;
     const program = found.program!;
     const commands = pluginCommands(kind);
-    const state = await pluginState(kind, program, env);
     if ("error" in state) {
       plan.changes.push({ kind: "plugin", summary: "install the Cavelon plugin", target: display(program, commands.install), outcome: "failed", reason: state.error });
       return plan;
     }
     plan.plugin = state;
-    if (!state.marketplace) {
+    if (!state.marketplace && commands.marketplaceAdd.length) {
       plan.changes.push({ kind: "marketplace", summary: "add the Cavelon plugin marketplace", target: display(program, commands.marketplaceAdd), outcome: "planned" });
     }
     plan.changes.push({
       kind: "plugin",
-      summary: "install the Cavelon plugin (skills and tools)",
+      summary: kind === "gemini" ? "install the Cavelon extension (skills and tools)" : "install the Cavelon plugin (skills and tools)",
       target: display(program, commands.install),
       outcome: state.installed ? "unchanged" : "planned",
       ...(state.installed && !state.enabled ? { reason: `it is installed but turned off; turn it on in ${agent.label}` } : {}),
@@ -433,16 +479,28 @@ export async function applyPlan(plan: AgentPlan, env: Env, command: ServerComman
     }
     try {
       if (change.kind === "marketplace" || change.kind === "plugin") {
-        const commands = pluginCommands(plan.agent.plugin!);
+        const kind = plan.agent.plugin!;
+        const commands = pluginCommands(kind);
         const args = change.kind === "marketplace" ? commands.marketplaceAdd : commands.install;
-        const result = await runProgram(plan.found.program!, args, { env, timeoutMs: RUN_TIMEOUT_MS });
+        const result = await runProgram(plan.found.program!, args, { env, timeoutMs: RUN_TIMEOUT_MS, cwd: await geminiFolder(kind, env) });
         if (result.code !== 0) {
-          done.push({ ...change, outcome: "failed", reason: result.error ?? firstLine(result.stderr || result.stdout) ?? `exit ${result.code}` });
+          if (kind === "gemini") {
+            // Gemini CLI prints the consent it was given first and its error last.
+            const reason = result.error ?? (lastLine(`${result.stdout}\n${result.stderr}`) || `exit ${result.code}`);
+            // A release without the extension (one before it, or a build from a clone): the files work as well.
+            done.push({ ...change, outcome: "skipped", reason: `${reason}; the tools server and skills go into Gemini CLI's files instead` });
+            done.push(await mcpChange(plan.agent.mcp, command, true, record));
+            done.push(await skillsChange(plan.agent.skills, skills, true, record));
+            break;
+          }
+          done.push({ ...change, outcome: "failed", reason: result.error ?? (firstLine(result.stderr || result.stdout) || `exit ${result.code}`) });
           break;
         }
         if (change.kind === "marketplace") record.marketplace_added = true;
         else record.plugin_installed = true;
         done.push({ ...change, outcome: "done" });
+        // The extension replaces what an earlier setup wrote into Gemini CLI's files, whose skills would hide the extension's.
+        if (kind === "gemini" && change.kind === "plugin") done.push(...(await removeFiles(plan.agent, record, skills, new Set())));
       } else if (change.kind === "mcp") {
         done.push(await mcpChange(plan.agent.mcp, command, true, record));
       } else {
@@ -472,14 +530,14 @@ export async function removeAgent(agent: SetupAgent, record: AgentRecord, env: E
     const found = await findAgent(agent, env);
     const commands = pluginCommands(agent.plugin!);
     const steps: Array<[ChangeKind, string[], string, keyof AgentRecord]> = [];
-    if (record.plugin_installed) steps.push(["plugin", commands.uninstall, "uninstall the Cavelon plugin", "plugin_installed"]);
+    if (record.plugin_installed) steps.push(["plugin", commands.uninstall, `uninstall the Cavelon ${agent.plugin === "gemini" ? "extension" : "plugin"}`, "plugin_installed"]);
     if (record.marketplace_added) steps.push(["marketplace", commands.marketplaceRemove, "remove the Cavelon plugin marketplace", "marketplace_added"]);
     for (const [kind, args, summary, key] of steps) {
       if (!found.program) {
         changes.push({ kind, summary, target: [agent.commands[0], ...args].join(" "), outcome: "failed", reason: `${agent.commands[0]} is not on the PATH; run it yourself` });
         continue;
       }
-      const result = await runProgram(found.program, args, { env, timeoutMs: RUN_TIMEOUT_MS });
+      const result = await runProgram(found.program, args, { env, timeoutMs: RUN_TIMEOUT_MS, cwd: await geminiFolder(agent.plugin!, env) });
       if (result.code === 0) {
         delete record[key];
         changes.push({ kind, summary, target: display(found.program, args), outcome: "removed" });
@@ -488,6 +546,13 @@ export async function removeAgent(agent: SetupAgent, record: AgentRecord, env: E
       }
     }
   }
+  changes.push(...(await removeFiles(agent, record, skills, sharedSkillDirs)));
+  return changes;
+}
+
+/** Take out the MCP entry and skill files setup recorded for an agent. */
+async function removeFiles(agent: SetupAgent, record: AgentRecord, skills: Skill[], sharedSkillDirs: Set<string>): Promise<Change[]> {
+  const changes: Change[] = [];
   if (record.mcp) {
     const change = await removeMcp(agent.mcp, record.mcp);
     if (change.outcome !== "failed" && change.outcome !== "skipped") delete record.mcp;
@@ -586,20 +651,23 @@ export interface AgentCheck {
 export async function checkAgent(agent: SetupAgent, env: Env, record: AgentRecord | undefined, platform: NodeJS.Platform = process.platform): Promise<AgentCheck> {
   const found = await findAgent(agent, env, platform);
   const check: AgentCheck = { name: agent.name, label: agent.label, found: Boolean(found.program || found.folder), method: null, ok: true, details: [], servers: [] };
-  if (agent.plugin && found.program) {
+  const state = agent.plugin && found.program ? await pluginState(agent.plugin, found.program, env) : undefined;
+  // Gemini CLI without the extension may have the files instead (setup's fallback).
+  const viaFiles = !state || (agent.plugin === "gemini" && ("error" in state || !state.installed));
+  const what = agent.plugin === "gemini" ? "extension" : "plugin";
+  if (state && !viaFiles) {
     check.method = "plugin";
-    const state = await pluginState(agent.plugin, found.program, env);
     if ("error" in state) {
       check.ok = false;
       check.details.push(`could not ask ${agent.label} about its plugins: ${state.error}`);
     } else if (!state.installed) {
       check.ok = false;
-      check.details.push("the Cavelon plugin is not installed");
+      check.details.push(`the Cavelon ${what} is not installed`);
     } else if (!state.enabled) {
       check.ok = false;
-      check.details.push(`the Cavelon plugin is installed but turned off; turn it on in ${agent.label}`);
+      check.details.push(`the Cavelon ${what} is installed but turned off; turn it on in ${agent.label}`);
     } else {
-      check.details.push("the Cavelon plugin is installed");
+      check.details.push(`the Cavelon ${what} is installed`);
       // The plugin starts the installed cavelon when there is one, otherwise npx.
       if (platform !== "win32") check.servers.push(await serverCommand(env, platform));
     }

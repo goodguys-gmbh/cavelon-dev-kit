@@ -116,3 +116,19 @@ an operation the list does not name, or misses one it does.
 
 When the kit supports several instance versions, each gets its own folder
 here, and the contract tests run against every one.
+
+## `clients/`
+
+The schemas the coding agents publish for their plugin formats, which
+`cli/test/plugin-packages.test.ts` checks the release's packages against:
+
+- `agent-plugins-1.0.0/plugin.schema.json` and `mcp.schema.json`: the
+  [Agent Plugins](https://agent-plugins.org) 1.0.0 manifest and MCP file, which
+  Cursor, VS Code with GitHub Copilot, Copilot CLI and Kiro read. Downloaded on
+  2026-10-07 from `https://agent-plugins.org/schemas/1.0.0/`.
+
+Gemini CLI publishes no schema for `gemini-extension.json`; the test holds the
+rules its loader applies, and CI runs `gemini extensions validate`. CI also
+compares the kept schemas with the published ones and warns when they differ
+(`.github/scripts/test-plugin-packages.sh`); refresh them by downloading the
+same URLs again.

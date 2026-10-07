@@ -1,9 +1,9 @@
 /* global process */
-// A stand-in for the `claude`, `codex` and `cavelon` commands in the setup
+// A stand-in for the `claude`, `codex`, `gemini` and `cavelon` commands in the setup
 // tests: it answers the plugin commands `cavelon setup` runs, keeps what is
 // installed in a file in the test's home folder, and logs every call. As
 // `cavelon mcp` it answers an MCP initialize. It never touches a real agent.
-import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 const [agent, ...args] = process.argv.slice(2);
@@ -31,6 +31,15 @@ if (agent === "cavelon" && call === "mcp") {
     out(JSON.stringify({ jsonrpc: "2.0", id: request.id, result: { protocolVersion: request.params.protocolVersion, capabilities: {}, serverInfo: { name: "cavelon", version: "9.9.9" } } }));
   });
   process.stdin.on("end", () => process.exit(0));
+} else if (agent === "gemini" && /^extensions install https:\/\/github\.com\/goodguys-gmbh\/cavelon-dev-kit --ref v\S+ --consent$/.test(call)) {
+  // Gemini CLI trusts the folder an install runs in; the test checks which one that was.
+  writeFileSync(path.join(home, ".fake-gemini.cwd"), process.cwd());
+  const extension = path.join(process.env.GEMINI_CLI_HOME || home, ".gemini", "extensions", "cavelon");
+  mkdirSync(extension, { recursive: true });
+  writeFileSync(path.join(extension, "gemini-extension.json"), JSON.stringify({ name: "cavelon", version: "0.1.2" }));
+  out('Extension "cavelon" installed successfully and enabled.');
+} else if (agent === "gemini" && call === "extensions uninstall cavelon") {
+  rmSync(path.join(process.env.GEMINI_CLI_HOME || home, ".gemini", "extensions", "cavelon"), { recursive: true, force: true });
 } else if (call === "plugin list --json") {
   if (agent === "claude") out(state.plugins.map((id) => ({ id, version: "0.1.2", scope: "user", enabled: true })));
   else out({ installed: state.plugins.map((id) => ({ pluginId: id, installed: true, enabled: true })) });

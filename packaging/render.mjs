@@ -1,17 +1,24 @@
-// Write the package manager files for the release in ./release, from its
-// checksums.txt and the version in cli/package.json (which the release
-// workflow checks against the tag). Run it from the repository's root:
+// Write the package manager files and the plugin packages for the release.
+// Run it from the repository's root:
 //
 //   node packaging/render.mjs homebrew [--base-url <url>]
 //     packaging-out/homebrew/Formula/cavelon.rb, the formula for the tap goodguys-gmbh/homebrew-cavelon
 //   node packaging/render.mjs winget [--base-url <url>]
 //     packaging-out/winget/manifests/g/goodguys/Cavelon/<version>/*.yaml, the manifest for microsoft/winget-pkgs
+//   node packaging/render.mjs plugins [--server auto|installed] [--out <dir>]
+//     packaging-out/plugins/*.tar.gz, the plugin packages of the clients without
+//     a marketplace in this repository (packaging/plugins.mjs says which), and
+//     each one unpacked in packaging-out/plugins/unpacked/
 //
-// --base-url names the folder the executables are downloaded from (default: the
-// GitHub release of that version); CI points it at a local server to test.
+// homebrew and winget read the release's checksums.txt in ./release; --base-url
+// names the folder the executables are downloaded from (default: the GitHub
+// release of that version), which CI points at a local server to test. Every
+// kind takes the version from cli/package.json, which the release workflow
+// checks against the tag.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
+import { renderPlugins } from "./plugins.mjs";
 
 const REPOSITORY = "goodguys-gmbh/cavelon-dev-kit";
 const HOMEPAGE = `https://github.com/${REPOSITORY}`;
@@ -21,12 +28,22 @@ const WINGET_ID = "goodguys.Cavelon";
 const WINGET_MANIFEST_VERSION = "1.9.0";
 const OUT = path.resolve("packaging-out");
 
-const { values, positionals } = parseArgs({ allowPositionals: true, options: { "base-url": { type: "string" } } });
+const { values, positionals } = parseArgs({
+  allowPositionals: true,
+  options: { "base-url": { type: "string" }, server: { type: "string" }, out: { type: "string" } },
+});
 const [kind] = positionals;
 const version = JSON.parse(readFileSync(path.resolve("cli", "package.json"), "utf8")).version;
-if (!["homebrew", "winget"].includes(kind) || !/^\d+\.\d+\.\d+$/.test(version)) {
-  throw new Error("Usage, from the repository's root: node packaging/render.mjs homebrew|winget [--base-url <url>]");
+if (!["homebrew", "winget", "plugins"].includes(kind) || !/^\d+\.\d+\.\d+$/.test(version)) {
+  throw new Error("Usage, from the repository's root: node packaging/render.mjs homebrew|winget [--base-url <url>] | plugins [--server auto|installed] [--out <dir>]");
 }
+
+if (kind === "plugins") {
+  const out = path.resolve(values.out ?? path.join(OUT, "plugins"));
+  for (const file of renderPlugins({ root: path.resolve("."), version, server: values.server ?? "auto", out })) process.stdout.write(`${file}\n`);
+  process.exit(0);
+}
+
 let base = values["base-url"] ?? `${HOMEPAGE}/releases/download/v${version}`;
 while (base.endsWith("/")) base = base.slice(0, -1);
 

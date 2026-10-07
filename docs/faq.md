@@ -28,9 +28,12 @@ with example briefs and prompts to copy.
 
 Claude Code, Codex, Cursor, GitHub Copilot in VS Code, Gemini CLI and Kiro:
 `cavelon setup` sets up each one it finds on your computer, Claude Code and
-Codex with the plugin, the others with the skills and the MCP server in their
-user settings ([Installation](installation.md#set-up-your-coding-agents)).
-`cavelon init --agents <name>` writes the same into one repository instead.
+Codex with the plugin, Gemini CLI with the extension, the others with the
+skills and the MCP server in their user settings
+([Installation](installation.md#set-up-your-coding-agents)). Each has an
+[install page](install/README.md), with the plugin packages for Cursor,
+VS Code and Kiro. `cavelon init --agents <name>` writes the same into one
+repository instead.
 Any other agent that reads `AGENTS.md` and runs shell commands can use the CLI
 directly. See [Installation](installation.md#agents-without-a-plugin).
 
@@ -62,8 +65,9 @@ The plugin starts whichever you have.
 
 For each coding agent it finds, it shows what it will change and asks first:
 it installs the Cavelon plugin through Claude Code's and Codex's own plugin
-commands, and adds the `cavelon` MCP server and the Cavelon skills to the user
-settings of Cursor, VS Code with GitHub Copilot, Gemini CLI and Kiro. In a file
+commands and the Cavelon extension through Gemini CLI's, and adds the
+`cavelon` MCP server and the Cavelon skills to the user settings of Cursor,
+VS Code with GitHub Copilot and Kiro. In a file
 that holds your other settings it changes only its own `cavelon` entry, and it
 leaves a `cavelon` server you configured yourself alone. `cavelon setup --check`
 shows what is set up and working; `cavelon setup --remove` undoes exactly what

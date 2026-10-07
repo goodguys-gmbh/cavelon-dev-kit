@@ -43,7 +43,7 @@ export function runProgram(
 ): Promise<ProgramResult> {
   const how = invocation(file, args, options.env);
   return new Promise((resolve) => {
-    execFile(
+    const child = execFile(
       how.file,
       how.args,
       {
@@ -63,6 +63,8 @@ export function runProgram(
         resolve({ code: null, stdout, stderr, error: err.message });
       },
     );
+    // Nobody answers: a program that asks (Gemini CLI's folder trust, a fallback to git clone) reads no and ends, rather than waiting out the timeout.
+    child.stdin?.end();
   });
 }
 

@@ -15,11 +15,11 @@ issue.
 | `cli/src/commands/` | one file per command group; each command declares its options, help text and whether it is read-only |
 | `cli/test/` | the tests, and the fake server that serves the contract snapshots |
 | `cli/scripts/` | build helpers: copying the skills into the package, building the standalone executable, trimming and cleaning the contract snapshots, generating `docs/commands.md` |
-| `plugin/` | the Cavelon plugin: `skills/` (the one source of the skills), `.mcp.json`, and a manifest each for Claude Code and Codex |
+| `plugin/` | the Cavelon plugin: `skills/` (the one source of the skills), `.mcp.json`, and a manifest each for Claude Code and Codex; the other clients' packages are rendered from it |
 | `.claude-plugin/`, `.agents/plugins/` | the marketplaces of Claude Code and Codex, naming `plugin/` |
-| `contracts/` | snapshots of what an instance publishes, and the list of operations the kit uses |
+| `contracts/` | snapshots of what an instance publishes, the list of operations the kit uses, and the published schemas of the clients' plugin formats (`clients/`) |
 | `install.sh`, `install.ps1` | the one-line installers of the standalone executable, published with each release |
-| `packaging/` | what the release workflow writes for Homebrew and winget, the PyPI wheel builder (`pypi/`, standard-library Python), and the macOS signing entitlements |
+| `packaging/` | what the release workflow writes for Homebrew and winget, the plugin packages for Cursor, VS Code, Kiro and Gemini CLI (`plugins.mjs`: `node packaging/render.mjs plugins`), the PyPI wheel builder (`pypi/`, standard-library Python), and the macOS signing entitlements |
 | `examples/` | solution repositories to copy: `support-faq/` (one agent and a knowledge base) and `expense-approval/` (a pipeline with an approval); the tests validate them |
 | `docs/` | the user documentation |
 
@@ -77,6 +77,27 @@ through the system's credential store against the fake server, `init --agents`
 with the embedded skills, and an MCP handshake), and tests `install.sh` and
 `install.ps1` (Windows PowerShell 5.1 and PowerShell 7) and the Homebrew
 formula against them, served from a local folder: nothing is published.
+
+### The plugin packages
+
+`plugin/` is the one source of the plugin. Claude Code and Codex install it as
+it is; for the other clients, each release attaches packages rendered from it
+by `packaging/plugins.mjs` (the Agent Plugins format for Cursor, VS Code with
+GitHub Copilot and Kiro, a Gemini CLI extension per platform, and the
+marketplace for Claude Code and Codex offline). Render them from the
+repository's root; Node.js is all it needs:
+
+```bash
+node packaging/render.mjs plugins                    # packaging-out/plugins/*.tar.gz, and each unpacked
+node packaging/render.mjs plugins --server installed # the MCP entry starts the cavelon on the PATH, never npx
+bash .github/scripts/test-plugin-packages.sh         # Gemini CLI validates, installs and lists its extension
+```
+
+`cli/test/plugin-packages.test.ts` checks the manifests against the Agent
+Plugins schemas kept in `contracts/clients/` and Gemini CLI's own rules, and
+that every render gives the same bytes. When a client changes its format,
+change `packaging/plugins.mjs` and the client's page in `docs/install/`, and
+say in the changelog what users of the old package do.
 
 ## How the kit is built
 
