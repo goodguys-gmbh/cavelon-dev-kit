@@ -189,13 +189,15 @@ the Admin. Then:
 - A direct workflow Tool Call write with confirmation enabled answers
   `confirmation_unavailable`. For an intended unattended write only, turn
   that query setting off and retain model-only arguments and trigger
-  identity checks. The current direct-node `max_calls` budget counts across
-  nodes, `for_each`, concurrent branches and resume; expect
-  `tool_call_limit_reached` on the next call, a failed node and `refused`
-  run evidence. Read queries have no run cap. Agent-stage workflow calls
-  still use per-turn counting; shared Agent/direct enforcement is a server
-  acceptance gate. Ordinary chat limits are unchanged. Fake kit tests prove
-  response handling, not this shared runtime budget or workflow acceptance.
+  identity checks. The shared `max_calls` budget counts across direct nodes,
+  Agent stages, `for_each`, concurrent branches and resume; expect
+  `tool_call_limit_reached` on the next call and `refused` run evidence.
+  A direct node fails with that code; an Agent receives the tool's refusal.
+  Test both mixed-call orders, repeated Agent stages, a fresh
+  run's reset and a resumed run's restored count. Agent per-turn limits also
+  apply. Read queries have no run cap, and ordinary chat limits are unchanged.
+  Fake kit tests prove response handling, not this shared runtime budget or
+  workflow acceptance.
 - `cavelon db runs <query>` lists each run's outcome and error code (never a
   value or a row), and `cavelon trace` shows the code a failed call answered
   the model with on the tool's span (`error_code`); `cavelon explain <code>`

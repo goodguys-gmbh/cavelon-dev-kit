@@ -162,7 +162,6 @@ describe("published write query interfaces", () => {
     const result = await cli(sb, ["explain", code, "--json"]); expect(result.code).toBe(0); expect(JSON.stringify(result.json())).toContain(entry.message);
     if (code === "tool_call_limit_reached") {
       expect(entry.message).toContain("Tool Call node"); expect(entry.hint).toContain("max_calls");
-      const docs = readFileSync(path.join(CONTRACTS, "../../docs/connect-a-database.md"), "utf8"); expect(docs).toContain(code); expect(docs).toMatch(/Agent-stage.*per.turn/);
     }
   });
   it.each(["allows-writes", "write-privileges-acknowledged", "password"])("connection commands accept no --%s field and send no update", async field => {

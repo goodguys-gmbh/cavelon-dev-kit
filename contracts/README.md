@@ -130,9 +130,12 @@ enum, and eight codes (`writes_not_allowed`, `too_many_rows_affected`,
 from its corpus renderer. Texts are scrubbed as below. Connection management,
 reader overrides, query confirmation/nonce and activation entries, unrelated
 schemas, capabilities and all recorded defaults stay as they were. A
-response field absent on an older instance stays unknown. The direct-node
-budget is published; shared Agent/direct workflow counting remains a server
-acceptance and release gate, which these snapshots and fake tests do not prove.
+response field absent on an older instance stays unknown. A later merged
+instance build counts Agent stages and direct nodes together against the
+workflow run's budget, preserving per-turn limits and leaving reads uncapped.
+Its relevant HTTP, package, catalog and administration-page shapes are
+unchanged. Snapshots and fake tests prove interfaces; runtime enforcement
+needs the instance's execution evidence.
 
 The tests switch features on in the fake server where a command needs them
 (personal access tokens, the operations API, Sandboxes, Masterloop, archive

@@ -529,15 +529,15 @@ graph_edges:
 - **Write confirmation and budget.** Every direct Tool Call node refuses a
   write with `requires_confirmation: true` (`confirmation_unavailable`),
   because it cannot wait for the person's click; `validate` warns. Turn it
-  off only for an intended unattended write. The current direct-node cap
+  off only for an intended unattended write. The shared workflow cap
   counts the query's saved `max_calls` across a workflow run's Tool Call
-  nodes, `for_each` iterations and concurrent branches, and persists on
-  resume. The next call is refused with `tool_call_limit_reached`, the node
-  fails with that code and evidence records `refused`. Read queries have no
-  run cap. Agent-stage workflow calls still count per turn; a shared
-  Agent/direct counter remains the server acceptance gate. Ordinary chat
-  per-turn limits stay as they are. Do not infer runtime acceptance from kit
-  fixtures, or raise a node's cap with assignment `config_overrides`.
+  nodes, Agent stages, `for_each` iterations and concurrent branches, and
+  persists on resume. The next call is refused with `tool_call_limit_reached`
+  and evidence records `refused`. A direct node fails with that code; an Agent
+  receives the tool's refusal. Read queries have no
+  run cap. Agent per-turn limits apply in addition to the shared run cap.
+  Ordinary chat per-turn limits stay as they are. Do not infer runtime acceptance
+  from kit fixtures, or raise a query's saved run cap with assignment `config_overrides`.
 - **Validation.** `validate` checks argument names in `input_schema` and a
   directly preceding Transform's flat JSON mapping, using the query's
   parameters (or the remembered query when its definition is left out).

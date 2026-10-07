@@ -203,15 +203,17 @@ confirmation on. Turn it off only for an intended unattended write.
 Identity parameters and trigger identity requirements still apply; a
 trigger execution identity is not a Chat User.
 
-The current direct Tool Call limit counts a write query's `max_calls`
-across every node, `for_each` iteration and concurrent branch of a workflow
-run, and persists when the run resumes in another process. The next call
-is refused before execution with `tool_call_limit_reached`; the node fails
-with that code and evidence records `refused`. Read queries have no
-per-run cap. Agent-stage calls inside a workflow still use per-turn
-counting in this build; shared Agent/direct run counting remains a server
-acceptance gate. Ordinary chat per-turn limits are unchanged. An
-assignment override does not raise a direct query node's saved run cap.
+The workflow limit counts a write query's saved `max_calls` across direct
+Tool Call nodes, Agent stages, `for_each` iterations and concurrent branches
+of a workflow run, and persists when the run resumes in another process.
+The next call is refused before execution with `tool_call_limit_reached`
+and evidence records `refused`. A direct node fails with that code; an Agent
+receives the tool's refusal. Read queries have no
+per-run cap. Agent per-turn limits apply in addition to the shared run cap.
+Ordinary chat per-turn limits are unchanged. An assignment override does
+not raise the query's saved run cap. Verify mixed calls, refusal before
+mutation, reset and resume against the instance; kit fixtures prove response
+handling rather than runtime enforcement.
 
 ## Change or remove a connection
 

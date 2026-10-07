@@ -241,10 +241,10 @@ check the database before any repetition. `write_statement_refused` and
 `write_procedure_definition_refused` are save-time checks; use `cavelon
 explain <code>` for the instance's rules. A confirmation-required direct
 query node answers `confirmation_unavailable`. Its per-run budget refusal
-is `tool_call_limit_reached`, counted across direct nodes and iterations.
-Agent-stage workflow calls still count per turn in this build; shared
-Agent/direct counting remains a server acceptance gate. Ordinary chat
-per-turn limits are unchanged. See [write queries](connect-a-database.md#write-queries).
+is `tool_call_limit_reached`, counted across direct nodes, Agent stages,
+iterations, concurrent branches and resume. Agent per-turn limits apply
+as well. Read queries have no run cap; ordinary chat per-turn limits are
+unchanged. See [write queries](connect-a-database.md#write-queries).
 
 **A query tool answers `identity_required` in a test.** The query reads a
 signed-in visitor's identity (`end_user.*`), or does not allow anonymous
