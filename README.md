@@ -24,8 +24,15 @@ You need a Cavelon instance with personal access tokens turned on, and a coding
 agent: Claude Code, Codex, Cursor, VS Code with GitHub Copilot, Gemini CLI or
 Kiro. Nothing else: no Node.js, no administrator rights.
 
-**1. Install `cavelon`** the way that suits your machine. Each way installs
-the same `cavelon` into your own user folder, without administrator rights.
+Three steps: **install `cavelon`** on your computer once, **connect your coding
+agents** to it, then **build** in your agent.
+
+### Step 1 · Install `cavelon` on your computer
+
+> [!NOTE]
+> **Once per computer.** This installs the `cavelon` tool itself, nothing in
+> your coding agents yet; that is step 2. Pick one way: each installs the same
+> `cavelon` into your own user folder, without administrator rights.
 
 **One line, nothing else needed** (recommended). On macOS or Linux, in Terminal:
 
@@ -66,8 +73,7 @@ agents. Python is only needed for the install: `cavelon` itself runs without it.
 npm i -g @cavelon/cli
 ```
 
-Or run it without installing: type `npx -y @cavelon/cli setup` in the next
-step, and wherever these docs write `cavelon`, write `npx -y @cavelon/cli`.
+Or run it without installing: type `npx -y @cavelon/cli setup` in step 2, and wherever these docs write `cavelon`, write `npx -y @cavelon/cli`.
 
 `cavelon --version` names the way you installed it and the command that
 updates it. [Installation](docs/installation.md) has the details for each way,
@@ -75,7 +81,11 @@ and how to remove it. Where machines reach neither GitHub, npm nor PyPI,
 install from the signed [offline bundle](docs/offline-bundle.md) each release
 carries.
 
-**2. Set up your agent and log in:**
+### Step 2 · Connect your coding agents
+
+> [!NOTE]
+> **Adds Cavelon to the agents installed on this computer, and logs you in.**
+> Run it after step 1, and again whenever you install another coding agent.
 
 ```bash
 cavelon setup
@@ -104,10 +114,29 @@ Then it logs you in. Have two things ready:
 If the token reaches several tenants, choose yours from the list by number or
 name. `cavelon setup --check` shows what is set up and working.
 
-**3. Open an empty folder in your agent** and describe what you need, for
-example: *"Build a Cavelon solution that answers our customers' questions from
+> [!TIP]
+> **Installed another coding agent later?** Run `setup` again. It finds the
+> new agent and adds Cavelon to it; you are still logged in, so it does not ask
+> for a token again. Then restart that agent.
+>
+> ```bash
+> cavelon setup                    # every agent it finds; the ones already set up stay set up
+> cavelon setup --agents cursor    # or only the one you name: claude, codex, cursor, copilot, gemini, kiro
+> cavelon setup --check            # what is set up and working, for each agent
+> ```
+
+**Updating later.** Update `cavelon` the way you installed it
+(`cavelon --version` names the command), then run `cavelon setup` again: it
+brings the skills it copied into Cursor, VS Code and Kiro up to the new
+release. Claude Code, Codex and Gemini CLI update the plugin with their own
+command; [Updating](docs/installation.md#updating-each-part) lists each one, and
+your agent tells you when something is behind.
+
+### Step 3 · Build your first solution
+
+Open an empty folder in your agent and describe what you need, for example: *"Build a Cavelon solution that answers our customers' questions from
 the FAQ pages in ./faq, and test it."* Restart the agent first if it was open
-during `setup`.
+during step 2.
 
 The agent creates the solution (`cavelon init`), writes the package and the
 tests, previews and imports them into a test environment, and runs the tests.
