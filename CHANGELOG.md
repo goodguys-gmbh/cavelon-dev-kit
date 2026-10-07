@@ -7,6 +7,20 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+## [0.1.13] - 2026-10-07
+
+The kit as a plugin for more coding agents, an offline bundle, and SQL Server
+stored procedures:
+- plugin packages for Cursor, VS Code with GitHub Copilot, Copilot CLI, Kiro
+  and Gemini CLI, and one install page per client in `docs/install/`;
+- `cavelon setup` installs the Gemini CLI extension from the release;
+- an offline bundle per release (`cavelon-bundle-<version>.tar.gz`), signed
+  with Sigstore, for instances whose developers reach neither GitHub, npm nor
+  PyPI;
+- SQL Server stored-procedure queries: `validate`, the `db` commands, `apply`
+  and `explain` show the instance's procedure checks and refusals;
+- `uvx` is named as the install method when `UV_CACHE_DIR` moved uv's cache.
+
 ### Added
 
 - SQL Server stored-procedure queries (#162): a query on an `mssql`
