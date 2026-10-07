@@ -134,20 +134,27 @@ function Install-Cavelon {
     $old = Join-Path $InstallDir 'cavelon.exe.old'
     Remove-Item -LiteralPath $old -Force -ErrorAction SilentlyContinue
     $oldVersion = $null
+    $identical = $false
     if (Test-Path -LiteralPath $target) {
       $ran = Invoke-Cavelon $target @('--version')
       if ($ran.Code -eq 0) { $oldVersion = ($ran.Text -split "`n")[0].Trim() } else { $oldVersion = 'an earlier version' }
-      # A running cavelon (an agent's MCP server) cannot be overwritten, but it
-      # can be renamed; the next run removes the old file.
-      Move-Item -LiteralPath $target -Destination $old -Force
+      # An unchanged executable needs no replacement. Windows can deny even
+      # a rename while a process holds it open; compare bytes, not versions.
+      $identical = (Get-FileHash -Algorithm SHA256 -LiteralPath $target).Hash -eq $actual
+      if (-not $identical) {
+        # Keep the previous executable for rollback if the new one cannot be written.
+        Move-Item -LiteralPath $target -Destination $old -Force
+      }
     }
-    try {
-      Move-Item -LiteralPath $download -Destination $target -Force
-    } catch {
-      if (Test-Path -LiteralPath $old) { Move-Item -LiteralPath $old -Destination $target -Force }
-      throw "Could not write $target`: $($_.Exception.Message)"
+    if (-not $identical) {
+      try {
+        Move-Item -LiteralPath $download -Destination $target -Force
+      } catch {
+        if (Test-Path -LiteralPath $old) { Move-Item -LiteralPath $old -Destination $target -Force }
+        throw "Could not write $target`: $($_.Exception.Message)"
+      }
+      Remove-Item -LiteralPath $old -Force -ErrorAction SilentlyContinue
     }
-    Remove-Item -LiteralPath $old -Force -ErrorAction SilentlyContinue
 
     if (-not $oldVersion) {
       Write-Host "Installed cavelon $newVersion to $target."

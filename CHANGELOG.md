@@ -37,6 +37,10 @@ CLI, the skills and the plugin.
 
 ### Fixed
 
+- Re-running the Windows installer leaves a byte-identical, verified executable
+  in place (#180), so an open MCP process or file handle cannot block an
+  already up-to-date installation. Version labels alone never skip replacement.
+
 - `activate` reads a null single-read `channel_count` from the matching
   published solution-list row (#174). Unknown reach still needs a person,
   as does a true or omitted readiness `takes_default_route` flag, including
