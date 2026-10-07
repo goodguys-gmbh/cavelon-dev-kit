@@ -3811,6 +3811,62 @@
       "message": "A workflow's Tool Call node runs a database query that neither the package nor the target tenant has.",
       "hint": "Add the query's tool to the package (an export of the solution that uses it carries its definition), or create the query in the target tenant under Settings → Databases first, then preview again.",
       "docs": "/docs/concepts/database-connections#solution-packages"
+    },
+    {
+      "code": "confirmation_unavailable",
+      "area": "database_connector",
+      "message": "A write query with 'Ask the person to confirm before writing' ran where nobody can confirm it: a run a trigger or a schedule started, a workflow's Tool Call node (which cannot wait for the person's click), a parallel branch, or a run without a signed-in person in a conversation. Nothing was written.",
+      "hint": "Call the write query from an agent in a chat with a signed-in person, who confirms it there. For an unattended write, whoever manages the tenant's queries switches the confirmation off for that query (and, for a query without an identity parameter, turns on 'Runs without a signed-in person').",
+      "docs": "/docs/troubleshooting/database-connections#error-codes"
+    },
+    {
+      "code": "key_needs_a_person",
+      "area": "auth",
+      "message": "A tenant API key cannot run this operation; a person runs it.",
+      "hint": "A person runs it signed in to the Admin; most such operations also take a personal access token (`cavelon login`), those marked `x-cavelon-person-only` do not. GET /api/v1/meta/principal lists them under `needs_a_person` for the key, with the reason.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "too_many_rows_affected",
+      "area": "database_connector",
+      "message": "A write query changed more rows than its cap (max_affected_rows), so its transaction was rolled back and nothing was changed.",
+      "hint": "Narrow the WHERE clause so one call changes at most the rows it should, for example by a key the model or the signed-in person fills. Raise max_affected_rows (at most 100) only when one call really changes that many rows.",
+      "docs": "/docs/troubleshooting/database-connections#error-codes"
+    },
+    {
+      "code": "tool_call_limit_reached",
+      "area": "database_connector",
+      "message": "A database write query was called more often in one workflow run than its max_calls allows, counted across every Tool Call node and for_each iteration of the run. The call was refused before it ran and changed nothing; the node fails with this code.",
+      "hint": "Check that the workflow loops over the items it should. When one run really writes that many rows, raise 'Calls per run at most' (max_calls, up to 1000) on the query under Settings → Databases.",
+      "docs": "/docs/troubleshooting/database-connections#error-codes"
+    },
+    {
+      "code": "write_outcome_unknown",
+      "area": "database_connector",
+      "message": "The connection was lost after a write query's COMMIT was sent, so the database may or may not have saved the change. The model is told not to retry, and the run evidence records the outcome as unknown.",
+      "hint": "Check the database for the change before anyone repeats it. Frequent cases point at the network or the database server: run the connection test.",
+      "docs": "/docs/troubleshooting/database-connections#error-codes"
+    },
+    {
+      "code": "write_procedure_definition_refused",
+      "area": "database_connector",
+      "message": "The definition of the stored procedure a write query calls does more than write rows: it controls the transaction (COMMIT, ROLLBACK, SAVE TRAN), calls another procedure or dynamic SQL (EXEC, sp_executesql, EXECUTE AS), reaches another server or a file (OPENROWSET, OPENQUERY, BULK), runs TRUNCATE, DDL other than on a temporary table, rights or server statements, or sets NOCOUNT ON, which hides the row counts the cap of affected rows is checked against. Such a query cannot be saved, enabled or test-run.",
+      "hint": "Keep the procedure to INSERT, UPDATE, DELETE and MERGE on its tables, without its own transaction control and without SET NOCOUNT ON; the connector's transaction commits or rolls back the call. The message names what the definition does.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
+      "code": "write_statement_refused",
+      "area": "database_connector",
+      "message": "A write query is not the one statement it may be: exactly one INSERT, UPDATE or DELETE (on SQL Server also one EXEC of a stored procedure), an UPDATE or DELETE with a WHERE that uses at least one :parameter, and never DDL (CREATE, ALTER, DROP), TRUNCATE, GRANT or REVOKE, transaction control, MERGE, COPY, LOAD DATA, SELECT … INTO (OUTFILE), a second write inside it, or a function that reads or writes the server's files or reaches another server (pg_read_file, lo_export, dblink, LOAD_FILE, OPENROWSET).",
+      "hint": "Write one INSERT, UPDATE or DELETE whose WHERE names the row by a :parameter, for example UPDATE orders SET status = 'cancelled' WHERE number = :order_no AND email = :email. Keep schema changes and bulk loads out of the assistant. A SELECT is a read query (kind read).",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
+      "code": "writes_not_allowed",
+      "area": "database_connector",
+      "message": "A write query (INSERT, UPDATE, DELETE, or a SQL Server procedure that writes) did not run, a test run's dry run included, because its connection does not allow write queries. Nothing was changed.",
+      "hint": "A tenant admin (the Owner or Admin role) switches on 'Allow write queries' on the connection under Settings → Databases. Use a separate connection with a login that may write only what the queries need; the setup guide has a script per dialect.",
+      "docs": "/docs/troubleshooting/database-connections#error-codes"
     }
   ]
 }

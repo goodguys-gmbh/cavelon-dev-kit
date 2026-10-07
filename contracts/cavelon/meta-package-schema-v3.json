@@ -644,7 +644,7 @@
           "description": "The connection the query runs on, by name and dialect."
         },
         "sql_text": {
-          "description": "One read-only statement starting with SELECT or WITH, at most 20,000 characters. Each value is a :name placeholder with a parameter of that name; a literal colon is written \\:. No INSERT, INTO, UPDATE, DELETE, EXEC, locking clause or second statement. Always bound the rows with LIMIT, TOP or FETCH FIRST. On an mssql connection it may instead be one stored-procedure call, EXEC [schema].[procedure] @p1 = :p1, @p2 = :p2, every argument a placeholder; the model gets its first result set, and the target's connection needs a login whose last test found no write privileges.",
+          "description": "One read-only statement starting with SELECT or WITH, at most 20,000 characters. Each value is a :name placeholder with a parameter of that name; a literal colon is written \\:. No INSERT, INTO, UPDATE, DELETE, EXEC, locking clause or second statement. Always bound the rows with LIMIT, TOP or FETCH FIRST. On an mssql connection it may instead be one stored-procedure call, EXEC [schema].[procedure] @p1 = :p1, @p2 = :p2, every argument a placeholder; the model gets its first result set, and the target's connection needs a login whose last test found no write privileges. With kind write instead exactly one INSERT, UPDATE or DELETE (on mssql also one EXEC of a procedure that writes), an UPDATE or DELETE with a WHERE that uses a :parameter.",
           "examples": [
             "SELECT number, status, shipped_at FROM orders WHERE number = :order_no AND email = :email LIMIT 5"
           ],
@@ -682,6 +682,45 @@
           "description": "'Runs without a signed-in person (anonymous visitors, triggers)'. Only for a query without an end_user.* parameter, for public data such as stock, prices or opening hours, and for a query a trigger uses. False: a run without a signed-in person, an anonymous visitor's or a trigger's, answers identity_required and the query does not run.",
           "title": "Allows Anonymous",
           "type": "boolean"
+        },
+        "kind": {
+          "default": "read",
+          "description": "read, or write: exactly one INSERT, UPDATE or DELETE (on mssql also one EXEC of a procedure that writes), an UPDATE or DELETE with a WHERE that uses a :parameter. A write runs only while the target connection allows write queries, a tenant admin's switch that never travels in a package; the import warns while it is off.",
+          "enum": [
+            "read",
+            "write"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "max_affected_rows": {
+          "default": 1,
+          "description": "A write query's cap, 1 to 100: more affected rows roll the call back (too_many_rows_affected). Ignored for a read.",
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Max Affected Rows",
+          "type": "integer"
+        },
+        "requires_confirmation": {
+          "default": true,
+          "description": "A write query asks the signed-in person to confirm in the chat before it runs; off only for a query an unattended run calls. Ignored for a read.",
+          "title": "Requires Confirmation",
+          "type": "boolean"
+        },
+        "max_calls": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How often the query's tool may run: per user turn for an agent, and for a write query also per workflow run across its Tool Call nodes and for_each iterations (tool_call_limit_reached after that). 1 to 1000; omitted, the default of the kind (1 for a write, 5 for a read).",
+          "maximum": 1000,
+          "minimum": 1,
+          "title": "Max Calls"
         }
       },
       "required": [
@@ -7183,6 +7222,7 @@
               "enum": [
                 "auth_failed",
                 "busy",
+                "confirmation_unavailable",
                 "identity_required",
                 "invalid_arguments",
                 "invalid_parameter_value",
@@ -7191,8 +7231,12 @@
                 "target_refused",
                 "timeout",
                 "tls_failed",
+                "too_many_rows_affected",
+                "tool_call_limit_reached",
                 "unavailable",
-                "unreachable"
+                "unreachable",
+                "write_outcome_unknown",
+                "writes_not_allowed"
               ]
             },
             "message": {

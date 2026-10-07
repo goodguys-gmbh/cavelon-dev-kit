@@ -65,17 +65,32 @@ export function schemaKnowsQueries(schema: PackageSchema | null): boolean {
   return isObject(properties) && QUERY_FIELD in properties;
 }
 
-/** The schema of a query's parameter, followed from the tool's `database_query`. */
-export function parameterSchema(schema: PackageSchema): Json | undefined {
+/** The query schema, followed from the tool's published `database_query` field. */
+export function querySchema(schema: PackageSchema): Json | undefined {
   const field = (toolSchema(schema)?.properties as Json | undefined)?.[QUERY_FIELD];
   const branches = isObject(field) && Array.isArray(field.anyOf) ? field.anyOf : [field];
   for (const branch of branches) {
     const query = resolveRef(schema, branch);
-    const parameters = (query?.properties as Json | undefined)?.parameters;
-    const items = isObject(parameters) ? resolveRef(schema, parameters.items) : undefined;
-    if (items) return items;
+    if (isObject(query?.properties)) return query;
   }
   return undefined;
+}
+
+export function parameterSchema(schema: PackageSchema): Json | undefined {
+  const parameters = (querySchema(schema)?.properties as Json | undefined)?.parameters;
+  return isObject(parameters) ? resolveRef(schema, parameters.items) : undefined;
+}
+
+/** Only where published; an older schema gives no write-query knowledge. */
+export function schemaKnowsWrites(schema: PackageSchema): boolean {
+  const kind = (querySchema(schema)?.properties as Record<string, Json> | undefined)?.kind;
+  return Array.isArray(kind?.enum) && kind.enum.includes("write");
+}
+
+export interface QueryConnection {
+  name: string;
+  dialect: string;
+  allows_writes?: boolean;
 }
 
 export interface QueryTool {
@@ -485,7 +500,7 @@ export function queryChanges(pkg: Json, schema: PackageSchema, baseline: QueryBa
  * person approves (warnings), and fields the instance ignores on
  * a query tool (warnings).
  */
-export function checkQueryTools(disk: PackageOnDisk, schema: PackageSchema, baseline: QueryBaseline | undefined): Finding[] {
+export function checkQueryTools(disk: PackageOnDisk, schema: PackageSchema, baseline: QueryBaseline | undefined, connections?: QueryConnection[]): Finding[] {
   if (!schemaKnowsQueries(schema)) return [];
   const findings: Finding[] = [];
   for (const { slug, index, tool } of queryTools(disk.package)) {
@@ -501,13 +516,23 @@ export function checkQueryTools(disk: PackageOnDisk, schema: PackageSchema, base
     }
     // Only where the SQL is the instance's to judge in full: a warning, since the instance's own check decides.
     const dialect = isObject(query.connection) && typeof query.connection.dialect === "string" ? query.connection.dialect : undefined;
-    const call = typeof query.sql_text === "string" ? procedureCallProblem(query.sql_text, dialect) : undefined;
+    const write = schemaKnowsWrites(schema) && query.kind === "write";
+    // Read-procedure refusals do not describe a procedure intentionally authored to write.
+    const call = !write && typeof query.sql_text === "string" ? procedureCallProblem(query.sql_text, dialect) : undefined;
     if (call) {
       findings.push({
         code: call.code,
         severity: "warning",
         ...locate(disk, `/${TOOLS_SECTION}/${index}/${QUERY_FIELD}/${call.at}`),
         message: `Query tool "${slug}": ${call.message}`,
+      });
+    }
+    const connection = isObject(query.connection) ? query.connection : undefined;
+    if (write && connections?.some(c => c.name === connection?.name && c.dialect === dialect && c.allows_writes === false)) {
+      findings.push({
+        code: "writes_not_allowed", severity: "warning",
+        ...locate(disk, `/${TOOLS_SECTION}/${index}/${QUERY_FIELD}/connection`),
+        message: `Write query tool "${slug}" names a connection that explicitly disallows writes: its calls and dry-run tests answer writes_not_allowed. A tenant Owner or Admin enables writes on the connection in the Admin; this flag never travels in a package.`,
       });
     }
   }

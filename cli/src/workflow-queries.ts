@@ -1,6 +1,6 @@
 import type { PackageSchema } from "./contracts.js";
 import type { TenantInventory } from "./commands/inventory.js";
-import { parameterSchema, QUERY_TOOL_TYPE, queryTools, schemaKnowsQueries, type QueryBaseline } from "./database-queries.js";
+import { parameterSchema, QUERY_TOOL_TYPE, querySchema, queryTools, schemaKnowsQueries, schemaKnowsWrites, type QueryBaseline } from "./database-queries.js";
 import { locate, type Finding, type PackageOnDisk } from "./package-files.js";
 
 export const WORKFLOW_QUERY_MISSING_CODE = "tool_call_database_query_missing";
@@ -140,6 +140,10 @@ export function checkWorkflowQueries(disk: PackageOnDisk, schema: PackageSchema,
       findings.push({ code: WORKFLOW_QUERY_MISSING_CODE, severity: "warning", ...locate(disk, at), message: `Tool Call node "${String(node.slug ?? index)}" names database query "${slug}", which is neither in the package nor among the tenant's tools at the last pull (${inventory.written_at}); the import preview blocks it unless it exists by then.` });
     }
     if (!query) continue;
+    const confirmation = object(object(querySchema(schema)?.properties)?.requires_confirmation);
+    if (schemaKnowsWrites(schema) && query.kind === "write" && confirmation && (query.requires_confirmation ?? confirmation.default) === true) {
+      findings.push({ code: "confirmation_unavailable", severity: "warning", ...locate(disk, at), message: `Tool Call node "${String(node.slug ?? index)}" calls write query "${slug}" with requires_confirmation: the node cannot wait for a person's click, so the instance refuses it with confirmation_unavailable.`, hint: "Call the query from an agent in a signed-in person's chat, or have the tenant's query manager turn confirmation off for an intended unattended write." });
+    }
     const parameters = rows(query.parameters);
     const model = new Set(parameters.filter((parameter) => (parameter.source ?? source) === source).map((parameter) => parameter.name));
     const identity = new Set(parameters.filter((parameter) => (parameter.source ?? source) !== source).map((parameter) => parameter.name));

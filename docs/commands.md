@@ -239,7 +239,7 @@ Check the package files against the instance's package schema, offline.
 cavelon validate [options]
 ```
 
-Uses the schema and error catalog cached by init, pull or apply; fetches them only when none is cached or a development build's copy is past its time-to-live, and never with --offline. A development build keeps one version while its schema changes, so its copy is read again after a minute (CAVELON_CONTRACT_TTL_SECONDS), or checked with the ETag the instance sent with it; --verbose says which copy was used. Warns (never fails) when a fan-out or Map loop's max_concurrency is above the instance's branch width, and when the tenant runs fan-outs and Map loops in sequence, from the limits the instance last published for the tenant. References to skills, tools, knowledge bases, solutions and models outside the package are checked against the tenant's lists in .cavelon/inventory.json (pull, models list); a list no command has read yet is read now, unless --offline, and a check that cannot be made is named (`skipped` in --json). A reference that is in neither is a warning, as it may be created on the instance before the import; the import preview blocks it otherwise, so validate does not say "Valid" then, and --strict fails on every warning (exit 3). Each finding carries a code: `cavelon explain <code>` says more. The import preview checks everything again on the server.
+Uses the schema and error catalog cached by init, pull or apply; fetches them only when none is cached or a development build's copy is past its time-to-live, and never with --offline. A development build keeps one version while its schema changes, so its copy is read again after a minute (CAVELON_CONTRACT_TTL_SECONDS), or checked with the ETag the instance sent with it; --verbose says which copy was used. Warns (never fails) when a fan-out or Map loop's max_concurrency is above the instance's branch width, and when the tenant runs fan-outs and Map loops in sequence, from the limits the instance last published for the tenant. References to skills, tools, knowledge bases, solutions and models outside the package are checked against the tenant's lists in .cavelon/inventory.json (pull, models list); a list no command has read yet is read now, unless --offline, and a check that cannot be made is named (`skipped` in --json). A reference that is in neither is a warning, as it may be created on the instance before the import; the import preview blocks it otherwise, so validate does not say "Valid" then, and --strict fails on every warning (exit 3). For write queries, reads connections now unless --offline and warns only on explicit allows_writes: false; an omitted flag or unreadable list stays unknown. Warns when a direct query node requires confirmation it cannot collect. Each finding carries a code: `cavelon explain <code>` says more. The import preview checks everything again on the server.
 
 With --json, `warnings` is always a list of `{code, message}` objects: the warning findings (at most --limit), then the warnings about the run, such as a stale copy of the schema, with code null. `warning_count` counts them all and `error_count` the errors (`errors` is the same number); `findings` has each finding's file, line and hint; `blocking_count` counts the warnings the import preview blocks on.
 
@@ -676,7 +676,7 @@ Read what the instance offers for database connections, and the connections, sav
 
 ### cavelon db instance
 
-What this instance offers for database connections: the dialects it runs, and the addresses a database's firewall lets in.
+What this instance offers for database connections: dialects, firewall addresses and write-query support where published.
 
 **read-only** · MCP tool: `db_instance`
 
@@ -727,7 +727,7 @@ The tenant's saved database queries by tool slug; with a query, its SQL, paramet
 cavelon db queries [query] [options]
 ```
 
-Each saved query is one agent tool (tool_type database_query). The tenant Owner or a superadmin in Tenant mode writes it with database_connectors.manage: in the Admin or through apply with a personal access token and the person's approval. `cavelon pull` writes its definition into the package's tools. A parameter filled by end_user.* comes from the signed-in visitor, never from the model. Without a query: one line per query. With one (its tool's slug or the query's id): the whole query.
+Each saved query is one agent tool (tool_type database_query). The tenant Owner or a superadmin in Tenant mode writes it with database_connectors.manage: in the Admin or through apply with a personal access token and the person's approval. `cavelon pull` writes its definition into the package's tools. A parameter filled by end_user.* comes from the signed-in visitor, never from the model. Where published, kind is read or write; write settings are max_affected_rows, requires_confirmation and max_calls. Without a query: one line per query. With one (its tool's slug or the query's id): the whole query.
 
 | Argument | Description |
 |---|---|
@@ -749,7 +749,7 @@ cavelon db queries order_status --json
 
 ### cavelon db runs
 
-A saved query's runs, newest first: source, outcome, error code, duration and row count; never values or rows.
+A saved query's runs: outcome, counts and published write evidence (kind, affected_rows, committed, dry_run); never values or rows.
 
 **read-only** · MCP tool: `db_runs`
 
@@ -808,7 +808,7 @@ Run a saved query once with the values given, identity parameters included; show
 cavelon db test-run <query> [options]
 ```
 
-Needs the tenant Owner's permission (database_connectors.test); it reads the customer's own data. Give each parameter with --value name=value, those the platform fills from the signed-in visitor (end_user.*) too: that is how an identity-scoped query is checked for one customer. The instance records the run (counts only) and audits it with your name; the rows come back once and are never stored. A failed run names its code; `cavelon explain <code>` says more. A stored-procedure query (SQL Server) shows the procedure's first result set; the instance refuses its run (exit 4) while the connection's last test found write privileges or the procedure's definition writes or cannot be read, and a run whose procedure ended the connector's transaction comes back with a notice saying so and whether the query was switched off.
+Needs the tenant Owner's permission (database_connectors.test); it reads the customer's own data. Give each parameter with --value name=value, those the platform fills from the signed-in visitor (end_user.*) too: that is how an identity-scoped query is checked for one customer. The instance records the run (counts only) and audits it with your name; the rows come back once and are never stored. A failed run names its code; `cavelon explain <code>` says more. A write query's test is a dry run that rolls back; it still needs the connection to allow writes. The result reports kind, dry_run, rolled_back, affected_rows and committed only where published; an omitted value stays unknown. Never retry an ambiguous write outcome. A read stored-procedure query (SQL Server) shows the procedure's first result set; the instance refuses its run (exit 4) while the connection's last test found write privileges or the procedure's definition writes or cannot be read, and a run whose procedure ended the connector's transaction comes back with a notice saying so and whether the query was switched off.
 
 | Argument | Description |
 |---|---|
