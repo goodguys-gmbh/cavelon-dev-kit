@@ -388,6 +388,18 @@ says who does what on the instance.
   postal code) rather than one guessable key. Each `:name` in the SQL needs
   exactly one parameter of that name (a literal colon is `\:`); validate checks
   this (`bind_mismatch`) and each parameter's type and constraints.
+- **Stored procedures (SQL Server only).** On an `mssql` connection the SQL
+  may instead be exactly one call, `EXEC [schema].[procedure] @p1 = :p1, @p2 =
+  :p2`: every argument a placeholder with a declared parameter, no literal,
+  `OUTPUT`, option or dynamic SQL (`procedure_call_form`; on another dialect
+  `not_select`). `cavelon validate` warns of both. Put fixed values inside the
+  procedure. The model gets the first result set. The instance saves, enables
+  and runs such a query only while the connection's last test found no write
+  privileges, acknowledged or not (`write_privileges_block_procedure`), and
+  only for a procedure whose definition the login may read and that only
+  reads (`procedure_definition_unreadable`, `procedure_definition_writes`):
+  ask the person for a read-only login with `EXECUTE` and `VIEW DEFINITION`
+  on procedures that read. Where a procedure is not needed, write a `SELECT`.
 - `cavelon explain <code>` explains every code the connector uses: what
   `validate` and the preview name, the codes of a failed call (`timeout`,
   `identity_required`, …) and of a connection test.

@@ -13,6 +13,7 @@ import type { InStream, Io } from "../src/io.js";
 import { createMcpServer } from "../src/mcp.js";
 import type { UpdateCheckOptions } from "../src/update-check.js";
 import { KIT_VERSION } from "../src/version.js";
+import { seedQueryTool } from "./fake-database.js";
 import { modelRow, startFakeServer, type FakeServer } from "./fake-server.js";
 import { askingClient, cli, login, sandbox, type PersonAtClient, type Sandbox } from "./helpers.js";
 
@@ -44,7 +45,13 @@ beforeAll(async () => {
   server = await startFakeServer();
   tenant = server.addTenant("acme", "Acme");
   sb = sandbox();
-  server.state.features = { ...server.state.features, sandbox_feature_enabled: true, sandbox_isolated_container_enabled: true, masterloop_enabled: true };
+  server.state.features = {
+    ...server.state.features,
+    sandbox_feature_enabled: true,
+    sandbox_isolated_container_enabled: true,
+    masterloop_enabled: true,
+    database_connector_enabled: true,
+  };
   await login(sb, server.url, server.addToken({ kind: "pat", tenantIds: [tenant], defaultTenant: tenant, email: "ada@example.com" }));
   const io: Io = {
     stdout: { write: (s: string) => ((stdout += s), true) },
@@ -415,6 +422,26 @@ describe("cavelon mcp", () => {
     expect(error.hint).toMatch(/^runtime_external_iteration_harness_unavailable: .*Step 1 comes first/);
     const explained = payload(await client.callTool({ name: "explain", arguments: { code: "package_version_unsupported" } }));
     expect(explained.kind).toBe("api");
+  });
+
+  it("the db tools carry the instance's stored-procedure fields in their JSON: the connection's refusal, a test's findings, a test run's notice", async () => {
+    const { query, connection } = seedQueryTool(server.state.db, tenant);
+    connection.dialect = "mssql";
+    query.sql_text = "EXEC [shop].[order_status] @order_no = :order_no, @email = :email";
+    connection.procedureCallRefusal = { code: "write_privileges_block_procedure", message: "The connection's last test found that its login can write." };
+    connection.procedureFindings = [{ query_id: query.id, slug: query.slug, code: "procedure_definition_writes", message: "The procedure [shop].[order_status] updates [dbo].[orders]." }];
+    query.result = { error_code: "query_failed", notice: "The procedure ended the connector's transaction." };
+    try {
+      const listed = payload(await client.callTool({ name: "db_connections", arguments: {} }));
+      expect(listed.items[0]).toMatchObject({ name: "shop-db", procedure_call_refusal: { code: "write_privileges_block_procedure" } });
+      const tested = payload(await client.callTool({ name: "db_test", arguments: { connection: "shop-db" } }));
+      expect(tested.procedure_findings).toEqual([expect.objectContaining({ slug: "order_status", code: "procedure_definition_writes" })]);
+      const run = await client.callTool({ name: "db_test_run", arguments: { query: "order_status", value: ["order_no=A-1", "email=ada@example.com"] } });
+      expect(payload(run)).toMatchObject({ error_code: "query_failed", notice: "The procedure ended the connector's transaction." });
+    } finally {
+      server.state.db.connections = [];
+      server.state.db.queries = [];
+    }
   });
 
   it("pull and apply take include_tenant_wide; apply returns the preview's tenant_wide report, and tenant_wide is still taken", async () => {

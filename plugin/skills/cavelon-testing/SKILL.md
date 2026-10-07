@@ -152,6 +152,13 @@ the Admin. Then:
   Owner runs it once with `cavelon db test-run <query> --value <name>=<value>`,
   identity parameters included; it shows what the model would see. Never put
   a real customer's data into a test file.
+- A stored-procedure query (SQL Server) is test-run the same way; the
+  instance refuses the run while the connection's login can write or the
+  procedure's definition writes or cannot be read, with a code
+  `cavelon explain` explains. A run whose procedure committed or rolled back
+  fails with `query_failed` and a `notice`: the query is switched off, and a
+  person fixes the procedure. `cavelon db test <connection>` lists the
+  procedure queries whose procedure no longer passes (`procedure_findings`).
 - `cavelon db runs <query>` lists each run's outcome and error code (never a
   value or a row), and `cavelon trace` shows the code a failed call answered
   the model with on the tool's span (`error_code`); `cavelon explain <code>`

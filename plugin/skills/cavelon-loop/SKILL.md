@@ -106,9 +106,12 @@ use it when you parse the result.
   `mssql` (SQL Server). A SQL Server login that can write keeps the
   connection's queries from running (`write_privileges_unacknowledged`) until
   it may only read or a superadmin acknowledges it in the Admin, so ask for a
-  read-only login. `cavelon db connections` shows which exist, whether their
+  read-only login. A stored-procedure query (`EXEC`, SQL Server only) needs
+  one without any write privileges, acknowledged or not
+  (`write_privileges_block_procedure`), and a procedure that only reads.
+  `cavelon db connections` shows which exist, whether their
   last test passed, when their CA certificates expire and why a connection's
-  queries cannot be enabled. A pull writes each query's SQL into
+  queries, or its stored-procedure queries, cannot be enabled. A pull writes each query's SQL into
   `package/tools.yaml`, so the repository holds it: review it like code.
 
 ## The loop

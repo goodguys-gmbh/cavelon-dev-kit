@@ -87,6 +87,22 @@ true), and the error catalog its four `confirmation` codes, as its
 released, a deployed instance publishes none of this; the fake server plays
 both (`confirmations: null` is the instance without it).
 
+Later on 2026-10-07 the snapshot took in the instance's SQL Server
+stored-procedure queries, from its main branch, again without running it. The
+OpenAPI is the reference its generator writes (`docs/openapi.json`), trimmed
+the same way; against the snapshot it differs only in three fields, which are
+taken in (`DatabaseConnectionResponse.procedure_call_refusal`,
+`DatabaseConnectionTestResponse.procedure_findings` and
+`DatabaseQueryTestRunResponse.notice`), and in the confirmation route and its
+fields, which that branch does not carry yet and which stay as recorded. The
+error catalog, from the function behind `/meta/error-catalog`, takes in only
+the database connector's changes: the new `procedure_call_form`,
+`write_privileges_block_procedure`, `procedure_definition_unreadable` and
+`procedure_definition_writes`, and the new wording of `not_select`,
+`query_failed` and `write_privileges_unacknowledged`. The package schema takes
+in only the new description of a query's `sql_text`, which names the
+procedure call. The Database Connectors page did not change.
+
 The tests switch features on in the fake server where a command needs them
 (personal access tokens, the operations API, Sandboxes, Masterloop, archive
 uploads, the database connector); the snapshot keeps the defaults.

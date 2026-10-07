@@ -782,7 +782,7 @@ Test a database connection step by step (DNS, policy, TCP, TLS, login, SELECT 1,
 cavelon db test <connection>
 ```
 
-Needs the tenant Owner's permission (database_connectors.test). The result becomes the connection's last test: a query tool is ready for agents only while it passed, and a package's query needs a tested connection of its name to import. A failed step names its code; `cavelon explain <code>` says how to fix it. A finding under write_privileges means the database user can write: ask the database administrator for a read-only user. On SQL Server, which has no read-only transaction, the connection's queries then do not run (write_privileges_unacknowledged) until its login may only read or a superadmin acknowledges the write privileges in the Admin.
+Needs the tenant Owner's permission (database_connectors.test). The result becomes the connection's last test: a query tool is ready for agents only while it passed, and a package's query needs a tested connection of its name to import. A failed step names its code; `cavelon explain <code>` says how to fix it. A finding under write_privileges means the database user can write: ask the database administrator for a read-only user. On SQL Server, which has no read-only transaction, the connection's queries then do not run (write_privileges_unacknowledged) until its login may only read or a superadmin acknowledges the write privileges in the Admin; a stored-procedure query (EXEC) runs only on a login the test found without write privileges, acknowledged or not. A passing test on SQL Server also reads again the procedure each stored-procedure query calls, and lists those that no longer pass the instance's check (procedure_findings); they stay as they are, and their next save or enable is refused until the procedure only reads again.
 
 | Argument | Description |
 |---|---|
@@ -805,7 +805,7 @@ Run a saved query once with the values given, identity parameters included; show
 cavelon db test-run <query> [options]
 ```
 
-Needs the tenant Owner's permission (database_connectors.test); it reads the customer's own data. Give each parameter with --value name=value, those the platform fills from the signed-in visitor (end_user.*) too: that is how an identity-scoped query is checked for one customer. The instance records the run (counts only) and audits it with your name; the rows come back once and are never stored. A failed run names its code; `cavelon explain <code>` says more.
+Needs the tenant Owner's permission (database_connectors.test); it reads the customer's own data. Give each parameter with --value name=value, those the platform fills from the signed-in visitor (end_user.*) too: that is how an identity-scoped query is checked for one customer. The instance records the run (counts only) and audits it with your name; the rows come back once and are never stored. A failed run names its code; `cavelon explain <code>` says more. A stored-procedure query (SQL Server) shows the procedure's first result set; the instance refuses its run (exit 4) while the connection's last test found write privileges or the procedure's definition writes or cannot be read, and a run whose procedure ended the connector's transaction comes back with a notice saying so and whether the query was switched off.
 
 | Argument | Description |
 |---|---|

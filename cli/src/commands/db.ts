@@ -1,6 +1,6 @@
 import { CURSOR_OPTION, intOption, LIMIT_OPTION, listOption, pageOf, positional, stringOption, type CommandSpec, type Context } from "../command.js";
 import { CavelonError, ExitCode, usageError } from "../errors.js";
-import { connectorOffer } from "../database-queries.js";
+import { connectorOffer, isProcedureCall } from "../database-queries.js";
 import { requireFeature } from "../features.js";
 import { clip, keyValues, moreHint, table } from "../format.js";
 import { callStable } from "../invoke.js";
@@ -42,9 +42,24 @@ interface Connection {
   /** A superadmin's decision that queries run although the last test found write privileges (SQL Server). */
   write_privileges_acknowledged?: boolean;
   /** Why the connection's queries may not be enabled now (`code`, `message`); an older instance does not say. */
-  query_enable_refusal?: { code?: string; message?: string } | null;
+  query_enable_refusal?: Refusal | null;
+  /** Why a stored-procedure query (SQL Server) may not be saved or run on it now; an older instance does not say. */
+  procedure_call_refusal?: Refusal | null;
   query_count?: number;
   [key: string]: unknown;
+}
+
+interface Refusal {
+  code?: string;
+  message?: string;
+}
+
+/** A stored-procedure query whose procedure no longer passes the instance's definition check, as a passing connection test lists it. */
+interface ProcedureFinding {
+  query_id?: string;
+  slug?: string;
+  code?: string;
+  message?: string;
 }
 
 interface CaCertificate {
@@ -266,6 +281,9 @@ function explainLine(codes: Array<string | null | undefined>): string {
   return `\n\nWhat a code means: ${cavelonCommand("explain", fill("code"))} (${distinct.slice(0, 8).join(", ")})`;
 }
 
+/** A connection and why the instance refuses something on it, as `name (code: message)`. */
+const refusalOf = (name: string, refusal: Refusal) => `${name} (${refusal.code}${refusal.message ? `: ${clip(refusal.message, 200)}` : ""})`;
+
 /** What a customer's firewall must let through, in a sentence; the text and the JSON say the same. */
 function firewallSentence(offer: InstanceOffer): string {
   const { egress_ips: ips, connections_per_process: perProcess } = offer.network;
@@ -356,19 +374,22 @@ export const dbConnections: CommandSpec = {
       };
     });
     const untested = page.items.filter((c) => (c as unknown as Connection).last_test_outcome !== "ok").map((c) => String(c.name));
-    const refused = (page.items as unknown as Connection[]).filter((c) => c.query_enable_refusal?.code);
+    const connections = page.items as unknown as Connection[];
+    const refused = connections.filter((c) => c.query_enable_refusal?.code);
+    const procedureRefused = connections.filter((c) => c.procedure_call_refusal?.code);
     return {
       data: page,
       text:
         (table(rows, ["name", "dialect", "target", "tls", "enabled", "last_test", "queries", "id"]) ||
           `No database connections. A superadmin creates one in the Admin (\`${cavelonCommand("docs", "get", DOCS_PAGE)}\` says who does what).`) +
-        caLines(page.items as unknown as Connection[]).join("\n") +
+        caLines(connections).join("\n") +
         moreHint(page.next_cursor, cavelonCommand("db", "connections")) +
         (untested.length ? `\n\nNot tested successfully: ${untested.join(", ")}; its queries are not ready for agents. The Owner tests one with: ${cavelonCommand("db", "test", fill("connection"))}` : "") +
-        (refused.length
-          ? `\n\nQueries cannot be enabled on: ${refused.map((c) => `${c.name} (${c.query_enable_refusal!.code}${c.query_enable_refusal!.message ? `: ${clip(c.query_enable_refusal!.message, 200)}` : ""})`).join("; ")}` +
-            explainLine(refused.map((c) => c.query_enable_refusal!.code))
-          : ""),
+        (refused.length ? `\n\nQueries cannot be enabled on: ${refused.map((c) => refusalOf(c.name, c.query_enable_refusal!)).join("; ")}` : "") +
+        (procedureRefused.length
+          ? `\n\nStored-procedure queries (EXEC) cannot be saved or run on: ${procedureRefused.map((c) => refusalOf(c.name, c.procedure_call_refusal!)).join("; ")}`
+          : "") +
+        explainLine([...refused.map((c) => c.query_enable_refusal!.code), ...procedureRefused.map((c) => c.procedure_call_refusal!.code)]),
     };
   },
 };
@@ -394,6 +415,9 @@ export const dbQueries: CommandSpec = {
     const ref = positional(input, "query");
     if (ref) {
       const q = await resolveQuery(ctx, ref);
+      const connection = (await listConnections(ctx)).find((c) => c.id === q.connection_id);
+      const procedure = isProcedureCall(q.sql_text, connection?.dialect);
+      const refusal = procedure ? connection?.procedure_call_refusal : undefined;
       const text = [
         keyValues([
           ["query", `${q.slug} (${q.name})`],
@@ -409,11 +433,19 @@ export const dbQueries: CommandSpec = {
         "SQL:",
         q.sql_text,
         "",
+        ...(procedure
+          ? [
+              "It calls a stored procedure: the model gets its first result set. It runs only while the connection's last test found no write privileges,",
+              "and the instance reads the procedure's definition at every save, enable and test run and refuses one that writes.",
+              ...(refusal?.code ? [`Not now on ${connection!.name}: ${refusal.code}${refusal.message ? ` (${clip(refusal.message, 200)})` : ""}`] : []),
+              "",
+            ]
+          : []),
         q.parameters.length ? table(parameterRows(q.parameters), ["name", "filled_by", "type", "required", "constraints", "description"]) : "No parameters.",
         "",
         `Its runs (no values, no rows): ${cavelonCommand("db", "runs", q.slug)}`,
       ].join("\n");
-      return { data: q, text };
+      return { data: q, text: text + explainLine([refusal?.code]) };
     }
     const connectionRef = stringOption(input, "connection");
     const connection = connectionRef ? await resolveConnection(ctx, connectionRef) : undefined;
@@ -499,7 +531,10 @@ export const dbTest: CommandSpec = {
     "step names its code; `cavelon explain <code>` says how to fix it. A finding under write_privileges means the database user\n" +
     "can write: ask the database administrator for a read-only user. On SQL Server, which has no read-only transaction, the\n" +
     "connection's queries then do not run (write_privileges_unacknowledged) until its login may only read or a superadmin\n" +
-    "acknowledges the write privileges in the Admin.",
+    "acknowledges the write privileges in the Admin; a stored-procedure query (EXEC) runs only on a login the test found\n" +
+    "without write privileges, acknowledged or not. A passing test on SQL Server also reads again the procedure each\n" +
+    "stored-procedure query calls, and lists those that no longer pass the instance's check (procedure_findings); they stay\n" +
+    "as they are, and their next save or enable is refused until the procedure only reads again.",
   readOnly: false,
   idempotent: true,
   mcpEffect: "Runs the connection test on the instance and stores its outcome as the connection's last test; changes no setting.",
@@ -509,7 +544,16 @@ export const dbTest: CommandSpec = {
   examples: ["cavelon db test shop-db", "cavelon db test shop-db --json"],
   async run(ctx, input) {
     const connection = await resolveConnection(ctx, positional(input, "connection")!);
-    let result: { outcome: string; steps: TestStep[]; server_version?: string | null; write_privileges?: Record<string, unknown> | null; duration_ms: number; tested_at: string };
+    let result: {
+      outcome: string;
+      steps: TestStep[];
+      server_version?: string | null;
+      write_privileges?: Record<string, unknown> | null;
+      duration_ms: number;
+      tested_at: string;
+      /** An older instance does not publish it. */
+      procedure_findings?: ProcedureFinding[];
+    };
     try {
       result = await callStable(ctx, "POST", "/api/v1/database-connectors/connections/{connection_id}/test", "testing database connections", {
         params: { connection_id: [connection.id] },
@@ -520,19 +564,57 @@ export const dbTest: CommandSpec = {
     }
     const ok = result.outcome === "ok";
     const steps = (result.steps ?? []).map((s) => ({ step: s.name, status: s.status, code: s.code ?? null, message: s.driver_message ? clip(s.driver_message, 160) : null }));
+    const findings = (Array.isArray(result.procedure_findings) ? result.procedure_findings : []).map((f) => ({
+      query: f.slug ?? f.query_id ?? "?",
+      code: f.code ?? null,
+      message: f.message ? clip(f.message, 200) : null,
+    }));
+    if (findings.length) {
+      ctx.warn(
+        `The test passed, but the procedure of ${findings.length === 1 ? "one stored-procedure query" : `${findings.length} stored-procedure queries`} ` +
+          `(${findings.map((f) => f.query).join(", ")}) no longer passes the instance's check: ${findings.length === 1 ? "it stays" : "they stay"} as ${findings.length === 1 ? "it is" : "they are"}, ` +
+          "and a save or enable is refused until the procedure only reads again.",
+      );
+    }
     const text = [
       `Connection "${connection.name}" (${connection.dialect}): ${ok ? "test passed" : `test failed (${result.outcome})`}, ${result.duration_ms} ms.`,
       table(steps, ["step", "status", "code", ...(steps.some((s) => s.message) ? ["message"] : [])], 80),
       ...(result.server_version ? [`server: ${result.server_version}`] : []),
       ...(result.write_privileges ? [`write privileges: ${clip(JSON.stringify(result.write_privileges), 300)}`] : []),
+      ...(findings.length
+        ? ["", "Stored-procedure queries whose procedure no longer passes (they stay as they are; a save or enable is refused):", table(findings, ["query", "code", "message"], 80)]
+        : []),
     ].join("\n");
     return {
       data: { connection: { id: connection.id, name: connection.name, dialect: connection.dialect }, ...result },
-      text: text + explainLine(steps.filter((s) => s.code && s.status !== "ok").map((s) => s.code)),
+      text: text + explainLine([...steps.filter((s) => s.code && s.status !== "ok").map((s) => s.code), ...findings.map((f) => f.code)]),
       exitCode: ok ? ExitCode.ok : ExitCode.validation,
     };
   },
 };
+
+/** The instance's refusals of a run before it starts, with the step that lifts each. */
+const RUN_REFUSAL_STEPS: Record<string, (query: Query) => string> = {
+  database_connection_untested: (q) => `The tenant Owner tests the connection first: ${cavelonCommand("db", "test", q.connection_name)}`,
+  write_privileges_block_procedure: (q) =>
+    `The connection's login needs to lose its write privileges (a database administrator's change), then the tenant Owner tests it again: ${cavelonCommand("db", "test", q.connection_name)}`,
+  procedure_definition_unreadable: () => "The connection's login needs VIEW DEFINITION on the procedure, and the procedure must not be created WITH ENCRYPTION.",
+  procedure_definition_writes: () => "The procedure must only read (temporary tables and table variables are fine), or a superadmin writes the query as a SELECT.",
+};
+
+/** A refused run (409) with the step that lifts the refusal and where its code is explained. */
+function refusedRun(error: unknown, query: Query): unknown {
+  if (!(error instanceof CavelonError) || error.status !== 409) return error;
+  const step = RUN_REFUSAL_STEPS[error.code];
+  return new CavelonError(error.exitCode, {
+    code: error.code,
+    status: error.status,
+    message: error.message,
+    hint: [error.hint, step?.(query), `\`${cavelonCommand("explain", error.code)}\` says more.`].filter(Boolean).join(" "),
+    docs: error.docs,
+    details: error.details,
+  });
+}
 
 /** A value given as text, as the parameter's type binds it. */
 function typed(parameter: QueryParameter | undefined, raw: string): unknown {
@@ -579,7 +661,11 @@ export const dbTestRun: CommandSpec = {
     "Needs the tenant Owner's permission (database_connectors.test); it reads the customer's own data. Give each parameter\n" +
     "with --value name=value, those the platform fills from the signed-in visitor (end_user.*) too: that is how an\n" +
     "identity-scoped query is checked for one customer. The instance records the run (counts only) and audits it with your\n" +
-    "name; the rows come back once and are never stored. A failed run names its code; `cavelon explain <code>` says more.",
+    "name; the rows come back once and are never stored. A failed run names its code; `cavelon explain <code>` says more.\n" +
+    "A stored-procedure query (SQL Server) shows the procedure's first result set; the instance refuses its run (exit 4)\n" +
+    "while the connection's last test found write privileges or the procedure's definition writes or cannot be read, and\n" +
+    "a run whose procedure ended the connector's transaction comes back with a notice saying so and whether the query was\n" +
+    "switched off.",
   readOnly: false,
   idempotent: true,
   mcpEffect: "Runs the saved query once on the instance; it leaves a run record (counts only) and an audit entry, and changes no setting.",
@@ -607,6 +693,8 @@ export const dbTestRun: CommandSpec = {
       truncated?: boolean;
       duration_ms: number;
       run_id?: string | null;
+      /** What the code alone does not say (a procedure ended the transaction); an older instance does not publish it. */
+      notice?: string | null;
     };
     try {
       result = await callStable(ctx, "POST", "/api/v1/database-connectors/queries/{query_id}/test-run", "test runs of database queries", {
@@ -615,7 +703,7 @@ export const dbTestRun: CommandSpec = {
         timeoutMs: 90_000,
       });
     } catch (error) {
-      throw ownerOnly(error, "A test run");
+      throw refusedRun(ownerOnly(error, "A test run"), query);
     }
     const ok = result.outcome === "ok" && !result.error_code;
     const columns = result.columns ?? [];
@@ -627,6 +715,7 @@ export const dbTestRun: CommandSpec = {
         ["outcome", result.error_code ? `${result.outcome} (${result.error_code}${result.sqlstate ? `, SQLSTATE ${result.sqlstate}` : ""})` : result.outcome],
         ["rows", ok ? `${result.returned_rows ?? rows.length} returned of ${result.row_count ?? "?"}${result.truncated ? ", truncated for the model" : ""}` : undefined],
         ["duration_ms", result.duration_ms],
+        ["notice", result.notice || undefined],
       ]),
       "",
       "What the model sees:",

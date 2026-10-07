@@ -644,7 +644,7 @@
           "description": "The connection the query runs on, by name and dialect."
         },
         "sql_text": {
-          "description": "One read-only statement starting with SELECT or WITH, at most 20,000 characters. Each value is a :name placeholder with a parameter of that name; a literal colon is written \\:. No INSERT, INTO, UPDATE, DELETE, EXEC, locking clause or second statement. Always bound the rows with LIMIT, TOP or FETCH FIRST.",
+          "description": "One read-only statement starting with SELECT or WITH, at most 20,000 characters. Each value is a :name placeholder with a parameter of that name; a literal colon is written \\:. No INSERT, INTO, UPDATE, DELETE, EXEC, locking clause or second statement. Always bound the rows with LIMIT, TOP or FETCH FIRST. On an mssql connection it may instead be one stored-procedure call, EXEC [schema].[procedure] @p1 = :p1, @p2 = :p2, every argument a placeholder; the model gets its first result set, and the target's connection needs a login whose last test found no write privileges.",
           "examples": [
             "SELECT number, status, shipped_at FROM orders WHERE number = :order_no AND email = :email LIMIT 5"
           ],
