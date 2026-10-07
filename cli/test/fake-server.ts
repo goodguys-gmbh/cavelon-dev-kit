@@ -1365,7 +1365,11 @@ export async function startFakeServer(): Promise<FakeServer> {
         ...state.previewExtras,
       };
       if (p.endsWith("/preview")) return send(res, 200, { ...preview, preview_id: previewId });
-      if (info.kind === "key") return send(res, 403, { detail: "Agent graph import requires admin authentication (JWT), not API key" });
+      if (info.kind === "key") {
+        const catalog = JSON.parse(readContract("meta-error-catalog.json")) as { api_error_codes: Array<{ code: string; hint: string; docs: string }> };
+        const entry = catalog.api_error_codes.find((e) => e.code === "forbidden")!;
+        return send(res, 403, { ...entry, detail: "Agent graph import requires admin authentication (JWT), not API key" });
+      }
       if (blockers.length) return send(res, 422, { detail: preview });
       if (b.preview_id && b.preview_id !== previewId) {
         // A recent instance answers at the top level and names what changed where it still knows.

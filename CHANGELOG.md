@@ -18,6 +18,17 @@ CLI, the skills and the plugin.
   instance's schema; dynamic payloads still need runtime validation. The
   write-query half remains pending its instance contract.
 
+### Fixed
+
+- `apply` still previews with an API key when the instance reserves imports
+  for a person, but offers no confirm command and names the Admin or the
+  person's own personal access token instead (#173). `apply --confirm`
+  refuses before sending (`import_needs_a_person`, exit 5). A 403 for an
+  operation listed in the credential's `needs_a_person` prefers the person
+  hint over the catalog's generic permission advice, retaining specific
+  server hints. Personal access tokens and older-instance fallbacks keep
+  working as before.
+
 ## [0.1.13] - 2026-10-07
 
 The kit as a plugin for more coding agents, an offline bundle, and SQL Server

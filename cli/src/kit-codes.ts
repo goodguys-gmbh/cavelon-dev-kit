@@ -68,6 +68,7 @@ export const KIT_ERROR_CODES: CatalogEntry[] = [
   { code: "path_in_kit_directory", area: "cli", message: "The file is in cavelon's own directory (login and cache); no tool reads or writes there.", hint: "Name a file in the solution folder." },
   { code: "skills_missing", area: "cli", message: "This cavelon has no skills to install; its package is incomplete.", hint: "Reinstall @cavelon/cli." },
   // apply, activate and the default route.
+  { code: "import_needs_a_person", area: "cli", message: "The instance keeps package imports from this credential; nothing was imported.", hint: "A person imports in the Admin or with their own personal access token. The API key can still preview with `cavelon apply`." },
   { code: "preview_unknown", area: "cli", message: "No open preview with that id in this solution.", hint: "Run `cavelon apply` for a new preview and confirm its id; `cavelon status` lists the open ones." },
   { code: "preview_other_instance", area: "cli", message: "The preview was made on another instance.", hint: "Confirm it with the instance it was made on, or preview again here." },
   { code: "preview_other_tenant", area: "cli", message: "The preview was made for another tenant than this command acts in.", hint: "Run the confirm command the preview printed (it names --env and --tenant), or preview again here." },
