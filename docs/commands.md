@@ -311,7 +311,7 @@ Preview the package files against the instance and print a preview id; --confirm
 cavelon apply [options]
 ```
 
-Without --confirm nothing is imported: the preview shows what changes, which active solutions it reaches, what the target still needs (secrets and variables with the command that sets each, grants, runtime bindings, trigger identities), loop budgets and ignored sections, and is stored in .cavelon/. A preview never creates the solution: one the env file names that is not on the instance yet gets the `cavelon harness new` command that creates it as a draft. A person sets the secrets (`cavelon secrets set <name>`), never the agent. Show a preview that reaches an active solution or env/prod to a person before confirming. Such a preview (show_to_person: tenant-wide sections, an active solution, deletions, env/prod) a coding agent cannot confirm: over MCP the client asks the person, and from an agent's shell the person runs the confirm in their own terminal. A stale preview exits 4 and imports nothing: one whose target changed on the instance since, one whose package files changed since (what they hold, not their formatting; --allow-stale imports what the preview showed anyway), and one older than a day. So does an import its own check refuses when it applies, naming each blocker. --discard &lt;id\|all&gt; forgets stored previews; `cavelon status` lists them with when each expires. A solution's import leaves the package's tenant-wide sections (tenant_settings, model_registry, …) out; --include-tenant-wide imports them, for every solution of the tenant. An instance that does not publish include_tenant_wide imports them with every solution's package, and apply says so.
+Without --confirm nothing is imported: the preview shows what changes, which active solutions it reaches, what the target still needs (secrets and variables with the command that sets each, grants, runtime bindings, trigger identities), loop budgets and ignored sections, and is stored in .cavelon/. A preview never creates the solution: one the env file names that is not on the instance yet gets the `cavelon harness new` command that creates it as a draft. A person sets the secrets (`cavelon secrets set <name>`, or in the Admin where the instance lets no token set one), never the agent. Show a preview that reaches an active solution or env/prod to a person before confirming. Such a preview (show_to_person: tenant-wide sections, an active solution, deletions, env/prod) a coding agent cannot confirm: over MCP the client asks the person, and from an agent's shell the person runs the confirm in their own terminal. A stale preview exits 4 and imports nothing: one whose target changed on the instance since, one whose package files changed since (what they hold, not their formatting; --allow-stale imports what the preview showed anyway), and one older than a day. So does an import its own check refuses when it applies, naming each blocker. --discard &lt;id\|all&gt; forgets stored previews; `cavelon status` lists them with when each expires. A solution's import leaves the package's tenant-wide sections (tenant_settings, model_registry, …) out; --include-tenant-wide imports them, for every solution of the tenant. An instance that does not publish include_tenant_wide imports them with every solution's package, and apply says so.
 
 | Option | Description | MCP |
 |---|---|---|
@@ -940,7 +940,7 @@ List the tenant's secret names ({{secret:…}}) with whether each is set; never 
 cavelon secrets list [options]
 ```
 
-Lists every secret that has a value or that an imported package declared, and in a solution folder the ones its package declares that the tenant does not know yet. A person sets a missing one with `cavelon secrets set <name>`; an agent never sets or reads a secret value.
+Lists every secret that has a value or that an imported package declared, and in a solution folder the ones its package declares that the tenant does not know yet. A person sets a missing one with `cavelon secrets set <name>`, or in the Admin under Settings › Secrets where the instance lets no token set one; an agent never sets or reads a secret value.
 
 | Option | Description | MCP |
 |---|---|---|
@@ -966,7 +966,7 @@ Set a secret's value (a person runs this, never the agent).
 cavelon secrets set <name> [options]
 ```
 
-Asks for the value without echoing it, or reads it from standard input when that is piped (one trailing line break is dropped). The value is never an argument, never printed and never read back. A tenant API key cannot set a secret, nor can a role the instance does not allow to manage secrets (a Builder): its refusal then names who can, a tenant Owner. Run by a coding agent in its shell, it is refused before it reads a value (operation_for_a_person).
+Asks for the value without echoing it, or reads it from standard input when that is piped (one trailing line break is dropped). The value is never an argument, never printed and never read back. A tenant API key cannot set a secret, nor can a role the instance does not allow to manage secrets (a Builder): its refusal then names who can, a tenant Owner. An instance that lets only a person signed in to the Admin set a secret (its /meta/principal lists the operation in needs_a_person) refuses every token; there it is refused before it reads a value, naming the Admin page. Run by a coding agent in its shell, it is refused before it reads a value (operation_for_a_person).
 
 | Argument | Description |
 |---|---|
@@ -993,7 +993,7 @@ Delete a secret's value (needs --confirm; a person runs this).
 cavelon secrets delete <name> [options]
 ```
 
-Without --confirm, shows the secret's status and deletes nothing. A tool or prompt that names it fails until a person sets it again. A tenant API key cannot delete a secret. Run by a coding agent in its shell, it is refused, with or without --confirm (operation_for_a_person).
+Without --confirm, shows the secret's status and deletes nothing. A tool or prompt that names it fails until a person sets it again. A tenant API key cannot delete a secret, nor can any token on an instance that lets only a person signed in to the Admin do it (secret_needs_a_person). Run by a coding agent in its shell, it is refused, with or without --confirm (operation_for_a_person).
 
 | Argument | Description |
 |---|---|

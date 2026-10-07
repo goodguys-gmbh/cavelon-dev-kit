@@ -70,8 +70,9 @@ const INSTRUCTIONS =
   "variables_list/variables_get/variables_set handle plain-text {{var:…}} values; setting one needs a role that may manage " +
   "the tenant's settings, as a secret does (a Builder's may not): where whoami says the credential may not, tell the person " +
   "who sets it instead of calling variables_set. secrets_list shows which {{secret:…}} " +
-  "values are set, never a value: a person sets a secret, so tell them the exact `cavelon secrets set <name>` command " +
-  "to run in their terminal, and never ask for, read or pass a secret value. Never approve or decide an approval; " +
+  "values are set, never a value: a person sets a secret, so tell them how, as the answers name it: the exact " +
+  "`cavelon secrets set <name>` command to run in their terminal, or, where the instance lets no token set one, the Admin " +
+  "under Settings › Secrets. Never ask for, read or pass a secret value. Never approve or decide an approval; " +
   "that stays with a person. Use docs_search before guessing, " +
   "and api_list/api_describe/api for anything without its own tool. " +
   "use_tenant chooses the tenant for this MCP session only and never changes the tenant stored for the person; every preview " +

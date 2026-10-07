@@ -17,7 +17,15 @@ import { callStable, workflowOperation } from "../invoke.js";
 import { readAll } from "../io.js";
 import { schemaErrors } from "../openapi.js";
 import { readPrincipal } from "../principal.js";
-import { permissionsNamed, SECRETS_PERMISSIONS, secretsPermissionMissing, variablesPermissionMissing } from "../secret-access.js";
+import { principalOf } from "../access.js";
+import {
+  permissionsNamed,
+  SECRETS_IN_ADMIN,
+  SECRETS_PERMISSIONS,
+  secretsInAdminOnly,
+  secretsPermissionMissing,
+  variablesPermissionMissing,
+} from "../secret-access.js";
 import { readHidden } from "../prompt.js";
 import { readPackage } from "../package-files.js";
 import { requireToken, type Session } from "../session.js";
@@ -65,6 +73,20 @@ interface SecretStatus {
  */
 export function secretSetCommand(name: string, env?: string | null): string {
   return printedCommand(["secrets", "set", name], { env });
+}
+
+/**
+ * How a person sets a secret, as a next step names it: the command they run
+ * in their own terminal, or the Admin page where the instance lets no token
+ * set it (`secretsInAdminOnly`, `secretsSetInAdmin`).
+ */
+export function secretStep(name: string, inAdmin: boolean, env?: string | null): string {
+  return inAdmin ? `${SECRETS_IN_ADMIN} (${name})` : secretSetCommand(name, env);
+}
+
+/** Whether a person sets this tenant's secrets only in the Admin, as the credential's principal says; false where it cannot be asked. */
+export async function secretsSetInAdmin(ctx: Context): Promise<boolean> {
+  return secretsInAdminOnly(await ctx.client().then(principalOf, () => undefined)) === true;
 }
 
 export function variableSetCommand(name: string, env?: string | null): string {
@@ -203,7 +225,7 @@ export const variablesSet: CommandSpec = {
     if (TOKEN_PREFIXES.some((prefix) => value.startsWith(prefix))) {
       throw usageError(
         "That value looks like a key or token. A variable is plain text anyone with settings access reads; nothing was sent.",
-        `Keep credentials in a secret, which a person sets: ${secretSetCommand(name)}. If this was a real token, revoke it.`,
+        `Keep credentials in a secret, which a person sets: ${secretStep(name, await secretsSetInAdmin(ctx))}. If this was a real token, revoke it.`,
       );
     }
     await checkName(ctx, "PUT", "/api/v1/variables/{name}", "setting tenant variables", name);
@@ -286,6 +308,27 @@ export const variablesDelete: CommandSpec = {
 // ---------------------------------------------------------------------------
 
 /**
+ * Where the instance lets only a person signed in to the Admin set or delete
+ * a secret (it lists the operation in this credential's `needs_a_person`), no
+ * token or key does: refused here, before a value is asked for or anything is
+ * sent, for a person and an agent alike, naming the Admin page. An older
+ * instance does not say, and a personal access token sets secrets there.
+ */
+async function refuseWhereAdminOnly(ctx: Context, verb: "set" | "delete", name: string): Promise<{ inAdmin: boolean }> {
+  const principal = await ctx.client().then(principalOf, () => undefined);
+  // An instance that publishes needs_a_person lets only a person in the Admin set a secret: who else may, does it there.
+  const inAdmin = Array.isArray(principal?.needs_a_person);
+  if (secretsInAdminOnly(principal, verb === "set" ? "PUT" : "DELETE") !== true) return { inAdmin };
+  const credential = principal!.kind === "api_key" ? "A tenant API key" : "A personal access token";
+  throw new CavelonError(ExitCode.needsAction, {
+    code: "secret_needs_a_person",
+    message: `${credential} cannot ${verb} a secret on this instance, so nothing was sent: only a person signed in to the Admin ${verb === "set" ? "sets" : "deletes"} a secret's value.`,
+    hint: `A person ${verb === "set" ? "sets" : "deletes"} ${name} ${SECRETS_IN_ADMIN}.`,
+    details: { sent: false, credential: principal!.kind },
+  });
+}
+
+/**
  * Setting or deleting a secret needs a person (a session or a personal access
  * token); the instance answers a tenant API key 403 `secret_needs_a_person`.
  * Refused here first, before a value is asked for or anything is sent.
@@ -311,11 +354,11 @@ async function requirePerson(ctx: Context, verb: "set" | "delete", name: string)
  * never refuses a person's token up front, as the permission names are not
  * published and a renamed one would turn away someone who may.
  */
-function refusedForRole(error: unknown, verb: "set" | "delete", name: string): unknown {
+function refusedForRole(error: unknown, verb: "set" | "delete", name: string, inAdmin: boolean): unknown {
   if (!(error instanceof CavelonError) || error.status !== 403 || error.code === "secret_needs_a_person") return error;
   const named = permissionsNamed(error.message);
   if (!named.length && error.code !== "forbidden") return error;
-  return secretsPermissionMissing(verb, name, named.length ? named : SECRETS_PERMISSIONS);
+  return secretsPermissionMissing(verb, name, named.length ? named : SECRETS_PERMISSIONS, inAdmin);
 }
 
 /**
@@ -441,8 +484,8 @@ export const secretsList: CommandSpec = {
   summary: "List the tenant's secret names ({{secret:…}}) with whether each is set; never a value.",
   description:
     "Lists every secret that has a value or that an imported package declared, and in a solution folder the ones its\n" +
-    "package declares that the tenant does not know yet. A person sets a missing one with `cavelon secrets set <name>`;\n" +
-    "an agent never sets or reads a secret value.",
+    "package declares that the tenant does not know yet. A person sets a missing one with `cavelon secrets set <name>`, or\n" +
+    "in the Admin under Settings › Secrets where the instance lets no token set one; an agent never sets or reads a secret value.",
   readOnly: true,
   idempotent: true,
   mcpTool: "secrets_list",
@@ -460,14 +503,19 @@ export const secretsList: CommandSpec = {
     const local = (await locallyDeclaredSecrets(session)).filter((d) => !all.some((s) => s.name === d.name));
     const wanted = boolOption(input, "missing") ? all.filter((s) => s.status !== "set") : all;
     const page = pageOf(wanted, limit, stringOption(input, "cursor"));
-    const items = page.items.map((s) => (s.status === "set" ? s : { ...s, set_by_person: secretSetCommand(s.name) }));
+    const inAdmin = await secretsSetInAdmin(ctx);
+    const items = page.items.map((s) => (s.status === "set" ? s : { ...s, set_by_person: secretStep(s.name, inAdmin) }));
     const missing = all.filter((s) => s.status !== "set").length;
     const onlyMissing = boolOption(input, "missing");
     let text = onlyMissing ? "Every secret this tenant knows is set." : "This tenant has no secrets, and no package applied to it declared one.";
     if (items.length) {
       const rows = items.map((s) => ({ ...s, declared: s.declared ? "yes" : "", changed_at: s.changed_at ?? "", description: s.description ?? "" }));
       const next = moreHint(page.next_cursor, cavelonCommand("secrets", "list", ...(onlyMissing ? ["--missing"] : [])));
-      const howTo = missing ? `\n\n${missing} not set. A person sets each with: ${cavelonCommand("secrets", "set", fill("name"))}` : "";
+      const howTo = !missing
+        ? ""
+        : inAdmin
+          ? `\n\n${missing} not set. A person sets each, signed in to the Admin under Settings › Secrets.`
+          : `\n\n${missing} not set. A person sets each with: ${cavelonCommand("secrets", "set", fill("name"))}`;
       text = table(rows, ["name", "status", "declared", "changed_at", "description"], 50) + next + howTo;
     }
     if (local.length) {
@@ -475,7 +523,7 @@ export const secretsList: CommandSpec = {
       text +=
         `\n\n${where} declares ${local.map((d) => d.name).join(", ")}, which the tenant does not know yet: it lists ` +
         `${local.length === 1 ? "it" : "them"} once the package is applied (\`${cavelonCommand("apply")}\`). A person may set ${local.length === 1 ? "it" : "each"} before that: ` +
-        local.map((d) => secretSetCommand(d.name)).join("; ");
+        local.map((d) => secretStep(d.name, inAdmin)).join("; ");
     }
     return {
       data: { items, next_cursor: page.next_cursor, total: page.total, not_set: missing, ...(local.length ? { declared_locally: local } : {}) },
@@ -491,6 +539,8 @@ export const secretsSet: CommandSpec = {
     "Asks for the value without echoing it, or reads it from standard input when that is piped (one trailing line break is\n" +
     "dropped). The value is never an argument, never printed and never read back. A tenant API key cannot set a secret,\n" +
     "nor can a role the instance does not allow to manage secrets (a Builder): its refusal then names who can, a tenant Owner.\n" +
+    "An instance that lets only a person signed in to the Admin set a secret (its /meta/principal lists the operation in\n" +
+    "needs_a_person) refuses every token; there it is refused before it reads a value, naming the Admin page.\n" +
     "Run by a coding agent in its shell, it is refused before it reads a value (operation_for_a_person).",
   readOnly: false,
   idempotent: true,
@@ -501,6 +551,7 @@ export const secretsSet: CommandSpec = {
   preprocess: refuseValueArgument,
   async run(ctx, input) {
     const name = positional(input, "name")!;
+    const { inAdmin } = await refuseWhereAdminOnly(ctx, "set", name);
     refuseForAgent(ctx, "Setting a secret's value", secretSetCommand(name));
     await requirePerson(ctx, "set", name);
     await checkName(ctx, "PUT", "/api/v1/secrets/{name}", "setting secrets", name);
@@ -509,7 +560,7 @@ export const secretsSet: CommandSpec = {
     try {
       status = await callStable<SecretStatus>(ctx, "PUT", "/api/v1/secrets/{name}", "setting secrets", { params: { name: [name] }, body: { value } });
     } catch (error) {
-      throw withoutValue(refusedForRole(error, "set", name), value);
+      throw withoutValue(refusedForRole(error, "set", name, inAdmin), value);
     }
     const data = secretView(status);
     return { data, text: `Secret ${data.name} is set${changedNote(data.changed_at)}. Its value is never shown.` };
@@ -521,7 +572,8 @@ export const secretsDelete: CommandSpec = {
   summary: "Delete a secret's value (needs --confirm; a person runs this).",
   description:
     "Without --confirm, shows the secret's status and deletes nothing. A tool or prompt that names it fails until a person\n" +
-    "sets it again. A tenant API key cannot delete a secret. Run by a coding agent in its shell, it is refused, with or without\n" +
+    "sets it again. A tenant API key cannot delete a secret, nor can any token on an instance that lets only a person signed\n" +
+    "in to the Admin do it (secret_needs_a_person). Run by a coding agent in its shell, it is refused, with or without\n" +
     "--confirm (operation_for_a_person).",
   readOnly: false,
   destructive: true,
@@ -532,6 +584,7 @@ export const secretsDelete: CommandSpec = {
   examples: ["cavelon secrets delete old_token", "cavelon secrets delete old_token --confirm", "cavelon secrets delete old_token --confirm <token>"],
   async run(ctx, input) {
     const name = positional(input, "name")!;
+    const { inAdmin } = await refuseWhereAdminOnly(ctx, "delete", name);
     refuseForAgent(ctx, "Deleting a secret's value", cavelonCommand("secrets", "delete", name));
     await requirePerson(ctx, "delete", name);
     const current = secretView(
@@ -552,7 +605,7 @@ export const secretsDelete: CommandSpec = {
       await callStable(ctx, "DELETE", "/api/v1/secrets/{name}", "deleting secrets", { params: { name: [name] } });
     } catch (error) {
       if (notFound(error)) return nothing;
-      throw refusedForRole(error, "delete", name);
+      throw refusedForRole(error, "delete", name, inAdmin);
     }
     return {
       data: { ...current, status: "not_set", deleted: true },

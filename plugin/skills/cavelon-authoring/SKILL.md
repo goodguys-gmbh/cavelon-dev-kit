@@ -319,7 +319,10 @@ schema has them: `cavelon validate` reports an unknown section):
   says "may set secrets: no", and `secrets set`, `activate` and `status` then
   name who does instead. Tell the person that a tenant Owner sets it, in the
   Admin under Settings › Secrets or with their own token; do not suggest the
-  command to someone whose role cannot run it.
+  command to someone whose role cannot run it. Where the instance lets no
+  token set a secret (`secret_needs_a_person`; the preview names the Admin
+  instead of the command), the person sets it signed in to the Admin under
+  Settings › Secrets.
 
 ## Database query tools
 

@@ -129,7 +129,9 @@ function parseParams(input: Input): Record<string, string[]> {
 const FOR_A_PERSON: Array<{ does: string; hint: string; match(word: string): boolean }> = [
   {
     does: "changes a secret",
-    hint: "A person sets a secret in their own terminal with `cavelon secrets set <name>` (or deletes it with `cavelon secrets delete <name>`).",
+    hint:
+      "A person sets a secret in the Admin under Settings › Secrets, or, on an instance that still takes a token there, in their own " +
+      "terminal with `cavelon secrets set <name>` (or deletes it with `cavelon secrets delete <name>`).",
     match: (word) => word.includes("secret"),
   },
   {

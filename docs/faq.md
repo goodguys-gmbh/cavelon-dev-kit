@@ -141,7 +141,8 @@ only after you confirm a preview that lists what it deletes. The default,
 Put the production tenant or solution in `env/prod.yaml`, then
 `cavelon apply --env prod`, check the preview, and confirm it. The same files
 go to both, so what you tested is what goes live. Secrets are set per tenant
-with `cavelon secrets set`.
+with `cavelon secrets set`, or in the Admin where the instance lets no token
+set one.
 
 ### Can I start from a package file someone sent me?
 

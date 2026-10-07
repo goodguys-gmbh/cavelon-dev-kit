@@ -387,6 +387,14 @@ export interface FakeState {
    */
   serveCredentialAccess: boolean;
   /**
+   * Whether the instance refuses a personal access token, as it does a key, on
+   * setting or deleting a secret (ChatFlow #4881): only a person signed in to
+   * the Admin does it, and /meta/principal lists both operations in a token's
+   * `needs_a_person` too. Off by default, so a token sets secrets as on an
+   * instance before it.
+   */
+  tokensRefusedOnSecrets: boolean;
+  /**
    * Whether /meta/principal answers a personal access token without a tenant
    * and lists the tenants it reaches, and /auth/me memberships carry
    * tenant_slug; off is an older instance, which refuses such a token there.
@@ -568,7 +576,7 @@ function permissionsOf(info: TokenInfo, tenantId: string | undefined, recent: bo
 }
 
 /** What a recent instance's /meta/principal lists as the operations a person runs, not this credential. */
-function needsAPersonOf(info: TokenInfo): Array<{ operation: string | null; method: string; path: string; reason: string }> {
+function needsAPersonOf(info: TokenInfo, tokensRefusedOnSecrets: boolean): Array<{ operation: string | null; method: string; path: string; reason: string }> {
   const listed =
     info.needsAPerson ??
     (info.kind === "key"
@@ -577,7 +585,12 @@ function needsAPersonOf(info: TokenInfo): Array<{ operation: string | null; meth
           { method: "DELETE", path: "/api/v1/secrets/{name}", reason: "Sets or deletes a secret value" },
           { method: "PUT", path: "/api/v1/secrets/{name}", reason: "Sets or deletes a secret value" },
         ]
-      : []);
+      : tokensRefusedOnSecrets
+        ? [
+            { method: "DELETE", path: "/api/v1/secrets/{name}", reason: "Sets or deletes a secret value" },
+            { method: "PUT", path: "/api/v1/secrets/{name}", reason: "Sets or deletes a secret value" },
+          ]
+        : []);
   const doc = JSON.parse(readContract("openapi.json")) as { paths: Record<string, Record<string, { operationId?: string }>> };
   return listed.map((o) => ({ operation: doc.paths[o.path]?.[o.method.toLowerCase()]?.operationId ?? null, ...o }));
 }
@@ -683,6 +696,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     inferenceBudgets: new Map(),
     servePermissions: true,
     serveCredentialAccess: true,
+    tokensRefusedOnSecrets: false,
     serveTenantReach: true,
     processingStepCaps: new Map(),
     processingStepsUsed: 0,
@@ -875,7 +889,7 @@ export async function startFakeServer(): Promise<FakeServer> {
                 const t = tenantId ? state.tenants.find((x) => x.id === tenantId) : undefined;
                 return t ? { id: t.id, name: t.name, slug: t.slug } : null;
               })(),
-              needs_a_person: needsAPersonOf(info),
+              needs_a_person: needsAPersonOf(info, state.tokensRefusedOnSecrets),
             }
           : {}),
         ...(info.kind === "pat" && state.serveTenantReach ? reachOf(info, url.searchParams) : {}),
@@ -1744,12 +1758,12 @@ export async function startFakeServer(): Promise<FakeServer> {
     if (!validName(name)) return badName(res);
     if (method === "GET") return send(res, 200, secretStatus(values, name));
     if (method !== "PUT" && method !== "DELETE") return send(res, 405, { detail: "Method Not Allowed" });
-    if (info.kind === "key") {
+    if (info.kind === "key" || state.tokensRefusedOnSecrets) {
       return send(res, 403, {
-        detail: "A tenant API key cannot set or delete a secret value.",
+        detail: "Sets or deletes a secret value: a person does this signed in to the Admin",
         code: "secret_needs_a_person",
-        message: "A tenant API key cannot set or delete a secret value.",
-        hint: "A person sets it: in the Admin under Settings › Secrets, or with a personal access token.",
+        message: "A personal access token or an API key cannot set or delete a secret value.",
+        hint: "A person sets it, signed in to the Admin under Settings › Secrets.",
         docs: "/docs/reference/api-endpoints#errors-and-retries",
       });
     }

@@ -399,9 +399,13 @@ op read op://dev/crm/token | cavelon secrets set crm_api_token
   dropped), and refuses a value given as an argument without repeating it.
   Setting or deleting one needs a person (a session or a personal access
   token): with a tenant API key, `cavelon` refuses before it asks for the value
-  or sends anything (exit 7, `secret_needs_a_person`, as the instance would
-  answer). MCP offers only `secrets_list`; an agent tells the person the exact
-  `cavelon secrets set <name>` command instead.
+  or sends anything (`secret_needs_a_person`, as the instance would answer).
+  Where the instance lets only a person signed in to the Admin set or delete
+  one (`/meta/principal` lists them in `needs_a_person`), every token is
+  refused that way (exit 5; a key on an older instance exits 7), and the hints name the Admin's
+  Settings › Secrets page. MCP offers only `secrets_list`; an agent tells the
+  person the exact `cavelon secrets set <name>` command, or the Admin page,
+  instead.
 - `--env <name>` acts in the tenant `env/<name>.yaml` names, like `apply`. A
   name without its env file is refused (exit 2) before anything is sent.
 
