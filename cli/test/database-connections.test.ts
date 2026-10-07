@@ -2,12 +2,16 @@ import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { rootCertificates } from "node:tls";
+import { Readable } from "node:stream";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { COMMANDS } from "../src/commands/index.js";
+import { createMcpServer } from "../src/mcp.js";
+import type { InStream, Io } from "../src/io.js";
 import { operationAt, schemaErrors } from "../src/openapi.js";
 import { seedQueryTool } from "./fake-database.js";
 import { CONTRACTS, openapiSnapshot, startFakeServer, type FakeServer } from "./fake-server.js";
-import { cli, login, sandbox, type Sandbox } from "./helpers.js";
+import { askingClient, cli, login, sandbox, type Sandbox } from "./helpers.js";
 
 let server: FakeServer;
 let sb: Sandbox;
@@ -39,6 +43,18 @@ function responseMatches(method: string, template: string, status: string, data:
 }
 
 function sent(method: string, suffix = "") { return server.state.requests.filter(r => r.method === method && r.path === route + suffix); }
+
+async function mcpSession() {
+  const io: Io = {
+    stdout: { write: () => true }, stderr: { write: () => true }, stdin: Readable.from([]) as unknown as InStream,
+    env: { ...sb.env, ...fresh() }, cwd: sb.home, now: () => new Date(), sleep: ms => new Promise(resolve => setTimeout(resolve, ms)),
+  };
+  const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+  await createMcpServer(io, COMMANDS).connect(serverSide);
+  const client = askingClient();
+  await client.connect(clientSide);
+  return client;
+}
 
 describe("connections from a managing token", () => {
   it("creates without a password, follows published defaults and returns the person-only Admin step", async () => {
@@ -178,6 +194,93 @@ describe("login script and schema", () => {
 });
 
 describe("gates and compatibility", () => {
+  it.each([undefined, "000000000000"])("refuses person-only MCP delete before confirmation (%s), without elicitation", async confirm => {
+    const { connection } = await created();
+    server.state.personOnly = { [`DELETE ${route}/{connection_id}`]: "Runs only for a person in the Admin" };
+    const client = await mcpSession();
+    try {
+      const result = await client.callTool({ name: "db_connection_delete", arguments: { connection: connection.id, ...(confirm ? { confirm } : {}) } });
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result.content)).toContain("operation_for_a_person");
+      expect(client.asked).toEqual([]);
+    } finally { await client.close(); }
+    expect(sent("DELETE", `/${connection.id}`)).toEqual([]);
+  });
+
+  it("refuses a person-only delete before CLI preview, explicit confirm or MCP confirmation", async () => {
+    const { connection } = await created();
+    const preview = await cli(sb, ["db", "connections", "delete", connection.id, "--json"], { env: { ...fresh(), CAVELON_AGENT: "1" } });
+    const { confirm_token: token } = preview.json<{ confirm_token: string }>();
+    expect(token).toMatch(/^[0-9a-f]{12}$/);
+    server.state.personOnly = { [`DELETE ${route}/{connection_id}`]: "Runs only for a person in the Admin" };
+    for (const confirm of [[], ["--confirm"], ["--confirm", token]]) {
+      const result = await cli(sb, ["db", "connections", "delete", connection.id, ...confirm, "--json"], { env: fresh() });
+      expect(result.code, result.stdout).toBe(5);
+      expect(result.json()).toMatchObject({ error: { code: "operation_for_a_person", hint: expect.stringMatching(/Admin/) } });
+      expect(result.json()).not.toHaveProperty("confirm");
+    }
+    const client = await mcpSession();
+    try {
+      for (const arguments_ of [{ connection: connection.id }, { connection: connection.id, confirm: token }]) {
+        const result = await client.callTool({ name: "db_connection_delete", arguments: arguments_ });
+        expect(result.isError).toBe(true);
+        expect(JSON.stringify(result.content)).toContain("operation_for_a_person");
+      }
+      expect(client.asked).toEqual([]);
+    } finally { await client.close(); }
+    expect(sent("DELETE", `/${connection.id}`)).toEqual([]);
+    expect(server.state.db.connections).toHaveLength(1);
+  });
+
+  it.each(["pat", "key"] as const)("refuses a known missing manage permission for %s before any delete confirmation", async kind => {
+    const { connection } = await created();
+    await login(sb, server.url, server.addToken({ kind, tenantIds: [tenant], defaultTenant: tenant, scopes: ["admin"], permissions: ["database_connectors.view"] }));
+    for (const confirm of [[], ["--confirm"]]) {
+      const result = await cli(sb, ["db", "connections", "delete", connection.id, ...confirm, "--json"]);
+      expect(result.code, result.stdout).toBe(7);
+      expect(result.json()).toMatchObject({ error: { code: "permission_missing", details: { sent: false } } });
+      expect(result.json()).not.toHaveProperty("confirm");
+    }
+    const client = await mcpSession();
+    try {
+      const result = await client.callTool({ name: "db_connection_delete", arguments: { connection: connection.id } });
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result.content)).toContain("permission_missing");
+      expect(client.asked).toEqual([]);
+    } finally { await client.close(); }
+    expect(sent("DELETE", `/${connection.id}`)).toEqual([]);
+  });
+
+  it("still previews and confirms supported deletion over MCP", async () => {
+    const { connection } = await created();
+    const client = await mcpSession();
+    try {
+      const preview = await client.callTool({ name: "db_connection_delete", arguments: { connection: connection.id } });
+      expect(preview.isError).not.toBe(true);
+      const data = JSON.parse((preview.content as Array<{ text: string }>)[0]!.text) as { deleted: boolean; confirm_token: string };
+      expect(data).toMatchObject({ deleted: false, confirm_token: expect.stringMatching(/^[0-9a-f]{12}$/) });
+      expect(sent("DELETE", `/${connection.id}`)).toEqual([]);
+      const result = await client.callTool({ name: "db_connection_delete", arguments: { connection: connection.id, confirm: data.confirm_token } });
+      expect(result.isError).not.toBe(true);
+      expect(JSON.parse((result.content as Array<{ text: string }>)[0]!.text)).toMatchObject({ deleted: true, id: connection.id });
+    } finally { await client.close(); }
+    expect(sent("DELETE", `/${connection.id}`)).toHaveLength(1);
+  });
+
+  it("leaves unpublished delete permission to the server, including its final refusal", async () => {
+    const { connection } = await created();
+    server.state.servePermissions = false;
+    server.state.serveCredentialAccess = false;
+    await login(sb, server.url, server.addToken({ kind: "pat", tenantIds: [tenant], defaultTenant: tenant, permissions: ["database_connectors.view"] }));
+    const preview = await cli(sb, ["db", "connections", "delete", connection.id, "--json"]);
+    expect(preview.code, preview.stdout).toBe(0);
+    expect(preview.json()).toMatchObject({ deleted: false });
+    const result = await cli(sb, ["db", "connections", "delete", connection.id, "--confirm", "--json"]);
+    expect(result.code).toBe(7);
+    expect(sent("DELETE", `/${connection.id}`)).toHaveLength(1);
+    expect(server.state.db.connections).toHaveLength(1);
+  });
+
   it.each(["pat", "key"] as const)("refuses an unmanageable %s principal for CRUD/CA/schema but permits a viewer's login script", async kind => {
     const { connection } = await created();
     await login(sb, server.url, server.addToken({ kind, tenantIds: [tenant], defaultTenant: tenant, scopes: ["admin"], permissions: ["database_connectors.view"] }));

@@ -1,7 +1,7 @@
 import { X509Certificate } from "node:crypto";
 import { promises as fs } from "node:fs";
 import { CURSOR_OPTION, intOption, LIMIT_OPTION, listOption, pageOf, positional, stringOption, type CommandSpec, type Context, type Input, type OptionSpec } from "../command.js";
-import { principalOf } from "../access.js";
+import { accessFor, allOf, operationAccess, principalOf } from "../access.js";
 import { confirmation } from "../confirm-token.js";
 import { CavelonError, ExitCode, usageError, validationError } from "../errors.js";
 import { keyValues, moreHint, table } from "../format.js";
@@ -15,15 +15,28 @@ const CONNECTIONS = "/api/v1/database-connectors/connections";
 const CONNECTION = `${CONNECTIONS}/{connection_id}`;
 const manageHint = "This needs database_connectors.manage in Tenant mode: the tenant Owner (legacy Admin) or a superadmin, using a personal access token or the dashboard. A tenant API key cannot manage connections.";
 
-/** The server remains the permission authority, including on older instances without principal permissions. */
-async function manage<T>(ctx: Context, method: string, route: string, body?: unknown, id?: string): Promise<T> {
+/** Refuse a published restriction before offering a confirmation; unpublished permissions stay with the server. */
+async function managementPreflight(ctx: Context, method: string, route: string): Promise<void> {
   await connectorOn(ctx);
-  try {
-    const { op } = await workflowOperation(ctx, method, route, "database connection management");
-    if (op.personOnly?.marked) throw new CavelonError(ExitCode.needsAction, {
-      code: "operation_for_a_person", message: `This instance keeps ${method} ${route} for a person${op.personOnly.reason ? ` (${op.personOnly.reason})` : ""}.`,
+  const { op } = await workflowOperation(ctx, method, route, "database connection management");
+  const access = operationAccess(await accessFor(await ctx.client()), `${method} ${route}`);
+  if (op.personOnly?.marked || access.person) {
+    const reason = op.personOnly?.marked ? op.personOnly.reason : access.person;
+    throw new CavelonError(ExitCode.needsAction, {
+      code: "operation_for_a_person", message: `This instance keeps ${method} ${route} for a person${reason ? ` (${reason})` : ""}.`,
       hint: "A person manages the connection in the Admin under Settings › Security & access › Databases. This instance may be older than connection management with a personal access token.",
     });
+  }
+  if (access.allowed === false) throw new CavelonError(ExitCode.unauthorized, {
+    code: "permission_missing", status: 403, message: `This credential lacks ${allOf(access.missing!)} for ${method} ${route}.`,
+    hint: manageHint, details: { permissions: access.missing, sent: false },
+  });
+}
+
+/** Recheck before sending; the server remains the final authority, including on older instances. */
+async function manage<T>(ctx: Context, method: string, route: string, body?: unknown, id?: string): Promise<T> {
+  try {
+    await managementPreflight(ctx, method, route);
     return await callStable<T>(ctx, method, route, "database connection management", { body, params: id ? { connection_id: [id] } : undefined });
   } catch (error) {
     if (error instanceof CavelonError && error.code === "credential_required_for_target_change") {
@@ -124,8 +137,7 @@ export const dbConnectionDelete: CommandSpec = {
   examples: ["cavelon db connections delete unused-db", "cavelon db connections delete unused-db --confirm"],
   async run(ctx, input) {
     const connection = await resolveConnection(ctx, positional(input, "connection")!);
-    await connectorOn(ctx);
-    await workflowOperation(ctx, "DELETE", CONNECTION, "database connection deletion");
+    await managementPreflight(ctx, "DELETE", CONNECTION);
     const gate = await confirmation(ctx, input, "db_connection_delete", { id: connection.id, config_version: connection.config_version });
     if (!gate.confirmed) return {
       data: { deleted: false, connection: connectionView(connection), confirm: gate.confirm(cavelonCommand("db", "connections", "delete", connection.id, "--confirm")), ...gate.fields },

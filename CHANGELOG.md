@@ -29,6 +29,10 @@ CLI, the skills and the plugin.
 
 ### Fixed
 
+- Connection deletion checks published person-only restrictions and known
+  missing manage permission before offering a preview or confirmation. An
+  older principal that omits permissions still leaves the final decision to
+  the instance (#170).
 - `apply` still previews with an API key when the instance reserves imports
   for a person, but offers no confirm command and names the Admin or the
   person's own personal access token instead (#173). `apply --confirm`
