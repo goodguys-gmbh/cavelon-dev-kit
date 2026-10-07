@@ -200,7 +200,9 @@ describe("cavelon api and the api tool, run by an agent and by a person", () => 
 
     it("shows the request under an agent, and leaves sending it to the person's own terminal", async () => {
       const before = server.state.requests.length;
-      const preview = await api(setVariable("eu"), AGENT);
+      // The person's command is quoted for the shell; pin POSIX so Windows runners agree.
+      const agent = { ...AGENT, SHELL: "/bin/sh" };
+      const preview = await api(setVariable("eu"), agent);
       expect(preview.code).toBe(0);
       const shown = preview.json<Record<string, any>>();
       expect(shown).toMatchObject({
@@ -214,22 +216,22 @@ describe("cavelon api and the api tool, run by an agent and by a person", () => 
       });
       expect(shown.confirm_token).toBeUndefined();
       // The text shows the person the request, and the command they send it with.
-      const text = await cli(sb, ["api", ...setVariable("eu")], { env: { ...fresh(), ...AGENT } });
+      const text = await cli(sb, ["api", ...setVariable("eu")], { env: { ...fresh(), ...agent } });
       expect(text.stdout).toMatch(/^Would send PUT \/api\/v1\/variables\/region\. Nothing was sent\.\nacts on: http:\/\/127\.0\.0\.1:\d+, tenant .+, tenant mode\nBody:\n\{\n {2}"value": "eu"\n\}\n/);
       expect(text.stdout).toContain(`cavelon api set_variable name=region --body '{"value":"eu"}' (the person runs it in their own terminal`);
       expect(changes(before)).toEqual([]);
 
       // A bare --confirm (exit 5), another request's token, or even this request's own token sends nothing from an agent's shell.
-      const bare = await api([...setVariable("eu"), "--confirm"], AGENT);
+      const bare = await api([...setVariable("eu"), "--confirm"], agent);
       expect(bare.code).toBe(5);
       expect(bare.json()).toMatchObject({ sent: false, token_required: true, needs_person: "terminal" });
       const client = await mcp();
       const token = (await tool(client, { operation: "set_variable", params: ["name=region"], body: JSON.stringify({ value: "eu" }) })).body.confirm_token as string;
       await client.close();
-      const changed = await api([...setVariable("us"), "--confirm", token], AGENT);
+      const changed = await api([...setVariable("us"), "--confirm", token], agent);
       expect(changed.code).toBe(4);
       expect(changed.json()).toMatchObject({ sent: false, token_mismatch: true, body: { value: "us" } });
-      const own = await api([...setVariable("eu"), "--confirm", token], AGENT);
+      const own = await api([...setVariable("eu"), "--confirm", token], agent);
       expect(own.code).toBe(5);
       expect(own.json<{ error: Record<string, unknown> }>().error).toMatchObject({
         code: "confirm_needs_person",
