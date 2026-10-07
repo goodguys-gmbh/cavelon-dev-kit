@@ -125,6 +125,7 @@ describe("cavelon mcp", () => {
         "artifacts_export",
         "chat",
         "db_connections",
+        "db_instance",
         "db_queries",
         "db_runs",
         "db_test",
@@ -187,7 +188,7 @@ describe("cavelon mcp", () => {
     expect(byName.api!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true });
     expect(byName.validate!.annotations).toMatchObject({ readOnlyHint: true });
     // A token reads the connections, queries and runs; the Owner's two checks run on the instance and change no setting.
-    for (const name of ["db_connections", "db_queries", "db_runs"]) expect(byName[name]!.annotations, name).toMatchObject({ readOnlyHint: true });
+    for (const name of ["db_instance", "db_connections", "db_queries", "db_runs"]) expect(byName[name]!.annotations, name).toMatchObject({ readOnlyHint: true });
     for (const name of ["db_test", "db_test_run"]) {
       expect(byName[name]!.annotations, name).toMatchObject({ readOnlyHint: false, destructiveHint: false });
       expect(byName[name]!.description, name).toMatch(/changes no setting/);

@@ -105,6 +105,7 @@ only reads it).
 | `kb_upload` | `cavelon kb upload` | changing |
 | `test_run` | `cavelon test run` | changing |
 | `trace` | `cavelon trace` | read-only |
+| `db_instance` | `cavelon db instance` | read-only |
 | `db_connections` | `cavelon db connections` | read-only |
 | `db_queries` | `cavelon db queries` | read-only |
 | `db_runs` | `cavelon db runs` | read-only |

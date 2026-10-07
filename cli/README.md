@@ -150,7 +150,8 @@ Every command takes `--json` (one JSON document on stdout, errors included),
 | `kb upload <dir> --kb <kb> [-r] [--ext pdf] [--replace] [--dry-run] [--wait]` | changing | Upload documents; returns operation ids. Names files that match an active document; `--replace` replaces those. `--dry-run` also names files identical to an active document. |
 | `test run [--suite <s>] [--harness <h>] [--wait]` | changing | Start test-suite runs; returns operation ids. |
 | `trace <run> [--trace <id>] [--span <id>]` | read-only | Summarise a run's traces (or a test run's results, with why a case did not pass), then one trace's spans, then one span. A database query call that failed shows its code. |
-| `db connections` / `db queries [<query>] [--connection]` / `db runs <query>` | read-only | The tenant's database connections, saved queries (one in full with its SQL and parameters) and a query's runs (no values, no rows). |
+| `db instance` | read-only | The dialects the instance runs and the addresses it connects to databases from, which a database's firewall lets in. |
+| `db connections` / `db queries [<query>] [--connection]` / `db runs <query>` | read-only | The tenant's database connections (with their CA certificates' expiry), saved queries (one in full with its SQL and parameters) and a query's runs (no values, no rows). |
 | `db test <connection>` | changing | The tenant Owner tests a connection step by step; exit 3 when a step fails. |
 | `db test-run <query> [--value name=value…]` | changing | The tenant Owner runs a saved query once, identity parameters included, and sees what the model would; exit 3 when it fails. |
 | `loop start <trigger> [--input <json>] [--wait] [--confirm]` | changing | Start a loop through its trigger, as you; without `--confirm`, shows the trigger, its solution and the payload; with it, returns the run and operation ids. |

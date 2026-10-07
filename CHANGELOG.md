@@ -7,6 +7,39 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Added
+
+- `cavelon db instance` (`db_instance`) says what the instance offers for
+  database connections (#146): the dialects it runs, and the addresses it
+  connects to databases from (`egress_ips`), which the customer allows through
+  their database's firewall, with how many connections each process opens per
+  connection. Where the operator named no addresses, it says to ask them. An
+  instance older than `GET /api/v1/database-connectors/instance` gets the
+  dialects from its capabilities and a line that it does not publish the rest.
+  The cavelon-loop skill names it where a person sets up a connection.
+- `db connections` shows each connection's CA certificates (subject and
+  expiry, `ca_certificates` in `--json`) and warns of one that has expired or
+  expires within 30 days, since the connection's TLS check and its queries
+  fail from then. An instance that publishes only the fingerprints gets a line
+  that a CA is set. It also names a connection whose queries cannot be
+  enabled, with the instance's code (`query_enable_refusal`), such as
+  `write_privileges_unacknowledged`.
+- SQL Server (`mssql`) connections: `db instance`, `apply`'s dialect check and
+  `explain` take the instance's word for them, and the skills, `db test`'s help
+  and the concepts say that a SQL Server login that can write runs no query
+  (`write_privileges_unacknowledged`) until it may only read or a superadmin
+  acknowledges it.
+- The contract snapshot carries SQL Server: the error catalog's
+  `write_privileges_unacknowledged` and its wording of `unavailable` and
+  `forbidden_keyword`, and the connections' `write_privileges_acknowledged`
+  and `query_enable_refusal`.
+
+### Fixed
+
+- The database commands that read name the permission a 403 is missing:
+  `database_connectors.view`, which the tenant roles that see tools hold
+  (#146).
+
 ### Security
 
 - A coding agent could confirm a live, tenant-wide or destructive change on
