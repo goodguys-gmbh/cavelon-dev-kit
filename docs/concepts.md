@@ -244,6 +244,55 @@ from, which a customer allows through their database's firewall. SQL Server
 has no read-only transaction, so a connection whose login can write runs no
 query (`write_privileges_unacknowledged`) until the login may only read or a
 superadmin acknowledges its write privileges in the Admin.
+
+**Stored procedures (SQL Server).** On an `mssql` connection a query may be
+one call of a stored procedure instead of a `SELECT`, in exactly this form:
+
+```yaml
+    connection: { name: erp-db, dialect: mssql }
+    sql_text: EXEC [inventory].[stock_level] @sku = :sku, @warehouse = :warehouse
+```
+
+An optional schema and the procedure, plain or in brackets, and every
+argument `@name = :placeholder` with a declared parameter. A literal or
+expression as an argument, `OUTPUT`, `DEFAULT`, an option such as `WITH
+RECOMPILE`, a return-status variable (`EXEC @rc = …`), a name with a database
+or server, dynamic SQL (`EXEC('…')`) and the system procedures that run SQL
+text (`sp_executesql`, `xp_…`) are refused (`procedure_call_form`); on
+PostgreSQL and MySQL any `EXEC` stays refused (`not_select`). `validate`
+warns of both, with file and line. The model gets the procedure's first
+result set; the result's note says how many followed it, or that there was
+none.
+
+The instance cannot see what a procedure does, so it checks the rest itself,
+at every save, enable, test run and import:
+
+- the connection's last test, of its current settings, found no write
+  privileges: a superadmin's acknowledgement of write privileges, which lets
+  `SELECT` queries run, does not count for a procedure
+  (`write_privileges_block_procedure`; `database_connection_untested` without
+  such a test);
+- the procedure's definition, read through the connection's login (which
+  needs `VIEW DEFINITION` on it), only reads: it changes nothing but temporary
+  tables (`#name`) and table variables (`@name`), creates or drops nothing,
+  does not commit or roll back, calls no other procedure or dynamic SQL, and
+  reaches no other server or file (`procedure_definition_writes`); a
+  procedure it cannot read, missing, invisible to the login or created `WITH
+  ENCRYPTION`, is refused too (`procedure_definition_unreadable`).
+
+A procedure that ends the connector's transaction at run time fails the call
+(`query_failed`), its query is switched off automatically (the audit log
+records `database_query.disabled_automatically`), and a test run's `notice`
+says whether its writes may be committed. A passing connection test reads each
+procedure again and lists the queries whose procedure no longer passes
+(`procedure_findings`); they stay as they are until their procedure only
+reads again. `db connections` names a connection where a procedure query
+cannot be saved or run now (`procedure_call_refusal`), `db queries <query>`
+says that a query calls a procedure, `db test` lists the findings and
+`db test-run` shows the notice; their `--json` (and the MCP tools) carry the
+instance's fields as it sends them. An instance older than stored-procedure
+queries publishes none of these fields, and the kit says nothing of them there.
+
 `cavelon db connections`, `db queries` and `db runs` read the connections
 (with their CA certificates, warning of one that expires within 30 days, and
 why a connection's queries cannot be enabled), the saved queries and each

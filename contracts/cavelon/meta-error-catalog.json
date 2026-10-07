@@ -2597,8 +2597,8 @@
     {
       "code": "query_failed",
       "area": "database_connector",
-      "message": "The database refused the query for another reason (a missing column, a syntax error the save check cannot see).",
-      "hint": "Run the SQL with the same values directly against the database as the read-only user to see its message, then correct the query under Settings → Databases.",
+      "message": "The database refused the query for another reason (a missing column, a syntax error the save check cannot see), or a stored procedure committed or rolled back the connector's transaction; that query is then switched off automatically and the audit log records it (database_query.disabled_automatically).",
+      "hint": "Run the SQL with the same values directly against the database as the read-only user to see its message, then correct the query under Settings → Databases. For a switched-off procedure query, remove the COMMIT or ROLLBACK from the procedure; saving it again checks its definition.",
       "docs": "/docs/troubleshooting/database-connections#error-codes"
     },
     {
@@ -2688,8 +2688,15 @@
     {
       "code": "not_select",
       "area": "database_connector",
-      "message": "The SQL does not start with SELECT or WITH.",
-      "hint": "A database query only reads: write one SELECT, or a WITH … SELECT.",
+      "message": "The SQL does not start with SELECT or WITH (on SQL Server: nor is it one EXEC of a stored procedure).",
+      "hint": "A database query only reads: write one SELECT, or a WITH … SELECT. On a SQL Server connection it may also be one stored-procedure call, EXEC [schema].[procedure] @p1 = :p1, @p2 = :p2.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
+      "code": "procedure_call_form",
+      "area": "database_connector",
+      "message": "The EXEC statement is not the one stored-procedure call a SQL Server query may be: a literal, an expression, OUTPUT, an option such as WITH RECOMPILE, a return-status variable, a name of more than schema and procedure, dynamic SQL (EXEC('…')), or a system procedure that runs SQL text (sp_executesql, sp_prepexec, xp_…).",
+      "hint": "Write EXEC [schema].[procedure] @p1 = :p1, @p2 = :p2: an optional schema and the procedure, plain or in [brackets], and every argument @name = :placeholder with a declared parameter. Put fixed values and dynamic SQL inside the procedure.",
       "docs": "/docs/concepts/database-connections#queries-and-parameters"
     },
     {
@@ -2714,10 +2721,31 @@
       "docs": "/docs/concepts/database-connections#queries-and-parameters"
     },
     {
+      "code": "procedure_definition_unreadable",
+      "area": "database_connector",
+      "message": "The definition of the stored procedure a query calls could not be read: the procedure does not exist or the connection's login may not see it, the login lacks VIEW DEFINITION on it, it was created WITH ENCRYPTION, or the database did not answer. Cavelon checks every procedure's definition before a query may call it, so such a query cannot be saved, enabled or test-run.",
+      "hint": "Grant VIEW DEFINITION on the procedure to the connector's login (GRANT VIEW DEFINITION ON [schema].[procedure] TO [login]), or recreate it without WITH ENCRYPTION; check that the connection test passes, then save again.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
+      "code": "procedure_definition_writes",
+      "area": "database_connector",
+      "message": "The definition of the stored procedure a query calls does more than read: it changes a table other than a local temporary table (#name) or a table variable (@name), creates, alters or drops an object, controls the transaction (COMMIT, ROLLBACK, SAVE TRAN), calls another procedure or dynamic SQL (EXEC, sp_executesql, EXECUTE AS), reaches another server or a file (OPENROWSET, OPENQUERY, BULK), or changes rights. Such a query cannot be saved, enabled or test-run.",
+      "hint": "Call a procedure that only reads (temporary tables and table variables are fine), or write the query as a SELECT. The message names what the definition does.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
+      "code": "write_privileges_block_procedure",
+      "area": "database_connector",
+      "message": "A stored-procedure query (EXEC) runs only on a SQL Server login whose last test found no write privileges, and this connection's last test found some. Cavelon cannot see whether a procedure writes, so the read-only login is the boundary; a superadmin's acknowledgement of the write privileges does not count for procedures. Such a query cannot be saved or enabled, and does not run.",
+      "hint": "Give the connection a login without write privileges (db_datareader, and EXECUTE only on procedures that read: a procedure writes its owner's tables for any caller; Settings → Databases shows the script), run the connection test again, then save the query.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
       "code": "write_privileges_unacknowledged",
       "area": "database_connector",
       "message": "The connection's last test found that its login can write, and its dialect (SQL Server) has no read-only transaction, so its queries cannot be enabled and do not run.",
-      "hint": "Give the connection a login that may only read (Settings → Databases shows the script) and test it again. Or a superadmin acknowledges on the connection that this login can write; the rollback after every call stays.",
+      "hint": "Give the connection a login that may only read (Settings → Databases shows the script) and test it again. Or a superadmin acknowledges on the connection that this login can write; the rollback after every call stays. A stored-procedure query needs the read-only login: the acknowledgement does not count for it (write_privileges_block_procedure).",
       "docs": "/docs/concepts/database-connections#queries-and-parameters"
     },
     {

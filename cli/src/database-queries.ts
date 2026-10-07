@@ -210,6 +210,191 @@ export function queryProblems(query: Json, schema: PackageSchema): Problem[] {
 }
 
 // ---------------------------------------------------------------------------
+// A stored-procedure call
+// ---------------------------------------------------------------------------
+
+/** The one call a SQL Server query may be, as the instance's refusals spell it. */
+export const PROCEDURE_CALL_FORM = "EXEC [schema].[procedure] @p1 = :p1, @p2 = :p2";
+
+/** The dialect whose queries may call a stored procedure. */
+const PROCEDURE_DIALECT = "mssql";
+
+interface Token {
+  kind: "word" | "string" | "identifier" | "comment" | "semicolon" | "symbol";
+  text: string;
+  start: number;
+}
+
+const WORD_START = /[A-Za-z_]/;
+const WORD_PART = /[A-Za-z0-9_$]/;
+
+/** Where a quote opened at `start` closes (after the closing quote); a doubled quote is part of the text. Undefined when it never closes. */
+function closing(sql: string, start: number, quote: string, backslash: boolean): number | undefined {
+  for (let i = start + 1; i < sql.length; i++) {
+    if (backslash && sql[i] === "\\") {
+      i++;
+      continue;
+    }
+    if (sql[i] !== quote) continue;
+    if (sql[i + 1] === quote) {
+      i++;
+      continue;
+    }
+    return i + 1;
+  }
+  return undefined;
+}
+
+/**
+ * The SQL as the instance's check reads it, far enough to find an `EXEC` and
+ * check its form: strings, quoted identifiers and comments are one token each,
+ * so a keyword inside one is no keyword. Undefined for SQL with an unclosed
+ * quote or comment, which the instance refuses with a code of its own.
+ */
+function sqlTokens(sql: string, dialect: string): Token[] | undefined {
+  const tokens: Token[] = [];
+  let i = 0;
+  while (i < sql.length) {
+    const char = sql[i]!;
+    if (/\s/.test(char)) {
+      i++;
+      continue;
+    }
+    let end: number | undefined;
+    let kind: Token["kind"];
+    if (sql.startsWith("--", i)) {
+      const newline = sql.indexOf("\n", i);
+      end = newline === -1 ? sql.length : newline;
+      kind = "comment";
+    } else if (sql.startsWith("/*", i)) {
+      const close = sql.indexOf("*/", i + 2);
+      if (close === -1) return undefined;
+      end = close + 2;
+      kind = "comment";
+    } else if (char === "'") {
+      end = closing(sql, i, "'", dialect === "mysql");
+      kind = "string";
+    } else if (char === '"') {
+      end = closing(sql, i, '"', dialect === "mysql");
+      kind = dialect === "mysql" ? "string" : "identifier";
+    } else if (char === "`" && dialect === "mysql") {
+      end = closing(sql, i, "`", false);
+      kind = "identifier";
+    } else if (char === "[" && dialect === PROCEDURE_DIALECT) {
+      end = closing(sql, i, "]", false);
+      kind = "identifier";
+    } else if (WORD_START.test(char)) {
+      end = i + 1;
+      while (end < sql.length && WORD_PART.test(sql[end]!)) end++;
+      kind = "word";
+    } else {
+      end = i + 1;
+      kind = char === ";" ? "semicolon" : "symbol";
+    }
+    if (end === undefined) return undefined;
+    tokens.push({ kind, text: sql.slice(i, end), start: i });
+    i = end;
+  }
+  return tokens;
+}
+
+const isWord = (token: Token | undefined, ...words: string[]) => token?.kind === "word" && words.includes(token.text.toUpperCase());
+const isSymbol = (token: Token | undefined, text: string) => token?.kind === "symbol" && token.text === text;
+const touching = (first: Token, second: Token) => second.start === first.start + first.text.length;
+
+/** System procedures that run SQL text or code outside the database: the instance refuses a query that calls one. */
+const DYNAMIC_SQL_PROCEDURES = ["sp_executesql", "sp_sqlexec", "sp_execute", "sp_execute_external_script", "sp_invoke_external_rest_endpoint"];
+const DYNAMIC_SQL_PREFIXES = ["xp_", "sp_prep", "sp_cursor", "sp_oa", "sp_msforeach"];
+
+/** One part of the procedure's name: a plain word or a `[bracketed]` identifier. */
+function namePart(token: Token | undefined): string | undefined {
+  if (token?.kind === "identifier" && token.text.startsWith("[") && token.text.length > 2) return token.text.slice(1, -1).replaceAll("]]", "]");
+  return token?.kind === "word" ? token.text : undefined;
+}
+
+/** Why an EXEC is not the one call the instance takes, or undefined when it is. */
+function procedureFormProblem(sql: string, code: Token[]): string | undefined {
+  const tokens = code[code.length - 1]?.kind === "semicolon" ? code.slice(0, -1) : code;
+  if (!isWord(tokens[0], "EXEC", "EXECUTE")) return "Nothing may stand before EXEC.";
+  if (tokens.length < 2) return "EXEC names no procedure.";
+  const parts: string[] = [];
+  let position = 1;
+  for (;;) {
+    const part = namePart(tokens[position]);
+    if (part === undefined) return `${tokens[position]?.text ?? "Nothing"} is not a procedure name.`;
+    parts.push(part);
+    position++;
+    if (!isSymbol(tokens[position], ".")) break;
+    if (parts.length === 2) return "The procedure is named by at most a schema and its name, not a database or server.";
+    position++;
+  }
+  const procedure = parts[parts.length - 1]!;
+  const lower = procedure.toLowerCase();
+  if (DYNAMIC_SQL_PROCEDURES.includes(lower) || DYNAMIC_SQL_PREFIXES.some((prefix) => lower.startsWith(prefix))) {
+    return `${procedure} runs SQL text or code outside the database; a query may not call it.`;
+  }
+  const args = tokens.slice(position);
+  for (let index = 0; index < args.length; ) {
+    const [at, name, equals, colon, bind] = args.slice(index, index + 5);
+    const argument =
+      isSymbol(at, "@") && name?.kind === "word" && touching(at!, name) && isSymbol(equals, "=") && isSymbol(colon, ":") && bind?.kind === "word" && touching(colon!, bind) && !bind.text.includes("$");
+    if (!argument) {
+      const shown = args.slice(index, index + 5);
+      const last = shown[shown.length - 1]!;
+      return `The argument '${sql.slice(shown[0]!.start, last.start + last.text.length)}' is not written @name = :placeholder.`;
+    }
+    index += 5;
+    if (index === args.length) break;
+    if (!isSymbol(args[index], ",")) return `'${args[index]!.text}' follows an argument, where only a comma and the next argument may stand.`;
+    if (index + 1 === args.length) return "The arguments end with a comma.";
+    index++;
+  }
+  return undefined;
+}
+
+/**
+ * What the instance would refuse in a query that calls a stored procedure: on
+ * a dialect other than SQL Server any `EXEC` (`not_select`), on SQL Server an
+ * `EXEC` that is not exactly the one call form (`procedure_call_form`).
+ * Nothing for a query that does not start with `EXEC`, for one without a
+ * dialect, or for SQL the instance refuses with another code first. Whether
+ * the connection's login and the procedure's definition allow the call, only
+ * the instance can check.
+ */
+export function procedureCallProblem(sql: string, dialect: string | undefined): Problem | undefined {
+  if (!dialect) return undefined;
+  const tokens = sqlTokens(sql, dialect);
+  if (!tokens) return undefined;
+  const code = tokens.filter((t) => t.kind !== "comment");
+  const first = code.find((t) => !isSymbol(t, "("));
+  if (!isWord(first, "EXEC", "EXECUTE")) return undefined;
+  if (dialect !== PROCEDURE_DIALECT) {
+    return problem(
+      "not_select",
+      `the SQL calls a stored procedure (${first!.text.toUpperCase()}), which only a query on a SQL Server (${PROCEDURE_DIALECT}) connection may do; ` +
+        `on ${dialect} the instance refuses it (not_select). Write the query as a SELECT.`,
+      "sql_text",
+    );
+  }
+  // A second statement is the instance's multiple_statements, not this form's.
+  if (code.some((t, i) => t.kind === "semicolon" && i !== code.length - 1)) return undefined;
+  const why = procedureFormProblem(sql, code);
+  if (!why) return undefined;
+  return problem("procedure_call_form", `${why} A stored-procedure query is exactly ${PROCEDURE_CALL_FORM}, every argument a :placeholder (procedure_call_form).`, "sql_text");
+}
+
+/** Whether a query's SQL is a stored-procedure call on SQL Server, as the instance tells one apart: its first keyword is EXEC. */
+export function isProcedureCall(sql: string, dialect: string | undefined): boolean {
+  if (dialect !== PROCEDURE_DIALECT) return false;
+  const code = sqlTokens(sql, dialect)?.filter((t) => t.kind !== "comment");
+  return isWord(
+    code?.find((t) => !isSymbol(t, "(")),
+    "EXEC",
+    "EXECUTE",
+  );
+}
+
+// ---------------------------------------------------------------------------
 // What changed since the last pull or apply
 // ---------------------------------------------------------------------------
 
@@ -312,6 +497,17 @@ export function checkQueryTools(disk: PackageOnDisk, schema: PackageSchema, base
         severity: "error",
         ...locate(disk, `/${TOOLS_SECTION}/${index}/${QUERY_FIELD}${problem.at ? `/${problem.at}` : ""}`),
         message: `Query tool "${slug}": ${problem.message}`,
+      });
+    }
+    // Only where the SQL is the instance's to judge in full: a warning, since the instance's own check decides.
+    const dialect = isObject(query.connection) && typeof query.connection.dialect === "string" ? query.connection.dialect : undefined;
+    const call = typeof query.sql_text === "string" ? procedureCallProblem(query.sql_text, dialect) : undefined;
+    if (call) {
+      findings.push({
+        code: call.code,
+        severity: "warning",
+        ...locate(disk, `/${TOOLS_SECTION}/${index}/${QUERY_FIELD}/${call.at}`),
+        message: `Query tool "${slug}": ${call.message}`,
       });
     }
   }

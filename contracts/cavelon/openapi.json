@@ -9609,6 +9609,20 @@
             ],
             "title": "Query Enable Refusal"
           },
+          "procedure_call_refusal": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Procedure Call Refusal"
+          },
           "query_count": {
             "type": "integer",
             "title": "Query Count",
@@ -9717,6 +9731,14 @@
             "type": "string",
             "format": "date-time",
             "title": "Tested At"
+          },
+          "procedure_findings": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Procedure Findings"
           }
         },
         "type": "object",
@@ -10257,6 +10279,17 @@
               }
             ],
             "title": "Run Id"
+          },
+          "notice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notice"
           },
           "params_json_schema": {
             "additionalProperties": true,

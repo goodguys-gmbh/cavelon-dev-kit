@@ -7,6 +7,31 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Added
+
+- SQL Server stored-procedure queries (#162): a query on an `mssql`
+  connection may be one call, `EXEC [schema].[procedure] @p = :p, …`, and the
+  instance checks the connection's login and the procedure's definition before
+  it saves, enables or runs one. The kit shows those checks:
+  - `validate` warns, with file and line, of an `EXEC` the instance would
+    refuse: not in that form on SQL Server (`procedure_call_form`), or on
+    another dialect (`not_select`);
+  - `db connections` names a connection where a stored-procedure query cannot
+    be saved or run now (`procedure_call_refusal`), and `db queries <query>`
+    says that a query calls a procedure and why it cannot run now;
+  - `db test` lists the stored-procedure queries whose procedure no longer
+    passes (`procedure_findings`), and warns;
+  - `db test-run` shows the instance's `notice` (a procedure that ended the
+    connector's transaction, and whether its query was switched off), and a
+    refused run names the step that lifts the refusal and `cavelon explain`;
+  - `apply` and `explain` show the four new codes
+    (`procedure_call_form`, `write_privileges_block_procedure`,
+    `procedure_definition_unreadable`, `procedure_definition_writes`) from the
+    instance's error catalog.
+  The `--json` output and the MCP tools carry the instance's new fields as it
+  sends them. On an instance older than stored-procedure queries none of
+  these fields exist, and the kit says nothing of them.
+
 ### Fixed
 
 - `cavelon --version` and the update notice named pip, with `pip install

@@ -23,6 +23,10 @@ export interface FakeConnection {
   caDetails?: false;
   /** Why its queries may not be enabled, as the instance says it (SQL Server with write privileges). */
   queryEnableRefusal?: { code: string; message: string };
+  /** Why a stored-procedure query may not be saved or run on it, as the instance says it (SQL Server). */
+  procedureCallRefusal?: { code: string; message: string };
+  /** What a passing test lists: stored-procedure queries whose procedure no longer passes. */
+  procedureFindings?: Array<{ query_id: string; slug: string; code: string; message: string }>;
 }
 
 export interface FakeCaCertificate {
@@ -46,8 +50,10 @@ export interface FakeQuery {
   max_result_chars: number;
   allows_anonymous: boolean;
   version: number;
-  /** What a test run returns: columns and rows, or an error code. */
-  result?: { columns: string[]; rows: unknown[][] } | { error_code: string };
+  /** What a test run returns: columns and rows, or an error code; a notice where the code alone does not say what happened. */
+  result?: ({ columns: string[]; rows: unknown[][] } | { error_code: string }) & { notice?: string };
+  /** The instance's refusal of a test run before it starts (409), as a stored-procedure query gets it. */
+  refusal?: { code: string; message: string };
 }
 
 export interface FakeQueryRun {
@@ -72,6 +78,8 @@ export interface DatabaseState {
   testRuns: Array<{ query_id: string; values: Record<string, unknown> }>;
   /** Whether the caller holds database_connectors.view, which every read needs. */
   mayView: boolean;
+  /** False plays an instance older than stored-procedure queries: no procedure_call_refusal, procedure_findings or notice. */
+  procedureFields: boolean;
   /** What GET /instance answers: the dialects this host runs and its network side. */
   instance: { runnable_dialects: string[]; network: { egress_ips: string[]; connections_per_process: number } };
 }
@@ -84,6 +92,7 @@ export function databaseState(): DatabaseState {
     mayTest: true,
     testRuns: [],
     mayView: true,
+    procedureFields: true,
     instance: { runnable_dialects: ["mssql", "mysql", "postgresql"], network: { egress_ips: ["203.0.113.10", "203.0.113.11"], connections_per_process: 5 } },
   };
 }
@@ -126,6 +135,7 @@ function connectionView(state: DatabaseState, c: FakeConnection) {
     last_test_detail: null,
     write_privileges_acknowledged: false,
     query_enable_refusal: c.queryEnableRefusal ?? null,
+    ...(state.procedureFields ? { procedure_call_refusal: c.procedureCallRefusal ?? null } : {}),
     query_count: state.queries.filter((q) => q.connection_id === c.id).length,
     created_by_user_id: null,
     updated_by_user_id: null,
@@ -232,6 +242,7 @@ export function handleDatabase(state: DatabaseState, rc: DatabaseRoute): boolean
         config_version: 1,
         duration_ms: 87,
         tested_at: at(),
+        ...(state.procedureFields ? { procedure_findings: failed ? [] : (connection.procedureFindings ?? []) } : {}),
       });
       return true;
     }
@@ -278,6 +289,10 @@ export function handleDatabase(state: DatabaseState, rc: DatabaseRoute): boolean
         rc.send(422, { detail: { code: "invalid_arguments", parameter, message: `${parameter}: ${unknown ? "is not a parameter of this query" : "is required"}` } });
         return true;
       }
+      if (query.refusal) {
+        rc.send(409, { detail: query.refusal });
+        return true;
+      }
       state.testRuns.unshift({ query_id: query.id, values });
       const result = query.result ?? { columns: ["number", "status"], rows: [["A-10023", "shipped"]] };
       const failed = "error_code" in result;
@@ -308,6 +323,7 @@ export function handleDatabase(state: DatabaseState, rc: DatabaseRoute): boolean
         result_chars: failed ? null : 80,
         duration_ms: 15,
         run_id: run.id,
+        ...(state.procedureFields ? { notice: result.notice ?? null } : {}),
         params_json_schema: queryView(state, query).params_json_schema,
       });
       return true;
@@ -374,7 +390,18 @@ export function queryBlockers(state: DatabaseState, tenantId: string, pkg: Recor
     const existing = state.queries.find((q) => q.tenant_id === tenantId && q.slug === slug);
     if (existing && matches(state, tool, existing)) return;
     const connection = isObject(tool.database_query.connection) ? tool.database_query.connection : {};
-    if (!state.connections.some((c) => c.tenant_id === tenantId && c.name === connection.name)) {
+    const target = state.connections.find((c) => c.tenant_id === tenantId && c.name === connection.name);
+    // A stored-procedure call the target's connection may not take: its login, or the procedure's definition.
+    const sql = typeof tool.database_query.sql_text === "string" ? tool.database_query.sql_text : "";
+    if (target?.procedureCallRefusal && target.dialect === "mssql" && /^\s*EXEC(UTE)?\s/i.test(sql)) {
+      out.push({
+        code: target.procedureCallRefusal.code,
+        message: `Database query '${slug}' cannot be saved: ${target.procedureCallRefusal.message}`,
+        path: `tools[${index}].database_query.connection`,
+        hint: hint(target.procedureCallRefusal.code),
+      });
+    }
+    if (!target) {
       out.push({
         code: "database_connection_missing",
         message: `Database query '${slug}' needs the database connection '${String(connection.name)}' (${String(connection.dialect)}).`,
