@@ -926,6 +926,18 @@ function personApplyCommand(stored: Pick<StoredPreview, "preview_id" | "env">): 
   return personCommand("apply", ...(stored.env ? ["--env", stored.env] : []), "--confirm", stored.preview_id);
 }
 
+/** The published restriction belongs to this credential, not to every token on the instance. */
+function importNeedsAPerson(access: CredentialAccess | undefined): CavelonError | undefined {
+  const { person } = operationAccess(access, "POST /api/v1/agent-graph/import");
+  if (!person) return undefined;
+  return new CavelonError(ExitCode.needsAction, {
+    code: "import_needs_a_person",
+    message: "This credential cannot import the package here; nothing was imported.",
+    hint: `A person imports it in the Admin or with their own personal access token. The instance says: ${person}.`,
+    details: { credential: access?.kind ?? null, needs_a_person: true, reason: person },
+  });
+}
+
 async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: string, allowStale: boolean) {
   const stored = await loadPreview(project.root, previewId);
   const session = await ctx.session();
@@ -964,6 +976,8 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
     });
   }
   if (stored.tenant_id && session.tokenKind !== "api_key") client.target.tenantId = stored.tenant_id;
+  const refusal = importNeedsAPerson(await accessFor(client));
+  if (refusal) throw refusal;
   const driven = drivenByAgent(ctx);
   // The instance guards an import that writes what the whole tenant shares; it asks for its confirmation only after the person's yes.
   const guarded = stored.request[INCLUDE_TENANT_WIDE] === true || (stored.request.package.manifest as Record<string, unknown> | undefined)?.scope === "full_config";
@@ -1191,6 +1205,8 @@ export const apply: CommandSpec = {
     "budgets and ignored sections, and is stored in .cavelon/. A preview never creates the solution: one the env file names\n" +
     "that is not on the instance yet gets the `cavelon harness new` command that creates it as a draft. A person sets the\n" +
     "secrets (`cavelon secrets set <name>`, or in the Admin where the instance lets no token set one), never the agent.\n" +
+    "Where the instance says this credential cannot import (needs_a_person), it still previews but prints no confirm\n" +
+    "command: a person imports in the Admin or with their own personal access token. --confirm refuses before sending (exit 5).\n" +
     "Show a preview that reaches an active solution or env/prod to a person before confirming. Such a preview (show_to_person:\n" +
     "tenant-wide sections, an active solution, deletions, env/prod) a coding agent cannot confirm: over MCP the client asks\n" +
     "the person, and from an agent's shell the person runs the confirm in their own terminal. A stale preview exits 4 and\n" +
@@ -1339,6 +1355,8 @@ export const apply: CommandSpec = {
           ? `tenant-wide: ${sharedLeftOut.join(", ")} left out (\`${cavelonCommand("apply", "--include-tenant-wide")}\` imports them, for every solution of the tenant${reachText ? `; they would reach ${reachText}` : ""})`
           : undefined;
     const access = await accessFor(await ctx.client());
+    const refusal = importNeedsAPerson(access);
+    if (refusal) data.import_access = { allowed: false, needs_a_person: (refusal.details as { reason: string }).reason, hint: refusal.hint };
     const commands = setCommands(preview, undefined, secretsInAdminOnly(access?.principal) === true);
     if (commands.secrets.length || commands.variables.length) data.set_commands = commands;
     const context: PreviewContext = { disk, harness: harness?.slug, access };
@@ -1372,6 +1390,7 @@ export const apply: CommandSpec = {
           ...(pair ? [`hint: ${pair.hint}`] : []),
           ...(sharedHint ? [`hint: ${sharedHint}`] : []),
           ...(queryHint ? [`hint: ${queryHint}`] : []),
+          ...(refusal ? [refusal.hint] : []),
           `The preview has blockers; fix them and run \`${cavelonCommand("apply")}\` again.`,
         ].join("\n"),
         exitCode: ExitCode.validation,
@@ -1416,12 +1435,12 @@ export const apply: CommandSpec = {
       const expired = (await listPreviews(project.root, ctx.io.now())).filter((old) => old.expired);
       await retirePreviews(project.root, expired.map((old) => ({ preview_id: old.preview_id, reason: "expired" as const, at })));
     }
-    data.show_to_person = Boolean(reason);
+    data.show_to_person = Boolean(reason || refusal);
     // An agent may not confirm what the person has to see: the client asks them, or they confirm in their own terminal.
     const driven = drivenByAgent(ctx);
-    const route = driven && reason && preview.preview_id ? personRoute(ctx, driven) : undefined;
+    const route = !refusal && driven && reason && preview.preview_id ? personRoute(ctx, driven) : undefined;
     if (route) data.needs_person = route;
-    const confirmLine = !preview.preview_id
+    const confirmLine = refusal || !preview.preview_id
       ? undefined
       : route === "terminal"
         ? confirmInTerminal(personApplyCommand({ preview_id: preview.preview_id, env: envFile?.name ?? null }))
@@ -1437,6 +1456,7 @@ export const apply: CommandSpec = {
       ...(preview.preview_id ? [`preview id: ${preview.preview_id}`] : []),
       ...(reason ? [`This ${reason}: show this preview to a person before confirming.`] : []),
       ...(confirmLine ? [`Import exactly this: ${confirmLine}`] : []),
+      ...(refusal ? [refusal.hint] : []),
     ].join("\n");
     return { data, text };
   },

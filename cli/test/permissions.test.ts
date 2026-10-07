@@ -7,7 +7,7 @@ import { Readable } from "node:stream";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { accessOf, forbiddenHint, mayActivate, operationAccess } from "../src/access.js";
 import { COMMANDS } from "../src/commands/index.js";
-import { errorFromResponse } from "../src/http.js";
+import { ApiClient, errorFromResponse } from "../src/http.js";
 import type { InStream, Io } from "../src/io.js";
 import { createMcpServer } from "../src/mcp.js";
 import type { MetaPrincipal } from "../src/principal.js";
@@ -39,6 +39,7 @@ beforeAll(async () => {
 afterEach(() => {
   server.state.serveCredentialAccess = true;
   server.state.servePermissions = true;
+  server.state.servePrincipal = true;
 });
 afterAll(async () => {
   for (const sb of sandboxes) sb.cleanup();
@@ -274,6 +275,76 @@ describe("api list marks what the credential may not send", () => {
   });
 });
 
+describe("apply honors the credential's person-only import restriction", () => {
+  const imports = () => server.state.requests.filter((r) => r.method === "POST" && r.path === "/api/v1/agent-graph/import");
+
+  it.each([false, true])("an API key still previews without offering a confirm command (agent: %s)", async (agent) => {
+    const key = await signedIn({ kind: "key", tenantIds: [tenant], scopes: ["admin"] });
+    const cwd = await folder(key);
+    const options = { cwd, env: { SHELL: "/bin/sh", ...(agent ? { CLAUDECODE: "1" } : {}) } };
+    const before = imports().length;
+    const preview = await cli(key, ["apply", "--json"], options);
+    expect(preview.code, preview.stdout + preview.stderr).toBe(0);
+    const text = await cli(key, ["apply"], options);
+    expect(text.code, text.stdout + text.stderr).toBe(0);
+    expect(text.stdout).not.toMatch(/Import exactly this:|cavelon apply[^\n]*--confirm/);
+    expect(text.stdout).toMatch(/A person imports.*Admin.*personal access token/);
+    expect(preview.json()).toMatchObject({
+      previewed: true,
+      ready: true,
+      preview_id: expect.stringMatching(/^pv_/),
+      import_access: { allowed: false, needs_a_person: "Runs only for a person: a dashboard session or a personal access token", hint: expect.stringMatching(/A person imports.*Admin.*personal access token/) },
+    });
+    expect(imports()).toHaveLength(before);
+  });
+
+  it.each([false, true])("confirm with a restricted key exits 5 before sending (agent: %s)", async (agent) => {
+    const key = await signedIn({ kind: "key", tenantIds: [tenant], scopes: ["admin"] });
+    const cwd = await folder(key);
+    const options = { cwd, env: agent ? { CLAUDECODE: "1" } : {} };
+    const id = (await cli(key, ["apply", "--json"], options)).json<{ preview_id: string }>().preview_id;
+    const before = imports().length;
+    const result = await cli(key, ["apply", "--confirm", id, "--json"], options);
+    expect(imports()).toHaveLength(before);
+    expect(result.code, result.stdout + result.stderr).toBe(5);
+    expect(result.json<{ error: Record<string, unknown> }>().error).toMatchObject({
+      code: "import_needs_a_person",
+      hint: expect.stringMatching(/A person imports.*Admin.*personal access token/),
+      details: { credential: "api_key", needs_a_person: true },
+    });
+  });
+
+  it.each(["recent", "without needs_a_person", "without principal"])("a personal access token may preview and import on an instance %s", async (instance) => {
+    const token = await signedIn({ kind: "pat", tenantIds: [tenant], defaultTenant: tenant });
+    const cwd = await folder(token);
+    server.state.serveCredentialAccess = instance !== "without needs_a_person";
+    server.state.servePrincipal = instance !== "without principal";
+    const preview = await cli(token, ["apply"], { cwd, env: { SHELL: "/bin/sh" } });
+    expect(preview.code, preview.stdout + preview.stderr).toBe(0);
+    const id = /preview id: (pv_\S+)/.exec(preview.stdout)![1]!;
+    expect(preview.stdout).toContain(`Import exactly this: cavelon apply --confirm ${id}`);
+    const before = imports().length;
+    const result = await cli(token, ["apply", "--confirm", id, "--json"], { cwd });
+    expect(result.code, result.stdout + result.stderr).toBe(0);
+    expect(result.json()).toMatchObject({ applied: true });
+    expect(imports()).toHaveLength(before + 1);
+  });
+
+  it.each(["without needs_a_person", "without principal", "without import restriction"])("an API key leaves import to the server on an instance %s", async (instance) => {
+    const key = await signedIn({ kind: "key", tenantIds: [tenant], scopes: ["admin"], ...(instance === "without import restriction" ? { needsAPerson: [] } : {}) });
+    const cwd = await folder(key);
+    server.state.serveCredentialAccess = instance !== "without needs_a_person";
+    server.state.servePrincipal = instance !== "without principal";
+    const preview = await cli(key, ["apply"], { cwd, env: { SHELL: "/bin/sh" } });
+    const id = /preview id: (pv_\S+)/.exec(preview.stdout)![1]!;
+    expect(preview.stdout).toContain(`Import exactly this: cavelon apply --confirm ${id}`);
+    const before = imports().length;
+    const result = await cli(key, ["apply", "--confirm", id, "--json"], { cwd });
+    expect(result.code).toBe(7);
+    expect(imports()).toHaveLength(before + 1);
+  });
+});
+
 describe("hints suggest activating only to a credential that may", () => {
   it("a token without may activate hears who activates, not the command it would be refused", async () => {
     const token = await signedIn({ kind: "pat", tenantIds: [tenant], defaultTenant: tenant, mayActivate: false });
@@ -334,15 +405,37 @@ describe("a 403 names what the credential lacks, by its kind", () => {
     expect(scoped.details).toEqual({ credential: "api_key", scope: "admin" });
   });
 
-  it("an operation a person runs: the instance's reason", async () => {
-    const key = await signedIn({ kind: "key", tenantIds: [tenant], tokenName: "ci", scopes: ["admin"] });
-    const dir = await folder(key);
-    const preview = await cli(key, ["apply", "--json"], { cwd: dir });
-    const id = preview.json<{ preview_id?: string }>().preview_id;
-    expect(id, preview.stdout + preview.stderr).toBeTruthy();
-    const result = await cli(key, ["apply", "--confirm", id!, "--json"], { cwd: dir });
-    expect(result.code).toBe(7);
-    const error = result.json<{ error: { hint: string; details: Record<string, unknown> } }>().error;
+  it("a person-only import replaces the catalog's generic forbidden hint", async () => {
+    const token = server.addToken({ kind: "key", tenantIds: [tenant], scopes: ["admin"] });
+    const client = new ApiClient({ url: server.url, token });
+    const error = await client.request("POST", "/api/v1/agent-graph/import", { json: { package: {} } }).catch((error: unknown) => error);
+    expect(error).toMatchObject({
+      exitCode: 7,
+      code: "forbidden",
+      hint: expect.stringMatching(/^A person does this.*in the Admin/),
+      details: { credential: "api_key", needs_a_person: true },
+    });
+    expect((error as { hint: string }).hint).not.toMatch(/Ask a tenant administrator for the permission/);
+  });
+
+  it("a person-only hint leads while meaningful server advice and its docs survive", () => {
+    const access = accessOf(principal({ needs_a_person: [{ operation: null, method: "POST", path: "/api/v1/agent-graph/import", reason: "A person imports" }] }));
+    const hint = "Restore the solution's archived target in the Admin first.";
+    const error = errorFromResponse(403, { code: "target_archived", detail: "Target archived", hint, docs: "/docs/solutions#restore" }, "import", undefined, {
+      credential: { access, method: "POST", path: "/api/v1/agent-graph/import" },
+    });
+    expect(error.hint).toMatch(/^A person does this/);
+    expect(error.hint).toContain(hint);
+    expect(error).toMatchObject({ code: "target_archived", status: 403, docs: "/docs/solutions#restore" });
+    const unrelated = errorFromResponse(403, { code: "forbidden", detail: "Forbidden", hint }, "read", undefined, {
+      credential: { access, method: "GET", path: "/api/v1/agent-graph/import" },
+    });
+    expect(unrelated.hint).toBe(hint);
+  });
+
+  it("an operation a person runs without a server hint: the instance's reason", () => {
+    const access = accessOf(principal({ kind: "api_key", token: null, needs_a_person: [{ operation: null, method: "POST", path: "/api/v1/agent-graph/import", reason: "Runs only for a person: a dashboard session or a personal access token" }] }));
+    const error = refused({ detail: "Forbidden" }, { access, method: "POST", path: "/api/v1/agent-graph/import" });
     expect(error.hint).toBe("A person does this, not a token or an API key (the instance says: Runs only for a person: a dashboard session or a personal access token): in the Admin, or as a session of their own.");
     expect(error.details).toMatchObject({ credential: "api_key", needs_a_person: true });
   });

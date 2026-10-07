@@ -374,6 +374,15 @@ preview id: pv1_55ed52186395560a11ad7e525a2b9553
 Import exactly this: cavelon apply --confirm pv1_55ed52186395560a11ad7e525a2b9553 --env test
 ```
 
+If the instance lists imports in this credential's `needs_a_person`, an API
+key still previews but gets no confirm command. A person imports in the
+Admin or with their own personal access token; `apply --confirm` with the
+restricted credential refuses before sending (`import_needs_a_person`,
+exit 5). JSON previews carry `import_access` with `allowed: false`, the
+instance's `needs_a_person` reason and the person hint. On an older instance
+that publishes no restriction, the server decides whether the import is
+allowed.
+
 The preview lists what the import would create, change and delete, which
 active solutions it reaches, what the tenant still needs (secrets, variables,
 grants), and the instance's warnings. The two warnings here are expected:

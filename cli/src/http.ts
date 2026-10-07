@@ -1,6 +1,7 @@
 import { accessFor, forbiddenHint, type RefusedCredential } from "./access.js";
 import { capacityCodeIn, capacityHint } from "./capacity.js";
 import { CONFIRMATION_REQUIRED, confirmationRefused } from "./change-confirmation.js";
+import type { ErrorCatalog } from "./contracts.js";
 import { ceilingRefusal, LIMIT_ABOVE_CEILING } from "./limits.js";
 import { CavelonError, ExitCode, type ExitCodeValue } from "./errors.js";
 import { blockerDetails, type BlockerDetail } from "./preview-report.js";
@@ -106,6 +107,8 @@ function leading(text: string, slashes: boolean): number {
 export class ApiClient {
   /** Whether the instance has personal access tokens turned off, asked once. */
   private tokensOff?: Promise<boolean>;
+  /** The catalog's generic permission advice, so a credential-specific restriction can replace it. */
+  private genericForbiddenHint?: Promise<string | undefined>;
   /**
    * Set where the tenant id came from the slug cache: resolves the slug
    * again, once, and says whether the id changed. The first 403 or 404 of a
@@ -285,6 +288,12 @@ export class ApiClient {
       // What the credential may do, for a hint that names what it lacks; asked once per client, and only on a refusal.
       const access = await accessFor(this).catch(() => undefined);
       sent = { ...sent, credential: { kind, access, method: sent.method, path: sent.path } };
+      if (forbiddenHint("", sent.credential!).details.needs_a_person === true) {
+        this.genericForbiddenHint ??= this.get<ErrorCatalog>("/api/v1/meta/error-catalog", { allow: [400, 401, 403, 404, 405], timeoutMs: 10_000 })
+          .then((response) => response.data?.api_error_codes?.find((entry) => entry.code === "forbidden")?.hint ?? undefined)
+          .catch(() => undefined);
+        sent.genericForbiddenHint = await this.genericForbiddenHint;
+      }
     }
     return errorFromResponse(status, body, what, headers, sent);
   }
@@ -382,6 +391,8 @@ export interface RefusalContext {
   path?: string;
   /** Who was refused, for a 403's hint. */
   credential?: RefusedCredential;
+  /** The instance catalog's generic forbidden hint; a different hint still carries meaningful server advice. */
+  genericForbiddenHint?: string;
 }
 
 /**
@@ -482,6 +493,14 @@ export function errorFromResponse(status: number, body: unknown, what: string, h
   if (typeof reason === "string") details = details && typeof details === "object" && !Array.isArray(details) ? { ...(details as Record<string, unknown>), reason } : { reason };
   if (status === 400 && !hint && message && /select a tenant|tenant context|X-Tenant-Id/i.test(message)) {
     hint = `Choose a tenant with \`${cavelonCommand("use")}\` (it lists your tenants), --tenant or CAVELON_TENANT.`;
+  }
+  if (status === 403 && sent.credential) {
+    const forbidden = forbiddenHint(message ?? "", sent.credential);
+    if (forbidden.details.needs_a_person === true) {
+      // The principal names who may act; retain additional advice that is specific to this refusal.
+      hint = !hint || hint === sent.genericForbiddenHint || hint === forbidden.hint ? forbidden.hint : `${forbidden.hint} ${hint}`;
+      if (details === undefined) details = forbidden.details;
+    }
   }
   if ((status === 401 || status === 403) && !hint) {
     hint =
