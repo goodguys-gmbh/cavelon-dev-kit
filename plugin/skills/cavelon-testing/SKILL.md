@@ -280,6 +280,12 @@ the confirm command in their own terminal. When every suite passes,
 `cavelon activate --harness <name or slug>` goes through the readiness gate; if the
 token may not activate, a person activates in the Admin. A solution that a
 channel or an active trigger reaches goes live for them at once, so its
-activation previews first and needs the person's yes: show it; over MCP the
+activation previews first and needs the person's yes. So does activation
+that takes the default route (including assigning an unassigned route), or
+whose reach or route effect is unknown. It needs no confirm only when no
+channel or active trigger reaches it and readiness explicitly says
+`takes_default_route: false`. The preview reserves no route state; the
+successful result's `took_default_route` fields report the actual effect.
+Show it; over MCP the
 client asks them when you confirm with its token, and from your shell they run
 the confirm command in their own terminal.

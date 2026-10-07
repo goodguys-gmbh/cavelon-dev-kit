@@ -243,6 +243,16 @@ callers, and a test run has no signed-in visitor. Check the query for one
 customer with `cavelon db test-run <query> --value email=<address>`; see the
 testing skill.
 
+**Activation still needs a person when nothing reaches it.** The kit reads
+`channel_count` from the matching solution-list row when the single read
+leaves it null. If the list is unreadable, omits the row or its count, reach
+stays unknown. Readiness must also explicitly publish
+`takes_default_route: false`; a missing flag stays unknown even with a false
+schema default.
+A true flag needs your yes, including assigning an unassigned default
+route. The preview reserves no state; successful activation reports what
+actually happened in `took_default_route` and its from/name fields.
+
 **My active solution does not answer in the chat or widget.** The tenant's
 chat and widget answer only with its default route. `cavelon harness list`
 shows which solution that is (DEFAULT). Try yours by name with

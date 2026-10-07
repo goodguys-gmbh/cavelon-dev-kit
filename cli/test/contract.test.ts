@@ -56,6 +56,20 @@ function check(method: string, template: string, status: number, data: unknown) 
 }
 
 describe("contract snapshots", () => {
+  it("publishes activation's preview and actual route effects, including unassigned routes", () => {
+    const schemas = (doc.components as { schemas: Record<string, { properties: Record<string, unknown> }> }).schemas;
+    for (const [name, prefix] of [["HarnessReadinessResponse", "takes"], ["HarnessActivationResponse", "took"]]) {
+      const properties = schemas[name!]!.properties;
+      expect(properties[`${prefix}_default_route`]).toMatchObject({ type: "boolean", default: false });
+      for (const suffix of ["_from", "_from_name"]) {
+        expect(properties[`${prefix}_default_route${suffix}`]).toMatchObject({ anyOf: [{ type: "string" }, { type: "null" }] });
+      }
+    }
+    const activation = operationAt(doc, "POST", "/api/v1/harnesses/{harness_id}/activate")!;
+    expect(activation.responses["200"]!.content!["application/json"]!.schema).toEqual({ $ref: "#/components/schemas/HarnessActivationResponse" });
+    expect(activation.confirmation).toBe(true);
+  });
+
   it("publishes per-request Chat User readers and verified identity listings", async () => {
     for (const [method, route, base] of [
       ["POST", "/api/v1/chat", { message: "My orders" }],
@@ -409,6 +423,35 @@ describe("the routes the commands use", () => {
 });
 
 describe("the fake server answers in the published shapes", () => {
+  it("readiness and activation route effects distinguish assignment, replacement and no change", async () => {
+    try {
+      server.state.singleHarnessWithoutChannelCount = true;
+      server.state.tokens.get(token)!.mayActivate = true;
+      for (const effect of [
+        { takes_default_route: false, takes_default_route_from: null, takes_default_route_from_name: null },
+        { takes_default_route: true, takes_default_route_from: "previous", takes_default_route_from_name: "Previous" },
+        { takes_default_route: true, takes_default_route_from: null, takes_default_route_from_name: null },
+      ]) {
+        server.state.readinessRouteEffect = effect;
+        const created = await call("POST", "/api/v1/harnesses", { slug: `route-${randomUUID()}`, name: "Route" });
+        const id = (created.data as { id: string }).id;
+        const readiness = (await call("GET", `/api/v1/harnesses/${id}/readiness`)).data;
+        check("GET", "/api/v1/harnesses/{harness_id}/readiness", 200, readiness);
+        expect(readiness).toMatchObject(effect);
+        const p = `/api/v1/harnesses/${id}/activate`;
+        const body = { force: false };
+        const result = await call("POST", p, body, effect.takes_default_route ? await confirmed("POST", p, body) : {});
+        check("POST", "/api/v1/harnesses/{harness_id}/activate", 200, result.data);
+        expect(result.data).toMatchObject({ channel_count: null, took_default_route: effect.takes_default_route,
+          took_default_route_from: effect.takes_default_route_from, took_default_route_from_name: effect.takes_default_route_from_name });
+      }
+    } finally {
+      server.state.singleHarnessWithoutChannelCount = false;
+      server.state.readinessRouteEffect = undefined;
+      server.state.tokens.get(token)!.mayActivate = false;
+    }
+  });
+
   it("meta, tenants, harnesses", async () => {
     check("GET", "/api/v1/meta/capabilities", 200, (await call("GET", "/api/v1/meta/capabilities")).data);
     const created = await fetch(`${server.url}/api/v1/tenants`, {

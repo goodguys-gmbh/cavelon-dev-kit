@@ -130,6 +130,19 @@ then scrubbed. All other snapshot entries and capability defaults stay as
 recorded. The fake server also plays instances without reader overrides,
 principal permissions, OpenAPI or the email verification flag.
 
+Later on 2026-10-07 the OpenAPI took in activation route effects from the
+instance's merged build, without running it. The source is the immutable
+checked-in output of its OpenAPI generator, verified before selection.
+Only `HarnessReadinessResponse`'s three `takes_default_route` fields,
+`HarnessActivationResponse` (the harness response plus its three
+`took_default_route` fields), the activation's response reference and its
+confirmation condition are taken in, without prose. All other snapshots,
+settings, reader overrides and existing confirmation entries stay as
+recorded. A schema default of false is not a response: an omitted flag
+remains unknown. The fake server plays older schemas and omitted response
+flags, list-only channel counts, and a route effect that changes after its
+preview; readiness reserves no state.
+
 | File | Source |
 |---|---|
 | `openapi.json` | `GET /openapi.json`, trimmed by `cli/scripts/trim-openapi.mjs` to the operations listed in [`kit-operations.json`](kit-operations.json) and the components they reference, without prose descriptions |
