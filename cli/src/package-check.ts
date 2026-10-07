@@ -3,7 +3,7 @@ import { BRANCH_WIDTH_KEY, branchConcurrency, offText } from "./branches.js";
 import type { CatalogEntry, ErrorCatalog, PackageSchema } from "./contracts.js";
 import type { PublishedLimits } from "./limits.js";
 import type { TenantInventory } from "./commands/inventory.js";
-import { checkQueryTools, QUERY_CHANGED_CODE, QUERY_FIELDS_IGNORED_CODE, type QueryBaseline } from "./database-queries.js";
+import { checkQueryTools, QUERY_CHANGED_CODE, QUERY_FIELDS_IGNORED_CODE, type QueryBaseline, type QueryConnection } from "./database-queries.js";
 import { locate, schemaSections, tenantWideSections, type Finding, type PackageOnDisk } from "./package-files.js";
 import { MANIFEST_SECTION, PERSONA_SECTION, sectionFields } from "./package-format.js";
 import { kitErrorEntry } from "./kit-codes.js";
@@ -362,6 +362,8 @@ export interface CheckOptions {
   solution?: string;
   /** The query tools as the last pull or apply left them, to name the ones the package changes; none names none. */
   queryBaseline?: QueryBaseline;
+  /** Current connection status when it could be read; omission never means writes are disallowed. */
+  queryConnections?: QueryConnection[];
 }
 
 export function checkPackage(disk: PackageOnDisk, options: CheckOptions): Finding[] {
@@ -434,7 +436,7 @@ export function checkPackage(disk: PackageOnDisk, options: CheckOptions): Findin
   findings.push(...checkUncheckedAssertions(disk, options.schema));
   findings.push(...checkSolutionSlug(disk, options.solution));
   findings.push(...checkTenantWide(disk, options.schema, options.solution));
-  findings.push(...checkQueryTools(disk, options.schema, options.queryBaseline));
+  findings.push(...checkQueryTools(disk, options.schema, options.queryBaseline, options.queryConnections));
   findings.push(...checkWorkflowQueries(disk, options.schema, options.inventory, options.queryBaseline));
   noteTenantWide(findings, options.schema, options.solution);
 

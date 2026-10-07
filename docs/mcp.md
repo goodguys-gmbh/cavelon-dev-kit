@@ -304,8 +304,9 @@ repeat them:
   `sandbox_refresh`, `artifacts_export`, `db_connection_create`,
   `db_connection_update`, `db_connection_ca` (public certificates only), and the tenant Owner's two database
   checks, `db_test` (a connection test, stored as the connection's last test)
-  and `db_test_run` (one run of a saved query with the values given; the rows
-  come back once, and the instance keeps counts only).
+  and `db_test_run` (one test of a saved query with the values given; writes
+  are dry runs that roll back, the rows come back once, and the instance
+  keeps counts and write evidence only). Never retry an ambiguous write outcome.
   [Security](security.md#every-changing-command-and-its-guard) lists every
   changing command and its guard.
 - **What no tool does, even with `confirm`.** `api` refuses an operation the

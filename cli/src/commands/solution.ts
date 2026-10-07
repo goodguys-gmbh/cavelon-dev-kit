@@ -37,7 +37,7 @@ import {
   type StoredPreview,
 } from "../local-state.js";
 import { catalogEntry, checkPackage, KIT_CODES, packageVersionOf } from "../package-check.js";
-import { applyQueryNotes, connectorOffer, importWritesQueries, NEEDS_SUPERADMIN_CODE, queryBlockedHint, queryChanges, readQueryBaseline, rememberQueries } from "../database-queries.js";
+import { applyQueryNotes, connectorOffer, importWritesQueries, NEEDS_SUPERADMIN_CODE, queryBlockedHint, queryChanges, queryTools, readQueryBaseline, rememberQueries, schemaKnowsWrites, type QueryConnection } from "../database-queries.js";
 import { cliFix, similarCodes } from "../code-hints.js";
 import { KIT_ERROR_CODES } from "../kit-codes.js";
 import { confirmationPointer } from "../change-confirmation.js";
@@ -484,6 +484,14 @@ async function validatePackage(
     });
   }
   const { inventory, skipped } = await inventoryFor(ctx, project, disk, offline, schema);
+  let queryConnections: QueryConnection[] | undefined;
+  if (!offline && schemaKnowsWrites(schema) && queryTools(disk.package).some(t => (t.tool.database_query as Record<string, unknown> | undefined)?.kind === "write")) {
+    try {
+      queryConnections = await callStable(ctx, "GET", "/api/v1/database-connectors/connections", "checking write-query connections");
+    } catch {
+      ctx.warn("The write-query connection check was skipped: the instance's connections could not be read, so allows_writes is unknown.");
+    }
+  }
   const findings = checkPackage(disk, {
     schema,
     catalog: await catalogFor(ctx, offline),
@@ -492,6 +500,7 @@ async function validatePackage(
     inventory,
     solution: project.harness,
     queryBaseline: await readQueryBaseline(project.root),
+    queryConnections,
   });
   return { disk, findings, schema, schemaVersion: schema["x-package-version"] ?? version ?? null, used, skipped };
 }
@@ -526,6 +535,8 @@ export const validate: CommandSpec = {
     "check that cannot be made is named (`skipped` in --json). A reference that is in neither is a warning, as it may be created\n" +
     "on the instance before the import; the import preview blocks it otherwise, so validate does not say \"Valid\" then, and\n" +
     "--strict fails on every warning (exit 3).\n" +
+    "For write queries, reads connections now unless --offline and warns only on explicit allows_writes: false; an\n" +
+    "omitted flag or unreadable list stays unknown. Warns when a direct query node requires confirmation it cannot collect.\n" +
     "Each finding carries a code: `cavelon explain <code>` says more. The import preview checks everything again on the server.\n\n" +
     "With --json, `warnings` is always a list of `{code, message}` objects: the warning findings (at most --limit), then the\n" +
     "warnings about the run, such as a stale copy of the schema, with code null. `warning_count` counts them all and\n" +
@@ -1174,7 +1185,7 @@ function packageHarnessName(pkg: Record<string, unknown>, slug: string): string 
   return name ? name.slice(0, 255) : undefined;
 }
 
-const QUERY_IMPORT_REASON = "creates or changes database queries, whose SQL reads the tenant's database";
+const QUERY_IMPORT_REASON = "creates or changes database queries, whose SQL can read or change rows in the tenant's database";
 
 /**
  * Whether a preview needs a person's look before it is confirmed, and why; naming the active solutions it reaches. Tenant-wide

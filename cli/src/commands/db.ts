@@ -75,6 +75,8 @@ interface CaCertificate {
 interface InstanceOffer {
   runnable_dialects: string[];
   network: { egress_ips: string[]; connections_per_process: number };
+  write_queries?: boolean;
+  max_affected_rows_limit?: number;
 }
 
 interface QueryParameter {
@@ -102,6 +104,10 @@ interface Query {
   allows_anonymous: boolean;
   is_enabled: boolean;
   version: number;
+  kind?: string;
+  max_affected_rows?: number;
+  requires_confirmation?: boolean;
+  max_calls?: number;
   [key: string]: unknown;
 }
 
@@ -117,6 +123,17 @@ interface Run {
   query_version: number;
   [key: string]: unknown;
 }
+
+/** Never fill response fields from a schema default: a missing value is not evidence. */
+function reported(value: unknown): string | number | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return "unknown";
+  if (typeof value === "boolean") return value ? "yes" : "no";
+  return typeof value === "string" || typeof value === "number" ? value : undefined;
+}
+
+const WRITE_EVIDENCE = ["kind", "dry_run", "rolled_back", "affected_rows", "committed"] as const;
+const NO_WRITE_RETRY = "Do not retry an ambiguous write outcome. Check the database for the change before anyone repeats it.";
 
 interface TestStep {
   name: string;
@@ -303,7 +320,7 @@ function firewallSentence(offer: InstanceOffer): string {
 
 export const dbInstance: CommandSpec = {
   name: "db instance",
-  summary: "What this instance offers for database connections: the dialects it runs, and the addresses a database's firewall lets in.",
+  summary: "What this instance offers for database connections: dialects, firewall addresses and write-query support where published.",
   description:
     "Read it before a database connection is set up: a connection of a dialect the instance does not run can be saved, but\n" +
     "its test and queries answer unavailable, and the customer's database must let the instance's egress addresses in. An\n" +
@@ -336,6 +353,8 @@ export const dbInstance: CommandSpec = {
           ["dialects", offer.runnable_dialects.join(", ") || "none"],
           ["egress_ips", offer.network.egress_ips.join(", ") || "none named"],
           ["connections_per_process", offer.network.connections_per_process],
+          ["write_queries", reported(offer.write_queries)],
+          ["max_affected_rows_limit", reported(offer.max_affected_rows_limit)],
         ]),
         "",
         firewall,
@@ -406,7 +425,8 @@ export const dbQueries: CommandSpec = {
     "Each saved query is one agent tool (tool_type database_query). The tenant Owner or a superadmin in Tenant mode writes\n" +
     "it with database_connectors.manage: in the Admin or through apply with a personal access token and the person's approval.\n" +
     "`cavelon pull` writes its definition into the package's tools. A parameter filled by end_user.* comes from the signed-in visitor, never from\n" +
-    "the model. Without a query: one line per query. With one (its tool's slug or the query's id): the whole query.",
+    "the model. Where published, kind is read or write; write settings are max_affected_rows, requires_confirmation and max_calls.\n" +
+    "Without a query: one line per query. With one (its tool's slug or the query's id): the whole query.",
   readOnly: true,
   idempotent: true,
   mcpTool: "db_queries",
@@ -422,14 +442,17 @@ export const dbQueries: CommandSpec = {
     if (ref) {
       const q = await resolveQuery(ctx, ref);
       const connection = (await listConnections(ctx)).find((c) => c.id === q.connection_id);
-      const procedure = isProcedureCall(q.sql_text, connection?.dialect);
+      const procedure = q.kind !== "write" && isProcedureCall(q.sql_text, connection?.dialect);
       const refusal = procedure ? connection?.procedure_call_refusal : undefined;
       const text = [
         keyValues([
           ["query", `${q.slug} (${q.name})`],
           ["connection", q.connection_name],
           ["description", q.description ? clip(q.description, 300) : undefined],
-          ["limits", `max_rows ${q.max_rows}, max_result_chars ${q.max_result_chars}`],
+          ["kind", reported(q.kind)],
+          ["limits", `max_rows ${q.max_rows}, max_result_chars ${q.max_result_chars}${typeof q.max_affected_rows === "number" ? `, max_affected_rows ${q.max_affected_rows}` : ""}`],
+          ["requires_confirmation", reported(q.requires_confirmation)],
+          ["max_calls", reported(q.max_calls)],
           ["anonymous", q.allows_anonymous ? "visitors may call it without signing in" : "a signed-in visitor only"],
           ["enabled", q.is_enabled ? "yes" : "no"],
           ["version", q.version],
@@ -463,6 +486,7 @@ export const dbQueries: CommandSpec = {
       slug: q.slug,
       name: q.name,
       connection: q.connection_name,
+      kind: q.kind ?? null,
       parameters: q.parameters.map((p) => (filledBy(p) === "model" ? p.name : `${p.name} (${filledBy(p)})`)).join(", ") || null,
       max_rows: q.max_rows,
       anonymous: q.allows_anonymous ? "yes" : "no",
@@ -472,7 +496,7 @@ export const dbQueries: CommandSpec = {
     return {
       data: page,
       text:
-        (table(rows, ["slug", "name", "connection", "parameters", "max_rows", "anonymous", "enabled", "version"], 60) || "No database queries.") +
+        (table(rows, ["slug", "name", "connection", ...(page.items.some(q => q.kind !== undefined) ? ["kind"] : []), "parameters", "max_rows", "anonymous", "enabled", "version"], 60) || "No database queries.") +
         moreHint(page.next_cursor, cavelonCommand("db", "queries")) +
         (rows.length ? `\n\nOne query in full: ${cavelonCommand("db", "queries", fill("slug"))}` : ""),
     };
@@ -481,7 +505,7 @@ export const dbQueries: CommandSpec = {
 
 export const dbRuns: CommandSpec = {
   name: "db runs",
-  summary: "A saved query's runs, newest first: source, outcome, error code, duration and row count; never values or rows.",
+  summary: "A saved query's runs: outcome, counts and published write evidence (kind, affected_rows, committed, dry_run); never values or rows.",
   description:
     "Every run leaves this evidence, an agent's call and a test run alike; the instance keeps no parameter value, row or SQL.\n" +
     "`cavelon explain <code>` says what an error code means and how to fix it.",
@@ -517,13 +541,15 @@ export const dbRuns: CommandSpec = {
       rows: r.row_count ?? null,
       truncated: r.truncated ? "yes" : null,
       version: r.query_version,
+      ...Object.fromEntries(WRITE_EVIDENCE.filter(k => k !== "rolled_back").map(k => [k, reported(r[k]) ?? null])),
     }));
     return {
       data: { query: { id: q.id, slug: q.slug, version: q.version }, items, next_cursor: next },
       text:
-        (table(rows, ["at", "source", "outcome", "error_code", "duration_ms", "rows", "truncated", "version"]) || `No runs of ${q.slug} yet.`) +
+        (table(rows, ["at", "source", "outcome", "error_code", "duration_ms", "rows", ...WRITE_EVIDENCE.filter(k => k !== "rolled_back" && items.some(r => r[k] !== undefined)), "truncated", "version"]) || `No runs of ${q.slug} yet.`) +
         moreHint(next, cavelonCommand("db", "runs", q.slug)) +
-        explainLine(items.map((r) => r.error_code)),
+        explainLine(items.map((r) => r.error_code)) +
+        (items.some(r => r.error_code === "write_outcome_unknown") ? `\n\n${NO_WRITE_RETRY}` : ""),
     };
   },
 };
@@ -668,13 +694,15 @@ export const dbTestRun: CommandSpec = {
     "with --value name=value, those the platform fills from the signed-in visitor (end_user.*) too: that is how an\n" +
     "identity-scoped query is checked for one customer. The instance records the run (counts only) and audits it with your\n" +
     "name; the rows come back once and are never stored. A failed run names its code; `cavelon explain <code>` says more.\n" +
-    "A stored-procedure query (SQL Server) shows the procedure's first result set; the instance refuses its run (exit 4)\n" +
+    "A write query's test is a dry run that rolls back; it still needs the connection to allow writes. The result reports\n" +
+    "kind, dry_run, rolled_back, affected_rows and committed only where published; an omitted value stays unknown. Never\n" +
+    "retry an ambiguous write outcome. A read stored-procedure query (SQL Server) shows the procedure's first result set; the instance refuses its run (exit 4)\n" +
     "while the connection's last test found write privileges or the procedure's definition writes or cannot be read, and\n" +
     "a run whose procedure ended the connector's transaction comes back with a notice saying so and whether the query was\n" +
     "switched off.",
   readOnly: false,
   idempotent: true,
-  mcpEffect: "Runs the saved query once on the instance; it leaves a run record (counts only) and an audit entry, and changes no setting.",
+  mcpEffect: "Tests the saved query once on the instance; writes are dry runs that roll back. Leaves a run record and audit entry, and changes no setting. Never retry an ambiguous write outcome.",
   mcpTool: "db_test_run",
   operations: ["POST /api/v1/database-connectors/queries/{query_id}/test-run"],
   positionals: [{ name: "query", description: "The query's tool slug or id.", required: true }],
@@ -701,6 +729,11 @@ export const dbTestRun: CommandSpec = {
       run_id?: string | null;
       /** What the code alone does not say (a procedure ended the transaction); an older instance does not publish it. */
       notice?: string | null;
+      kind?: string;
+      dry_run?: boolean;
+      rolled_back?: boolean;
+      affected_rows?: number | null;
+      committed?: boolean | null;
     };
     try {
       result = await callStable(ctx, "POST", "/api/v1/database-connectors/queries/{query_id}/test-run", "test runs of database queries", {
@@ -709,6 +742,9 @@ export const dbTestRun: CommandSpec = {
         timeoutMs: 90_000,
       });
     } catch (error) {
+      if (query.kind === "write" && error instanceof CavelonError && (error.code === "network_error" || error.code === "request_timeout")) {
+        throw new CavelonError(error.exitCode, { code: error.code, status: error.status, message: error.message, hint: NO_WRITE_RETRY, docs: error.docs, details: error.details });
+      }
       throw refusedRun(ownerOnly(error, "A test run"), query);
     }
     const ok = result.outcome === "ok" && !result.error_code;
@@ -722,6 +758,7 @@ export const dbTestRun: CommandSpec = {
         ["rows", ok ? `${result.returned_rows ?? rows.length} returned of ${result.row_count ?? "?"}${result.truncated ? ", truncated for the model" : ""}` : undefined],
         ["duration_ms", result.duration_ms],
         ["notice", result.notice || undefined],
+        ...WRITE_EVIDENCE.map(k => [k, reported(result[k])] as [string, string | number | undefined]),
       ]),
       "",
       "What the model sees:",
@@ -731,7 +768,7 @@ export const dbTestRun: CommandSpec = {
     ].join("\n");
     return {
       data: { query: { id: query.id, slug: query.slug, version: query.version }, ...result },
-      text: text + explainLine([result.error_code]),
+      text: text + explainLine([result.error_code]) + (result.error_code === "write_outcome_unknown" ? `\n\n${NO_WRITE_RETRY}` : ""),
       exitCode: ok ? ExitCode.ok : ExitCode.validation,
     };
   },

@@ -185,7 +185,7 @@ under "needs variables".
 
 A **database query tool** lets an agent answer from a customer's live
 database: the status of an order, the stock of an article. The agent never
-writes SQL. A saved, read-only query becomes one tool (`tool_type:
+writes SQL. A saved query, explicitly `kind: read` or `kind: write`, becomes one tool (`tool_type:
 database_query`); the model calls it and fills only the parameters it is
 given. A parameter whose `source` is `end_user.id`,
 `end_user.external_subject` or `end_user.email` is filled by the instance from
@@ -256,14 +256,24 @@ change. An apply whose queries match the instance's passes. So:
   permitted token or import it in the Admin; then `apply` passes while the
   definitions match.
 
+**Write queries.** `kind: write` carries `max_affected_rows`,
+`requires_confirmation` and `max_calls`. Keep the row cap small and chat
+confirmation on. A person enables writes on the connection in the Admin;
+`allows_writes`, passwords and privilege acknowledgment never travel in a
+package. Validation warns only for an explicit `allows_writes: false`,
+not an omitted flag. Test runs roll back and print only the returned write
+evidence; unknown commit evidence stays unknown. Never retry
+`write_outcome_unknown`. The [database walkthrough](connect-a-database.md#write-queries)
+covers statement rules, refusals and the current direct-node budget boundary.
+
 `cavelon db instance` says which dialects the instance runs (`postgresql`,
 `mysql`, `mssql` for SQL Server) and the addresses it connects to databases
 from, which a customer allows through their database's firewall. SQL Server
-has no read-only transaction, so a connection whose login can write runs no
-query (`write_privileges_unacknowledged`) until the login may only read or a
+has no read-only transaction, so a connection whose login can write without
+allowing write queries runs no read query (`write_privileges_unacknowledged`) until the login may only read or a
 superadmin acknowledges its write privileges in the Admin.
 
-**Stored procedures (SQL Server).** On an `mssql` connection a query may be
+**Read stored procedures (SQL Server).** On an `mssql` connection a read query may be
 one call of a stored procedure instead of a `SELECT`, in exactly this form:
 
 ```yaml
