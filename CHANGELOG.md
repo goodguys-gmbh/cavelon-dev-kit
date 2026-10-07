@@ -9,6 +9,37 @@ CLI, the skills and the plugin.
 
 ### Added
 
+- Plugin packages for the clients without a marketplace in this repository
+  (#155), rendered at release time from `plugin/`, the one source of the skills
+  and the MCP entry (`node packaging/render.mjs plugins`), and attached to each
+  release with `checksums-plugins.txt` and build provenance:
+  `cavelon-agent-plugin.tar.gz` (and `-windows`) in the Agent Plugins 1.0
+  format that Cursor, VS Code with GitHub Copilot, Copilot CLI and Kiro (as a
+  power) read; a Gemini CLI extension per platform
+  (`<platform>.cavelon-gemini-extension.tar.gz`, named so that
+  `gemini extensions install https://github.com/goodguys-gmbh/cavelon-dev-kit`
+  picks it); and `cavelon-marketplace.tar.gz` for Claude Code and Codex on a
+  machine that cannot reach GitHub. `--server installed` renders them with
+  `cavelon mcp` in place of the npx fallback. The tests check every manifest
+  against the Agent Plugins schemas (kept in `contracts/clients/`) and Gemini
+  CLI's rules, and CI has Gemini CLI validate, install and list the extension.
+- One install page per client in `docs/install/`: Claude Code, Codex, Cursor,
+  VS Code with GitHub Copilot (and Copilot CLI), Kiro, Gemini CLI, and cloud
+  agents and CI (`npx`, `uvx`). Each covers the install, the first login, how
+  to check that the skills and MCP tools are listed, updating and removing,
+  and says what was verified with the client.
+- `cavelon setup` installs the Cavelon extension in Gemini CLI from this
+  version's release (`gemini extensions install … --ref v<version> --consent`,
+  run in an empty folder of the kit's cache, which Gemini CLI then trusts), and
+  takes out the files an earlier `setup` wrote there. Where the release has no
+  extension (every release up to 0.1.11), it writes the files as before.
+  Cursor, VS Code and Kiro keep the files: their plugins install only from
+  their own window, VS Code's are off by default, and a Kiro power loads only
+  when a prompt names its keywords.
+- The update notice in an agent session names how the agent that started the
+  server updates the plugin: `gemini extensions update cavelon`,
+  `copilot plugin update cavelon`, or for Cursor, VS Code and Kiro the update
+  section of their install page.
 - An offline bundle per release (#156), for instances whose developers reach
   neither GitHub, npm nor PyPI: `cavelon-bundle-<version>.tar.gz` holds every
   platform's executable, the install scripts, the plugin for Claude Code and
@@ -51,38 +82,6 @@ instance can check that confirmation; database connections on SQL Server;
 - `uvx cavelon`, `pipx install cavelon` and `pip install cavelon`.
 
 ### Added
-
-- Plugin packages for the clients without a marketplace in this repository
-  (#155), rendered at release time from `plugin/`, the one source of the skills
-  and the MCP entry (`node packaging/render.mjs plugins`), and attached to each
-  release with `checksums-plugins.txt` and build provenance:
-  `cavelon-agent-plugin.tar.gz` (and `-windows`) in the Agent Plugins 1.0
-  format that Cursor, VS Code with GitHub Copilot, Copilot CLI and Kiro (as a
-  power) read; a Gemini CLI extension per platform
-  (`<platform>.cavelon-gemini-extension.tar.gz`, named so that
-  `gemini extensions install https://github.com/goodguys-gmbh/cavelon-dev-kit`
-  picks it); and `cavelon-marketplace.tar.gz` for Claude Code and Codex on a
-  machine that cannot reach GitHub. `--server installed` renders them with
-  `cavelon mcp` in place of the npx fallback. The tests check every manifest
-  against the Agent Plugins schemas (kept in `contracts/clients/`) and Gemini
-  CLI's rules, and CI has Gemini CLI validate, install and list the extension.
-- One install page per client in `docs/install/`: Claude Code, Codex, Cursor,
-  VS Code with GitHub Copilot (and Copilot CLI), Kiro, Gemini CLI, and cloud
-  agents and CI (`npx`, `uvx`). Each covers the install, the first login, how
-  to check that the skills and MCP tools are listed, updating and removing,
-  and says what was verified with the client.
-- `cavelon setup` installs the Cavelon extension in Gemini CLI from this
-  version's release (`gemini extensions install … --ref v<version> --consent`,
-  run in an empty folder of the kit's cache, which Gemini CLI then trusts), and
-  takes out the files an earlier `setup` wrote there. Where the release has no
-  extension (every release up to 0.1.11), it writes the files as before.
-  Cursor, VS Code and Kiro keep the files: their plugins install only from
-  their own window, VS Code's are off by default, and a Kiro power loads only
-  when a prompt names its keywords.
-- The update notice in an agent session names how the agent that started the
-  server updates the plugin: `gemini extensions update cavelon`,
-  `copilot plugin update cavelon`, or for Cursor, VS Code and Kiro the update
-  section of their install page.
 
 - `cavelon` on PyPI (#151): `uvx cavelon` runs it without installing, and
   `uv tool install cavelon`, `pipx install cavelon` or `pip install cavelon`
