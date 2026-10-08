@@ -1,4 +1,5 @@
 import type { Skill } from "./agents.js";
+import type { NativeAsset } from "./native-assets.js";
 
 /**
  * What a standalone executable carries in place of the files beside the npm
@@ -9,6 +10,7 @@ import type { Skill } from "./agents.js";
 export interface Embedded {
   version: string;
   skills: Skill[];
+  nativeAssets?: NativeAsset[];
 }
 
 let embedded: Embedded | undefined;

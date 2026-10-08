@@ -9,6 +9,13 @@ CLI, the skills and the plugin.
 
 ### Added
 
+- Versioned, dependency-bundled OpenCode/Pi native adapter build assets, with
+  hashes and redistribution licenses in npm and embedded standalone builds.
+  Packaged-runtime checks cover session-bound native calls, headless refusal,
+  cancellation, duplicate UI ownership and complete long Unicode previews.
+  Native setup/init installation and client/platform qualification remain in
+  development (#201).
+
 - Native person-approval transport foundation and the verified OpenCode/Pi
   prototype design (#193). Native client installation and release qualification
   remain in development; existing built-in MCP setup keeps its terminal route.
