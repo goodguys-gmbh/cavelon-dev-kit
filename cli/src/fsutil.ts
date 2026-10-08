@@ -1,6 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 
 export async function readJsonFile<T>(file: string): Promise<T | undefined> {
   try {
@@ -39,15 +40,29 @@ export function withoutBom(text: string): string {
 export async function writeFileAtomic(file: string, content: string, mode = 0o644, dirMode = 0o755): Promise<void> {
   await fs.mkdir(path.dirname(file), { recursive: true, mode: dirMode });
   const tmp = `${file}.${randomBytes(6).toString("hex")}.tmp`;
-  const handle = await fs.open(tmp, "w", mode);
   try {
-    await handle.writeFile(content, "utf8");
+    const handle = await fs.open(tmp, "w", mode);
+    try {
+      await handle.writeFile(content, "utf8");
+    } finally {
+      await handle.close();
+    }
+    const existing = await fs.stat(file).then((st) => st.mode & 0o777, () => undefined);
+    if (existing !== undefined) await fs.chmod(tmp, existing & mode).catch(() => undefined);
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await fs.rename(tmp, file);
+        break;
+      } catch (error) {
+        // Windows readers can hold a target briefly; never unlink it to replace it.
+        const code = (error as NodeJS.ErrnoException).code;
+        if (process.platform !== "win32" || attempt >= 5 || !["EPERM", "EACCES", "EBUSY"].includes(code ?? "")) throw error;
+        await delay(10 * 2 ** attempt);
+      }
+    }
   } finally {
-    await handle.close();
+    await fs.rm(tmp, { force: true }).catch(() => undefined);
   }
-  const existing = await fs.stat(file).then((st) => st.mode & 0o777, () => undefined);
-  if (existing !== undefined) await fs.chmod(tmp, existing & mode).catch(() => undefined);
-  await fs.rename(tmp, file);
 }
 
 /**
