@@ -167,3 +167,30 @@ it("Pi's packaged default resolves its adjacent profile without a dependency dir
   await module.default({ on(name: string) { events.push(name); } });
   expect(events).toEqual(["session_start", "session_shutdown"]);
 });
+
+it("OpenCode's packaged defaults load a portable adjacent profile and retain headless refusal", async () => {
+  const isolated = path.join(root, "opencode-packaged");
+  cpSync(assets, isolated, { recursive: true });
+  const entry = { type: "local", command: [command().command, ...command().args], enabled: false };
+  writeFileSync(path.join(isolated, "opencode.json"), JSON.stringify({ mcp: { cavelon: entry } }));
+  writeFileSync(path.join(isolated, "profile.json"), JSON.stringify({ format: 2, client: "opencode", version: KIT_VERSION,
+    configFile: "opencode.json", entryHash: nativeEntryHash(entry), scope: "project", projectRoot: "." }));
+  const serverModule = await import(pathToFileURL(path.join(isolated, "opencode-server.mjs")).href);
+  const tuiModule = await import(pathToFileURL(path.join(isolated, "opencode-tui.mjs")).href);
+  const disposers: Array<() => Promise<void>> = [];
+  const api: OpenCodeTui = { route: { current: { name: "home" } }, state: { path: { directory: isolated } },
+    renderer: { width: 80, height: 24 }, lifecycle: { onDispose(callback) { disposers.push(callback); } },
+    ui: { DialogAlert() { throw new Error("Unexpected dialog"); }, DialogConfirm() { throw new Error("Unexpected dialog"); },
+      dialog: { open: false, replace() { throw new Error("Unexpected dialog"); }, clear() {}, setSize() {} } } };
+  const server = await serverModule.default.server({ directory: isolated }, undefined);
+  try {
+    const context = { sessionID: "headless", abort: new AbortController().signal };
+    const read = await server.tool.cavelon_read.execute({}, context);
+    expect(JSON.parse(read.output).content[0].text).toBe("Grüße 東京 🐳");
+    const change = await server.tool.cavelon_change.execute({ message: "synthetic change" }, context);
+    expect(JSON.parse(change.output).content[0].text).toBe("person-terminal");
+    await tuiModule.default.tui(api, undefined);
+    await expect(serverModule.default.server({ directory: root }, undefined)).rejects.toThrow(/matching project/);
+    await expect(tuiModule.default.tui({ ...api, state: { path: { directory: root } } }, undefined)).rejects.toThrow(/matching project/);
+  } finally { await server.dispose(); for (const dispose of disposers) await dispose(); }
+});

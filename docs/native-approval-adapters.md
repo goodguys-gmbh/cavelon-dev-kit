@@ -55,12 +55,26 @@ standalone builds embed the same bytes for setup. The packaged adapters load
 from a directory without `node_modules`. These build assets do not yet enable
 native installation through `setup` or `init`.
 
-Each installed adapter will read its adjacent profile (OpenCode receives the
-profile path as plugin options). The profile names the selected existing MCP
+Each adapter reads its adjacent `profile.json`; OpenCode also accepts an
+explicit profile path in plugin options. The profile names the selected existing MCP
 configuration and stores a hash of its disabled Cavelon entry. It copies no
 credential or command environment values. A changed or re-enabled entry refuses
 native startup so duplicate built-in Cavelon tools cannot silently take over.
 Other MCP servers keep their own configuration.
+
+Project profiles use format `2`: their configuration and project-root paths
+are relative to the profile, with forward slashes, so moving a clone does not
+keep a path to the original machine. The configuration must remain inside the
+project after symlink resolution, and the native server and UI must run in the
+matching project workspace. Pi still requires the person's project trust.
+Existing absolute user profiles remain readable. Profiles bind configuration;
+they neither contain credentials nor represent a person's change approval.
+
+The configuration editor adds and removes individual native plugin/extension
+array members while preserving other members and comments. Duplicate owned
+members, invalid lists and edits that would remove a personal comment are
+refused. These primitives support the installer work; automatic native
+`setup` and `init` remain in development.
 
 The OpenCode server exposes `cavelon_<tool>` names. Private IPC exposes only
 session discovery and tool calls, never an approval answer. It refuses multiple

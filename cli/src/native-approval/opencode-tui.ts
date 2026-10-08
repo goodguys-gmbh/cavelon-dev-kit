@@ -1,6 +1,7 @@
 import { nativeStdioClient, type NativeApprovalClient } from "./client.js";
+import { fileURLToPath } from "node:url";
 import { startUiSocket } from "./ipc.js";
-import { loadNativeRuntime, type NativeRuntime } from "./profile.js";
+import { assertNativeWorkspace, loadNativeRuntime, type NativeRuntime } from "./profile.js";
 import { previewPages } from "./preview-pages.js";
 
 /** The minimal native host contract: no UI framework or credential binding is bundled. */
@@ -17,6 +18,7 @@ export interface OpenCodeTui {
 }
 
 export async function startOpenCodeTui(api: OpenCodeTui, options: NativeRuntime) {
+  await assertNativeWorkspace(options, api.state.path.directory);
   const clients = new Map<string, Promise<NativeApprovalClient>>();
   const pending = new Set<AbortController>();
   const retiring = new Set<Promise<void>>();
@@ -122,7 +124,8 @@ export async function startOpenCodeTui(api: OpenCodeTui, options: NativeRuntime)
 export default {
   id: "cavelon.native-approval",
   async tui(api: OpenCodeTui, options: { profile?: unknown } | undefined) {
-    if (typeof options?.profile !== "string") throw new Error("Cavelon native approval needs its setup profile.");
-    await startOpenCodeTui(api, await loadNativeRuntime(options.profile, "opencode"));
+    const profile = options?.profile === undefined ? fileURLToPath(new URL("./profile.json", import.meta.url)) : options.profile;
+    if (typeof profile !== "string") throw new Error("Cavelon native approval needs its setup profile.");
+    await startOpenCodeTui(api, await loadNativeRuntime(profile, "opencode"));
   },
 };

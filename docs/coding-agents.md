@@ -90,6 +90,11 @@ agent can do. Choose the token accordingly (next section). See also
    solution. `cavelon init` writes `cavelon.yaml`, `package/`, `tests/`, `env/`
    and an `AGENTS.md` block the agent reads first. To work on a solution that
    already exists, add `cavelon pull`.
+   Several solution folders may share one repository. With the unreleased
+   folder-selection support, a root MCP session passes `solution_dir` for
+   each child solution, keeping it on preview, confirmation and follow-up
+   calls. `harness` selects the instance's solution, not a local folder.
+   See [MCP folder selection](mcp.md#several-solutions-in-one-repository).
 4. **Put the material in the folder.** Everything the solution must know or
    follow: policies, FAQ pages, product sheets, sample documents, example
    requests and the answers you expect, an API description for a tool. Put

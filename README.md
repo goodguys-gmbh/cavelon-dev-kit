@@ -18,6 +18,15 @@ through the Admin.
 Your token stays with you: `cavelon` never takes it as an argument, keeps it in
 your system's credential store, and your agent never sees it.
 
+> [!NOTE]
+> **Open-source client expansion is under Unreleased.** The next release adds
+> OpenCode, Pi, Cline, Kilo, Goose, OMP and Qwen Code. OpenCode/Pi configuration
+> setup is implemented on `main`; automatic native-dialog installation and the
+> full client qualification are still being completed. Version 0.1.15 does not
+> include these additions. See the [client install pages](docs/install/README.md)
+> and [native approval details](docs/native-approval-adapters.md) for the current
+> scope. The release waits for all seven integrations.
+
 ## Five-minute start
 
 You need a Cavelon instance with personal access tokens turned on, and a coding
@@ -234,6 +243,14 @@ cavelon activate                                # through the readiness gate, ne
 The [getting-started tutorial](docs/getting-started.md) walks through all of
 this with the ready-made example in [`examples/support-faq/`](examples/support-faq/).
 
+**Several solutions in one repository (Unreleased).** Keep each solution's
+`cavelon.yaml`, `env/` and package in its own folder. An MCP session opened at
+the repository root selects that folder with `solution_dir` on each tool call,
+including preview and confirmation. `harness` names the solution on the
+instance; it does not select local files. Guarded imports still ask for your
+fresh answer. [MCP folder selection](docs/mcp.md#several-solutions-in-one-repository)
+shows the calls; CLI commands run in the individual solution's folder.
+
 **Next: [Building a solution with a coding agent](docs/coding-agents.md).** How
 to brief the agent, what it shows you at each step, what it leaves to you, and
 how to review and test its work.
@@ -243,7 +260,7 @@ how to review and test its work.
 | Page | What it covers |
 |---|---|
 | [Installation](docs/installation.md) | the one-line install, Homebrew, PyPI (uvx, uv, pipx, pip), npx and npm, `cavelon setup`, the plugin in Claude Code and Codex, other agents, updating, uninstalling, Windows/macOS/Linux, proxies |
-| [Install pages](docs/install/README.md) | one page per client: Claude Code, Codex, Cursor, VS Code with GitHub Copilot, Kiro, Gemini CLI, cloud agents and CI; the plugin packages each release carries |
+| [Install pages](docs/install/README.md) | one page per client, including the unreleased OpenCode/Pi setup; install, approval scope, updating, removal and plugin packages |
 | [Getting started](docs/getting-started.md) | a full tutorial from an empty folder to an active solution |
 | [Building with a coding agent](docs/coding-agents.md) | briefing the agent, the loop as it runs it, what stays with you, reviewing and testing its work, prompts to copy |
 | [Concepts](docs/concepts.md) | instance, tenant, solution, package, environments, preview and confirm, operations, tests, activation, Platform mode |
