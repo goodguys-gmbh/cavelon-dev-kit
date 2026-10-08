@@ -492,6 +492,7 @@ export interface FakeState {
   runCapacity: { per_tenant?: number; global?: number; wait_seconds?: number };
   /** Each tenant's own run cap, as an operator sets it with the tenant_change. */
   tenantRunCaps: Map<string, number>;
+  tenantDatabaseCaps: Map<string, Record<string, number>>;
   /** Each tenant's feature flags, as PUT /admin/feature-flags/{tenant_id}/{flag_key} sets them. */
   tenantFlags: Map<string, Map<string, boolean>>;
   /** The tenants on Processing-Step terms: the token budget stops nothing there. */
@@ -814,6 +815,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     processingStepsUsed: 0,
     runCapacity: {},
     tenantRunCaps: new Map(),
+    tenantDatabaseCaps: new Map(),
     tenantFlags: new Map(),
     processingStepTerms: new Set(),
     confirmations: { enforced: true },
@@ -1827,13 +1829,26 @@ export async function startFakeServer(): Promise<FakeServer> {
     if (!platformCaller(res, info, undefined, ["platform_admin", "superadmin"])) return;
     const tenant = state.tenants.find((t) => t.id === target);
     if (!tenant) return send(res, 404, { detail: "Tenant not found" });
+    const databaseFields = { max_database_connections: 1000, max_database_queries: 10000 };
+    const sent = (json ?? {}) as Record<string, unknown>;
+    const own = state.tenantDatabaseCaps.get(target) ?? {};
+    for (const [field, maximum] of Object.entries(databaseFields)) {
+      if (!(field in sent)) continue;
+      const value = sent[field];
+      if (value !== null && !(Number.isInteger(value) && (value as number) >= 1 && (value as number) <= maximum)) {
+        return send(res, 422, { detail: [{ loc: ["body", field], msg: `A whole number from 1 to ${maximum}` }] });
+      }
+      if (value === null) delete own[field];
+      else own[field] = value as number;
+    }
+    state.tenantDatabaseCaps.set(target, own);
     const value = (json as { max_concurrent_agent_runs?: unknown } | null)?.max_concurrent_agent_runs;
     if (value !== null && value !== undefined && !(Number.isInteger(value) && (value as number) >= 1 && (value as number) <= 100_000)) {
       return send(res, 422, { detail: [{ type: "greater_than_equal", loc: ["body", "max_concurrent_agent_runs"], msg: "Input should be greater than or equal to 1" }] });
     }
     if (value === null) state.tenantRunCaps.delete(target);
     else if (typeof value === "number") state.tenantRunCaps.set(target, value);
-    return send(res, 200, tenantDetail(target, { max_concurrent_agent_runs: state.tenantRunCaps.get(target) ?? null }));
+    return send(res, 200, tenantDetail(target, { max_concurrent_agent_runs: state.tenantRunCaps.get(target) ?? null, max_database_connections: own.max_database_connections ?? null, max_database_queries: own.max_database_queries ?? null }));
   }
 
   /** PUT /admin/feature-flags/{tenant_id}/{flag_key}: an operator switches one tenant's flag. */

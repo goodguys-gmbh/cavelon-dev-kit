@@ -28,6 +28,13 @@ names no addresses, ask the instance operator before opening the firewall.
 A private target needs the operator's admission for your tenant; loopback
 and the platform's own containers are refused.
 
+Where published, `db instance` also shows the tenant's connection/query
+limits, current counts, whether each cap comes from the platform or the
+tenant, and the platform default. `cavelon limits` shows the same counts beside
+the published metadata. Defaults are 10 connections and 200 queries unless
+the operator sets others. Existing entries still work above a lowered cap;
+only new entries count against it. See [limits and operator overrides](limits.md#database-connections-and-queries).
+
 Send the SQL from `db login-script` to the DBA. The instance supplies the
 script; this build publishes only `kind: read_only`. The DBA replaces its
 password placeholder locally, outside the kit. `--egress-ip` is repeatable;

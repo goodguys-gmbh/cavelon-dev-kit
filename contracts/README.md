@@ -6,6 +6,16 @@ and the fake server in `cli/test/` serves them.
 
 ## `cavelon/`
 
+On 2026-10-08 the database limits were selectively refreshed from the
+instance's checked-in OpenAPI and published catalog definitions without
+running a live instance: the optional `DatabaseConnectorInstanceResponse.limits`
+and its two schemas, the two `max_database_*` fields on the tenant's detail
+and limits request, and `database_connection_limit_reached` and
+`database_query_limit_reached`. The default capabilities still have the
+connector off, so they correctly contain neither database limit entry.
+Connector-on fixtures exercise the published `tenant_change` fields and
+bounds. Unrelated contract changes stay outside this refresh.
+
 Recorded on 2026-10-04 from an instance with its default settings: every
 optional feature off, rate limiting on, a tenant without settings of its own,
 no licence entitlement, and an empty billing month. Refreshed on 2026-10-05

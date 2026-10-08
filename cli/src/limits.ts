@@ -38,7 +38,7 @@ export interface Limit {
   change?: LimitChange;
   /**
    * How an operator sets one tenant's own value:
-   * only on the per-tenant run cap, whose `change` targets the platform's cap.
+   * a per-tenant cap or flag. Some entries publish only this change.
    */
   tenant_change?: LimitChange;
   /** The switches an on/off value needs, each with its state. */
