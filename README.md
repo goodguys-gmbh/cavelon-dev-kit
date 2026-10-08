@@ -17,24 +17,23 @@ through the Admin.
 
 Your token stays with you: `cavelon` never takes it as an argument, keeps it in
 your system's credential store, and your agent never sees it.
-The unreleased kit also refuses token login from recognized agent shells before
+The kit also refuses token login from recognized agent shells before
 reading input. Log in from your own terminal; see [the login guide](docs/getting-started.md#2-log-in).
 
 > [!NOTE]
-> **Open-source client expansion is under Unreleased.** The next release adds
-> OpenCode, Pi, Cline, Kilo, Goose, OMP and Qwen Code. OpenCode/Pi setup installs
-> bundled native adapters and skills; the full client qualification is still
-> being completed. [Qwen Code CLI](docs/install/qwen-code.md) has native settings
-> and skills with person-owned-terminal approval. Version 0.1.15 does not
-> include these additions. See the [client install pages](docs/install/README.md)
-> and [native approval details](docs/native-approval-adapters.md) for the current
-> scope. The release waits for all seven integrations.
+> **New in 0.1.16:** [OpenCode](docs/install/opencode.md) and
+> [Pi](docs/install/pi.md) get bundled native approval dialogs and skills.
+> [Qwen Code CLI](docs/install/qwen-code.md) gets native settings and skills;
+> guarded changes use your own terminal. The [qualification matrix](docs/coding-agent-qualification.md)
+> names the tested versions, platforms and limits. Cline, Kilo, Goose and OMP
+> remain planned for a later release.
 
 ## Five-minute start
 
 You need a Cavelon instance with personal access tokens turned on, and a coding
-agent: Claude Code, Codex, Cursor, VS Code with GitHub Copilot, Gemini CLI or
-Kiro. Nothing else: no Node.js, no administrator rights.
+agent: Claude Code, Codex, Cursor, VS Code with GitHub Copilot, Gemini CLI,
+Kiro, OpenCode, Pi or Qwen Code CLI. Provision that client first. The standalone
+Cavelon tool needs no Node.js or administrator rights.
 
 Three steps: **install `cavelon`** on your computer once, **connect your coding
 agents** to it, then **build** in your agent.
@@ -246,7 +245,7 @@ cavelon activate                                # through the readiness gate, ne
 The [getting-started tutorial](docs/getting-started.md) walks through all of
 this with the ready-made example in [`examples/support-faq/`](examples/support-faq/).
 
-**Several solutions in one repository (Unreleased).** Keep each solution's
+**Several solutions in one repository.** Keep each solution's
 `cavelon.yaml`, `env/` and package in its own folder. An MCP session opened at
 the repository root selects that folder with `solution_dir` on each tool call,
 including preview and confirmation. `harness` names the solution on the
@@ -263,7 +262,7 @@ how to review and test its work.
 | Page | What it covers |
 |---|---|
 | [Installation](docs/installation.md) | the one-line install, Homebrew, PyPI (uvx, uv, pipx, pip), npx and npm, `cavelon setup`, the plugin in Claude Code and Codex, other agents, updating, uninstalling, Windows/macOS/Linux, proxies |
-| [Install pages](docs/install/README.md) | one page per client, including the unreleased OpenCode/Pi setup; install, approval scope, updating, removal and plugin packages |
+| [Install pages](docs/install/README.md) | one page per client, including OpenCode, Pi and Qwen setup; install, approval scope, updating, removal and plugin packages |
 | [Getting started](docs/getting-started.md) | a full tutorial from an empty folder to an active solution |
 | [Building with a coding agent](docs/coding-agents.md) | briefing the agent, the loop as it runs it, what stays with you, reviewing and testing its work, prompts to copy |
 | [Concepts](docs/concepts.md) | instance, tenant, solution, package, environments, preview and confirm, operations, tests, activation, Platform mode |

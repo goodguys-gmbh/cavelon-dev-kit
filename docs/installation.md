@@ -306,7 +306,9 @@ What it changes, per agent, for your user only (never a project's files):
 | GitHub Copilot in VS Code | files | VS Code's user `mcp.json`: `~/.config/Code/User/` on Linux, `~/Library/Application Support/Code/User/` on macOS, `%APPDATA%\Code\User\` on Windows | `~/.copilot/skills/` |
 | Gemini CLI | `gemini extensions install https://github.com/goodguys-gmbh/cavelon-dev-kit --ref v<this version> --consent`, run in an empty folder of `cavelon`'s cache, which Gemini CLI then trusts; files when that release has no extension | from the extension, else `~/.gemini/settings.json` | from the extension, else `~/.gemini/skills/` |
 | Kiro | files | `~/.kiro/settings/mcp.json` | `~/.kiro/skills/` |
-| Qwen Code CLI (Unreleased) | files; guarded changes in the person's own terminal | `~/.qwen/settings.json`, or `<QWEN_HOME>/settings.json` | `~/.qwen/skills/`, or `<QWEN_HOME>/skills/` |
+| OpenCode | bundled native server/TUI plugins; separate exact-change dialog | `$XDG_CONFIG_HOME/opencode/opencode.json[c]`, otherwise `~/.config/opencode/`; separate `tui.json[c]` | the selected directory's `skills/` |
+| Pi | bundled native extension; separate exact-change dialog | `~/.pi/agent/mcp.json` and `settings.json`, or `<PI_CODING_AGENT_DIR>/` | the selected directory's `skills/` |
+| Qwen Code CLI | files; guarded changes in the person's own terminal | `~/.qwen/settings.json`, or `<QWEN_HOME>/settings.json` | `~/.qwen/skills/`, or `<QWEN_HOME>/skills/` |
 
 See [Qwen Code CLI](install/qwen-code.md) for project paths, managed policy,
 native skill discovery and its explicit terminal approval route. This entry
@@ -468,8 +470,9 @@ cavelon init --agents cursor,copilot
 | `pi` | reuse verified user native setup, or `.pi/mcp.json`, a native extension reference in `.pi/settings.json`, portable `.pi/cavelon/` assets and `.pi/skills/cavelon-*/` |
 | `other` | no MCP entry; the shared skills and `AGENTS.md` |
 
-OpenCode/Pi setup is under **Unreleased**; see their install pages for the
-verified scope and final native approval qualification. Their adapters and
+OpenCode/Pi native setup is included in 0.1.16. See the
+[qualification matrix](coding-agent-qualification.md) and install pages for
+the tested scope and approval modes. Their adapters and
 protocol dependencies are bundled. Setup/init/check/update/removal track exact
 configuration bindings, references and asset hashes; personal edits are
 preserved. For offline use, put the installed executable on PATH before setup

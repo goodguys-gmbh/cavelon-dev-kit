@@ -7,68 +7,44 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
-### Fixed
+## [0.1.16] - 2026-10-08
 
-- Atomic file replacement retries short Windows sharing locks with a bounded
-  wait, preserving the old file if replacement fails and removing the temporary
-  copy. Concurrent MCP contract-cache writes no longer fail on a transient lock
-  (#211).
-
-- Token login from recognized coding-agent shells is refused before reading
-  input, contacting the instance or replacing the stored login, including
-  `login --token-stdin`. Use the person's separate terminal (#208).
+OpenCode and Pi native approval, Qwen Code CLI setup, and guarded imports from
+multi-solution repositories. Cline, Kilo, Goose and OMP follow separately.
 
 ### Added
 
-- Qwen Code CLI setup and project init with native commented settings and
-  skills, direct `QWEN_HOME` support, preserved personal entries and managed
-  MCP policy diagnostics. Setup/check/update/remove track only kit-owned
-  files. Its shell marker is recognized; guarded changes use the person's
-  own terminal. Full client/platform release qualification remains open (#207).
-
-- Native OpenCode/Pi installation through setup and project init, with owned
-  assets/profiles, separate OpenCode server/TUI references, checking, updates
-  and removal. Only the duplicate Cavelon built-in entry is disabled. Personal
-  settings are preserved; edited assets/references, aliases and concurrent
-  config changes are refused. Failed writes roll back. Verified user/project
-  ownership avoids duplicate native tools. Actual packaged-client dialogs and
-  final client/platform qualification remain open (#201).
-
-- Portable project profiles for the native adapter build assets and scoped
-  plugin/extension-list editing for their installer. OpenCode can load its
-  adjacent profile without an absolute plugin-option path. Project native
-  entry points refuse a different workspace; Pi still requires project trust.
-  Native installation uses these profiles and edits (#201).
-
-- Versioned, dependency-bundled OpenCode/Pi native adapter build assets, with
-  hashes and redistribution licenses in npm and embedded standalone builds.
-  Packaged-runtime checks cover session-bound native calls, headless refusal,
-  cancellation, duplicate UI ownership and complete long Unicode previews.
-  Final client/platform qualification remains in development (#201).
-
-- Native person-approval transport foundation and the verified OpenCode/Pi
-  prototype design (#193). Native installation is added separately; final
-  release qualification remains in development. Built-in MCP keeps its
-  terminal route when used without the native adapters.
-
-- Project and user MCP/skill setup for OpenCode and Pi, including check, update
-  and removal. OpenCode preserves existing JSONC configuration and command
-  arrays; Pi uses native directories and honors `PI_CODING_AGENT_DIR`. Conflicts
-  and managed overrides are reported without replacing personal entries.
-  Built-in MCP guarded changes require the person's own terminal; the native
-  adapters add dialogs through the client extension systems (#198, #193, #201).
+- OpenCode and Pi user setup and project init with all four skills and bundled
+  native adapters. Each guarded change asks the person in the client's UI;
+  built-in MCP and headless modes retain the own-terminal route. See the
+  [qualification matrix](docs/coding-agent-qualification.md) for tested versions,
+  platforms and limits (#193, #198, #201).
+- Safe native check/update/remove with exact config bindings, references and
+  asset hashes. Personal entries, comments and permissions are preserved;
+  edited assets and concurrent config changes refuse. Failed writes roll back.
+  Portable project profiles and verified user/project ownership prevent duplicate
+  tools. npm and standalone carry versioned assets, hashes and redistribution
+  licenses without runtime dependency downloads (#201).
+- Qwen Code CLI native commented settings, user/project skills, direct
+  `QWEN_HOME` support and managed MCP policy diagnostics. Lifecycle operations
+  track only kit-owned files; guarded changes use the person's own terminal
+  (#207).
 
 ### Fixed
 
 - Root MCP sessions can select a child solution with `solution_dir`, including
-  its environment files and saved deleting-import preview. Selection is
-  confined to the original workspace, isolated per call, and carried into tool
-  hints and own-terminal fallbacks. Fresh person approval stays required (#203).
-
-- Recognize Pi's native `PI_SESSION_ID` shell marker so person-only operations,
-  secret entry and agent-supplied guarded-change confirmations are refused in
-  its shell too. Pi configurations that disable session-environment exposure
-  need a process-scoped `CAVELON_AGENT=1` launch (#194).
+  its environment and saved deleting-import preview. Selection is confined to
+  the original workspace, isolated per call and retained in hints and terminal
+  fallbacks. Every guarded import still requires fresh person approval (#203).
+- Recognize Pi's `PI_SESSION_ID` and Qwen's `QWEN_CODE` shell markers. Pi
+  sessions that disable environment exposure need a process-scoped
+  `CAVELON_AGENT=1` launch (#194, #207).
+- Token login from recognized coding-agent shells refuses before reading
+  input, contacting the instance or replacing the login, including
+  `login --token-stdin`. Log in from your own terminal (#208).
+- Concurrent contract-cache replacement retries transient Windows sharing
+  locks with a bounded wait. Failure preserves the old file and removes only
+  the writer's temporary copy (#211).
 
 ## [0.1.15] - 2026-10-08
 

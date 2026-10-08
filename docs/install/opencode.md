@@ -5,9 +5,8 @@ shared CLI/MCP implementation and all four authoritative skills. The native
 plugins carry Cavelon's exact-change person dialog through OpenCode's UI;
 its built-in MCP path alone does not provide that form capability.
 
-These additions are **Unreleased** and are not in 0.1.15. Packaged-client
-qualification remains in [#201](https://github.com/goodguys-gmbh/cavelon-dev-kit/issues/201),
-following the completed [native prototype](../native-approval-adapters.md#prototype-evidence).
+Added in kit 0.1.16. The [qualification matrix](../coding-agent-qualification.md)
+records the exact tested client version, platform and approval mode.
 
 ## Install
 
@@ -126,12 +125,12 @@ skill copies; retain other settings and plugins.
 
 ## Qualification
 
-The Linux 1.18.35 binary connected to Cavelon and discovered the shared skills.
-A separate prototype completed actual person Cancel/Confirm dialogs against a
-fake instance. Packaged lifecycle and simulated protocol tests cover config
-preservation, rollback, ownership, project precedence and refusal. Actual
-packaged-client person dialogs, full journeys and native Windows/WSL
-qualification remain open; these tests do not certify those interactions.
+The [0.1.16 qualification matrix](../coding-agent-qualification.md) records
+released-client runtime checks, person interaction and platform limits.
+Configuration lifecycle tests cover preserved personal settings, ownership,
+updates/removal and refusal. A fake local instance supplies synthetic data;
+there are no model calls or real database execution in these checks. Scripted
+answers never count as a person's approval.
 
 Primary references: [configuration](https://opencode.ai/docs/config/),
 [MCP](https://opencode.ai/docs/mcp-servers/), [skills](https://opencode.ai/docs/skills/),

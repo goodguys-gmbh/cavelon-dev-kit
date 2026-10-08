@@ -63,7 +63,7 @@ came from. The order is in [Concepts](concepts.md#tenant).
 
 ## Login says it needs a person
 
-The unreleased kit returns `operation_for_a_person` (exit 5) for token login in
+The kit returns `operation_for_a_person` (exit 5) for token login in
 a recognized agent shell, including `--token-stdin`. It reads no token and
 keeps the stored login. Open a separate terminal application, run `cavelon login`
 yourself and then return to the agent. See [Log in](getting-started.md#2-log-in).
@@ -73,7 +73,7 @@ yourself and then return to the agent. See [Log in](getting-started.md#2-log-in)
 In a multi-solution repository, `No env/test.yaml in this solution` or
 `preview_unknown` can mean the MCP server is reading the root folder.
 `harness` selects the solution on the instance; it does not choose local files.
-The unreleased kit adds `solution_dir`: pass the child folder, such as
+Kit 0.1.16 adds `solution_dir`: pass the child folder, such as
 `solutions/review`, on the preview, confirmation and subsequent MCP calls.
 See [MCP folder selection](mcp.md#several-solutions-in-one-repository).
 On 0.1.15, start a separate MCP session in the child solution, or run the
@@ -82,7 +82,7 @@ cannot answer a guarded-change confirmation on your behalf.
 
 ## Qwen setup reports a managed binding or MCP policy
 
-Unreleased Qwen setup leaves operator settings, MCP allow/exclude policies and
+Qwen setup leaves operator settings, MCP allow/exclude policies and
 personal Cavelon entries unchanged. Review the named file with the person or
 operator. `QWEN_HOME` is the configuration directory itself; `QWEN_RUNTIME_DIR`
 does not move settings or skills. Use the same overrides for setup and the
@@ -91,7 +91,7 @@ client, then restart Qwen and check its `/mcp` and `/skills` lists. See
 
 ## A native adapter's files or references were edited
 
-Unreleased OpenCode/Pi setup records hashes of the native assets and disabled
+OpenCode/Pi setup records hashes of the native assets and disabled
 Cavelon MCP entry, plus exact plugin/extension references. Update, check and
 removal refuse an edited binding, asset or reference, and duplicate path
 aliases. This preserves personal configuration and avoids removing an asset

@@ -2,9 +2,10 @@
 
 Prototype decision for [#193](https://github.com/goodguys-gmbh/cavelon-dev-kit/issues/193),
 part of [#192](https://github.com/goodguys-gmbh/cavelon-dev-kit/issues/192).
-Native adapter installation remains in development. Existing built-in MCP setup
-for these clients uses the person's separate terminal for guarded changes. The
-prototype evidence does not change released support.
+Kit 0.1.16 installs bundled OpenCode/Pi native adapters. Their built-in MCP
+route still uses the person's separate terminal for guarded changes. See the
+[qualification matrix](coding-agent-qualification.md) for current packaged
+client evidence; the prototype record below is historical.
 
 ## Decision
 
@@ -52,9 +53,11 @@ The production adapter sources now build three self-contained native entry
 points: separate OpenCode server/TUI modules and a Pi extension. npm carries
 the versioned assets and their dependency licenses, hashes and manifest;
 standalone builds embed the same bytes for setup. The packaged adapters load
-from a directory without `node_modules`. Unreleased `setup` and `init` install
+from a directory without `node_modules`. `setup` and `init` install
 these assets, profiles and exact client references without fetching a runtime
-dependency. Final packaged-client qualification remains open in #201.
+dependency. Packaged-client qualification is recorded in the
+[release matrix](coding-agent-qualification.md); broader qualification stays
+tracked in #201.
 
 Each adapter reads its adjacent `profile.json`; OpenCode also accepts an
 explicit profile path in plugin options. The profile names the selected existing MCP
@@ -106,7 +109,8 @@ Long previews are shown in bounded native pages before a final fresh approval.
 Continuation through a preview page does not approve the guarded change. A
 refusal, close, abort or changed session cancels it. Automated packaged-runtime
 and lifecycle checks use simulated UI callbacks; actual packaged-client loading
-and supervised person interaction remain separate release gates.
+and supervised person interaction are recorded separately in the
+[qualification matrix](coding-agent-qualification.md).
 
 ## OpenCode
 
@@ -157,7 +161,8 @@ deterministic plugin rendering, hashes and the existing signed offline/release
 artifacts without assuming a new instance manifest contract. Setup/check/update/
 remove must preserve personal edits, unrelated configuration and formatting.
 
-The prototype decision is complete. Production adapters, safe setup lifecycle,
-real packaged loading, shell guards, full solution journeys, Windows/macOS
-qualification and offline consumer checks remain open. Advertise native approval
-only for the exact packaged client version, mode and platform whose checks passed.
+The adapters, setup lifecycle, shell guards and bundled dependencies are part
+of 0.1.16. The [qualification matrix](coding-agent-qualification.md) separates
+automated checks from real-client loading and person interaction. Native UI
+checks on additional operating systems and customer model/network pilots remain
+separate work; no qualification is inherited from a related client.
