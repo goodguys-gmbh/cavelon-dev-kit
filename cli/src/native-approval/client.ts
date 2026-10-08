@@ -2,7 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport, type StdioServerParameters } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { ElicitRequestSchema, type Tool } from "@modelcontextprotocol/sdk/types.js";
-import { PERSON_WAIT_MS } from "../confirm-token.js";
+import { PERSON_WAIT_MS } from "../approval-policy.js";
 
 /** Supplied by a native UI adapter, never a model-facing argument or tool. */
 export type PersonDialog = (message: string, signal: AbortSignal, timeoutMs: number) => Promise<unknown>;
