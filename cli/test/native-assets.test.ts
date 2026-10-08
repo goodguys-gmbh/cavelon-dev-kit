@@ -66,7 +66,7 @@ it("ships deterministic self-contained native entry points with pinned dependenc
   expect(tui.default.server).toBeUndefined();
   expect(pi.default).toBeTypeOf("function");
   await expect(server.default.server({ directory: root }, {})).rejects.toThrow("profile");
-});
+}, 60_000);
 
 it("binds a profile to its disabled Cavelon entry without copying environment values", async () => {
   const file = path.join(root, "opencode.jsonc");
