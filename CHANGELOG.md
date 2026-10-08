@@ -7,6 +7,11 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+## [0.1.15] - 2026-10-08
+
+Clear responsibility for guarded changes: the kit asks the person; the
+instance binds its confirmation to the exact request.
+
 ### Changed
 
 - Clarified guarded-change confirmation (#189): the kit asks the person before
