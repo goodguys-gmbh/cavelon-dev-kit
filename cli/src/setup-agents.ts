@@ -611,12 +611,13 @@ async function removeMcp(mcp: McpFile, record: FileRecord): Promise<Change> {
   const summary = 'remove the "cavelon" tools server from';
   const existing = await readTextFile(mcp.file);
   if (existing === undefined) return { kind: "mcp", summary, target: mcp.file, outcome: "unchanged" };
-  const result =
-    mcp.format === "native"
-      ? (mcp.syntax === "yaml" ? removeYamlEntry : removeJsoncEntry)(existing, mcp.keys, value => isKitMcpEntry(value, mcp.entryFormat, mcp.extra), record.kept ?? mcp.keys.length - 1)
-      : mcp.format === "json"
-      ? removeJsonEntry(existing, mcp.keys, (value) => isOwnJsonEntry(mcp, value), record.kept ?? mcp.keys.length - 1)
-      : removeBlock(existing, "hash");
+  let result: BlockResult & { empty?: boolean };
+  if (mcp.format === "native") {
+    const remove = mcp.syntax === "yaml" ? removeYamlEntry : removeJsoncEntry;
+    result = remove(existing, mcp.keys, value => isKitMcpEntry(value, mcp.entryFormat, mcp.extra), record.kept ?? mcp.keys.length - 1);
+  } else if (mcp.format === "json") {
+    result = removeJsonEntry(existing, mcp.keys, value => isOwnJsonEntry(mcp, value), record.kept ?? mcp.keys.length - 1);
+  } else result = removeBlock(existing, "hash");
   if (result.outcome === "unchanged") return { kind: "mcp", summary, target: mcp.file, outcome: "unchanged" };
   if (result.outcome === "skipped") return { kind: "mcp", summary, target: mcp.file, outcome: "skipped", reason: result.reason };
   if (result.empty && record.created) {

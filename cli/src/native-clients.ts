@@ -52,29 +52,41 @@ const piConfig = (file: string): NativeMcpConfig => ({
 
 const piDir = (env: Env) => env.PI_CODING_AGENT_DIR || path.join(homeDir(env), ".pi", "agent");
 
-function gooseUser(env: Env, platform: NodeJS.Platform = process.platform): ReturnType<NativeClient["user"]> {
+function gooseConfigDir(env: Env, platform: NodeJS.Platform): string {
+  if (env.GOOSE_PATH_ROOT && path.isAbsolute(env.GOOSE_PATH_ROOT)) return path.join(env.GOOSE_PATH_ROOT, "config");
   const home = homeDir(env);
-  const root = env.GOOSE_PATH_ROOT;
-  const dir = root && path.isAbsolute(root) ? path.join(root, "config")
-    : platform === "win32" ? path.join(env.APPDATA || path.join(home, "AppData", "Roaming"), "Block", "goose", "config")
-      : path.join(env.XDG_CONFIG_HOME && path.isAbsolute(env.XDG_CONFIG_HOME) ? env.XDG_CONFIG_HOME : path.join(home, ".config"), "goose");
-  const system = platform === "win32" ? path.join(env.PROGRAMDATA || "C:\\ProgramData", "goose", "config.yaml") : "/etc/goose/config.yaml";
+  if (platform === "win32") return path.join(env.APPDATA || path.join(home, "AppData", "Roaming"), "Block", "goose", "config");
+  const xdg = env.XDG_CONFIG_HOME;
+  return path.join(xdg && path.isAbsolute(xdg) ? xdg : path.join(home, ".config"), "goose");
+}
+
+function gooseAdditionalPaths(value: string | undefined, platform: NodeJS.Platform): string[] {
+  if (value === undefined) return [];
   // Rust split_paths strips Windows quotes and splits only outside them.
-  const additional: string[] = [];
+  const paths: string[] = [];
   let segment = "";
   let quoted = false;
-  for (const char of env.GOOSE_ADDITIONAL_CONFIG_FILES ?? "") {
+  const separator = platform === "win32" ? ";" : ":";
+  for (const char of value) {
     if (platform === "win32" && char === '"') quoted = !quoted;
-    else if (char === (platform === "win32" ? ";" : ":") && !quoted) { additional.push(segment); segment = ""; }
+    else if (char === separator && !quoted) { paths.push(segment); segment = ""; }
     else segment += char;
   }
-  if (segment || env.GOOSE_ADDITIONAL_CONFIG_FILES !== undefined) additional.push(segment);
+  paths.push(segment);
+  return paths;
+}
+
+function gooseUser(env: Env, platform: NodeJS.Platform = process.platform): ReturnType<NativeClient["user"]> {
+  const dir = gooseConfigDir(env, platform);
+  const system = platform === "win32" ? path.join(env.PROGRAMDATA || String.raw`C:\ProgramData`, "goose", "config.yaml") : "/etc/goose/config.yaml";
+  const additional = gooseAdditionalPaths(env.GOOSE_ADDITIONAL_CONFIG_FILES, platform);
   const file = path.join(dir, "config.yaml");
+  let blocked: string | undefined;
+  if (additional.some(file => !file)) blocked = "GOOSE_ADDITIONAL_CONFIG_FILES contains an empty path; review it before setup";
+  else if (env.GOOSE_ALLOWLIST) blocked = "Goose's extension allowlist is active; ask the operator to review Cavelon's binding in that policy";
   return {
     mcp: { client: "goose", format: "native", file, files: [file], syntax: "yaml", keys: ["extensions", "cavelon"], entryFormat: "goose-stdio",
-      extra: { type: "stdio", name: "cavelon", enabled: true }, managedFiles: [...new Set([system, ...additional])],
-      ...(additional.some(file => !file) ? { blocked: "GOOSE_ADDITIONAL_CONFIG_FILES contains an empty path; review it before setup" } :
-        env.GOOSE_ALLOWLIST ? { blocked: "Goose's extension allowlist is active; ask the operator to review Cavelon's binding in that policy" } : {}) },
+      extra: { type: "stdio", name: "cavelon", enabled: true }, managedFiles: [...new Set([system, ...additional])], ...(blocked ? { blocked } : {}) },
     skills: path.join(dir, "skills"), folders: [dir],
   };
 }
@@ -290,6 +302,25 @@ async function qwenPolicy(config: NativeMcpConfig, full: (file: string) => strin
   return undefined;
 }
 
+function gooseExtensionName(key: string, value: unknown): { cavelon: boolean; conflicting: boolean } {
+  const name = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>).name : undefined;
+  const equivalent = (name: string) => name.replace(/\s/g, "").toLowerCase() === "cavelon";
+  const cavelon = equivalent(key) || (typeof name === "string" && equivalent(name));
+  return { cavelon, conflicting: key !== "cavelon" || (name !== undefined && name !== "cavelon") };
+}
+
+function gooseExtensionsPolicy(value: unknown, managed: boolean, file: string): string | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return `the extensions in ${file} are not a mapping; review them manually`;
+  for (const [key, entry] of Object.entries(value)) {
+    const name = gooseExtensionName(key, entry);
+    if (!name.cavelon) continue;
+    if (managed) return `a system or additional Cavelon extension in ${file} is preserved; review its binding with the operator`;
+    if (name.conflicting) return `another Cavelon extension name in ${file} would conflict; review that binding manually`;
+  }
+  return undefined;
+}
+
 async function goosePolicy(config: NativeMcpConfig, full: (file: string) => string): Promise<string | undefined> {
   for (const candidate of new Set([...(config.managedFiles ?? []), ...config.files])) {
     const file = full(candidate);
@@ -297,17 +328,8 @@ async function goosePolicy(config: NativeMcpConfig, full: (file: string) => stri
     if (text === undefined) continue;
     const extensions = readYamlEntry(text, ["extensions"]);
     if ("error" in extensions) return `${file}: ${extensions.error}`;
-    if (extensions.value !== undefined) {
-      if (!extensions.value || typeof extensions.value !== "object" || Array.isArray(extensions.value)) return `the extensions in ${file} are not a mapping; review them manually`;
-      for (const [key, value] of Object.entries(extensions.value)) {
-        const name = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>).name : undefined;
-        const equivalent = (name: string) => name.replace(/\s/g, "").toLowerCase() === "cavelon";
-        if (equivalent(key) || (typeof name === "string" && equivalent(name))) {
-          if (config.managedFiles?.includes(candidate)) return `a system or additional Cavelon extension in ${file} is preserved; review its binding with the operator`;
-          if (key !== "cavelon" || (name !== undefined && name !== "cavelon")) return `another Cavelon extension name in ${file} would conflict; review that binding manually`;
-        }
-      }
-    }
+    const error = gooseExtensionsPolicy(extensions.value, config.managedFiles?.includes(candidate) ?? false, file);
+    if (error) return error;
     const allowlist = readYamlEntry(text, ["GOOSE_ALLOWLIST"]);
     if ("error" in allowlist) return `${file}: ${allowlist.error}`;
     if (allowlist.value) return `Goose's extension allowlist in ${file} requires operator review before Cavelon setup`;

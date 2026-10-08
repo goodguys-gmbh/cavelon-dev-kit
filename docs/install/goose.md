@@ -79,7 +79,9 @@ See [folder selection](../mcp.md#several-solutions-in-one-repository).
 The interactive Goose CLI has a built-in MCP form for Cavelon's exact change.
 Only your fresh **Yes** may approve that request. **No**, cancellation or a
 missing interactive terminal sends no instance confirmation or guarded change.
-Automatic tool permissions do not answer this separate form.
+Automatic tool permissions do not answer this separate form. Goose 1.53.0
+expires its own form after five minutes. An expired form can still be visible;
+a late answer cannot approve it. Start a new preview and fresh form instead.
 
 Plain `goose run` is headless even when launched in a terminal. Use an
 interactive session, or `goose run --interactive`, for person forms. Headless

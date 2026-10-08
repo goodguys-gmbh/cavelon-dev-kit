@@ -417,7 +417,9 @@ See [Kilo](install/kilo.md#check).
 Plain `goose run` is headless. An elicitation error in that mode sends no
 Cavelon confirmation or guarded mutation; use an interactive session or make
 a fresh preview and confirm it yourself in your separate terminal. Do not pipe
-answers. CLI forms and Desktop/ACP host UI checks are separate.
+answers. Goose 1.53.0 expires its form after five minutes; a later answer can
+report `Request not found`. It does not approve the change. Start a new preview
+and fresh form. CLI forms and Desktop/ACP host UI checks are separate.
 
 Compare `goose info` with setup's configuration path. Keep path-root/XDG and
 additional configuration overrides the same. Setup refuses a Cavelon entry in
