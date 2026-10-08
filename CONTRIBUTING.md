@@ -92,6 +92,43 @@ build subprocess stays bounded at 30 seconds. This allows a slow Windows
 runner to finish the byte/license and module checks within a consistent
 deadline, without changing the ordinary suite timeout.
 
+### Released coding-client runtimes
+
+The `Released coding-client runtimes` workflow provisions pinned OpenCode, Pi,
+Qwen, Cline, Kilo, Goose and OMP CLIs in private directories and exercises the actual clients on
+Linux x64, macOS arm64 and Windows x64. The fixture uses the locally built
+standalone executable and generated setup in a multi-solution root. It validates,
+previews/imports an ordinary draft, runs/waits for a synthetic suite and reads
+its trace, then repeats after one bounded prompt improvement.
+
+Pins live in `cli/test/fixtures/coding-client-runtimes.json`. Provisioning needs
+network access to fetch those public clients; the runtime uses only a fake
+loopback instance and scripted loopback provider responses. Goose archives are
+checked against pinned release SHA-256 digests; npm package integrity and the
+installed version are recorded. OMP uses Bun 1.3.14 after Cavelon's standalone
+build. Each fixture isolates personal profiles, bounds the client run at 90
+seconds and cleans up its own process tree. It never supplies a person answer,
+requests an instance confirmation or changes a real tenant.
+
+For a local Linux x64 run, first build the standalone executable as above, then:
+
+```bash
+# From the repository root; change cline to kilo, goose or omp.
+CAVELON_CLIENT_RUNTIME="$PWD/.wt/client-runtime/cline" node .github/scripts/provision-coding-client.mjs cline
+cd cli
+CAVELON_CLIENT_RUNTIME="$PWD/../.wt/client-runtime/cline" CAVELON_QUALIFY_CLIENT=cline CAVELON_EXECUTABLE="$PWD/build/cavelon-linux-x64" npx vitest run test/coding-client-runtime.test.ts
+```
+
+Use your platform's executable name on macOS or Windows and your shell's
+syntax to set the same environment variables. Provision OMP's pinned Bun
+runtime separately. Without `CAVELON_QUALIFY_CLIENT` and `CAVELON_EXECUTABLE`,
+the runtime fixture skips and the ordinary unit suite installs no client.
+Evidence is kept under `.wt/coding-client-runtime/` and uploaded by CI.
+Qwen reviews deferred Cavelon schemas with its native `tool_search` and invokes
+them through `tool_call`; the fixture preserves that released client behavior.
+Native human UI, editor/desktop/ACP/RPC, WSL and customer model/network
+qualification remain separate; see the [qualification matrix](docs/coding-agent-qualification.md).
+
 ### The plugin packages
 
 `plugin/` is the one source of the plugin. Claude Code and Codex install it as

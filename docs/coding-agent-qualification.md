@@ -19,15 +19,28 @@ macOS, Windows and WSL client UI checks and customer-specific model/network
 pilots remain separate qualification work. Qwen editor surfaces are outside
 this release's scope.
 
+The opt-in released-client CI lane runs all seven pinned CLIs: OpenCode 1.18.35,
+Pi 1.1.0, Qwen Code CLI 0.25.0, Cline CLI 3.0.70, Kilo CLI 7.8.8, Goose CLI 1.53.0
+and OMP CLI 18.8.5 on native Linux x64, macOS arm64 and Windows x64. Each actual
+client consumes generated setup and the platform's locally built standalone
+Cavelon executable. It completes two ordinary draft workflows against scripted
+loopback fixtures: child validation, preview/import, synthetic suite, wait and
+trace, with one bounded prompt improvement between runs. These checks send no
+guarded confirmation and open no person dialog. Qwen uses its actual deferred
+`tool_search`/`tool_call` dispatch; no host registry is replaced. This automated
+evidence does not qualify human UI, editor, desktop, ACP/RPC or WSL surfaces.
+See [running the runtime checks](../CONTRIBUTING.md#released-coding-client-runtimes).
+
 Client checks use a fake local instance and synthetic data, with no real model
-provider calls or database execution. The 0.1.17 Linux candidate passed npm
+provider calls or database execution. The 0.1.17 Linux candidate also passed npm
 consumer and locally installed offline-bundle workflows for Cline, Kilo, Goose
 and OMP. Each validated a child solution, previewed and imported an ordinary
 draft, ran and waited for a synthetic suite, read its trace, then repeated after
 one bounded prompt improvement: two imports, suites and traces, with no guarded
 changes or instance confirmation ids. Coding clients and fixture providers
 were provisioned separately; this does not certify a customer's model or network.
- Programmatic fixture calls prove transport
+
+Programmatic fixture calls prove transport
 and behavior. Scripted UI responses never count as a person's approval.
 The packaged OpenCode, Pi and Qwen checks opened a multi-solution root, validated
 a child package and previewed an import that deletes a synthetic agent and
