@@ -135,3 +135,11 @@ answers never count as a person's approval.
 Primary references: [configuration](https://opencode.ai/docs/config/),
 [MCP](https://opencode.ai/docs/mcp-servers/), [skills](https://opencode.ai/docs/skills/),
 [TUI](https://opencode.ai/docs/tui/).
+
+The released CLI also completes two scripted draft workflows on native Linux
+x64, macOS arm64 and Windows x64 through generated setup and the platform's
+standalone Cavelon executable. The fixture validates and imports a child draft,
+runs/waits for a synthetic suite and reads its trace, then repeats after one
+bounded improvement. It uses only loopback fixtures and sends no guarded
+confirmation. This evidence does not extend the recorded human UI approval
+qualification to another platform. See [the automated runtime lane](../../CONTRIBUTING.md#released-coding-client-runtimes).

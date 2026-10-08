@@ -94,8 +94,8 @@ deadline, without changing the ordinary suite timeout.
 
 ### Released coding-client runtimes
 
-The `Released coding-client runtimes` workflow provisions pinned Cline, Kilo,
-Goose and OMP CLIs in private directories and exercises the actual clients on
+The `Released coding-client runtimes` workflow provisions pinned OpenCode, Pi,
+Qwen, Cline, Kilo, Goose and OMP CLIs in private directories and exercises the actual clients on
 Linux x64, macOS arm64 and Windows x64. The fixture uses the locally built
 standalone executable and generated setup in a multi-solution root. It validates,
 previews/imports an ordinary draft, runs/waits for a synthetic suite and reads
@@ -124,6 +124,8 @@ syntax to set the same environment variables. Provision OMP's pinned Bun
 runtime separately. Without `CAVELON_QUALIFY_CLIENT` and `CAVELON_EXECUTABLE`,
 the runtime fixture skips and the ordinary unit suite installs no client.
 Evidence is kept under `.wt/coding-client-runtime/` and uploaded by CI.
+Qwen reviews deferred Cavelon schemas with its native `tool_search` and invokes
+them through `tool_call`; the fixture preserves that released client behavior.
 Native human UI, editor/desktop/ACP/RPC, WSL and customer model/network
 qualification remain separate; see the [qualification matrix](docs/coding-agent-qualification.md).
 

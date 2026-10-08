@@ -34,7 +34,7 @@ reading input. Log in from your own terminal; see [the login guide](docs/getting
 > native setup with CLI dialogs and editor terminal approval. [Goose](docs/install/goose.md)
 > gets native YAML settings, skills and its built-in interactive form.
 > [OMP](docs/install/omp.md) gets its own native profile, skills and TUI extension.
-> Their released CLI runtimes also have [native platform workflow checks](CONTRIBUTING.md#released-coding-client-runtimes);
+> All seven released CLI runtimes have [native platform workflow checks](CONTRIBUTING.md#released-coding-client-runtimes);
 > these scripted fixtures leave human UI qualification separate.
 
 ## Five-minute start
