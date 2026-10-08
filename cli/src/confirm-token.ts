@@ -1,10 +1,13 @@
 import { createHash } from "node:crypto";
+import { PERSON_WAIT_MS } from "./approval-policy.js";
 import { actingTarget, targetLine, type ActingTarget, type PlatformTarget } from "./acting.js";
 import { drivenByAgent, type DrivenBy } from "./agent-env.js";
 import type { Context, Input } from "./command.js";
 import { CavelonError, ExitCode, type ExitCodeValue } from "./errors.js";
 import { canonical } from "./package-files.js";
 import { personCommand, PREVIEW_TOKEN, type Word } from "./printed.js";
+
+export { PERSON_WAIT_MS } from "./approval-policy.js";
 
 /** The token a preview returns for confirming exactly it: 12 hex digits of the change's hash. */
 export const CONFIRM_TOKEN = /^[0-9a-f]{12}$/;
@@ -192,9 +195,6 @@ async function gateOf(
 export function personRoute(ctx: Context, driven: DrivenBy): PersonRoute {
   return driven.by === "mcp" && ctx.askPerson ? "client" : "terminal";
 }
-
-/** How long a person may take to answer the client's dialog before nothing is changed. */
-export const PERSON_WAIT_MS = 10 * 60_000;
 
 /**
  * The person's own yes to a change an agent confirmed with its token: over

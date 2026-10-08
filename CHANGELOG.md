@@ -9,6 +9,10 @@ CLI, the skills and the plugin.
 
 ### Added
 
+- Native person-approval transport foundation and the verified OpenCode/Pi
+  prototype design (#193). Native client installation and release qualification
+  remain in development; existing built-in MCP setup keeps its terminal route.
+
 - Project and user MCP/skill setup for OpenCode and Pi, including check, update
   and removal. OpenCode preserves existing JSONC configuration and command
   arrays; Pi uses native directories and honors `PI_CODING_AGENT_DIR`. Conflicts
