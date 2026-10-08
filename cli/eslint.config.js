@@ -14,7 +14,7 @@ export default tseslint.config(
   {
     // Build scripts run on Node.js.
     files: ["scripts/**/*.mjs"],
-    languageOptions: { globals: { process: "readonly" } },
+    languageOptions: { globals: { process: "readonly", Buffer: "readonly" } },
   },
   {
     // Tests read loosely typed JSON output.

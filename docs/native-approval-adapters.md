@@ -46,8 +46,36 @@ disconnect and headless fallback. Simulated dialogs prove protocol behavior,
 not person interaction.
 
 The reusable transport is in `cli/src/native-approval/client.ts` with
-fake-instance tests in `cli/test/native-approval.test.ts`. This foundation is
-not itself an installed client adapter.
+fake-instance tests in `cli/test/native-approval.test.ts`.
+
+The production adapter sources now build three self-contained native entry
+points: separate OpenCode server/TUI modules and a Pi extension. npm carries
+the versioned assets and their dependency licenses, hashes and manifest;
+standalone builds embed the same bytes for setup. The packaged adapters load
+from a directory without `node_modules`. These build assets do not yet enable
+native installation through `setup` or `init`.
+
+Each installed adapter will read its adjacent profile (OpenCode receives the
+profile path as plugin options). The profile names the selected existing MCP
+configuration and stores a hash of its disabled Cavelon entry. It copies no
+credential or command environment values. A changed or re-enabled entry refuses
+native startup so duplicate built-in Cavelon tools cannot silently take over.
+Other MCP servers keep their own configuration.
+
+The OpenCode server exposes `cavelon_<tool>` names. Private IPC exposes only
+session discovery and tool calls, never an approval answer. It refuses multiple
+matching TUIs and unsafe paths, decodes split UTF-8 frames, bounds frame size,
+uses short Unix socket paths or Windows named pipes and removes its descriptors
+on shutdown. A dispatched failure is never retried through the headless route.
+Pi uses `mcp__cavelon__<tool>` names, current TUI context, project trust and
+fresh connections after session shutdown/restart. RPC/headless modes keep the
+person-terminal route; a duplicate Cavelon tool owner is refused.
+
+Long previews are shown in bounded native pages before a final fresh approval.
+Continuation through a preview page does not approve the guarded change. A
+refusal, close, abort or changed session cancels it. Automated packaged-runtime
+and lifecycle checks use simulated UI callbacks; actual packaged-client loading
+and supervised person interaction remain separate release gates.
 
 ## OpenCode
 
