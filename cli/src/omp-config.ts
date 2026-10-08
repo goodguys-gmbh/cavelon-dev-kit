@@ -51,6 +51,16 @@ export function ompListPolicy(text: string | undefined): string | undefined {
   return undefined;
 }
 
+/** OMP's canonical user file holds list policy even when another file holds the binding. */
+export async function ompRuntimePolicy(configFile: string, env: Env): Promise<string | undefined> {
+  const files = new Set([...nativeFiles(path.dirname(configFile)), path.join(ompDirectory(env).directory, "mcp.json")]);
+  for (const file of files) {
+    const error = ompListPolicy(await readTextFile(file));
+    if (error) return `${file}: ${error}`;
+  }
+  return undefined;
+}
+
 export async function ompPolicy(config: NativeMcpConfig, full: (file: string) => string): Promise<string | undefined> {
   for (const file of new Set([...(config.managedFiles ?? []), ...config.files.map(full)])) {
     const error = ompListPolicy(await readTextFile(file));

@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, promises as fs, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { agentByName, applyPlan, checkAgent, loadSkills, planAgent, removeAgent, setupAgents, type AgentRecord } from "../src/setup-agents.js";
 import { nativeClient, resolveNativeMcp } from "../src/native-clients.js";
 import { installPiExtension, type PiApi, type PiContext } from "../src/native-approval/pi-extension.js";
@@ -10,7 +10,7 @@ import { cli, login, sandbox, type Sandbox } from "./helpers.js";
 
 let sb: Sandbox;
 beforeEach(() => { sb = sandbox(); });
-afterEach(() => sb.cleanup());
+afterEach(() => { vi.unstubAllEnvs(); sb.cleanup(); });
 const command = { command: "cavelon", args: ["mcp"] };
 
 it("selects OMP independently from Pi and installs its native autoload extension", async () => {
@@ -80,6 +80,23 @@ it.each(["disabledServers", "enabledServers"])("preserves the person's %s policy
   writeFileSync(config.file, before);
   expect(await resolveNativeMcp(config)).toMatchObject({ error: expect.stringContaining(policy) });
   expect(readFileSync(config.file, "utf8")).toBe(before);
+});
+
+it("refuses a canonical user policy added after installing an alternate native binding", async () => {
+  const directory = path.join(sb.home, "omp-profile");
+  vi.stubEnv("PI_CODING_AGENT_DIR", directory);
+  vi.stubEnv("OMP_PROFILE", "default");
+  const env = { ...sb.env, PI_CODING_AGENT_DIR: directory, OMP_PROFILE: "default" };
+  const agent = agentByName(setupAgents(env), "omp")!;
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(path.join(directory, ".mcp.json"), "{}\n");
+  const skills = await loadSkills();
+  const record: AgentRecord = {};
+  await applyPlan(await planAgent(agent, {}, env, command, skills), env, command, skills, record);
+  const profile = path.join(directory, "cavelon", "profile.json");
+  expect(await loadNativeRuntime(profile, "omp")).toMatchObject({ command });
+  writeFileSync(path.join(directory, "mcp.json"), JSON.stringify({ disabledServers: ["cavelon"] }));
+  await expect(loadNativeRuntime(profile, "omp")).rejects.toThrow("disabledServers");
 });
 
 it("preserves a compatible Cavelon entry instead of shadowing another client", async () => {

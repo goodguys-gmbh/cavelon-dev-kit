@@ -1,4 +1,4 @@
-import { ompListPolicy } from "../omp-config.js";
+import { ompRuntimePolicy } from "../omp-config.js";
 import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import os from "node:os";
@@ -113,7 +113,7 @@ export async function loadNativeRuntime(profileFile: string, client: NativeProfi
     try { JSON.parse(text); }
     catch { throw new Error(`The ${client === "pi" ? "Pi" : "OMP"} MCP configuration requires plain JSON; review it before native startup.`); }
   }
-  if (client === "omp") { const policy = ompListPolicy(text); if (policy) throw new Error(policy); }
+  if (client === "omp") { const policy = await ompRuntimePolicy(configFile, process.env); if (policy) throw new Error(policy); }
   const selected = readJsoncEntry(text, [commandArgs ? "mcpServers" : "mcp", "cavelon"]);
   if ("error" in selected || !selected.value || nativeEntryHash(selected.value) !== profile.entryHash) {
     throw new Error("The Cavelon MCP entry changed; review it and repeat setup before using native approval.");
