@@ -9,6 +9,11 @@ CLI, the skills and the plugin.
 
 ### Fixed
 
+- Atomic file replacement retries short Windows sharing locks with a bounded
+  wait, preserving the old file if replacement fails and removing the temporary
+  copy. Concurrent MCP contract-cache writes no longer fail on a transient lock
+  (#211).
+
 - Token login from recognized coding-agent shells is refused before reading
   input, contacting the instance or replacing the stored login, including
   `login --token-stdin`. Use the person's separate terminal (#208).

@@ -253,6 +253,12 @@ cached copy is a minute old (`CAVELON_CONTRACT_TTL_SECONDS`), or when the
 instance's ETag says it changed. `cavelon validate --verbose` names the copy it
 used: cached or read now, when, and its hash.
 
+On Windows, concurrent calls can briefly hold a cached contract file open while
+another call replaces it. The kit retries these sharing-lock errors up to six
+times, with at most 310 ms of retry delays. It keeps the old complete file if
+replacement still fails and reports the error; it does not delete the cache to
+force a write. Other filesystem errors are reported without retrying.
+
 ## Preview and apply
 
 | Code | Exit | Cause and fix |
