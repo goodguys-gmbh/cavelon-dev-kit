@@ -61,6 +61,13 @@ meaning.
 `cavelon whoami` says which instance and tenant a command uses, and where each
 came from. The order is in [Concepts](concepts.md#tenant).
 
+## Login says it needs a person
+
+The unreleased kit returns `operation_for_a_person` (exit 5) for token login in
+a recognized agent shell, including `--token-stdin`. It reads no token and
+keeps the stored login. Open a separate terminal application, run `cavelon login`
+yourself and then return to the agent. See [Log in](getting-started.md#2-log-in).
+
 ## A root MCP session cannot find a child solution's environment or preview
 
 In a multi-solution repository, `No env/test.yaml in this solution` or

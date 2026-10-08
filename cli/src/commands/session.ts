@@ -1,4 +1,5 @@
 import { capacityLimits, capacityNotes } from "../capacity.js";
+import { refuseForAgent } from "../agent-env.js";
 import { boolOption, positional, type CommandSpec, type Context } from "../command.js";
 import { compareContracts, Contracts, type Capabilities } from "../contracts.js";
 import { deleteToken, saveToken } from "../credentials.js";
@@ -92,6 +93,7 @@ export const login: CommandSpec = {
   summary: "Store a token for an instance (a person runs this, never the agent).",
   description:
     "Asks for the token without echoing it, or reads it from standard input with --token-stdin. It is never an argument.\n" +
+    "A coding agent's shell is refused before reading input or contacting the instance; log in from your own terminal.\n" +
     "Create a personal access token (cvpat_…) on /account/access-tokens; a tenant API key (cbp_…) also works.\n" +
     "The token is kept in the operating system's credential store, or in a file only you can read.\n" +
     "Without --tenant, login finds the tenants the token reaches: one is used; from several, a person chooses on a terminal by number or name; " +
@@ -109,6 +111,7 @@ export const login: CommandSpec = {
     "op read op://dev/cavelon/token | cavelon login --token-stdin --tenant acme-support",
   ],
   async run(ctx, input) {
+    refuseForAgent(ctx, "Logging in with a token", cavelonCommand("login"));
     const session = await ctx.session();
     const url = session.url;
     if (!url) throw usageError("Which instance?", "Pass --instance <url> (or set CAVELON_URL).");

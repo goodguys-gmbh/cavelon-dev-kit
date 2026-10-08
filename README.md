@@ -17,6 +17,8 @@ through the Admin.
 
 Your token stays with you: `cavelon` never takes it as an argument, keeps it in
 your system's credential store, and your agent never sees it.
+The unreleased kit also refuses token login from recognized agent shells before
+reading input. Log in from your own terminal; see [the login guide](docs/getting-started.md#2-log-in).
 
 > [!NOTE]
 > **Open-source client expansion is under Unreleased.** The next release adds
