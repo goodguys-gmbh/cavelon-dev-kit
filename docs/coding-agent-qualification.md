@@ -1,9 +1,10 @@
 # Coding-agent qualification
 
 Setup support and real-client qualification are recorded separately. Version
-0.1.16 adds the three open-source clients below. Unreleased Cline, Kilo, Goose and OMP
-checks are recorded separately; OMP remains planned. Existing clients
-keep their installation routes.
+0.1.16 added OpenCode, Pi and Qwen Code CLI. The 0.1.17 candidate adds Cline,
+Kilo, Goose and OMP. Fresh Cline terminal and OMP person-dialog checks remain
+release gates; their launchers are prepared. Existing clients keep their
+installation routes.
 
 | Client | Pinned version | Runtime checked | Guarded-change mode |
 |---|---|---|---|
@@ -18,8 +19,15 @@ macOS, Windows and WSL client UI checks and customer-specific model/network
 pilots remain separate qualification work. Qwen editor surfaces are outside
 this release's scope.
 
-Client checks use a fake local instance and synthetic data, with no model
-calls or real database execution. Programmatic fixture calls prove transport
+Client checks use a fake local instance and synthetic data, with no real model
+provider calls or database execution. The 0.1.17 Linux candidate passed npm
+consumer and locally installed offline-bundle workflows for Cline, Kilo, Goose
+and OMP. Each validated a child solution, previewed and imported an ordinary
+draft, ran and waited for a synthetic suite, read its trace, then repeated after
+one bounded prompt improvement: two imports, suites and traces, with no guarded
+changes or instance confirmation ids. Coding clients and fixture providers
+were provisioned separately; this does not certify a customer's model or network.
+ Programmatic fixture calls prove transport
 and behavior. Scripted UI responses never count as a person's approval.
 The packaged OpenCode, Pi and Qwen checks opened a multi-solution root, validated
 a child package and previewed an import that deletes a synthetic agent and
@@ -56,7 +64,7 @@ Installation and lifecycle instructions: [OpenCode](install/opencode.md),
 [native adapter design](native-approval-adapters.md) explains exact-change
 approval, refusal and failure behavior.
 
-## Unreleased Cline integration
+## 0.1.17 candidate: Cline integration
 
 | Surface | Pinned version | Runtime checked | Guarded-change mode |
 |---|---|---|---|
@@ -72,11 +80,10 @@ confirmation or import and do not supply a person's answer.
 Use the editor's default shared paths and launch a fresh process from the
 repository root. Its legacy compatibility UI has separate custom-path limits,
 and its MCP environment filters custom Cavelon state paths; see
-[Cline](install/cline.md). Packaged own-terminal approval and complete offline
-workflow qualification remain release gates. Other platforms, editor variants
+[Cline](install/cline.md). The 0.1.17 candidate passed complete npm and locally installed Linux offline workflows, each with two ordinary draft imports, synthetic suites and traces around one bounded prompt improvement. Packaged own-terminal approval remains a release gate. Other platforms, editor variants
 and customer model/network pilots remain separate work.
 
-## Unreleased Kilo integration
+## 0.1.17 candidate: Kilo integration
 
 | Surface | Pinned version | Runtime checked | Guarded-change mode |
 |---|---|---|---|
@@ -101,11 +108,11 @@ sent no confirmation or mutation. A fresh Confirm applied one exactly bound
 synthetic child-solution import, deleting an obsolete agent and changing a fake
 query's row limit from 5 to 10. A sibling's preview was refused in both cases.
 This person check made no model call and used no real database or instance.
-The complete offline workflow remains a next-release gate. No qualification is inherited from OpenCode. Other client versions,
+The 0.1.17 candidate passed complete npm and locally installed Linux offline workflows, each with two draft imports, synthetic suites and traces around one bounded prompt improvement. No qualification is inherited from OpenCode. Other client versions,
 macOS/Windows/WSL UIs, JetBrains and customer network/model pilots remain
 separate. Installation and lifecycle: [Kilo](install/kilo.md).
 
-## Unreleased Goose integration
+## 0.1.17 candidate: Goose integration
 
 | Surface | Pinned version | Runtime checked | Guarded-change mode |
 |---|---|---|---|
@@ -124,11 +131,10 @@ confirmation and import. It deleted one synthetic agent and changed a fake
 query's row limit from 5 to 10, with sibling previews still refused.
 
 Goose's form expires after five minutes; a late answer can report `Request not
-found` without approving the change. The complete offline workflow and final
-release candidate remain gates. No custom native adapter is needed for the CLI's
+found` without approving the change. The 0.1.17 candidate passed the complete npm and locally installed Linux offline workflows, each with two ordinary draft imports, synthetic suites and traces around one bounded prompt improvement. No custom native adapter is needed for the CLI's
 built-in form. See [Goose](install/goose.md).
 
-## Unreleased OMP integration
+## 0.1.17 candidate: OMP integration
 
 | Surface | Pinned version | Runtime checked | Guarded-change mode |
 |---|---|---|---|
@@ -143,5 +149,4 @@ all 64 Cavelon tools and its instructions named all four skills. Read, validatio
 child-solution deleting preview, sibling-preview refusal and actual shell guards
 passed. Print-mode confirmation made no instance confirmation or mutation.
 Native errors propagate as error results. No real model, database or production
-call was used. The fresh person's TUI check, complete offline workflow and final
-release candidate remain gates. See [OMP](install/omp.md).
+call was used. The actual packaged OMP TUI loaded 64 tools and passed a read/validate readiness check without opening a form or calling a model. The 0.1.17 candidate passed complete npm and locally installed Linux offline workflows, each with two ordinary draft imports, synthetic suites and traces around one bounded prompt improvement. The fresh person’s TUI check remains a release gate. See [OMP](install/omp.md).

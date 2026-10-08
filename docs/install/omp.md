@@ -1,7 +1,7 @@
 # OMP (Oh My Pi)
 
-OMP is a separate coding client from Pi. This integration is unreleased; use a
-kit release that includes it. Configuration and extension APIs were inspected
+OMP is a separate coding client from Pi. This integration requires
+kit 0.1.17 or newer. Configuration and extension APIs were inspected
 in `@oh-my-pi/pi-coding-agent` 18.8.5 with Bun 1.3.14. Runtime and actual person
 dialog qualification are recorded separately in
 [Coding-agent qualification](../coding-agent-qualification.md).

@@ -9,7 +9,7 @@ updating and removing.
 Version 0.1.16 adds OpenCode and Pi with bundled native adapters, and Qwen
 Code CLI with native settings and person-terminal approval. See the
 [qualification matrix](../coding-agent-qualification.md) for tested versions,
-platforms and limits. Unreleased Cline, Kilo, Goose and OMP support is described below.
+platforms and limits. Version 0.1.17 adds Cline, Kilo, Goose and OMP.
 
 | Client | Installs as | Page |
 |---|---|---|
@@ -22,10 +22,10 @@ platforms and limits. Unreleased Cline, Kilo, Goose and OMP support is described
 | OpenCode | bundled native server/TUI plugins and skills (`cavelon setup`) | [OpenCode](opencode.md) |
 | Pi | bundled native extension and skills (`cavelon setup`) | [Pi](pi.md) |
 | Qwen Code CLI | native MCP settings and skills (`cavelon setup`); guarded changes in the person's own terminal | [Qwen Code](qwen-code.md) |
-| Cline (unreleased) | shared native user MCP settings and skills; project skills only; person-terminal approval | [Cline](cline.md) |
-| Goose (unreleased) | native user YAML extension and skills; built-in interactive CLI form, headless refusal | [Goose](goose.md) |
-| Kilo (unreleased) | bundled server/TUI plugins and native skills; CLI dialogs, editor/headless person-terminal approval | [Kilo](kilo.md) |
-| OMP (unreleased) | own native profile, autoload extension and skills; TUI dialogs, print/RPC person-terminal approval | [OMP](omp.md) |
+| Cline | shared native user MCP settings and skills; project skills only; person-terminal approval | [Cline](cline.md) |
+| Goose | native user YAML extension and skills; built-in interactive CLI form, headless refusal | [Goose](goose.md) |
+| Kilo | bundled server/TUI plugins and native skills; CLI dialogs, editor/headless person-terminal approval | [Kilo](kilo.md) |
+| OMP | own native profile, autoload extension and skills; TUI dialogs, print/RPC person-terminal approval | [OMP](omp.md) |
 | Cloud agents and CI | `npx` or `uvx`, with the skills committed to the repository | [Cloud agents and CI](cloud-and-ci.md) |
 
 **The quickest way** on your own computer: install `cavelon`

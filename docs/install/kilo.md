@@ -1,6 +1,6 @@
 # Kilo CLI and current VS Code extension
 
-Unreleased. This integration targets `@kilocode/cli` 7.8.8 and the
+Kit 0.1.17 targets `@kilocode/cli` 7.8.8 and the
 `kilocode.kilo-code` VS Code extension 7.8.8. Their shared backend uses Kilo's
 native configuration and skills. Older editor formats, JetBrains, remote
 sessions and other versions need separate qualification. See the

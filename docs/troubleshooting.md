@@ -91,7 +91,7 @@ client, then restart Qwen and check its `/mcp` and `/skills` lists. See
 
 ## A native adapter's files or references were edited
 
-OpenCode/Pi and unreleased Kilo setup record hashes of the native assets and disabled
+OpenCode/Pi, Kilo and OMP setup record hashes of the native assets and disabled
 Cavelon MCP entry, plus exact plugin/extension references. Update, check and
 removal refuse an edited binding, asset or reference, and duplicate path
 aliases. This preserves personal configuration and avoids removing an asset

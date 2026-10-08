@@ -1,6 +1,6 @@
 # Goose
 
-Unreleased setup support targets Goose CLI 1.53.0. The
+Setup support in kit 0.1.17 targets Goose CLI 1.53.0. The
 [qualification matrix](../coding-agent-qualification.md) records actual client
 loading and person interaction separately. Goose Desktop, ACP hosts and other
 versions need their own UI checks.
