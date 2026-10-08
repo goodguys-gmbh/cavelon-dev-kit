@@ -261,6 +261,14 @@ new folder (`claude plugin marketplace remove cavelon-dev-kit`, then add the
 new folder and install again). `cavelon --version` still names the online
 update command; offline, the next bundle is the update.
 
+## Qwen Code CLI (Unreleased)
+
+Qwen Code's unreleased file integration also works from the installed
+executable: `cavelon setup --agents qwen` copies the bundled skills and writes
+`cavelon mcp`, without a marketplace or registry install. Guarded changes remain
+person-terminal commands. Provision Qwen and its model separately; see
+[Qwen Code](install/qwen-code.md#update).
+
 ## Native OpenCode and Pi adapters (Unreleased)
 
 The standalone executable carries the same dependency-bundled native adapter

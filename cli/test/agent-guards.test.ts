@@ -395,6 +395,8 @@ describe("cavelon api and the api tool, run by an agent and by a person", () => 
       copilot: { AI_AGENT: "github_copilot_vscode_agent", COPILOT_AGENT: "1", TERM_PROGRAM: "vscode" },
       // Gemini CLI's run_shell_command (docs/tools/shell.md).
       gemini: { GEMINI_CLI: "1" },
+      // Qwen Code 0.25.0's released shell execution service.
+      qwen: { QWEN_CODE: "1" },
       // The Kiro IDE's agent terminal: no agent marker, TERM_PROGRAM in every terminal it opens.
       kiro: { TERM_PROGRAM: "kiro", Q_TERM_DISABLED: "1" },
       // kiro-cli: "only set when the agent is driving the command" (kiro.dev/docs/reference/built-in-tools).

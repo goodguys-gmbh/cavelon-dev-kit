@@ -20,6 +20,12 @@ CLI, the skills and the plugin.
 
 ### Added
 
+- Qwen Code CLI setup and project init with native commented settings and
+  skills, direct `QWEN_HOME` support, preserved personal entries and managed
+  MCP policy diagnostics. Setup/check/update/remove track only kit-owned
+  files. Its shell marker is recognized; guarded changes use the person's
+  own terminal. Full client/platform release qualification remains open (#207).
+
 - Native OpenCode/Pi installation through setup and project init, with owned
   assets/profiles, separate OpenCode server/TUI references, checking, updates
   and removal. Only the duplicate Cavelon built-in entry is disabled. Personal

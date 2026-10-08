@@ -306,6 +306,11 @@ What it changes, per agent, for your user only (never a project's files):
 | GitHub Copilot in VS Code | files | VS Code's user `mcp.json`: `~/.config/Code/User/` on Linux, `~/Library/Application Support/Code/User/` on macOS, `%APPDATA%\Code\User\` on Windows | `~/.copilot/skills/` |
 | Gemini CLI | `gemini extensions install https://github.com/goodguys-gmbh/cavelon-dev-kit --ref v<this version> --consent`, run in an empty folder of `cavelon`'s cache, which Gemini CLI then trusts; files when that release has no extension | from the extension, else `~/.gemini/settings.json` | from the extension, else `~/.gemini/skills/` |
 | Kiro | files | `~/.kiro/settings/mcp.json` | `~/.kiro/skills/` |
+| Qwen Code CLI (Unreleased) | files; guarded changes in the person's own terminal | `~/.qwen/settings.json`, or `<QWEN_HOME>/settings.json` | `~/.qwen/skills/`, or `<QWEN_HOME>/skills/` |
+
+See [Qwen Code CLI](install/qwen-code.md) for project paths, managed policy,
+native skill discovery and its explicit terminal approval route. This entry
+does not qualify Qwen's editor surfaces or claim a native approval dialog.
 
 `~` is your home folder (`%USERPROFILE%` on Windows). Cursor, VS Code and Kiro
 keep the files although their plugin packages exist: Cursor and VS Code install

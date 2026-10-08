@@ -14,6 +14,10 @@ to the user settings of Cursor, VS Code with GitHub Copilot, Gemini CLI and
 Kiro. `cavelon setup --check` starts it once to show that it works. See
 [Set up your coding agents](installation.md#set-up-your-coding-agents).
 
+Under **Unreleased**, setup also writes Qwen Code's native settings and skills.
+Its inspected MCP client does not advertise form elicitation: guarded previews
+return the command for the person's own terminal. See [Qwen Code](install/qwen-code.md#approval).
+
 **With the Cavelon plugin** installed by hand for Claude Code or Codex, the
 plugin starts the server. See [Installation](installation.md#install-the-plugin).
 

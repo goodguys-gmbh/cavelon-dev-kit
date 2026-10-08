@@ -1,4 +1,5 @@
 import path from "node:path";
+import { parseTree, type ParseError } from "jsonc-parser";
 import { readTextFile } from "./fsutil.js";
 import { readJsoncEntry } from "./jsonc-config.js";
 import { isKitMcpEntry, type McpEntryFormat } from "./mcp-entry.js";
@@ -7,14 +8,16 @@ import { homeDir } from "./paths.js";
 type Env = Record<string, string | undefined>;
 
 export interface NativeMcpConfig {
-  client: "opencode" | "pi";
+  client: "opencode" | "pi" | "qwen";
   format: "native";
   file: string;
   /** Low to high precedence; never create a companion when one already exists. */
   files: string[];
   /** A personal user entry must not be silently shadowed by a new project entry. */
   shadowFiles?: string[];
-  syntax: "json" | "jsonc";
+  /** Read-only operator settings that must not be silently overridden. */
+  managedFiles?: string[];
+  syntax: "json" | "jsonc" | "json-comments";
   keys: string[];
   entryFormat: McpEntryFormat;
   extra: Record<string, unknown>;
@@ -28,7 +31,7 @@ export interface NativeClient {
   commands: string[];
   projectSkills: string[];
   project(env?: Env): NativeMcpConfig;
-  user(env: Env): { mcp: NativeMcpConfig; skills: string; folders: string[] };
+  user(env: Env, platform?: NodeJS.Platform): { mcp: NativeMcpConfig; skills: string; folders: string[] };
   notes: string[];
 }
 
@@ -41,6 +44,30 @@ const piConfig = (file: string): NativeMcpConfig => ({
 });
 
 const piDir = (env: Env) => env.PI_CODING_AGENT_DIR || path.join(homeDir(env), ".pi", "agent");
+
+function qwenDir(env: Env): string {
+  const raw = env.QWEN_HOME;
+  if (!raw) return path.join(homeDir(env), ".qwen");
+  const expanded = raw === "~" ? homeDir(env) : raw.startsWith("~/") || raw.startsWith("~\\")
+    ? path.join(homeDir(env), ...raw.slice(2).split(/[/\\]+/)) : raw;
+  return path.resolve(expanded);
+}
+
+function qwenManagedFiles(env: Env, platform: NodeJS.Platform): string[] {
+  const system = env.QWEN_CODE_SYSTEM_SETTINGS_PATH || (platform === "darwin" ? "/Library/Application Support/QwenCode/settings.json"
+    : platform === "win32" ? "C:\\ProgramData\\qwen-code\\settings.json" : "/etc/qwen-code/settings.json");
+  return [env.QWEN_CODE_SYSTEM_DEFAULTS_PATH || path.join(path.dirname(system), "system-defaults.json"), system];
+}
+
+const qwenConfig = (file: string, env: Env, platform = process.platform): NativeMcpConfig => ({
+  client: "qwen", format: "native", file, files: [file], syntax: "json-comments", keys: ["mcpServers", "cavelon"],
+  entryFormat: "command-args", extra: {}, managedFiles: qwenManagedFiles(env, platform),
+});
+
+/** A native configuration format does not imply a person-dialog adapter. */
+export function hasNativeApprovalAdapter(config: NativeMcpConfig): config is NativeMcpConfig & { client: "opencode" | "pi" } {
+  return config.client === "opencode" || config.client === "pi";
+}
 
 function openCodeUserFiles(env: Env): string[] {
   const dir = path.join(env.XDG_CONFIG_HOME || path.join(homeDir(env), ".config"), "opencode");
@@ -80,6 +107,18 @@ export const NATIVE_CLIENTS: NativeClient[] = [
       "Setup installs the native Cavelon extension and disables only its duplicate built-in MCP entry. Guarded changes require a fresh person dialog; missing UI returns a command for the person's own terminal. File checks do not certify actual UI loading.",
     ],
   },
+  {
+    name: "qwen", label: "Qwen Code CLI", aliases: ["qwen-code", "qwen-cli"], commands: ["qwen"], projectSkills: [".qwen/skills"],
+    project: (env = {}) => ({ ...qwenConfig(".qwen/settings.json", env), shadowFiles: [path.join(qwenDir(env), "settings.json")] }),
+    user: (env, platform = process.platform) => {
+      const dir = qwenDir(env);
+      return { mcp: qwenConfig(path.join(dir, "settings.json"), env, platform), skills: path.join(dir, "skills"), folders: [dir] };
+    },
+    notes: [
+      "Qwen Code CLI 0.25.0 reads native Cavelon skills and MCP settings; project settings depend on project trust. System MCP policies and personal servers are preserved.",
+      "This client does not advertise MCP form elicitation. Guarded changes return a preview and a command for the person's own terminal; tool permission approval and automatic modes cannot confirm the Cavelon change.",
+    ],
+  },
 ];
 
 export const nativeClient = (name: string): NativeClient | undefined => NATIVE_CLIENTS.find(client => client.name === name || client.aliases.includes(name));
@@ -88,7 +127,49 @@ export function readNativeMcp(text: string | undefined, config: NativeMcpConfig)
   if (text !== undefined && config.syntax === "json") {
     try { JSON.parse(text); } catch { return { error: "this client requires plain JSON; correct the file before setup" }; }
   }
+  if (text !== undefined && config.syntax === "json-comments") {
+    const errors: ParseError[] = [];
+    parseTree(text, errors, { allowTrailingComma: false });
+    if (errors.length) return { error: "this client accepts JSON comments but not trailing commas; correct the file before setup" };
+  }
   return readJsoncEntry(text, config.keys);
+}
+
+function serverMatches(pattern: string): boolean {
+  // Qwen's policies accept only * and ? globs, not arbitrary regular expressions.
+  let positions = new Set([0]);
+  for (const char of pattern) {
+    const next = new Set<number>();
+    for (const at of positions) {
+      if (char === "*") for (let end = at; end <= "cavelon".length; end++) next.add(end);
+      else if (at < "cavelon".length && (char === "?" || char === "cavelon"[at])) next.add(at + 1);
+    }
+    positions = next;
+  }
+  return positions.has("cavelon".length);
+}
+
+async function qwenPolicy(config: NativeMcpConfig, full: (file: string) => string): Promise<string | undefined> {
+  for (const file of new Set([...(config.managedFiles ?? []), ...(config.shadowFiles ?? []), ...config.files.map(full)])) {
+    const text = await readTextFile(file);
+    if (text === undefined) continue;
+    const parsed = readNativeMcp(text, config);
+    if ("error" in parsed) return `${file}: ${parsed.error}`;
+    if (config.managedFiles?.includes(file) && parsed.value !== undefined) return `managed settings in ${file} define Cavelon; review that binding with the operator instead of writing another entry`;
+    const policy = readJsoncEntry(text, ["mcp"]);
+    if ("error" in policy) return `${file}: ${policy.error}`;
+    if (policy.value === undefined) continue;
+    if (!policy.value || typeof policy.value !== "object" || Array.isArray(policy.value)) return `the MCP policy in ${file} is invalid; review it manually`;
+    const settings = policy.value as Record<string, unknown>;
+    for (const key of ["allowed", "excluded"]) {
+      const patterns = settings[key];
+      if (patterns === undefined) continue;
+      if (!Array.isArray(patterns) || !patterns.every(pattern => typeof pattern === "string")) return `the MCP ${key} policy in ${file} is invalid; review it manually`;
+      const matches = patterns.some(serverMatches);
+      if (key === "allowed" ? !matches : matches) return `the MCP ${key} policy in ${file} prevents Cavelon; ask the person or operator to review it`;
+    }
+  }
+  return undefined;
 }
 
 /** Refuse duplicate effective entries instead of guessing which a merged client config uses. */
@@ -97,6 +178,10 @@ export async function resolveNativeMcp(config: NativeMcpConfig, root?: string): 
 > {
   const full = (file: string) => root ? path.resolve(root, file) : path.resolve(file);
   if (config.blocked) return { file: full(config.file), error: config.blocked };
+  if (config.client === "qwen") {
+    const error = await qwenPolicy(config, full);
+    if (error) return { file: full(config.file), error };
+  }
   for (const file of config.shadowFiles ?? []) {
     const entry = readNativeMcp(await readTextFile(file), config);
     if ("error" in entry) return { file: full(config.file), error: `${file}: ${entry.error}; review user/project precedence manually` };
