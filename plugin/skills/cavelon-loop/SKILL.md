@@ -13,6 +13,13 @@ use it when you parse the result.
 
 ## Before anything
 
+- **Select the local solution folder.** In a repository with several solutions,
+  pass `solution_dir`, such as `solutions/review`, on MCP calls. It resolves
+  inside the server's startup workspace and selects that folder's
+  `cavelon.yaml`, `env/`, package, tests and saved previews. Use the same folder
+  for preview, confirmation and follow-up calls; `harness` selects the solution
+  on the instance and does not locate its files. Without `solution_dir`, tools
+  keep using the startup folder. From a shell, run in the solution folder.
 - `cavelon status` says which instance, tenant and solution this folder is
   bound to, the solution's state (draft, active, or inactive after a
   deactivate; whether it is ready to

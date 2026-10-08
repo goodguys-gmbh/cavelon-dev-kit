@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { ownsTenant, propertyName, type CommandSpec, type OptionSpec } from "./command.js";
 import { CavelonError } from "./errors.js";
-import { shellWord } from "./shell.js";
+import { currentShell, shellWord } from "./shell.js";
 
 /**
  * Commands the kit prints for a person or an agent to run next: in hints, in
@@ -34,6 +34,10 @@ export interface PrintTarget {
   instance?: string;
   tenant?: string;
   env?: string;
+  /** Explicit MCP selection, carried into every following tool call. */
+  solutionDir?: string;
+  /** The selected folder for an own-terminal fallback; never a process chdir. */
+  personCwd?: string;
 }
 
 const current = new AsyncLocalStorage<PrintTarget>();
@@ -59,7 +63,7 @@ export function cavelonCommand(...words: Word[]): string {
  */
 export function folderCommand(...words: Word[]): string {
   const target = current.getStore();
-  return target ? current.run({ mode: target.mode, commands: target.commands, agentShell: target.agentShell }, () => printedCommand(words)) : printedCommand(words);
+  return target ? current.run({ mode: target.mode, commands: target.commands, agentShell: target.agentShell, solutionDir: target.solutionDir, personCwd: target.personCwd }, () => printedCommand(words)) : printedCommand(words);
 }
 
 /**
@@ -76,9 +80,9 @@ export function printedCommand(words: readonly Word[], override: { env?: string 
       if (call) return call;
     }
     const line = withTarget(spec, words, { ...target, env });
-    return commandLine(target.agentShell ? withTokenPlaceholder(line) : line);
+    return inPersonFolder(commandLine(target.agentShell ? withTokenPlaceholder(line) : line), target);
   }
-  return commandLine(words);
+  return inPersonFolder(commandLine(words), target);
 }
 
 /**
@@ -90,7 +94,18 @@ export function printedCommand(words: readonly Word[], override: { env?: string 
 export function personCommand(...words: Word[]): string {
   const target = current.getStore();
   const spec = target ? commandOf(target.commands, words) : undefined;
-  return commandLine(target && spec ? withTarget(spec, words, target) : words);
+  return inPersonFolder(commandLine(target && spec ? withTarget(spec, words, target) : words), target);
+}
+
+/** Keep the fallback runnable in the selected folder, with shell quoting. */
+function inPersonFolder(line: string, target: PrintTarget | undefined): string {
+  if (!target?.personCwd) return line;
+  const directory = shellWord(target.personCwd);
+  switch (currentShell()) {
+    case "posix": return `cd -- ${directory} && ${line}`;
+    case "cmd": return `cd /d ${directory} && ${line}`;
+    case "powershell": return `& { Set-Location -LiteralPath ${directory} -ErrorAction Stop; ${line} }`;
+  }
 }
 
 /**
@@ -206,6 +221,7 @@ function toolCall(target: PrintTarget, spec: CommandSpec, args: readonly Word[],
   }
   if (target.tenant && takesTenant(tool) && out.tenant === undefined) out.tenant = target.tenant;
   if (env && tool.options?.env && out.env === undefined) out.env = env;
+  if (target.solutionDir !== undefined) out.solution_dir = target.solutionDir;
   return `${tool.mcpTool} ${JSON.stringify(out)}`;
 }
 

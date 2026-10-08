@@ -56,7 +56,39 @@ The agent never sees or passes the token, and there is no login tool. Without
 a login, tools answer `not_logged_in` and tell the agent to ask you.
 Repository tools (`init`, `pull`, `validate`, `package_schema`, `apply`, `explain`, `activate`,
 `sandbox_seed`, `artifacts_export`) work in the folder the agent started the
-server in, and use its `cavelon.yaml`.
+server in, and use its `cavelon.yaml`. Every tool also takes an optional
+`solution_dir` to select a folder inside that workspace for one call.
+
+## Several solutions in one repository
+
+When your coding client starts at the repository root, pass `solution_dir`
+to use a child solution's `cavelon.yaml`, `env/`, `package/`, tests and saved
+previews. The path is relative to the server's startup folder; an absolute
+path inside that workspace also works. Other concurrent calls keep their own
+folder, and calls without the argument keep using the startup folder.
+
+For a solution in `solutions/review/`, preview a replacement import with:
+
+```text
+apply {"solution_dir":"solutions/review","env":"test","mode":"replace"}
+```
+
+Then show the preview to the person and confirm its id in the same folder:
+
+```text
+apply {"solution_dir":"solutions/review","env":"test","confirm":"<preview_id>"}
+```
+
+The client asks the person before this deleting import. `harness` chooses a
+solution on the instance; it does not locate that solution's files. Use the
+same `solution_dir` for preview, confirmation and follow-up calls. A preview
+stored in another folder is unavailable here; make a new preview rather than
+copying it. Tool hints carry the selected folder. If the client cannot ask,
+the own-terminal command includes the selected working directory.
+
+Selection cannot leave the startup workspace, including through a symlink,
+or enter the kit's credential/cache directories. File arguments are then
+confined to the selected solution as usual.
 
 ## Tools
 
