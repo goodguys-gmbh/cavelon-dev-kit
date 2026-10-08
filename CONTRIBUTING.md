@@ -82,6 +82,11 @@ with the embedded skills, and an MCP handshake), and tests `install.sh` and
 `install.ps1` (Windows PowerShell 5.1 and PowerShell 7) and the Homebrew
 formula against them, served from a local folder: nothing is published.
 
+The standalone credential-store comparison uses a synthetic person-login
+environment without coding-agent markers. Agent login refusal is checked
+separately; inheriting the developer's agent marker would refuse the fixture
+before it can compare the two stores.
+
 ### The plugin packages
 
 `plugin/` is the one source of the plugin. Claude Code and Codex install it as

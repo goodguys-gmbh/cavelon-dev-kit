@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { InStream, Io } from "../src/io.js";
 import { run as runNpmBuild } from "../src/main.js";
+import { AGENT_VARIABLES } from "../src/agent-env.js";
 import { startFakeServer, type FakeServer } from "./fake-server.js";
 
 /**
@@ -28,12 +29,14 @@ let baseEnv: Record<string, string>;
 /**
  * The real home folder, so the system's credential store is the one a person
  * has; the kit's own folders go to a temporary one. No CAVELON_* variable of
- * the machine running the tests leaks in.
+ * the machine running the tests leaks in. This credential-store comparison
+ * models a person with a synthetic token; agent markers belong to guard tests.
  */
 function environment(): Record<string, string> {
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
-    if (value !== undefined && !key.toUpperCase().startsWith("CAVELON_")) env[key] = value;
+    if (value !== undefined && !key.toUpperCase().startsWith("CAVELON_")
+      && !AGENT_VARIABLES.some(({ variable }) => variable === key)) env[key] = value;
   }
   return {
     ...env,
