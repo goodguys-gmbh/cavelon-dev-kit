@@ -401,6 +401,8 @@ describe("cavelon api and the api tool, run by an agent and by a person", () => 
       "kiro-cli": { AGENT_CONTEXT_OUT: "/tmp/kiro-ctx.fifo", AGENT_DISPLAY_OUT: "/tmp/kiro-out.fifo" },
       // Seen in a run (1.18).
       opencode: { OPENCODE: "1", AGENT: "1" },
+      // Pi 1.1.0's released bash tool, executed with a synthetic session context.
+      pi: { PI_SESSION_ID: "synthetic-pi-session" },
       // Grok Build, seen in a run (1.0).
       grok: { GROK_AGENT: "1", CI: "true" },
     };

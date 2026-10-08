@@ -216,6 +216,7 @@ agents set for the commands their shell tool runs, is set (and is not empty,
 | `AGENT_CONTEXT_OUT` | Kiro CLI, while its agent runs the command |
 | `TERM_PROGRAM=kiro` | the Kiro IDE, in every terminal it opens |
 | `OPENCODE` | OpenCode, in every command it starts |
+| `PI_SESSION_ID` | Pi's shell tools, with session-environment exposure enabled (the default in Pi 1.1.0) |
 | `GROK_AGENT` | Grok Build |
 | `AI_AGENT` | the shared variable newer agents set |
 | `CAVELON_AGENT=1` | you, for an agent that sets none of the above |
@@ -233,6 +234,12 @@ its commands run in. The MCP server needs none of them: everything that
 reaches `cavelon` over MCP is guarded. A person in a plain terminal is
 unaffected: `cavelon api` sends at once, takes any path and sends
 any field.
+
+If your Pi configuration disables session-environment exposure, launch that
+agent with process-scoped `CAVELON_AGENT=1`. Keep the person's separate terminal
+outside that launch environment. Environment detection guards mistakes; it
+does not replace the instance's permission checks or the person's fresh answer
+before each guarded change.
 
 The commands with a `--confirm` flag are held to the same as their MCP tools:
 `tenant create`, `variables set` (replacing a value), `loop start`,
