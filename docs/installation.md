@@ -15,7 +15,7 @@ your computer and logs you in ([Set up your coding agents](#set-up-your-coding-a
 This page covers that, the ways to do each part by hand, updating and
 removing. [Install the kit in your coding agent](install/README.md) has one page
 per client (Claude Code, Codex, Cursor, VS Code with GitHub Copilot, Kiro,
-Gemini CLI, OpenCode, Pi, and cloud agents and CI), each with its install, first login,
+Gemini CLI, OpenCode, Pi, Qwen Code, Cline, and cloud agents and CI), each with its install, first login,
 check, update and removal. When you are done, continue with
 [Getting started](getting-started.md) or
 [Building a solution with a coding agent](coding-agents.md).
@@ -309,6 +309,12 @@ What it changes, per agent, for your user only (never a project's files):
 | OpenCode | bundled native server/TUI plugins; separate exact-change dialog | `$XDG_CONFIG_HOME/opencode/opencode.json[c]`, otherwise `~/.config/opencode/`; separate `tui.json[c]` | the selected directory's `skills/` |
 | Pi | bundled native extension; separate exact-change dialog | `~/.pi/agent/mcp.json` and `settings.json`, or `<PI_CODING_AGENT_DIR>/` | the selected directory's `skills/` |
 | Qwen Code CLI | files; guarded changes in the person's own terminal | `~/.qwen/settings.json`, or `<QWEN_HOME>/settings.json` | `~/.qwen/skills/`, or `<QWEN_HOME>/skills/` |
+
+Unreleased: [Cline](install/cline.md) setup writes
+`~/.cline/data/settings/cline_mcp_settings.json` and `~/.cline/skills/`.
+Project init copies `.cline/skills/` only; MCP stays at user level. Custom CLI
+paths and editor path limits are documented separately. Guarded changes use
+the person’s own terminal, with a process-scoped guarded client launch.
 
 See [Qwen Code CLI](install/qwen-code.md) for project paths, managed policy,
 native skill discovery and its explicit terminal approval route. This entry

@@ -55,11 +55,11 @@ Set up your coding agents for Cavelon and log in, in one guided step.
 cavelon setup [options]
 ```
 
-Finds Claude Code, Codex, Cursor, VS Code with GitHub Copilot, Gemini CLI, Kiro, OpenCode and Pi, shows what it will change for each, asks once and does it: Claude Code and Codex get the Cavelon plugin through their own plugin command, Gemini CLI the extension of this release (or the files, when the release has none); the others get the `cavelon` MCP server in their user MCP configuration and the skills in their user skills folder. It touches nothing else in those files and records what it did, so --remove undoes exactly that. Then it logs in if needed, choosing the tenant by name as `login` does. The server starts as `cavelon mcp` when cavelon is installed, otherwise through npx. --check reports what is set up and working: each agent's entry, the MCP server starting, and the login. An agent found but never set up for Cavelon is reported and skipped (exit 0 when the rest works); --strict, or naming it with --agents, counts it. Without a terminal it changes nothing unless --yes.
+Finds Claude Code, Codex, Cursor, VS Code with GitHub Copilot, Gemini CLI, Kiro, OpenCode, Pi, Qwen and Cline, shows what it will change for each, asks once and does it: Claude Code and Codex get the Cavelon plugin through their own plugin command, Gemini CLI the extension of this release (or the files, when the release has none); the others get the `cavelon` MCP server in their user MCP configuration and the skills in their user skills folder. It touches nothing else in those files and records what it did, so --remove undoes exactly that. Then it logs in if needed, choosing the tenant by name as `login` does. The server starts as `cavelon mcp` when cavelon is installed, otherwise through npx. --check reports what is set up and working: each agent's entry, the MCP server starting, and the login. An agent found but never set up for Cavelon is reported and skipped (exit 0 when the rest works); --strict, or naming it with --agents, counts it. Without a terminal it changes nothing unless --yes.
 
 | Option | Description |
 |---|---|
-| `--agents <list>` | Only these agents: claude, codex, cursor, copilot, gemini, kiro, opencode, pi, qwen, or all (comma-separated). Default: every agent found. Repeatable. |
+| `--agents <list>` | Only these agents: claude, codex, cursor, copilot, gemini, kiro, opencode, pi, qwen, cline, or all (comma-separated). Default: every agent found. Repeatable. |
 | `-y, --yes` | Make the changes without asking. |
 | `--check` | Report what is set up and working; change nothing. |
 | `--strict` | With --check: fail for every agent found that is not set up, not only the ones setup set up. |
@@ -188,7 +188,7 @@ Never overwrites a file it did not create. AGENTS.md, .gitignore and an existing
 |---|---|---|
 | `--harness <harness>` | The solution (harness) this folder holds, by name, slug or id; its slug goes into cavelon.yaml. One that is not on the instance yet is created as a draft with that name, unless an existing solution's name is close to it: then init refuses, naming that one, and --new creates the new one. Without it, init asks on a terminal. | yes |
 | `--new` | Create the solution --harness names as a new draft, even when an existing solution has a similar name (refused when one has that very name or slug). | yes |
-| `--agents <list>` | Write the fallback for these agents: claude, codex, cursor, copilot, gemini, kiro, opencode, pi, qwen, other or all (comma-separated). Repeatable. | yes |
+| `--agents <list>` | Write the fallback for these agents: claude, codex, cursor, copilot, gemini, kiro, opencode, pi, qwen, cline, other or all (comma-separated). Repeatable. | yes |
 | `--hook` | Add a git pre-commit hook that runs `cavelon validate`; never in a hooks folder outside the repository. | yes |
 | `--update` | Only bring the marked blocks and fallback files to this version. | yes |
 | `--from <file>` | Write this package file (a JSON or YAML export) into package/ and tests/. | yes |

@@ -7,6 +7,14 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Added
+
+- Cline shared native user MCP setup and skills, independent CLI configuration
+  overrides, project skills without an ineffective project MCP file, and safe
+  ownership-based check/update/remove. Guarded changes use the person’s own
+  terminal; the coding client needs a process-scoped guarded launch. CLI and
+  editor qualification remain separate (#213).
+
 ## [0.1.16] - 2026-10-08
 
 OpenCode and Pi native approval, Qwen Code CLI setup, and guarded imports from

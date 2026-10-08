@@ -1,7 +1,7 @@
-# Coding-agent qualification for 0.1.16
+# Coding-agent qualification
 
 Setup support and real-client qualification are recorded separately. This
-release adds three open-source clients; Cline, Kilo, Goose and OMP remain
+release adds three open-source clients; Kilo, Goose and OMP remain
 planned for a later release. Existing clients keep their installation routes.
 
 | Client | Pinned version | Runtime checked | Guarded-change mode |
@@ -54,3 +54,23 @@ Installation and lifecycle instructions: [OpenCode](install/opencode.md),
 [Pi](install/pi.md), [Qwen Code](install/qwen-code.md). The
 [native adapter design](native-approval-adapters.md) explains exact-change
 approval, refusal and failure behavior.
+
+## Unreleased Cline integration
+
+| Surface | Pinned version | Runtime checked | Guarded-change mode |
+|---|---|---|---|
+| Cline CLI | `cline` 3.0.70 | Linux x64 released binary; four skills, native MCP read, child-solution deleting preview, headless/sibling refusal and inherited guarded shell | Person's own terminal; no native Cavelon dialog |
+| Cline VS Code | `saoudrizwan.claude-dev` 4.1.23, VS Code 1.139.1 | Linux x64 actual isolated extension host; default shared settings, four native skills, native MCP read, child-solution deleting preview and headless/sibling refusal | Person's own terminal; no native Cavelon dialog |
+
+The CLI uses a scripted loopback model endpoint to exercise its actual tool
+dispatch; no real model provider is called. The editor loads the released VSIX
+in VS Code with a small inspection facade for its existing controller, rather
+than replacing the editor or MCP implementation. These checks send no guarded
+confirmation or import and do not supply a person's answer.
+
+Use the editor's default shared paths and launch a fresh process from the
+repository root. Its legacy compatibility UI has separate custom-path limits,
+and its MCP environment filters custom Cavelon state paths; see
+[Cline](install/cline.md). Packaged own-terminal approval and complete offline
+workflow qualification remain release gates. Other platforms, editor variants
+and customer model/network pilots remain separate work.

@@ -54,7 +54,7 @@ const tomlServer = (file: string): McpTarget => {
 };
 
 /** An agent whose MCP entry is made when it is written, for the system the command runs on. */
-function agent(name: string, label: string, mcp?: () => McpTarget): AgentTarget {
+function agent(name: string, label: string, mcp?: () => McpTarget | undefined): AgentTarget {
   if (!mcp) return { name, label };
   return {
     name,
@@ -74,6 +74,7 @@ export const AGENTS: AgentTarget[] = [
   agent("kiro", "Kiro", () => jsonServer(".kiro/settings/mcp.json")),
   ...NATIVE_CLIENTS.map(client => agent(client.name, client.label, () => {
     const config = client.project();
+    if (!config) return undefined;
     return { ...config, entry: encodeMcpEntry(mcpCommand(), config.entryFormat, config.extra),
       others: [...otherPlatforms().map(p => encodeMcpEntry(mcpCommand(p), config.entryFormat, config.extra)), encodeMcpEntry(INSTALLED_MCP_COMMAND, config.entryFormat, config.extra)] };
   })),

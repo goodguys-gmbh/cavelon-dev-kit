@@ -304,3 +304,11 @@ version ([Which bundle fits an instance](#which-bundle-fits-an-instance)):
 
 Until your instance serves a bundle, bring a verified copy in as described
 above.
+
+## Cline
+
+When your kit release includes Cline setup, provision Cline separately, install
+the verified local executable, then run `cavelon setup --agents cline`. Setup
+copies bundled skills and writes `cavelon mcp` without a runtime package fetch.
+Project init copies skills only. Keep guarded changes in your own terminal and
+launch the coding client with its guard marker; see [Cline](install/cline.md).

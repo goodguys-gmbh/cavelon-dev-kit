@@ -101,7 +101,7 @@ async function verify(directory: string, record: Installation): Promise<void> {
   }
   const mcpFile = fileOf(directory, record.mcp.file);
   await safeFile(mcpFile, root);
-  const mcp = nativeClient(record.client)!.project();
+  const mcp = nativeClient(record.client)!.project()!;
   const selected = readNativeMcp(await readTextFile(mcpFile), mcp);
   if ("error" in selected || selected.value === undefined || nativeEntryHash(selected.value) !== record.mcp.hash) throw new Error("The native Cavelon MCP entry was edited; review it before update or removal.");
   for (const ref of record.references) {
@@ -278,7 +278,7 @@ export async function checkNativeInstallation(directory: string): Promise<{ comm
         if (enabled.value === false) throw new Error("The person turned off the Cavelon plugin; enable it in the client only if intended.");
       }
     }
-    const config = nativeClient(record.client)!.project();
+    const config = nativeClient(record.client)!.project()!;
     const entry = readNativeMcp(await readTextFile(fileOf(directory, record.mcp.file)), config);
     if ("error" in entry) throw new Error(entry.error);
     return { command: decodeMcpEntry(entry.value, config.entryFormat) };
@@ -304,7 +304,7 @@ export async function removeNativeInstallation(directory: string): Promise<{ rem
     }
     const mcpFile = fileOf(directory, record.mcp.file);
     const before = writes.get(mcpFile)?.after ?? await readTextFile(mcpFile);
-    const config = nativeClient(record.client)!.project();
+    const config = nativeClient(record.client)!.project()!;
     const removed = removeJsoncEntry(before, config.keys, value => nativeEntryHash(value) === record.mcp.hash, record.mcp.kept);
     if (removed.outcome === "skipped") throw new Error(removed.reason);
     await replace(mcpFile, removed.empty && record.mcp.created ? undefined : removed.content ?? before);
