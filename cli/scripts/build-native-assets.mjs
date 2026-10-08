@@ -15,7 +15,7 @@ await mkdir(target, { recursive: true });
 const files = [];
 const dependencies = new Set();
 const add = async (name, content) => {
-  const bytes = Buffer.from(content);
+  const bytes = Buffer.from(Buffer.from(content).toString("utf8").replaceAll("\r\n", "\n"));
   await writeFile(path.join(target, name), bytes);
   files.push({ path: name, size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") });
 };

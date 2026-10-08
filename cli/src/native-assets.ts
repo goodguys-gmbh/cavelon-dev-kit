@@ -16,9 +16,16 @@ interface Manifest {
 export async function bundledNativeAssets(): Promise<NativeAsset[]> {
   let assets = embeddedContent()?.nativeAssets;
   if (!assets) {
-    const directory = path.join(path.dirname(fileURLToPath(import.meta.url)), "native-assets");
-    const names = await fs.readdir(directory);
-    assets = await Promise.all(names.map(async name => ({ path: name, content: await fs.readFile(path.join(directory, name), "utf8") })));
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    // A checkout runs src/ in tests and dist/ in its CLI; neither fetches assets.
+    for (const directory of [path.join(here, "native-assets"), path.resolve(here, "..", "dist", "native-assets")]) {
+      let names: string[];
+      try { names = await fs.readdir(directory); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") continue; throw error; }
+      assets = await Promise.all(names.map(async name => ({ path: name, content: await fs.readFile(path.join(directory, name), "utf8") })));
+      break;
+    }
+    if (!assets) throw new Error("Missing native assets; build or reinstall Cavelon.");
   }
   const raw = assets.find(asset => asset.path === "manifest.json");
   if (!raw) throw new Error("Missing native asset manifest; reinstall Cavelon.");
