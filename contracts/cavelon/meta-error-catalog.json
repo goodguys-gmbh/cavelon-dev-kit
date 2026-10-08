@@ -2331,7 +2331,7 @@
     {
       "code": "confirmation_required",
       "area": "confirmation",
-      "message": "This change needs a person's confirmation; a personal access token sends it with X-Cavelon-Confirmation. Nothing was changed.",
+      "message": "This change needs a confirmation: a personal access token's client asks its person, then sends X-Cavelon-Confirmation. Nothing was changed.",
       "hint": "Update the cavelon dev-kit: it asks you before it confirms such a change. Or make the change yourself, signed in to the Admin.",
       "docs": "/docs/reference/api-endpoints#changes-a-person-confirms"
     },

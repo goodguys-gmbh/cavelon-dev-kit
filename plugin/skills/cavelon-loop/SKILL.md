@@ -294,8 +294,8 @@ preview too.
 ## Show the person before confirming
 
 Show every preview to the person. Confirm on your own only a preview that
-needs no person: `apply` to a draft solution in a test environment (the
-preview says nothing about showing it to a person), `loop start` of a trigger
+needs no person: `apply` to a draft solution in a test environment (no query
+writes or other reason to show it to a person), `loop start` of a trigger
 of a draft solution, `loop cancel` and `sandbox seed` of a test run or Sandbox
 you started, and `kb upload --replace`. Stop, show the preview, and wait for
 the person when:
@@ -344,9 +344,19 @@ or active trigger reaches it and readiness explicitly publishes
 null, the kit reads the matching list row; an unreadable list, missing row
 or missing count keeps reach unknown and needs the person.
 
-An instance that publishes `confirmations.enforced` checks the person's yes
-too: after it, `cavelon` asks the instance for a confirmation id for exactly
-that request and sends it along; you never handle it. `confirmation_required`
+Asking the person is the kit's responsibility alone. Keep asking before every
+guarded change; never answer on their behalf or reuse a previous yes for a
+different change. This includes creating, changing or deleting a database
+query and imports that create or change one, even on a draft.
+
+Where the instance publishes `confirmations.enforced`, after the person's
+yes `cavelon` asks it for an id bound to the token, tenant and exact request
+(method, path and canonical body) and sends it along; you never handle it.
+It is audited, usable once and lasts 10 minutes. The same personal access
+token can issue it and send the change, so the instance cannot verify that
+the person answered. After their yes, make the change directly: there is no
+extra Admin approval step. Database passwords and **Allow write queries**
+remain person-only, set in the Admin. `confirmation_required`
 or `confirmation_invalid` (exit code 5) means the instance changed nothing:
 show the person the preview again and let them confirm it (in the client's
 dialog or their own terminal), never retry on your own.
