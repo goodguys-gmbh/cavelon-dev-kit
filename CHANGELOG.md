@@ -29,6 +29,11 @@ CLI, the skills and the plugin.
 
 ### Fixed
 
+- Root MCP sessions can select a child solution with `solution_dir`, including
+  its environment files and saved deleting-import preview. Selection is
+  confined to the original workspace, isolated per call, and carried into tool
+  hints and own-terminal fallbacks. Fresh person approval stays required (#203).
+
 - Recognize Pi's native `PI_SESSION_ID` shell marker so person-only operations,
   secret entry and agent-supplied guarded-change confirmations are refused in
   its shell too. Pi configurations that disable session-environment exposure

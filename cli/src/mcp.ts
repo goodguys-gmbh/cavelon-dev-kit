@@ -5,6 +5,7 @@ import { formerlyWarning, ownsTenant, propertyName, type CommandSpec, type Input
 import { MCP_MAX_WAIT_MS } from "./commands/async.js";
 import { PERSON_WAIT_MS } from "./confirm-token.js";
 import { createContext, withWarnings } from "./context.js";
+import { solutionDirectory } from "./mcp-directory.js";
 import { asCavelonError, CavelonError, ExitCode, usageError } from "./errors.js";
 import type { Io } from "./io.js";
 import { closest } from "./package-references.js";
@@ -64,6 +65,9 @@ const INSTRUCTIONS =
   "Run from your shell, cavelon's api command applies the same guards, and sends a changing operation only with --confirm and the token " +
   "its preview printed. Tools read and write files only " +
   "inside the solution folder (the folder of cavelon.yaml, or the one the server started in), never in cavelon's own " +
+  "directories. In a repository with several solutions, pass solution_dir to select a folder inside the server's startup workspace. " +
+  "Use the same solution_dir for preview, confirmation and follow-up tools; harness selects an instance solution, not its local folder. Never infer a folder from a harness name. " +
+  "Tools cannot select a folder outside the original workspace or in cavelon's " +
   "config or cache directory. Read limits before planning a solution: it lists what the " +
   "instance allows this tenant (upload sizes and types, run and tool limits, timeouts, quotas) and who changes each. " +
   "Never change a limit on your own: propose the old and new value (limits_set for a limit a tenant admin changes, " +
@@ -154,6 +158,11 @@ export function inputSchema(spec: CommandSpec, commands: readonly CommandSpec[] 
       description: "Tenant slug or id, when not the one chosen for this directory or with use_tenant in this session. A preview names the tenant it acts on.",
     };
   }
+  properties.solution_dir = {
+    type: "string",
+    minLength: 1,
+    description: "Solution folder inside this MCP session's workspace, relative to its startup folder or an absolute path inside it. Omit to use the startup folder. Use the same folder for preview, confirmation and follow-up calls; harness selects an instance solution, not this folder.",
+  };
   return { type: "object", properties, ...(required.length ? { required } : {}), additionalProperties: false };
 }
 
@@ -350,14 +359,20 @@ export function createMcpServer(io: Io, commands: CommandSpec[], updates: Sessio
     }
     const tenant = !ownsTenant(spec) && typeof args.tenant === "string" ? args.tenant : undefined;
     const solutionEnv = spec.options?.env && typeof args.env === "string" ? args.env : undefined;
-    const ctx = createContext(mcpIo(io), { json: true, tenant, solutionEnv, sessionTenants }, "mcp");
+    let folder: Awaited<ReturnType<typeof solutionDirectory>>;
+    try {
+      folder = await solutionDirectory(io, args.solution_dir);
+    } catch (error) {
+      return fail(error);
+    }
+    const ctx = createContext(mcpIo(folder.io), { json: true, tenant, solutionEnv, sessionTenants }, "mcp");
     if (clientAsks(server)) ctx.askPerson = (message) => askThroughClient(server, message, requestId);
     for (const message of renamed) ctx.warn(message);
     try {
       // A command a person runs in a terminal knows nothing of this session's tenant, so the lines printed for one name it.
       const chosen = tenant ?? (await ctx.session().then((s) => (s.tenantSource === "session" ? s.tenant : undefined), () => undefined));
       // The answer's hints, warnings and a refusal's hint name tool calls, as the commands it prints do.
-      const { result, warnings } = await printingFor({ mode: "mcp", commands, ...(spec.storesTarget ? {} : { tenant: chosen, env: solutionEnv }) }, async () => {
+      const { result, warnings } = await printingFor({ mode: "mcp", commands, solutionDir: folder.selected, personCwd: folder.directory, ...(spec.storesTarget ? {} : { tenant: chosen, env: solutionEnv }) }, async () => {
         try {
           const done = await spec.run(ctx, inputFrom(spec, args));
           return { result: { ...done, data: spokenHints(done.data) }, warnings: ctx.warnings.map(spoken) };
