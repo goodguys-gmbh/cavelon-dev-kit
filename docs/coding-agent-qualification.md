@@ -80,7 +80,7 @@ and customer model/network pilots remain separate work.
 
 | Surface | Pinned version | Runtime checked | Guarded-change mode |
 |---|---|---|---|
-| Kilo CLI | `@kilocode/cli` 7.8.8 | Linux x64 released binary; four skills, native server plugin, read, child-solution deleting preview, headless/sibling refusal and actual shell hook | CLI TUI native adapter; fresh person qualification pending; headless person-terminal route |
+| Kilo CLI | `@kilocode/cli` 7.8.8 | Linux x64 released binary; four skills, native server plugin, read, child-solution deleting preview, headless/sibling refusal and actual shell hook | CLI TUI native adapter; packaged fresh Cancel/Confirm passed; headless person-terminal route |
 | Kilo VS Code | `kilocode.kilo-code` 7.8.8, Linux x64 VSIX; VS Code 1.139.1 | Actual isolated editor host and bundled backend; four skills, 64 native tools, read, child-solution deleting preview, headless/sibling refusal and actual shell hook | Person's own terminal; no native editor Cavelon dialog |
 
 Both actual runtimes used a scripted loopback model endpoint and a fake local
@@ -96,8 +96,11 @@ documentation checks. Typecheck, lint and build passed. Simulated UI callbacks
 are protocol evidence and do not count as a person's answer.
 
 The private npm candidate loads without fetching an adapter dependency. Its
-actual Kilo TUI displayed the packaged exact-change dialog; the fresh person's
-Cancel/Confirm result and the complete offline workflow remain next-release
-gates. No qualification is inherited from OpenCode. Other client versions,
+actual Kilo 7.8.8 TUI passed the person's fresh Cancel/Confirm check. Cancel
+sent no confirmation or mutation. A fresh Confirm applied one exactly bound
+synthetic child-solution import, deleting an obsolete agent and changing a fake
+query's row limit from 5 to 10. A sibling's preview was refused in both cases.
+This person check made no model call and used no real database or instance.
+The complete offline workflow remains a next-release gate. No qualification is inherited from OpenCode. Other client versions,
 macOS/Windows/WSL UIs, JetBrains and customer network/model pilots remain
 separate. Installation and lifecycle: [Kilo](install/kilo.md).

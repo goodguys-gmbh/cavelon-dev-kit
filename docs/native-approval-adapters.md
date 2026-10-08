@@ -172,8 +172,10 @@ when that plugin is unavailable.
 The CLI TUI provides the same fresh exact-change dialog, session confinement
 and refusal behavior. The current editor uses the backend server plugin but
 has no matching TUI owner; guarded changes return the person's terminal route.
-Packaged fresh person interaction and full offline journeys are tracked
-separately from actual runtime loading in the
+The packaged Kilo 7.8.8 CLI passed fresh person Cancel/Confirm: refusal made
+no confirmation or mutation, and the new approval applied one bound synthetic
+child-solution import. Full offline journeys remain a release gate, tracked
+separately from runtime loading and person interaction in the
 [qualification matrix](coding-agent-qualification.md).
 
 ## Packaging and completion gates
