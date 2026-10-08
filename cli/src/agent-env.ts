@@ -34,6 +34,8 @@ export const AGENT_VARIABLES: ReadonlyArray<{ variable: string; value?: string; 
   // The Kiro IDE marks no agent terminal; it sets this in every terminal it opens.
   { variable: "TERM_PROGRAM", value: "kiro", agent: "Kiro" },
   { variable: "OPENCODE", agent: "OpenCode" },
+  // Pi's shell tools expose the current session by default.
+  { variable: "PI_SESSION_ID", agent: "Pi" },
   { variable: "GROK_AGENT", agent: "Grok Build" },
   // The cross-vendor variable newer agents set; last, so an agent's own variable is the one named.
   { variable: "AI_AGENT", agent: "an agent that follows the AI_AGENT convention" },

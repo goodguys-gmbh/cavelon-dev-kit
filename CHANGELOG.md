@@ -7,6 +7,13 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Fixed
+
+- Recognize Pi's native `PI_SESSION_ID` shell marker so person-only operations,
+  secret entry and agent-supplied guarded-change confirmations are refused in
+  its shell too. Pi configurations that disable session-environment exposure
+  need a process-scoped `CAVELON_AGENT=1` launch (#194).
+
 ## [0.1.15] - 2026-10-08
 
 Clear responsibility for guarded changes: the kit asks the person; the
