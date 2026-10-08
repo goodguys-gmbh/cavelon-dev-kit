@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, cpSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, cpSync, mkdirSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -23,6 +23,15 @@ beforeAll(() => {
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 const nativeImport = (name: string) => import(pathToFileURL(path.join(assets, name + ".mjs")).href);
 const command = () => ({ command: process.execPath, args: [path.resolve("test/fixtures/native-mcp-host.mjs")] });
+
+it("refuses an output-path argument before removing any personal file", () => {
+  const personal = path.join(root, "personal-build-directory");
+  mkdirSync(personal);
+  const sentinel = path.join(personal, "keep.txt");
+  writeFileSync(sentinel, "personal file");
+  expect(() => execFileSync(process.execPath, ["scripts/build-native-assets.mjs", personal], { timeout: 30_000, stdio: "pipe" })).toThrow();
+  expect(readFileSync(sentinel, "utf8")).toBe("personal file");
+});
 
 it("ships deterministic self-contained native entry points with pinned dependency licenses", async () => {
   const other = path.join(root, "second-render");

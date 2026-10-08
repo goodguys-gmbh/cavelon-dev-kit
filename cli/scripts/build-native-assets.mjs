@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const cli = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+if (process.argv.length > 2) throw new Error("Native assets are built only in dist/native-assets; output arguments are not accepted.");
 const target = path.join(cli, "dist", "native-assets");
 const version = JSON.parse(await readFile(path.join(cli, "package.json"), "utf8")).version;
 const entries = ["opencode-server", "opencode-tui", "pi-extension"];
