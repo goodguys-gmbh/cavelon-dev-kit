@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, promises as fs, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { agentByName, applyPlan, checkAgent, loadSkills, planAgent, removeAgent, setupAgents, type AgentRecord } from "../src/setup-agents.js";
@@ -49,7 +49,7 @@ it("creates project-native OMP files without touching another client's settings"
   expect(existsSync(path.join(sb.home, ".omp", "extensions", "cavelon.js"))).toBe(true);
   expect(existsSync(path.join(sb.home, ".omp", "skills", "cavelon-loop", "SKILL.md"))).toBe(true);
   expect(existsSync(path.join(sb.home, ".pi"))).toBe(false);
-  expect(await loadNativeRuntime(path.join(sb.home, ".omp", "cavelon", "profile.json"), "omp")).toMatchObject({ scope: "project", projectRoot: realpathSync(sb.home) });
+  expect(await loadNativeRuntime(path.join(sb.home, ".omp", "cavelon", "profile.json"), "omp")).toMatchObject({ scope: "project", projectRoot: await fs.realpath(sb.home) });
   } finally { await fake.close(); }
 });
 
