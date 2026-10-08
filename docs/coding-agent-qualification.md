@@ -18,6 +18,16 @@ macOS, Windows and WSL client UI checks and customer-specific model/network
 pilots remain separate qualification work. Qwen editor surfaces are outside
 this release's scope.
 
+The opt-in released-client CI lane additionally runs Cline CLI 3.0.70, Kilo CLI
+7.8.8, Goose CLI 1.53.0 and OMP CLI 18.8.5 on native Linux x64, macOS arm64 and
+Windows x64. Each actual client consumes generated setup and the platform's
+locally built standalone Cavelon executable. It completes two ordinary draft
+workflows against scripted loopback fixtures: child validation, preview/import,
+synthetic suite, wait and trace, with one bounded prompt improvement between
+runs. These checks send no guarded confirmation and open no person dialog.
+Their evidence does not qualify editor, desktop, ACP/RPC or WSL surfaces.
+See [running the runtime checks](../CONTRIBUTING.md#released-coding-client-runtimes).
+
 Client checks use a fake local instance and synthetic data, with no model
 calls or real database execution. Programmatic fixture calls prove transport
 and behavior. Scripted UI responses never count as a person's approval.
