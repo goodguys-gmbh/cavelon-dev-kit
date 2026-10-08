@@ -7,12 +7,12 @@ import { bundledNativeAssets } from "./native-assets.js";
 import { readTextFile, writeFileAtomic } from "./fsutil.js";
 import { appendJsoncMember, readJsoncEntry, removeJsoncEntry, removeJsoncMember, upsertJsoncEntry } from "./jsonc-config.js";
 import { decodeMcpEntry, encodeMcpEntry, isKitMcpEntry, type McpCommand } from "./mcp-entry.js";
-import { nativeClient, readNativeMcp, resolveNativeMcp, type NativeMcpConfig } from "./native-clients.js";
+import { nativeClient, hasNativeApprovalAdapter, readNativeMcp, resolveNativeMcp, type NativeMcpConfig } from "./native-clients.js";
 import { nativeEntryHash, type NativeProfile } from "./native-approval/profile.js";
 import { KIT_VERSION } from "./version.js";
 
 type Env = Record<string, string | undefined>;
-type Client = NativeMcpConfig["client"];
+type Client = "opencode" | "pi";
 interface Reference { file: string; key: "plugin" | "extensions"; member: string; created: boolean; kept: boolean }
 interface Installation {
   format: 1; client: Client; scope: "user" | "project"; version: string; projectRoot?: string;
@@ -140,6 +140,7 @@ async function references(client: Client, directory: string, mcpFile: string, en
 
 /** Build all edits before any write; the output stays internal, never in CLI JSON. */
 export async function planNativeInstallation(config: NativeMcpConfig, command: McpCommand, env: Env, options: { root?: string; directory?: string; mcpRecord?: { file: string; created: boolean; kept?: number } } = {}): Promise<NativeInstallPlan> {
+  if (!hasNativeApprovalAdapter(config)) throw new Error("This client has no native person-dialog adapter.");
   const root = options.root;
   const expectedDirectory = root ? path.join(root, config.client === "pi" ? ".pi" : ".opencode", "cavelon") : path.join(path.dirname(nativeClient(config.client)!.user(env).skills), "cavelon");
   const directory = options.directory ?? expectedDirectory;

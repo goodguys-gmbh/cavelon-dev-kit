@@ -27,6 +27,7 @@ export const AGENT_VARIABLES: ReadonlyArray<{ variable: string; value?: string; 
   { variable: "CODEX_SANDBOX", agent: "Codex" },
   { variable: "CURSOR_AGENT", agent: "Cursor" },
   { variable: "GEMINI_CLI", agent: "Gemini CLI" },
+  { variable: "QWEN_CODE", agent: "Qwen Code" },
   { variable: "COPILOT_CLI", agent: "GitHub Copilot CLI" },
   { variable: "COPILOT_AGENT", agent: "GitHub Copilot in VS Code" },
   // kiro-cli sets it only while its agent drives the command; it holds a path.

@@ -23,6 +23,7 @@ native prototype does not certify its packaged release. See
 | Gemini CLI | the extension, from the release | [Gemini CLI](gemini-cli.md) |
 | OpenCode | bundled native server/TUI plugins and skills (`cavelon setup`, unreleased); final client qualification pending | [OpenCode](opencode.md) |
 | Pi | bundled native extension and skills (`cavelon setup`, unreleased); final client qualification pending | [Pi](pi.md) |
+| Qwen Code CLI | native MCP settings and skills (`cavelon setup`, unreleased); guarded changes in the person's own terminal; final client qualification pending | [Qwen Code](qwen-code.md) |
 | Cloud agents and CI | `npx` or `uvx`, with the skills committed to the repository | [Cloud agents and CI](cloud-and-ci.md) |
 
 **The quickest way** on your own computer: install `cavelon`

@@ -211,6 +211,7 @@ agents set for the commands their shell tool runs, is set (and is not empty,
 | `CODEX_THREAD_ID`, `CODEX_CI`, `CODEX_SANDBOX` | Codex (`CODEX_SANDBOX` only inside its macOS sandbox) |
 | `CURSOR_AGENT` | Cursor's agent terminal and `cursor-agent` |
 | `GEMINI_CLI` | Gemini CLI's shell tool and its `!` commands |
+| `QWEN_CODE` | Qwen Code CLI's shell execution service (0.25.0; Unreleased kit support) |
 | `COPILOT_CLI` | GitHub Copilot CLI |
 | `COPILOT_AGENT` | GitHub Copilot's agent terminals in VS Code |
 | `AGENT_CONTEXT_OUT` | Kiro CLI, while its agent runs the command |

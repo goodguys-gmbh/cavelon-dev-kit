@@ -73,6 +73,15 @@ On 0.1.15, start a separate MCP session in the child solution, or run the
 previewed command in your own terminal from that folder. The agent still
 cannot answer a guarded-change confirmation on your behalf.
 
+## Qwen setup reports a managed binding or MCP policy
+
+Unreleased Qwen setup leaves operator settings, MCP allow/exclude policies and
+personal Cavelon entries unchanged. Review the named file with the person or
+operator. `QWEN_HOME` is the configuration directory itself; `QWEN_RUNTIME_DIR`
+does not move settings or skills. Use the same overrides for setup and the
+client, then restart Qwen and check its `/mcp` and `/skills` lists. See
+[Qwen Code](install/qwen-code.md#check).
+
 ## A native adapter's files or references were edited
 
 Unreleased OpenCode/Pi setup records hashes of the native assets and disabled

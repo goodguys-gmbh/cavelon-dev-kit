@@ -7,7 +7,7 @@ import { isGenerated, removeBlock, removeJsonEntry, upsertBlock, upsertJsonEntry
 import { cacheDir, homeDir } from "./paths.js";
 import { runProgram } from "./run-program.js";
 import { KIT_VERSION } from "./version.js";
-import { NATIVE_CLIENTS, nativeClient, readNativeMcp, resolveNativeMcp, type NativeMcpConfig } from "./native-clients.js";
+import { NATIVE_CLIENTS, nativeClient, hasNativeApprovalAdapter, readNativeMcp, resolveNativeMcp, type NativeMcpConfig } from "./native-clients.js";
 import { decodeMcpEntry, encodeMcpEntry, isKitMcpEntry } from "./mcp-entry.js";
 import { removeJsoncEntry, upsertJsoncEntry } from "./jsonc-config.js";
 import { applyNativeInstallation, checkNativeInstallation, planNativeInstallation, removeNativeInstallation, type NativeInstallPlan } from "./native-install.js";
@@ -134,7 +134,7 @@ export function setupAgents(env: Env, platform: NodeJS.Platform = process.platfo
       mcp: json(path.join(home, ".kiro", "settings", "mcp.json")),
       skills: path.join(home, ".kiro", "skills"),
     },
-    ...NATIVE_CLIENTS.map(client => ({ name: client.name, label: client.label, commands: client.commands, ...client.user(env), notes: client.notes })),
+    ...NATIVE_CLIENTS.map(client => ({ name: client.name, label: client.label, commands: client.commands, ...client.user(env, platform), notes: client.notes })),
   ];
 }
 
@@ -385,7 +385,7 @@ export async function planAgent(agent: SetupAgent, found: Found, env: Env, comma
       ...(state.installed && !state.enabled ? { reason: `it is installed but turned off; turn it on in ${agent.label}` } : {}),
     });
   }
-  if (agent.mcp.format === "native") {
+  if (agent.mcp.format === "native" && hasNativeApprovalAdapter(agent.mcp)) {
     plan.native = await planNativeInstallation(agent.mcp, command, env, { directory: record?.native?.directory, mcpRecord: record?.mcp });
     plan.changes.push({ kind: "native", summary: "install the Cavelon native tools and person dialogs in", target: plan.native.directory,
       outcome: plan.native.outcome, ...(plan.native.reason ? { reason: plan.native.reason } : {}) });
@@ -717,7 +717,7 @@ export async function checkAgent(agent: SetupAgent, env: Env, record: AgentRecor
   } else {
     check.method = "files";
   }
-  const nativeDirectory = record?.native?.directory ?? (agent.mcp.format === "native" ? path.join(path.dirname(agent.skills), "cavelon") : undefined);
+  const nativeDirectory = record?.native?.directory ?? (agent.mcp.format === "native" && hasNativeApprovalAdapter(agent.mcp) ? path.join(path.dirname(agent.skills), "cavelon") : undefined);
   const native = nativeDirectory && (record?.native || await readTextFile(path.join(nativeDirectory, "installation.json"))) ? await checkNativeInstallation(nativeDirectory) : undefined;
   if (record?.native && agent.mcp.format === "native" && record.native.directory !== path.join(path.dirname(agent.skills), "cavelon")) {
     check.ok = false;
