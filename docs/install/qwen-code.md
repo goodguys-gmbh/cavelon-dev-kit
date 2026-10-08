@@ -1,8 +1,8 @@
 # Qwen Code CLI
 
-**Unreleased:** this integration targets `@qwen-code/qwen-code` 0.25.0 (Node.js
-22 or newer). It is not in kit 0.1.15. Final client/platform qualification and
-the complete seven-client release are still in progress. Editor integrations
+Added in kit 0.1.16 for `@qwen-code/qwen-code` 0.25.0 (Node.js 22 or newer).
+See the [qualification matrix](../coding-agent-qualification.md) for tested
+versions, platforms and limits. Editor integrations
 are separate surfaces and are not certified by this CLI page.
 
 ## Install
@@ -114,14 +114,12 @@ copies in version control separately.
 
 ## Qualification
 
-Configuration lifecycle tests cover comments, overrides, system policy,
-personal entries, update/removal and the shell marker. A Linux check of the
-released 0.25.0 settings and skill loaders, MCP transport and shell service
-loads the generated files, invokes a read and refuses a guarded deleting import
-from a multi-solution root. It uses a fake instance and minimal host registry
-stubs, with no model calls or person UI. Full solution journeys, person-terminal,
-platform and offline evidence remain release gates; scripted responses never
-count as a person's approval.
+The [0.1.16 qualification matrix](../coding-agent-qualification.md) records
+released-client runtime checks, person interaction and platform limits.
+Configuration lifecycle tests cover preserved personal settings, ownership,
+updates/removal and refusal. A fake local instance supplies synthetic data;
+there are no model calls or real database execution in these checks. Scripted
+answers never count as a person's approval.
 
 Configuration and limitations follow Qwen's
 [settings](https://qwenlm.github.io/qwen-code-docs/en/users/configuration/settings/),

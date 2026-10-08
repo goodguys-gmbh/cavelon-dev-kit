@@ -261,15 +261,15 @@ new folder (`claude plugin marketplace remove cavelon-dev-kit`, then add the
 new folder and install again). `cavelon --version` still names the online
 update command; offline, the next bundle is the update.
 
-## Qwen Code CLI (Unreleased)
+## Qwen Code CLI
 
-Qwen Code's unreleased file integration also works from the installed
+Qwen Code's file integration (0.1.16+) also works from the installed
 executable: `cavelon setup --agents qwen` copies the bundled skills and writes
 `cavelon mcp`, without a marketplace or registry install. Guarded changes remain
 person-terminal commands. Provision Qwen and its model separately; see
 [Qwen Code](install/qwen-code.md#update).
 
-## Native OpenCode and Pi adapters (Unreleased)
+## Native OpenCode and Pi adapters
 
 The standalone executable carries the same dependency-bundled native adapter
 assets as npm. With the executable already on PATH, `cavelon setup --agents
@@ -280,7 +280,8 @@ dependency is downloaded while setup installs the bundled files.
 Provision the selected client and its model runtime separately before blocking
 external egress. The coding-model provider and the Cavelon instance's execution
 provider are separate settings. An offline artifact alone does not configure
-either one. Final real-client offline qualification remains open; see
+either one. See the [qualification matrix](coding-agent-qualification.md) for
+the tested runtime scope and
 [OpenCode](install/opencode.md) and [Pi](install/pi.md).
 
 ## For an instance that serves the bundle

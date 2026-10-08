@@ -180,7 +180,7 @@ activates. Over MCP, `cavelon` limits it further:
 
 ### When the agent runs `cavelon` in its shell
 
-Token login stays with the person. The unreleased kit refuses `cavelon login`
+Token login stays with the person. The kit refuses `cavelon login`
 in every recognized agent shell, including `--token-stdin`, before reading input,
 contacting the instance or changing the stored login (`operation_for_a_person`,
 exit 5). Log in once in a separate terminal, then let the agent use the stored
@@ -218,7 +218,7 @@ agents set for the commands their shell tool runs, is set (and is not empty,
 | `CODEX_THREAD_ID`, `CODEX_CI`, `CODEX_SANDBOX` | Codex (`CODEX_SANDBOX` only inside its macOS sandbox) |
 | `CURSOR_AGENT` | Cursor's agent terminal and `cursor-agent` |
 | `GEMINI_CLI` | Gemini CLI's shell tool and its `!` commands |
-| `QWEN_CODE` | Qwen Code CLI's shell execution service (0.25.0; Unreleased kit support) |
+| `QWEN_CODE` | Qwen Code CLI's shell execution service (0.25.0; kit 0.1.16+) |
 | `COPILOT_CLI` | GitHub Copilot CLI |
 | `COPILOT_AGENT` | GitHub Copilot's agent terminals in VS Code |
 | `AGENT_CONTEXT_OUT` | Kiro CLI, while its agent runs the command |

@@ -21,6 +21,18 @@ in Windows PowerShell. With Python, `uvx cavelon` runs the same executable from
 PyPI, and `uv tool install cavelon` or `pipx install cavelon` installs it. Then
 `cavelon setup` sets up your coding agents and logs you in.
 
+Version 0.1.16 adds OpenCode and Pi with bundled native approval dialogs and
+Qwen Code CLI with native settings, skills and person-terminal confirmation:
+
+```bash
+cavelon setup --agents opencode,pi,qwen
+```
+
+See the [client install pages](https://github.com/goodguys-gmbh/cavelon-dev-kit/blob/main/docs/install/README.md)
+and [qualification matrix](https://github.com/goodguys-gmbh/cavelon-dev-kit/blob/main/docs/coding-agent-qualification.md)
+for pinned versions, tested platforms, updates and removal.
+
+
 The full documentation is in the repository's
 [`docs/`](https://github.com/goodguys-gmbh/cavelon-dev-kit/tree/main/docs):
 [installation](https://github.com/goodguys-gmbh/cavelon-dev-kit/blob/main/docs/installation.md)

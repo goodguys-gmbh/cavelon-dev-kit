@@ -6,12 +6,10 @@ skills (`cavelon-loop`, `cavelon-authoring`, `cavelon-testing`,
 the first login, how to check that the agent lists the skills and tools,
 updating and removing.
 
-OpenCode and Pi setup with bundled native adapters is **Unreleased**; final
-client qualification is still in progress. The next release also
-includes Cline, Kilo, Goose, OMP and Qwen Code; their install pages will name
-the exact qualified client surfaces and approval modes. An integration's
-native prototype does not certify its packaged release. See
-[native approval details](../native-approval-adapters.md).
+Version 0.1.16 adds OpenCode and Pi with bundled native adapters, and Qwen
+Code CLI with native settings and person-terminal approval. See the
+[qualification matrix](../coding-agent-qualification.md) for tested versions,
+platforms and limits. Cline, Kilo, Goose and OMP remain planned separately.
 
 | Client | Installs as | Page |
 |---|---|---|
@@ -21,9 +19,9 @@ native prototype does not certify its packaged release. See
 | VS Code with GitHub Copilot, Copilot CLI | the skills and MCP entry (`cavelon setup`), or the plugin from this repository's marketplace or the release's package | [VS Code and Copilot](vscode-copilot.md) |
 | Kiro | the skills and MCP entry (`cavelon setup`), or the Agent Plugins package as a power | [Kiro](kiro.md) |
 | Gemini CLI | the extension, from the release | [Gemini CLI](gemini-cli.md) |
-| OpenCode | bundled native server/TUI plugins and skills (`cavelon setup`, unreleased); final client qualification pending | [OpenCode](opencode.md) |
-| Pi | bundled native extension and skills (`cavelon setup`, unreleased); final client qualification pending | [Pi](pi.md) |
-| Qwen Code CLI | native MCP settings and skills (`cavelon setup`, unreleased); guarded changes in the person's own terminal; final client qualification pending | [Qwen Code](qwen-code.md) |
+| OpenCode | bundled native server/TUI plugins and skills (`cavelon setup`) | [OpenCode](opencode.md) |
+| Pi | bundled native extension and skills (`cavelon setup`) | [Pi](pi.md) |
+| Qwen Code CLI | native MCP settings and skills (`cavelon setup`); guarded changes in the person's own terminal | [Qwen Code](qwen-code.md) |
 | Cloud agents and CI | `npx` or `uvx`, with the skills committed to the repository | [Cloud agents and CI](cloud-and-ci.md) |
 
 **The quickest way** on your own computer: install `cavelon`

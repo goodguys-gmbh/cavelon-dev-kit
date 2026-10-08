@@ -14,7 +14,9 @@ to the user settings of Cursor, VS Code with GitHub Copilot, Gemini CLI and
 Kiro. `cavelon setup --check` starts it once to show that it works. See
 [Set up your coding agents](installation.md#set-up-your-coding-agents).
 
-Under **Unreleased**, setup also writes Qwen Code's native settings and skills.
+Since 0.1.16, setup installs dependency-bundled native adapters for
+[OpenCode](install/opencode.md) and [Pi](install/pi.md), which carry the
+exact-change dialog through their client UI. It also writes Qwen Code's native settings and skills.
 Its inspected MCP client does not advertise form elicitation: guarded previews
 return the command for the person's own terminal. See [Qwen Code](install/qwen-code.md#approval).
 
@@ -22,8 +24,9 @@ return the command for the person's own terminal. See [Qwen Code](install/qwen-c
 plugin starts the server. See [Installation](installation.md#install-the-plugin).
 
 **With `cavelon init --agents <list>`**, the entry is written into the
-solution folder for Cursor, GitHub Copilot in VS Code, Gemini CLI, Kiro and
-Claude Code. See [Agents without a plugin](installation.md#agents-without-a-plugin).
+solution folder for Cursor, GitHub Copilot in VS Code, Gemini CLI, Kiro,
+Claude Code and Qwen Code. OpenCode and Pi reuse verified user native setup
+or receive project assets and references. See [Agents without a plugin](installation.md#agents-without-a-plugin).
 
 **By hand**, add this server to your agent's MCP configuration:
 
