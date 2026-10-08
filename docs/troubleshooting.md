@@ -426,3 +426,13 @@ additional configuration overrides the same. Setup refuses a Cavelon entry in
 system/additional layers, a competing extension name, an active allowlist or
 ambiguous YAML. Review that binding with the operator rather than adding a
 shadow entry. See [Goose](install/goose.md#check).
+
+### OMP loads no Cavelon tools or a different profile
+
+Use the same `OMP_PROFILE`/`PI_PROFILE`, `PI_CONFIG_DIR` and default
+`PI_CODING_AGENT_DIR` selection for setup and launch. Named OMP profiles ignore
+the default agent-directory override. Inspect native autoload and custom
+plugin/discovery settings in OMP; file checks alone do not prove loading. Setup
+preserves a personal autoload entry and compatible Cavelon bindings, and refuses
+Cavelon in deny/force-enable lists. Review those settings before repeating setup.
+See [OMP](install/omp.md).

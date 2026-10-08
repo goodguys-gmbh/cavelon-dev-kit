@@ -1,7 +1,7 @@
 # Coding-agent qualification
 
 Setup support and real-client qualification are recorded separately. Version
-0.1.16 adds the three open-source clients below. Unreleased Cline, Kilo and Goose
+0.1.16 adds the three open-source clients below. Unreleased Cline, Kilo, Goose and OMP
 checks are recorded separately; OMP remains planned. Existing clients
 keep their installation routes.
 
@@ -127,3 +127,21 @@ Goose's form expires after five minutes; a late answer can report `Request not
 found` without approving the change. The complete offline workflow and final
 release candidate remain gates. No custom native adapter is needed for the CLI's
 built-in form. See [Goose](install/goose.md).
+
+## Unreleased OMP integration
+
+| Surface | Pinned version | Runtime checked | Guarded-change mode |
+|---|---|---|---|
+| OMP CLI | 18.8.5, Bun 1.3.14 | Linux x64 released npm CLI; four native skills, 64 essential Cavelon tools, read, deleting child preview, sibling refusal and actual guarded shell | Separate bundled native TUI extension; print-mode refusal passed; actual person dialog pending |
+| OMP RPC / ACP and other platforms | Separate surfaces | Configuration and lifecycle file checks do not qualify these runtimes | Missing UI uses the person's terminal; host dialogs require separate evidence |
+
+The setup regression failed on the base. Native configuration and profile
+selection, personal settings, ownership lifecycle and neighboring tests pass.
+The actual released CLI loaded the generated autoload extension and used only
+scripted loopback responses and a fake instance. Its model-facing catalog had
+all 64 Cavelon tools and its instructions named all four skills. Read, validation,
+child-solution deleting preview, sibling-preview refusal and actual shell guards
+passed. Print-mode confirmation made no instance confirmation or mutation.
+Native errors propagate as error results. No real model, database or production
+call was used. The fresh person's TUI check, complete offline workflow and final
+release candidate remain gates. See [OMP](install/omp.md).

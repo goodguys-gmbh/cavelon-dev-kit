@@ -17,12 +17,12 @@ export interface PiApi {
   getAllTools(): Array<{ name: string }>;
   registerTool(tool: {
     name: string; label: string; description: string; parameters: ReturnType<typeof Type.Unsafe>; annotations: Tool["annotations"];
-    executionMode: "sequential";
+    executionMode: "sequential"; loadMode?: "essential"; mcpServerName?: string; mcpToolName?: string;
     execute(id: string, params: Record<string, unknown>, signal: AbortSignal | undefined, update: unknown, ctx: PiContext): Promise<unknown>;
   }): void;
 }
 
-export function installPiExtension(pi: PiApi, options: NativeRuntime): void {
+export function installPiExtension(pi: PiApi, options: NativeRuntime, clientName: "pi" | "omp" = "pi"): void {
   let opening: Promise<NativeApprovalClient> | undefined;
   let current: PiContext | undefined;
   let generation = 0;
@@ -50,7 +50,7 @@ export function installPiExtension(pi: PiApi, options: NativeRuntime): void {
   };
   pi.on("session_start", async (_event, ctx) => {
     await close();
-    if (ctx.isProjectTrusted() && await hasNativeProjectOwner(options, "pi", ctx.cwd)) return;
+    if (ctx.isProjectTrusted() && await hasNativeProjectOwner(options, clientName, ctx.cwd)) return;
     current = ctx;
     const epoch = generation;
     const client = await start(ctx);
@@ -67,6 +67,7 @@ export function installPiExtension(pi: PiApi, options: NativeRuntime): void {
       pi.registerTool({
         name, label: tool.annotations?.title ?? tool.name, description: tool.description ?? tool.name,
         parameters: Type.Unsafe(tool.inputSchema), annotations: tool.annotations, executionMode: "sequential",
+        ...(clientName === "omp" ? { loadMode: "essential" as const, mcpServerName: "cavelon", mcpToolName: tool.name } : {}),
         async execute(_id, params, signal, _update, ctx) {
           if (!current) throw new Error("The Cavelon native session has ended.");
           const callGeneration = generation;
@@ -82,7 +83,8 @@ export function installPiExtension(pi: PiApi, options: NativeRuntime): void {
               return ctx.ui.confirm("Cavelon: approve this exact change", pages.length === 1 ? message : `Approve the exact change shown in all ${pages.length} preview pages?`, { signal: dialogSignal, timeout });
             } : undefined,
           });
-          return { content: result.content, details: { isError: result.isError === true } };
+          return { content: result.content, details: { isError: result.isError === true },
+            ...(clientName === "omp" ? { isError: result.isError === true } : {}) };
         },
       });
     }

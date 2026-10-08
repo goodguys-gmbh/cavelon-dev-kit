@@ -13,6 +13,8 @@ CLI, the skills and the plugin.
 
 ### Added
 
+- OMP native profiles, autoload extension and skills, independently from Pi. Preserve personal YAML and compatible MCP bindings; native TUI approval asks the person afresh, while print/RPC uses the person’s terminal (#225).
+
 - Kilo-native CLI/editor settings and skills, preserved compatible OpenCode
   and operator configurations, ownership-based lifecycle and bundled CLI
   server/TUI approval plugins. Effective binding changes refuse tool dispatch;

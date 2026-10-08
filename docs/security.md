@@ -441,3 +441,12 @@ Headless Goose cancels a form without sending a confirmation or guarded change.
 Its developer shell sets `AGENT_SESSION_ID`; the kit recognizes it. Launch
 other modes with `CAVELON_AGENT=1` and keep person steps in a separate terminal.
 See [Goose](install/goose.md#guarded-shell).
+
+### OMP shells and native approval
+
+Launch OMP with `CAVELON_AGENT=1` scoped to its coding process. The loaded Cavelon
+extension also sets that marker; the explicit launch covers disabled or failed
+extension loading. A separate person's terminal must not inherit it. OMP TUI
+approval uses the person's fresh answer, with timeout and disconnect refusal;
+print/RPC modes use the person-terminal command. Generic client permissions and
+automatic mode do not approve Cavelon's guarded changes. See [OMP](install/omp.md).

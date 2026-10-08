@@ -29,7 +29,8 @@ reading input. Log in from your own terminal; see [the login guide](docs/getting
 > **Unreleased:** [Cline](docs/install/cline.md) native setup and project skills,
 > with guarded changes in your own terminal, and [Kilo](docs/install/kilo.md)
 > native setup with CLI dialogs and editor terminal approval. [Goose](docs/install/goose.md)
-> gets native YAML settings, skills and its built-in interactive form. OMP follows separately.
+> gets native YAML settings, skills and its built-in interactive form.
+> [OMP](docs/install/omp.md) gets its own native profile, skills and TUI extension.
 
 ## Five-minute start
 

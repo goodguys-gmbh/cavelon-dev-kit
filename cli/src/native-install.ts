@@ -12,8 +12,8 @@ import { nativeEntryHash, type NativeProfile } from "./native-approval/profile.j
 import { KIT_VERSION } from "./version.js";
 
 type Env = Record<string, string | undefined>;
-type Client = "opencode" | "pi" | "kilo";
-interface Reference { file: string; key: "plugin" | "extensions"; member: string; created: boolean; kept: boolean }
+type Client = "opencode" | "pi" | "kilo" | "omp";
+interface Reference { file: string; key: "plugin" | "extensions" | "autoload"; member: string; created: boolean; kept: boolean }
 interface Installation {
   format: 1; client: Client; scope: "user" | "project"; version: string; projectRoot?: string;
   files: Record<string, string>;
@@ -57,12 +57,12 @@ async function readInstallation(directory: string): Promise<Installation | undef
   let record: Installation;
   try { record = JSON.parse(text) as Installation; }
   catch { throw new Error("Invalid native ownership record; inspect the installation before repeating setup."); }
-  if (record.format !== 1 || !["opencode", "pi", "kilo"].includes(record.client) || !["user", "project"].includes(record.scope)
+  if (record.format !== 1 || !["opencode", "pi", "kilo", "omp"].includes(record.client) || !["user", "project"].includes(record.scope)
     || typeof record.version !== "string" || !record.files || typeof record.files !== "object" || Array.isArray(record.files)
     || !record.mcp || typeof record.mcp.file !== "string" || !/^[a-f0-9]{64}$/.test(record.mcp.hash)
     || typeof record.mcp.created !== "boolean" || !Number.isInteger(record.mcp.kept) || record.mcp.kept < 0 || record.mcp.kept > 1
     || !Array.isArray(record.references) || !record.references.length
-    || record.references.some(ref => !ref || typeof ref.file !== "string" || !["plugin", "extensions"].includes(ref.key) || typeof ref.member !== "string"
+    || record.references.some(ref => !ref || typeof ref.file !== "string" || !["plugin", "extensions", "autoload"].includes(ref.key) || typeof ref.member !== "string"
       || typeof ref.created !== "boolean" || typeof ref.kept !== "boolean")
     || (record.scope === "project" && record.projectRoot !== "../..")) {
     throw new Error("Invalid native ownership record; inspect the installation before repeating setup.");
@@ -107,6 +107,10 @@ async function verify(directory: string, record: Installation): Promise<void> {
   for (const ref of record.references) {
     const file = fileOf(directory, ref.file);
     await safeFile(file, root);
+    if (ref.key === "autoload") {
+      if (await readTextFile(file) !== ref.member) throw new Error("The native autoload entry was edited; personal changes are preserved.");
+      continue;
+    }
     const entry = readJsoncEntry(await readTextFile(file), [ref.key]);
     if ("error" in entry || !Array.isArray(entry.value) || entry.value.filter(member => isDeepStrictEqual(member, ref.member)).length !== 1
       || await referenceCount(file, entry.value, ref.member) !== 1) {
@@ -123,6 +127,7 @@ async function chooseFile(files: string[], fallback: string): Promise<string> {
 
 /** Each command-array client's TUI config is separate from its MCP config. */
 async function references(client: Client, directory: string, mcpFile: string, env: Env, root?: string): Promise<Array<{ file: string; key: Reference["key"]; member: string }>> {
+  if (client === "omp") return [{ file: path.join(path.dirname(directory), "extensions", "cavelon.js"), key: "autoload", member: 'export { default } from "../cavelon/omp-extension.mjs";\n' }];
   if (client === "pi") return [{ file: path.join(path.dirname(directory), "settings.json"), key: "extensions", member: memberPath(path.join(path.dirname(directory), "settings.json"), path.join(directory, "pi-extension.mjs")) }];
   const prefix = client.toUpperCase();
   const global = path.dirname(nativeClient(client)!.user({ ...env, [`${prefix}_CONFIG_DIR`]: undefined }).skills);
@@ -179,7 +184,7 @@ export async function planNativeInstallation(config: NativeMcpConfig, command: M
       client: config.client, version: KIT_VERSION, scope: root ? "project" : "user", configFile: root ? portable(directory, selected.file) : selected.file, entryHash: nativeEntryHash(disabled) };
     const contents = new Map(assets.map(asset => [asset.path, asset.content]));
     contents.set("profile.json", json(profile));
-    if (config.client !== "pi") for (const surface of ["server", "tui"]) {
+    if (config.client !== "pi" && config.client !== "omp") for (const surface of ["server", "tui"]) {
       contents.set(`${config.client}-${surface}-entry.mjs`, `import adapter from "./${config.client}-${surface}.mjs";\nexport default { ...adapter, id: "cavelon.native-approval.${config.client === "kilo" ? "kilo." : ""}${root ? "project" : "user"}" };\n`);
     }
     const writes = new Map<string, Write>();
@@ -195,6 +200,12 @@ export async function planNativeInstallation(config: NativeMcpConfig, command: M
     const refs: Reference[] = [];
     for (const ref of await references(config.client, directory, selected.file, env, root)) {
       const before = writes.get(ref.file)?.after ?? await readTextFile(ref.file);
+      if (ref.key === "autoload") {
+        if (before !== undefined && !previous) return skipped("The native autoload entry belongs to a personal extension; it is preserved.");
+        await replace(ref.file, ref.member);
+        refs.push({ file: root ? portable(directory, ref.file) : ref.file, key: ref.key, member: ref.member, created: true, kept: false });
+        continue;
+      }
       if (config.client === "pi" && before !== undefined) {
         try { JSON.parse(before); }
         catch { return skipped("Pi settings require plain JSON; correct the file before native installation."); }
@@ -275,6 +286,7 @@ export async function checkNativeInstallation(directory: string): Promise<{ comm
     if (!record) throw new Error("No recorded native installation exists.");
     await verify(directory, record);
     for (const ref of record.references) {
+      if (ref.key === "autoload") continue;
       const text = await readTextFile(fileOf(directory, ref.file));
       for (const id of ["cavelon.native-approval", `cavelon.native-approval.${record.scope}`,
         ...(record.client === "kilo" ? ["cavelon.native-approval.kilo", `cavelon.native-approval.kilo.${record.scope}`] : [])]) {
@@ -303,6 +315,7 @@ export async function removeNativeInstallation(directory: string): Promise<{ rem
     for (const ref of record.references) {
       const file = fileOf(directory, ref.file);
       const before = writes.get(file)?.after ?? await readTextFile(file);
+      if (ref.key === "autoload") { await replace(file, undefined); continue; }
       const removed = removeJsoncMember(before, [ref.key], ref.member, { removeEmpty: !ref.kept });
       if (removed.outcome === "skipped") throw new Error(removed.reason);
       await replace(file, removed.empty && ref.created ? undefined : removed.content ?? before);

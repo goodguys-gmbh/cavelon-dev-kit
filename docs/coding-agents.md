@@ -376,7 +376,7 @@ these lessons:
 ## Claude Code, Codex and other agents
 
 **`cavelon setup`, for you.** `cavelon setup` finds Claude Code, Codex, Cursor,
-VS Code with GitHub Copilot, Gemini CLI, Kiro, OpenCode, Pi, Qwen and (when included in your kit release) Cline, Kilo and Goose on your computer and sets up
+VS Code with GitHub Copilot, Gemini CLI, Kiro, OpenCode, Pi, Qwen and (when included in your kit release) Cline, Kilo, Goose and OMP on your computer and sets up
 each for your user, in every folder you open: Claude Code and Codex get the
 Cavelon plugin through their own plugin command, which also updates it, and
 Gemini CLI the Cavelon extension; the others get the skills and the MCP server
@@ -434,3 +434,13 @@ Open the solution folder in your agent and adapt these:
   `cavelon pull`, run its test suites, and tell me what fails."*
 - *"Read `cavelon limits` and tell me whether the documents in `seeds/` fit.
   Propose a change if they do not; do not make it."*
+
+## OMP
+
+When included in your kit release, [OMP](install/omp.md) has its own native
+autoload extension, profile and skills, separately from Pi. Its MCP initializer
+advertises roots rather than form elicitation; the bundled extension supplies
+the fresh person dialog in the TUI. Print/RPC modes use the person's terminal.
+Keep setup and launch profile selection aligned. See the
+[qualification matrix](coding-agent-qualification.md) for actual runtime and
+person evidence; compatibility with Pi does not qualify an OMP surface.

@@ -15,7 +15,7 @@ your computer and logs you in ([Set up your coding agents](#set-up-your-coding-a
 This page covers that, the ways to do each part by hand, updating and
 removing. [Install the kit in your coding agent](install/README.md) has one page
 per client (Claude Code, Codex, Cursor, VS Code with GitHub Copilot, Kiro,
-Gemini CLI, OpenCode, Pi, Qwen Code, Cline, Kilo, Goose, and cloud agents and CI), each with its install, first login,
+Gemini CLI, OpenCode, Pi, Qwen Code, Cline, Kilo, Goose, OMP, and cloud agents and CI), each with its install, first login,
 check, update and removal. When you are done, continue with
 [Getting started](getting-started.md) or
 [Building a solution with a coding agent](coding-agents.md).
@@ -783,3 +783,11 @@ export NODE_EXTRA_CA_CERTS=/path/to/company-ca.pem
 
 To try a change before it is released, or to contribute: see
 [CONTRIBUTING.md](../CONTRIBUTING.md#build-and-test).
+
+## OMP
+
+Unreleased: [OMP](install/omp.md) setup follows its own profile and agent-directory
+selection, installs native skills and a bundled autoload extension, and preserves
+personal YAML. A fresh TUI dialog approves a guarded change; print/RPC calls
+return a person-terminal command. Use the same OMP profile environment for setup
+and launch, and scope `CAVELON_AGENT=1` to the coding process.

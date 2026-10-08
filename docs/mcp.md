@@ -447,3 +447,11 @@ an interactive session. Plain `goose run` cancels elicitation even when launched
 from a terminal; use an interactive session or the person's own terminal route.
 An automatic tool permission cannot answer Cavelon's separate form. Desktop
 and ACP host qualification are separate from CLI and file checks.
+
+### OMP
+
+The unreleased OMP integration uses a separate bundled native extension and
+profile. It registers Cavelon tools as essential native tools, and its TUI asks
+the person afresh for each guarded change. Built-in MCP, print and RPC approval
+do not substitute for that dialog. Missing UI returns a command for the person's
+own terminal. See [OMP](install/omp.md).
