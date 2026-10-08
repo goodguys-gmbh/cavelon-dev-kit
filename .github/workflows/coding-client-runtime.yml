@@ -29,7 +29,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        client: [cline, kilo, goose, omp]
+        client: [cline, kilo, goose, omp, opencode, pi, qwen]
         os: [ubuntu-latest, macos-latest, windows-latest]
     defaults:
       run:

@@ -126,3 +126,11 @@ Configuration and limitations follow Qwen's
 [skills](https://qwenlm.github.io/qwen-code-docs/en/users/features/skills/),
 [MCP](https://qwenlm.github.io/qwen-code-docs/en/users/features/mcp/) and
 [hooks](https://qwenlm.github.io/qwen-code-docs/en/users/features/hooks/) documentation.
+
+The released CLI also completes two scripted draft workflows on native Linux
+x64, macOS arm64 and Windows x64 through generated setup and the platform's
+standalone Cavelon executable. The fixture validates and imports a child draft,
+runs/waits for a synthetic suite and reads its trace, then repeats after one
+bounded improvement. It uses only loopback fixtures and sends no guarded
+confirmation. This evidence does not extend the recorded human UI approval
+qualification to another platform. See [the automated runtime lane](../../CONTRIBUTING.md#released-coding-client-runtimes).

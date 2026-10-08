@@ -16,7 +16,10 @@ switch (process.argv[2]) {
   case 'kilo': client = 'kilo'; break;
   case 'goose': client = 'goose'; break;
   case 'omp': client = 'omp'; break;
-  default: throw new Error('Choose cline, kilo, goose or omp.');
+  case 'opencode': client = 'opencode'; break;
+  case 'pi': client = 'pi'; break;
+  case 'qwen': client = 'qwen'; break;
+  default: throw new Error('Choose cline, kilo, goose, omp, opencode, pi or qwen.');
 }
 const pin = pins[client];
 const runtime = path.resolve(process.env.CAVELON_CLIENT_RUNTIME ?? path.join(repo, '.wt/client-runtime', client));

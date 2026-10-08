@@ -1,15 +1,55 @@
 {
-  "cline": {"version": "3.0.70", "package": "cline", "tool_prefix": "cavelon__"},
-  "kilo": {"version": "7.8.8", "package": "@kilocode/cli", "tool_prefix": "cavelon_"},
-  "omp": {"version": "18.8.5", "package": "@oh-my-pi/pi-coding-agent", "tool_prefix": "mcp__cavelon__", "bun": "1.3.14"},
+  "cline": {
+    "version": "3.0.70",
+    "package": "cline",
+    "tool_prefix": "cavelon__"
+  },
+  "kilo": {
+    "version": "7.8.8",
+    "package": "@kilocode/cli",
+    "tool_prefix": "cavelon_"
+  },
+  "omp": {
+    "version": "18.8.5",
+    "package": "@oh-my-pi/pi-coding-agent",
+    "tool_prefix": "mcp__cavelon__",
+    "bun": "1.3.14"
+  },
   "goose": {
     "version": "1.53.0",
     "tool_prefix": "cavelon__",
     "assets": {
-      "linux-x64": {"name": "goose-x86_64-unknown-linux-gnu.tar.gz", "sha256": "deb2191a6b75acc0a20232fc5c52655ea2f9cc8fa2f5dffc8622e8d378a915dc"},
-      "darwin-arm64": {"name": "goose-aarch64-apple-darwin.tar.gz", "sha256": "134f331212d3ac480641d8b7b0e4155bdac581f881370b6129a38103debc686f"},
-      "darwin-x64": {"name": "goose-x86_64-apple-darwin.tar.gz", "sha256": "17d0635db643b627c3dfcd430776735bdff1594c8429edd0d75ccff247e35840"},
-      "win32-x64": {"name": "goose-x86_64-pc-windows-msvc.zip", "sha256": "3a951c661f12415f7947daac2bb4651af1a7b41532f34d7c2f05ea6636eadaa9"}
+      "linux-x64": {
+        "name": "goose-x86_64-unknown-linux-gnu.tar.gz",
+        "sha256": "deb2191a6b75acc0a20232fc5c52655ea2f9cc8fa2f5dffc8622e8d378a915dc"
+      },
+      "darwin-arm64": {
+        "name": "goose-aarch64-apple-darwin.tar.gz",
+        "sha256": "134f331212d3ac480641d8b7b0e4155bdac581f881370b6129a38103debc686f"
+      },
+      "darwin-x64": {
+        "name": "goose-x86_64-apple-darwin.tar.gz",
+        "sha256": "17d0635db643b627c3dfcd430776735bdff1594c8429edd0d75ccff247e35840"
+      },
+      "win32-x64": {
+        "name": "goose-x86_64-pc-windows-msvc.zip",
+        "sha256": "3a951c661f12415f7947daac2bb4651af1a7b41532f34d7c2f05ea6636eadaa9"
+      }
     }
+  },
+  "opencode": {
+    "version": "1.18.35",
+    "package": "opencode-ai",
+    "tool_prefix": "cavelon_"
+  },
+  "pi": {
+    "version": "1.1.0",
+    "package": "@earendil-works/pi-coding-agent",
+    "tool_prefix": "mcp__cavelon__"
+  },
+  "qwen": {
+    "version": "0.25.0",
+    "package": "@qwen-code/qwen-code",
+    "tool_prefix": "mcp__cavelon__"
   }
 }
