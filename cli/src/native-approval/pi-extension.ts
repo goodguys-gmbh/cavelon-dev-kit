@@ -1,7 +1,7 @@
 import { Type } from "typebox";
 import { fileURLToPath } from "node:url";
 import { nativeStdioClient, type NativeApprovalClient } from "./client.js";
-import { assertNativeWorkspace, loadNativeRuntime, type NativeRuntime } from "./profile.js";
+import { assertNativeWorkspace, hasNativeProjectOwner, loadNativeRuntime, type NativeRuntime } from "./profile.js";
 import { previewPages } from "./preview-pages.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 
@@ -50,6 +50,7 @@ export function installPiExtension(pi: PiApi, options: NativeRuntime): void {
   };
   pi.on("session_start", async (_event, ctx) => {
     await close();
+    if (ctx.isProjectTrusted() && await hasNativeProjectOwner(options, "pi", ctx.cwd)) return;
     current = ctx;
     const epoch = generation;
     const client = await start(ctx);

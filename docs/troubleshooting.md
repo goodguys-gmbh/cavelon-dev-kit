@@ -73,6 +73,27 @@ On 0.1.15, start a separate MCP session in the child solution, or run the
 previewed command in your own terminal from that folder. The agent still
 cannot answer a guarded-change confirmation on your behalf.
 
+## A native adapter's files or references were edited
+
+Unreleased OpenCode/Pi setup records hashes of the native assets and disabled
+Cavelon MCP entry, plus exact plugin/extension references. Update, check and
+removal refuse an edited binding, asset or reference, and duplicate path
+aliases. This preserves personal configuration and avoids removing an asset
+still used by a surviving reference.
+
+Review the recorded `cavelon/installation.json` and the changes to its named
+files. Restore only the kit-owned bytes if the edit was accidental. For an
+intentional custom integration, review and remove its Cavelon references and
+assets yourself, keeping unrelated settings. Do not re-enable the duplicate
+built-in entry alongside the native adapter. If a config-directory override
+changed, remove the old recorded installation before setting up the new one.
+See [OpenCode](install/opencode.md#update) or [Pi](install/pi.md#update).
+
+If setup reports an existing `cavelon.lock`, another installer may still be
+working. Inspect the lock's process ID and wait for that process to finish.
+After an interrupted run, remove only that stale lock once you have confirmed
+the installer is no longer running, then repeat setup.
+
 ## Logging in and permissions
 
 | Code | Exit | Cause and fix |

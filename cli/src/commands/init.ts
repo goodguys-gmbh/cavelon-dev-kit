@@ -4,9 +4,8 @@ import { parseDocument } from "yaml";
 import { boolOption, listOption, stringOption, type CommandSpec, type Context } from "../command.js";
 import { AGENTS, bundledSkills, generatedCopy, parseAgents, KNOWN_SKILL_ROOTS, skillRootsFor, type AgentTarget, type McpTarget } from "../agents.js";
 import { nativeClient, resolveNativeMcp } from "../native-clients.js";
-import { isKitMcpEntry } from "../mcp-entry.js";
-import { upsertJsoncEntry } from "../jsonc-config.js";
-import { isDeepStrictEqual } from "node:util";
+import { applyNativeInstallation, planNativeInstallation } from "../native-install.js";
+import { serverCommand } from "../setup-agents.js";
 import { CavelonError, ExitCode, usageError } from "../errors.js";
 import { confinedPath, realPath, within } from "../paths.js";
 import { readTextFile, withoutBom, writeFileAtomic } from "../fsutil.js";
@@ -253,11 +252,15 @@ async function writeSkills(root: string, roots: string[]): Promise<FileAction[]>
 async function writeMcp(root: string, target: McpTarget, onlyExisting: boolean, env: Record<string, string | undefined>): Promise<FileAction> {
   if (target.format === "native") {
     const config = { ...target, ...nativeClient(target.client)?.project(env) };
-    const selected = await resolveNativeMcp(config, root);
-    if ("error" in selected) return { file: rel(root, selected.file), action: "skipped", reason: selected.error };
-    if (target.others.some(entry => isDeepStrictEqual(entry, selected.current))) return { file: rel(root, selected.file), action: "unchanged" };
-    const result = upsertJsoncEntry(selected.text, target.keys, target.entry, { onlyExisting, matches: value => isKitMcpEntry(value, target.entryFormat, target.extra) });
-    return applyBlock(root, selected.file, result);
+    if (onlyExisting) {
+      const selected = await resolveNativeMcp({ ...config, shadowFiles: [] }, root);
+      if (!("error" in selected) && selected.current === undefined) return { file: rel(root, selected.file), action: "skipped", reason: "it has no cavelon entry" };
+    }
+    const plan = await planNativeInstallation(config, await serverCommand(env), env, { root });
+    if (plan.outcome !== "planned") return { file: rel(root, plan.directory), action: plan.outcome, ...(plan.reason ? { reason: plan.reason } : {}) };
+    const exists = await fs.stat(plan.directory).then(() => true, () => false);
+    await applyNativeInstallation(plan);
+    return { file: rel(root, plan.directory), action: exists ? "updated" : "created" };
   }
   const file = path.join(root, target.file);
   const existing = await readTextFile(file);

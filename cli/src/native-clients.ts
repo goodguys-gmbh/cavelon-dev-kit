@@ -65,7 +65,7 @@ export const NATIVE_CLIENTS: NativeClient[] = [
         skills: path.join(dir, "skills"), folders: [...new Set([global, dir])],
       };
     },
-    notes: ["OpenCode's built-in MCP path does not provide Cavelon form approval; guarded changes return a command for the person's own terminal. Native dialog qualification is separate."],
+    notes: ["Setup installs separate native OpenCode server/TUI plugins and disables only its duplicate Cavelon MCP entry. Guarded changes require a fresh person dialog; missing UI returns a command for the person's own terminal. File checks do not certify actual UI loading."],
   },
   {
     name: "pi", label: "Pi", aliases: ["pi-coding-agent"], commands: ["pi"], projectSkills: [".pi/skills"],
@@ -77,7 +77,7 @@ export const NATIVE_CLIENTS: NativeClient[] = [
     notes: [
       "Pi reads project MCP only after the person grants project trust. A project entry overrides a user entry with the same name.",
       "Replacement /mcp extensions can override Pi's built-in MCP; inspect them in Pi before using these settings. Setup does not install or disable another MCP extension.",
-      "Pi's built-in MCP path does not provide Cavelon form approval; guarded changes return a command for the person's own terminal. Native dialog qualification is separate.",
+      "Setup installs the native Cavelon extension and disables only its duplicate built-in MCP entry. Guarded changes require a fresh person dialog; missing UI returns a command for the person's own terminal. File checks do not certify actual UI loading.",
     ],
   },
 ];

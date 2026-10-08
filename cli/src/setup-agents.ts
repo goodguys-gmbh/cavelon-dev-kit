@@ -10,6 +10,7 @@ import { KIT_VERSION } from "./version.js";
 import { NATIVE_CLIENTS, nativeClient, readNativeMcp, resolveNativeMcp, type NativeMcpConfig } from "./native-clients.js";
 import { decodeMcpEntry, encodeMcpEntry, isKitMcpEntry } from "./mcp-entry.js";
 import { removeJsoncEntry, upsertJsoncEntry } from "./jsonc-config.js";
+import { applyNativeInstallation, checkNativeInstallation, planNativeInstallation, removeNativeInstallation, type NativeInstallPlan } from "./native-install.js";
 
 /**
  * The coding agents `cavelon setup` sets up for the person, at user level:
@@ -243,6 +244,7 @@ export interface AgentRecord {
   plugin_installed?: boolean;
   mcp?: FileRecord;
   skills?: { dir: string; created_dir?: string };
+  native?: { directory: string };
 }
 
 export interface SetupState {
@@ -253,7 +255,7 @@ export interface SetupState {
 // One change, planned and applied
 // ---------------------------------------------------------------------------
 
-export type ChangeKind = "plugin" | "marketplace" | "mcp" | "skills";
+export type ChangeKind = "plugin" | "marketplace" | "mcp" | "skills" | "native";
 
 export interface Change {
   kind: ChangeKind;
@@ -271,6 +273,7 @@ export interface AgentPlan {
   /** "plugin": the agent's own plugin command; "files": its MCP configuration and skills folder. */
   method: "plugin" | "files";
   changes: Change[];
+  native?: NativeInstallPlan;
   /** The plugin's state, read from the agent (plugin method). */
   plugin?: { marketplace: boolean; installed: boolean; enabled: boolean };
 }
@@ -358,7 +361,7 @@ function pluginCommands(kind: PluginKind) {
  * The plugin's MCP entry starts through `sh`, which native Windows does not
  * have, so there a plugin agent also gets the server in its MCP file.
  */
-export async function planAgent(agent: SetupAgent, found: Found, env: Env, command: ServerCommand, skills: Skill[], platform: NodeJS.Platform = process.platform): Promise<AgentPlan> {
+export async function planAgent(agent: SetupAgent, found: Found, env: Env, command: ServerCommand, skills: Skill[], platform: NodeJS.Platform = process.platform, record?: AgentRecord): Promise<AgentPlan> {
   const usePlugin = Boolean(agent.plugin && found.program);
   const state = usePlugin ? await pluginState(agent.plugin!, found.program!, env) : undefined;
   const plan: AgentPlan = { agent, found, method: usePlugin ? "plugin" : "files", changes: [] };
@@ -382,7 +385,11 @@ export async function planAgent(agent: SetupAgent, found: Found, env: Env, comma
       ...(state.installed && !state.enabled ? { reason: `it is installed but turned off; turn it on in ${agent.label}` } : {}),
     });
   }
-  if (!usePlugin || platform === "win32") plan.changes.push(await mcpChange(agent.mcp, command, false));
+  if (agent.mcp.format === "native") {
+    plan.native = await planNativeInstallation(agent.mcp, command, env, { directory: record?.native?.directory, mcpRecord: record?.mcp });
+    plan.changes.push({ kind: "native", summary: "install the Cavelon native tools and person dialogs in", target: plan.native.directory,
+      outcome: plan.native.outcome, ...(plan.native.reason ? { reason: plan.native.reason } : {}) });
+  } else if (!usePlugin || platform === "win32") plan.changes.push(await mcpChange(agent.mcp, command, false));
   if (!usePlugin) plan.changes.push(await skillsChange(agent.skills, skills, false));
   return plan;
 }
@@ -491,6 +498,7 @@ export async function applyPlan(plan: AgentPlan, env: Env, command: ServerComman
   const done: Change[] = [];
   for (const change of plan.changes) {
     if (change.outcome !== "planned") {
+      if (change.kind === "native" && change.outcome === "unchanged") record.native = { directory: plan.native!.directory };
       done.push(change);
       continue;
     }
@@ -518,6 +526,11 @@ export async function applyPlan(plan: AgentPlan, env: Env, command: ServerComman
         done.push({ ...change, outcome: "done" });
         // The extension replaces what an earlier setup wrote into Gemini CLI's files, whose skills would hide the extension's.
         if (kind === "gemini" && change.kind === "plugin") done.push(...(await removeFiles(plan.agent, record, skills, new Set())));
+      } else if (change.kind === "native") {
+        await applyNativeInstallation(plan.native!);
+        record.native = { directory: plan.native!.directory };
+        delete record.mcp;
+        done.push({ ...change, outcome: "done" });
       } else if (change.kind === "mcp") {
         done.push(await mcpChange(plan.agent.mcp, command, true, record));
       } else {
@@ -570,6 +583,13 @@ export async function removeAgent(agent: SetupAgent, record: AgentRecord, env: E
 /** Take out the MCP entry and skill files setup recorded for an agent. */
 async function removeFiles(agent: SetupAgent, record: AgentRecord, skills: Skill[], sharedSkillDirs: Set<string>): Promise<Change[]> {
   const changes: Change[] = [];
+  if (record.native) {
+    const result = await removeNativeInstallation(record.native.directory);
+    changes.push({ kind: "native", summary: "remove the recorded Cavelon native integration from", target: record.native.directory,
+      outcome: result.removed ? "removed" : "skipped", ...(result.reason ? { reason: result.reason } : {}) });
+    if (result.removed) delete record.native;
+    else return changes;
+  }
   if (record.mcp) {
     const change = await removeMcp(agent.mcp, record.mcp);
     if (change.outcome !== "failed" && change.outcome !== "skipped") delete record.mcp;
@@ -697,9 +717,15 @@ export async function checkAgent(agent: SetupAgent, env: Env, record: AgentRecor
   } else {
     check.method = "files";
   }
-  const entry = await readEntry(agent.mcp);
+  const nativeDirectory = record?.native?.directory ?? (agent.mcp.format === "native" ? path.join(path.dirname(agent.skills), "cavelon") : undefined);
+  const native = nativeDirectory && (record?.native || await readTextFile(path.join(nativeDirectory, "installation.json"))) ? await checkNativeInstallation(nativeDirectory) : undefined;
+  if (record?.native && agent.mcp.format === "native" && record.native.directory !== path.join(path.dirname(agent.skills), "cavelon")) {
+    check.ok = false;
+    check.details.push("The native config directory override changed; remove the recorded integration before setting up the new location.");
+  }
+  const entry = native ? { server: native.command, problem: native.reason, file: nativeDirectory } : await readEntry(agent.mcp);
   if (entry.server) {
-    check.details.push(`the "cavelon" tools server is in ${entry.file ?? agent.mcp.file}`);
+    check.details.push(native ? `the Cavelon native tools and person-dialog files are in ${nativeDirectory}; actual UI loading must be checked in the client` : `the "cavelon" tools server is in ${entry.file ?? agent.mcp.file}`);
     check.servers.push(entry.server);
   } else {
     check.ok = false;

@@ -1,7 +1,7 @@
 import { nativeStdioClient, type NativeApprovalClient } from "./client.js";
 import { fileURLToPath } from "node:url";
 import { startUiSocket } from "./ipc.js";
-import { assertNativeWorkspace, loadNativeRuntime, type NativeRuntime } from "./profile.js";
+import { assertNativeWorkspace, hasNativeProjectOwner, loadNativeRuntime, type NativeRuntime } from "./profile.js";
 import { previewPages } from "./preview-pages.js";
 
 /** The minimal native host contract: no UI framework or credential binding is bundled. */
@@ -19,6 +19,7 @@ export interface OpenCodeTui {
 
 export async function startOpenCodeTui(api: OpenCodeTui, options: NativeRuntime) {
   await assertNativeWorkspace(options, api.state.path.directory);
+  if (await hasNativeProjectOwner(options, "opencode", api.state.path.directory)) return;
   const clients = new Map<string, Promise<NativeApprovalClient>>();
   const pending = new Set<AbortController>();
   const retiring = new Set<Promise<void>>();

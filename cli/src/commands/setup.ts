@@ -227,8 +227,9 @@ async function runSetup(ctx: Context, input: Input) {
     throw new CavelonError(ExitCode.failure, { code: "skills_missing", message: "This cavelon has no skills to install (its package is incomplete).", hint: "Reinstall @cavelon/cli." });
   }
   const command = await serverCommand(env);
+  const state = await loadState(env);
   const plans: AgentPlan[] = [];
-  for (const { agent, found: where } of chosen) plans.push(await planAgent(agent, where, env, command, skills));
+  for (const { agent, found: where } of chosen) plans.push(await planAgent(agent, where, env, command, skills, process.platform, state.agents[agent.name]));
   const pending = plans.some((p) => p.changes.some((c) => c.outcome === "planned"));
 
   let results = plans.map((plan) => ({ plan, changes: plan.changes }));
@@ -243,7 +244,6 @@ async function runSetup(ctx: Context, input: Input) {
       declined = !(await confirm(ctx, "Make these changes?", true));
     }
     if (!declined) {
-      const state = await loadState(env);
       results = [];
       for (const plan of plans) {
         const record: AgentRecord = (state.agents[plan.agent.name] ??= {});
@@ -254,6 +254,14 @@ async function runSetup(ctx: Context, input: Input) {
     }
   }
 
+  let recovered = false;
+  if (!declined) for (const { plan, changes } of results) {
+    if (plan.native && changes.some(change => change.kind === "native" && change.outcome === "unchanged") && !state.agents[plan.agent.name]?.native) {
+      (state.agents[plan.agent.name] ??= {}).native = { directory: plan.native.directory };
+      recovered = true;
+    }
+  }
+  if (recovered) await saveState(env, state);
   const loginReport = declined ? undefined : await loginStep(ctx);
   const failed = results.some((r) => r.changes.some((c) => c.outcome === "failed"));
   const ready = results.filter((r) => r.changes.length && r.changes.every((c) => c.outcome === "done" || c.outcome === "unchanged"));

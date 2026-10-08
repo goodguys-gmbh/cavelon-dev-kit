@@ -6,8 +6,8 @@ skills (`cavelon-loop`, `cavelon-authoring`, `cavelon-testing`,
 the first login, how to check that the agent lists the skills and tools,
 updating and removing.
 
-OpenCode and Pi configuration setup is **Unreleased**, with native adapter
-installation and qualification still in development. The next release also
+OpenCode and Pi setup with bundled native adapters is **Unreleased**; final
+client qualification is still in progress. The next release also
 includes Cline, Kilo, Goose, OMP and Qwen Code; their install pages will name
 the exact qualified client surfaces and approval modes. An integration's
 native prototype does not certify its packaged release. See
@@ -21,8 +21,8 @@ native prototype does not certify its packaged release. See
 | VS Code with GitHub Copilot, Copilot CLI | the skills and MCP entry (`cavelon setup`), or the plugin from this repository's marketplace or the release's package | [VS Code and Copilot](vscode-copilot.md) |
 | Kiro | the skills and MCP entry (`cavelon setup`), or the Agent Plugins package as a power | [Kiro](kiro.md) |
 | Gemini CLI | the extension, from the release | [Gemini CLI](gemini-cli.md) |
-| OpenCode | native MCP entry and skills (`cavelon setup`, unreleased); native approval qualification pending | [OpenCode](opencode.md) |
-| Pi | native MCP entry and skills (`cavelon setup`, unreleased); native approval qualification pending | [Pi](pi.md) |
+| OpenCode | bundled native server/TUI plugins and skills (`cavelon setup`, unreleased); final client qualification pending | [OpenCode](opencode.md) |
+| Pi | bundled native extension and skills (`cavelon setup`, unreleased); final client qualification pending | [Pi](pi.md) |
 | Cloud agents and CI | `npx` or `uvx`, with the skills committed to the repository | [Cloud agents and CI](cloud-and-ci.md) |
 
 **The quickest way** on your own computer: install `cavelon`

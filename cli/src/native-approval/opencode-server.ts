@@ -2,7 +2,7 @@ import { z } from "zod";
 import { fileURLToPath } from "node:url";
 import { nativeStdioClient, type NativeApprovalClient } from "./client.js";
 import { callUi, NativeUiUnavailable } from "./ipc.js";
-import { assertNativeWorkspace, loadNativeRuntime, type NativeRuntime } from "./profile.js";
+import { assertNativeWorkspace, hasNativeProjectOwner, loadNativeRuntime, type NativeRuntime } from "./profile.js";
 import { PERSON_WAIT_MS } from "../approval-policy.js";
 
 interface ToolContext { sessionID: string; abort: AbortSignal }
@@ -15,6 +15,7 @@ function toolArguments(input: Parameters<typeof z.fromJSONSchema>[0]) {
 
 export async function startOpenCodeServer(input: { directory: string }, options: NativeRuntime) {
   await assertNativeWorkspace(options, input.directory);
+  if (await hasNativeProjectOwner(options, "opencode", input.directory)) return { dispose: async () => undefined, tool: {} };
   const command = { ...options.command, cwd: input.directory };
   const discovery = await nativeStdioClient(command, false, options.version);
   const tools = await discovery.tools().finally(() => discovery.close());

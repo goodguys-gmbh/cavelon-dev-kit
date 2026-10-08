@@ -36,8 +36,8 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run typecheck
       - run: npm run lint
-      - run: npm test
       - run: npm run build
+      - run: npm test
       - name: Smoke test the built binary
         shell: bash
         run: |

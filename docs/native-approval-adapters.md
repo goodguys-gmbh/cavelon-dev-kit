@@ -52,8 +52,9 @@ The production adapter sources now build three self-contained native entry
 points: separate OpenCode server/TUI modules and a Pi extension. npm carries
 the versioned assets and their dependency licenses, hashes and manifest;
 standalone builds embed the same bytes for setup. The packaged adapters load
-from a directory without `node_modules`. These build assets do not yet enable
-native installation through `setup` or `init`.
+from a directory without `node_modules`. Unreleased `setup` and `init` install
+these assets, profiles and exact client references without fetching a runtime
+dependency. Final packaged-client qualification remains open in #201.
 
 Each adapter reads its adjacent `profile.json`; OpenCode also accepts an
 explicit profile path in plugin options. The profile names the selected existing MCP
@@ -73,8 +74,24 @@ they neither contain credentials nor represent a person's change approval.
 The configuration editor adds and removes individual native plugin/extension
 array members while preserving other members and comments. Duplicate owned
 members, invalid lists and edits that would remove a personal comment are
-refused. These primitives support the installer work; automatic native
-`setup` and `init` remain in development.
+refused. Automatic native setup records file hashes, exact references and the
+selected MCP config in `installation.json`. It prepares all edits before
+writing, locks its installation directory, refuses concurrent configuration
+changes, and rolls back only bytes it actually wrote when a write fails.
+Update/check/removal refuse edited
+assets or references, including additional absolute/file-URL aliases.
+
+User assets live in the selected client directory's `cavelon/`; project assets
+live in `.opencode/cavelon/` or `.pi/cavelon/`. A verified user installation can
+serve a new project without duplicate project files. If both adapters already
+exist, a valid project profile owns its workspace and the user adapter yields;
+Pi requires project trust before this precedence applies. OpenCode's generated
+entry wrappers use distinct user/project plugin IDs. Setup respects a person's
+disabled plugin, and removal keeps unrelated settings and files.
+
+OpenCode's server and TUI references follow separate configuration precedence.
+`OPENCODE_TUI_CONFIG` does not come from `OPENCODE_CONFIG`; a higher-precedence
+directory or changed reference location is diagnosed rather than duplicated.
 
 The OpenCode server exposes `cavelon_<tool>` names. Private IPC exposes only
 session discovery and tool calls, never an approval answer. It refuses multiple

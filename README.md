@@ -20,9 +20,9 @@ your system's credential store, and your agent never sees it.
 
 > [!NOTE]
 > **Open-source client expansion is under Unreleased.** The next release adds
-> OpenCode, Pi, Cline, Kilo, Goose, OMP and Qwen Code. OpenCode/Pi configuration
-> setup is implemented on `main`; automatic native-dialog installation and the
-> full client qualification are still being completed. Version 0.1.15 does not
+> OpenCode, Pi, Cline, Kilo, Goose, OMP and Qwen Code. OpenCode/Pi setup installs
+> bundled native adapters and skills; the full client qualification is still
+> being completed. Version 0.1.15 does not
 > include these additions. See the [client install pages](docs/install/README.md)
 > and [native approval details](docs/native-approval-adapters.md) for the current
 > scope. The release waits for all seven integrations.
