@@ -155,13 +155,21 @@ function changeableKeys(published: PublishedLimits): { tenant: string[]; operato
 /**
  * The limit or quota named by `key`, refused when the instance does
  * not let anyone change it through the API. `--tenant` picks a limit's
- * `tenant_change` (one tenant's own run cap) over its `change`.
+ * `tenant_change` (one tenant's override) over its `change`.
  */
 function findTarget(published: PublishedLimits, key: string, explicitTenant: boolean): Target {
   const limit = published.byKey.get(key);
   if (limit) {
     if (explicitTenant && limit.tenant_change) return limitTarget(key, limit, limit.tenant_change);
     if (limit.change) return limitTarget(key, limit, limit.change);
+    if (limit.tenant_change) {
+      throw new CavelonError(ExitCode.usage, {
+        code: "tenant_required",
+        message: `${key} changes one tenant's override. Nothing was sent.`,
+        hint: "Pass --tenant <id|slug> and use a personal access token in Platform mode of the role the published change names.",
+        details: { key, sent: false },
+      });
+    }
     if (limit.changeable_by !== "tenant_admin") throw operatorRefusal(limit, switchFor(published, key));
     throw notPublished(
       `This instance does not publish how to change ${key}, so nothing was sent.`,
@@ -367,6 +375,7 @@ function anyOf(names: string[], none = "a permission the instance does not name"
 /** The Admin page where an operator makes the same change. */
 function adminPage(target: Target): string {
   if (target.flag) return FEATURE_FLAGS_PAGE;
+  if (target.change.field.startsWith("max_database_")) return "the tenant's Limits section (Database connections and Database queries)";
   return target.scope === "one_tenant" ? TENANT_LIMITS_PAGE : RUN_CAPS_PAGE;
 }
 
@@ -585,7 +594,7 @@ export const limitsSet: CommandSpec = {
     "before sending. Without --confirm, shows the old and new value, the operation and who may run it, and changes nothing.\n" +
     "Also changes the tenant quotas in tenant_quotas.changes (the inference budget, the monthly Processing Step cap).\n" +
     "An operator's change (a run cap) is sent only with a personal access token in Platform mode of a role it names, without\n" +
-    "X-Tenant-Id; --tenant <id|slug> then sets one tenant's own run cap. An environment or licence limit, a value out of bounds,\n" +
+    "X-Tenant-Id; --tenant <id|slug> then sets one tenant's override, including database connection/query caps. An environment or licence limit, a value out of bounds,\n" +
     "an instance that does not publish how to change the limit, and a credential without the permission or the role are refused\n" +
     "before anything is sent. Propose the change to the person; never raise a limit on your own.\n" +
     PERSON_CONFIRMS_HELP,

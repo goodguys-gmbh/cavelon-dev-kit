@@ -95,7 +95,7 @@ export interface DatabaseState {
   /** False plays an older response without write-query fields. Fixtures supply write evidence explicitly. */
   writeFields: boolean;
   /** What GET /instance answers: the dialects this host runs and its network side. */
-  instance: { runnable_dialects: string[]; network: { egress_ips: string[]; connections_per_process: number }; write_queries?: boolean; max_affected_rows_limit?: number };
+  instance: { runnable_dialects: string[]; network: { egress_ips: string[]; connections_per_process: number }; write_queries?: boolean; max_affected_rows_limit?: number; limits?: import("../src/database-limits.js").DatabaseTenantLimits };
 }
 
 export function databaseState(): DatabaseState {

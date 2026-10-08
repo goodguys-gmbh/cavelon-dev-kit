@@ -289,6 +289,13 @@ whole import. Restore that tool as the last pull wrote it or remove its
 `database_query` block to apply the rest. A missing or untested connection
 needs the tenant Owner's setup and `cavelon db test <connection>`.
 
+**The database cap refuses a new entry.** `database_connection_limit_reached`
+or `database_query_limit_reached` names the tenant's cap and current count;
+the query code can block an import preview. Read `cavelon db instance` or
+`cavelon limits`, delete entries no longer needed, or ask the platform operator
+to raise the tenant's override. Existing entries above a lowered cap keep
+working. See [Database limits](limits.md#database-connections-and-queries).
+
 For writes, `writes_not_allowed` includes dry-run tests: a person enables
 writes on the connection in the Admin. Omitted `allows_writes` is unknown.
 `too_many_rows_affected` means the transaction rolled back.

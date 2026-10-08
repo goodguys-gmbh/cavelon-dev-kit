@@ -10540,6 +10540,16 @@
             "type": "integer",
             "title": "Max Affected Rows Limit",
             "default": 100
+          },
+          "limits": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DatabaseConnectorTenantLimits"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -19087,6 +19097,28 @@
             "type": "object",
             "title": "Effective Conversation Retention",
             "readOnly": true
+          },
+          "max_database_connections": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Database Connections"
+          },
+          "max_database_queries": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Database Queries"
           }
         },
         "type": "object",
@@ -19208,6 +19240,32 @@
               }
             ],
             "title": "Max Tools"
+          },
+          "max_database_connections": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1000,
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Database Connections"
+          },
+          "max_database_queries": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 10000,
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Database Queries"
           }
         },
         "type": "object",
@@ -22547,6 +22605,54 @@
           "columns"
         ],
         "title": "DatabaseSchemaTable"
+      },
+      "DatabaseConnectorTenantLimit": {
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "current": {
+            "type": "integer",
+            "title": "Current"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "platform",
+              "tenant"
+            ],
+            "title": "Source"
+          },
+          "platform_limit": {
+            "type": "integer",
+            "title": "Platform Limit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "limit",
+          "current",
+          "source",
+          "platform_limit"
+        ],
+        "title": "DatabaseConnectorTenantLimit"
+      },
+      "DatabaseConnectorTenantLimits": {
+        "properties": {
+          "connections": {
+            "$ref": "#/components/schemas/DatabaseConnectorTenantLimit"
+          },
+          "queries": {
+            "$ref": "#/components/schemas/DatabaseConnectorTenantLimit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "connections",
+          "queries"
+        ],
+        "title": "DatabaseConnectorTenantLimits"
       }
     }
   }
