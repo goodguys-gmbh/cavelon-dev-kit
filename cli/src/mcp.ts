@@ -29,7 +29,7 @@ const INSTRUCTIONS =
   "loop_start, sandbox_seed, artifacts_export) return operation ids at once; read them with operation_status, which returns " +
   `the state at once, or waits up to its timeout (at most ${MCP_MAX_WAIT_MS / 1000} s) when given one, and reports waited_ms, ` +
   "and follow a loop with loop_iterations. What needs confirmation: apply imports only with confirm set to a preview's id; " +
-  "tenant_create, variables_set where it replaces another value, loop_start, limits_set, models_set_limit, loop_cancel, sandbox_seed, " +
+  "tenant_create, variables_set where it replaces another value, variables_delete, loop_start, limits_set, models_set_limit, loop_cancel, sandbox_seed, " +
   "trigger_identity, harness_default, activate of a solution a channel or trigger reaches or with make_default, deactivate, " +
   "and api for an operation that is not read-only, " +
   "return what they would do and a confirm_token, and change nothing until called again with the same arguments and " +
@@ -38,14 +38,16 @@ const INSTRUCTIONS =
   "or that cannot be taken back, is the person's to confirm, and the token alone does not make it: its preview says " +
   "needs_person. With needs_person \"client\", call again with the token and the client asks the person to approve exactly that " +
   "change; their no, or no answer, changes nothing (confirm_declined). Only after their yes does cavelon ask the instance for " +
-  "the confirmation it checks itself; confirmation_required or confirmation_invalid changed nothing: preview again, never retry " +
+  "confirmation bound to the token, tenant and exact request. The instance does not verify the person's answer: asking them " +
+  "is the kit's responsibility alone. Ask before every guarded change; never answer on the person's behalf or reuse an earlier yes for another change. " +
+  "confirmation_required or confirmation_invalid changed nothing: preview again, never retry " +
   "on your own. With needs_person \"terminal\" this client cannot ask " +
   "them: give the person the preview's confirm command, which they run in their own terminal, never in yours. These are " +
   "harness_default and activate (the default route and a solution something reaches: live traffic), deactivate, tenant_create, " +
-  "variables_set replacing a value (every solution of the tenant reads it), limits_set, models_set_limit, trigger_identity, " +
+  "variables_set replacing a value (every solution of the tenant reads it), variables_delete, limits_set, models_set_limit, trigger_identity, " +
   "api for an operation that is not read-only, loop_start unless the trigger's solution is a draft (a run acts as the person " +
   "and spends budget), and apply where its preview says show_to_person (tenant-wide sections, an active solution, deletions, " +
-  "env/prod). A draft's apply, a draft's loop_start, loop_cancel, sandbox_seed and kb_upload's replace you confirm with the " +
+  "env/prod, or database_queries.would_write). A draft's apply with no query writes or other person requirement, a draft's loop_start, loop_cancel, sandbox_seed and kb_upload's replace you confirm with the " +
   "token once the person saw the preview. " +
   "chat sends one message to a solution and returns its answer: the way to try one that is not the default route. " +
   "kb_upload names files that match an active document of the knowledge base; with replace it replaces them, and where the " +
@@ -69,7 +71,7 @@ const INSTRUCTIONS =
   "db_connections, db_queries and db_runs read database connections, saved queries and their runs. Connection commands " +
   "and query-writing apply follow the permissions and needs_a_person the instance publishes: use whoami, including " +
   "database_connectors.manage, instead of assuming every token is blocked. An authorized personal access token may " +
-  "manage definitions. Query changes need the person's approval even on a draft; after approval cavelon sends the " +
+  "manage definitions. Creating, changing or deleting a query, including imports that create or change one, needs the person's approval even on a draft; after approval cavelon sends the " +
   "instance's confirmation for the exact change where required. Passwords, privilege acknowledgment and enabling writes " +
   "stay with a person in the Admin; never accept or pass the database password or set allows_writes through a tool. " +
   "variables_list/variables_get/variables_set handle plain-text {{var:…}} values; setting one needs a role that may manage " +

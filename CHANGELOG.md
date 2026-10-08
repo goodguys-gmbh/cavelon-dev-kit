@@ -7,6 +7,16 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Changed
+
+- Clarified guarded-change confirmation (#189): the kit asks the person before
+  each guarded change, through the MCP client's dialog or their own terminal.
+  The instance binds its confirmation id to the token, tenant and exact
+  request; it does not verify the person's answer. Updated MCP instructions,
+  skills, API guidance and the published contract wording. Codes, header and
+  flow stay the same, with no extra Admin approval step. Database passwords
+  and **Allow write queries** remain person-only in the Admin.
+
 ## [0.1.14] - 2026-10-07
 
 Database connection and query authoring, Chat User readers, workflow query
@@ -202,7 +212,7 @@ stored procedures:
 ## [0.1.12] - 2026-10-07
 
 A person confirms what reaches live traffic or the whole tenant, and the
-instance can check that confirmation; database connections on SQL Server;
+instance binds a confirmation to the request; database connections on SQL Server;
 `cavelon` on PyPI:
 - live, tenant-wide and destructive changes need the person's own yes, in the
   MCP client's dialog or their own terminal; a coding agent's confirm alone no
@@ -256,7 +266,7 @@ instance can check that confirmation; database connections on SQL Server;
 
 - `setup`'s refusal to change something without a terminal to ask is now
   `yes_required` (was `confirmation_required`, which the instance now uses for
-  its own check of a person's confirmation).
+  its own check of a request-bound confirmation).
 
 ### Fixed
 
@@ -308,7 +318,7 @@ instance can check that confirmation; database connections on SQL Server;
   `apply` and `loop start`, `loop cancel`, `sandbox seed` and `kb upload
   --replace` are confirmed with the token as before, and nothing changes in a
   person's own terminal.
-- The instance's own check of the person's yes (#153). An instance that
+- The instance's binding of a confirmation to the request (#153). An instance that
   publishes `confirmations.enforced` in `/meta/capabilities` refuses a
   personal access token's change to an operation its OpenAPI marks
   `x-cavelon-confirmation` (the default route, activating a solution a channel
@@ -318,7 +328,7 @@ instance can check that confirmation; database connections on SQL Server;
   person approved, in their own terminal with `--confirm` or in the MCP
   client's dialog, and never before, `cavelon` asks the instance for one
   (`POST /api/v1/confirmations` with the method, path and body) and sends it
-  with exactly that request; an agent's token alone never gets one, and an API
+  with exactly that request; the kit never asks without the person's yes, and an API
   key, which the instance does not ask, never asks. Where the kit does not
   expect the operation to be guarded (`api` from a person's terminal, a
   change whose condition only the instance knows), it asks only once the

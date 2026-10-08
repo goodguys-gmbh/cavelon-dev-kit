@@ -72,8 +72,8 @@ The rest of the catalog stays as recorded.
 
 Later on 2026-10-07 the snapshot was refreshed from the instance's next
 build, which is not released or deployed anywhere yet, again without running
-it: the change that checks a person's confirmation of a personal access
-token's guarded change on the server. The OpenAPI is the reference that build's
+it: the change that binds a confirmation to a personal access token's exact
+guarded request on the server. The OpenAPI is the reference that build's
 generator writes (`docs/openapi.json`), trimmed with `POST /api/v1/confirmations`
 added to the list; against the snapshot it differs only in that route, its
 `Confirmation*` schemas, `MetaCapabilities.confirmations`, and
@@ -201,6 +201,18 @@ recorded. A schema default of false is not a response: an omitted flag
 remains unknown. The fake server plays older schemas and omitted response
 flags, list-only channel counts, and a route effect that changes after its
 preview; readiness reserves no state.
+
+On 2026-10-08 the snapshot took the instance's clarified confirmation wording
+from an immutable merged development build, generated without running it.
+Only the `confirmation_required` catalog message changed: the client asks its
+person, and the instance binds the id to the exact request. The Dev-Kit page
+was added as rendered by that build's docs corpus, then scrubbed as below;
+its existing index entry now carries the same description. The description
+of `POST /api/v1/confirmations` changed in the full published OpenAPI, but the
+trimmer removes descriptions. Comparing the trimmed references before and
+after this wording change gives identical bytes, and the confirmation
+operation and schemas still match this snapshot. No code, header, shape or
+confirmation flow changed. This build reaches production with its next deploy.
 
 | File | Source |
 |---|---|

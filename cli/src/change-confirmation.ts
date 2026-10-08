@@ -5,9 +5,9 @@ import { operationForPath } from "./openapi.js";
 import { cavelonCommand } from "./printed.js";
 
 /**
- * The instance's own check of a person's yes. A coding agent holds the
- * person's token and could compute the kit's confirm token itself, so an
- * instance that publishes `confirmations.enforced` refuses a personal access
+ * The instance binds a confirmation to the exact request, not to a person's
+ * answer. The same personal access token can issue the id and send the change.
+ * An instance that publishes `confirmations.enforced` refuses a personal access
  * token's guarded change (`x-cavelon-confirmation` in its OpenAPI) without a
  * confirmation id that names exactly that change: `POST <confirmations.path>`
  * with `{method, path, body}` issues one, valid once and for minutes, sent in
@@ -15,8 +15,8 @@ import { cavelonCommand } from "./printed.js";
  *
  * The kit asks for an id only after the person approved the change
  * (`Context.approved`): in their own terminal with --confirm, or in the MCP
- * client's dialog. An agent's token alone never gets one, so such a change
- * from an agent stays refused by the instance as well as by the kit.
+ * client's dialog. Asking the person is the kit's responsibility alone;
+ * the instance cannot tell whether that question was asked or answered.
  */
 
 /** Where the instance issues confirmation ids, and the header a change carries one in. */
@@ -45,7 +45,7 @@ function offerFrom(path: unknown, header: unknown): ConfirmationOffer {
   };
 }
 
-/** Whether the instance's OpenAPI marks the operation `method path` resolves to as one a person confirms. */
+/** Whether the instance's OpenAPI marks the operation `method path` resolves to as requiring a bound confirmation. */
 async function marked(ctx: Context, method: string, path: string): Promise<boolean> {
   const doc = await (await ctx.contracts()).openapi().catch(() => undefined);
   const found = doc ? operationForPath(doc, method, path) : undefined;
@@ -107,7 +107,7 @@ export function changeConfirmer(ctx: Context, client: ApiClient): ChangeConfirme
   };
 }
 
-/** The codes an instance answers a change with when it lacks the person's confirmation. */
+/** The codes an instance answers a change with when its bound confirmation is missing or invalid. */
 export const CONFIRMATION_REQUIRED = "confirmation_required";
 export const CONFIRMATION_INVALID = "confirmation_invalid";
 
@@ -125,7 +125,7 @@ export function confirmationRefused(error: CavelonError, sentId: boolean): Cavel
         `A confirmation lasts minutes and confirms one change once. \`${cavelonCommand("explain", CONFIRMATION_INVALID)}\` says more.`
       : sentId
         ? `The instance asked again for a confirmation cavelon sent. \`${cavelonCommand("explain", CONFIRMATION_REQUIRED)}\` says more.`
-        : "The instance wants the person's own yes for this change. The person runs the command in their own terminal with --confirm " +
+        : "The instance requires a confirmation bound to this exact change; cavelon asks the person first. The person runs the command in their own terminal with --confirm " +
           "(or approves it in the MCP client's dialog), where cavelon asks the instance for the confirmation; or makes the change in the Admin. " +
           `\`${cavelonCommand("explain", CONFIRMATION_REQUIRED)}\` says more.`;
   return new CavelonError(ExitCode.needsAction, {
@@ -143,7 +143,8 @@ export function confirmationPointer(code: string): string | undefined {
   if (code !== CONFIRMATION_REQUIRED && code !== CONFIRMATION_INVALID) return undefined;
   return (
     "Only after the person approved the change does cavelon ask the instance for this confirmation: in their own terminal with " +
-    "--confirm, or in the MCP client's dialog when an agent confirms with the preview's token. An agent's token alone never gets one. " +
+    "--confirm, or in the MCP client's dialog when an agent confirms with the preview's token. The instance binds the id to the token, tenant and exact request; " +
+    "it does not verify the person's answer. Asking the person is cavelon's responsibility; never answer on their behalf. " +
     (code === CONFIRMATION_INVALID
       ? "An expired, used or other change's confirmation needs a new preview and the person's yes again."
       : "An older cavelon sends none: update it, or make the change in the Admin.")

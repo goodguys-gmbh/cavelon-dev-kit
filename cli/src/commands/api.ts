@@ -411,7 +411,12 @@ async function previewUnlessConfirmed(
   const lines = [`Would send ${request.method} ${request.path}. Nothing was sent.`, targetLine(target)];
   if (stale) lines.push("The confirm token is not this request's: the request changed since its preview, or the token is another one's.");
   if (bare && driven.by === "agent") lines.push("A coding agent cannot send it: the person sends it from their own terminal.");
-  if (op.confirmation) lines.push(`The instance asks for the person's confirmation of it (x-cavelon-confirmation)${op.confirmationWhen ? `: ${op.confirmationWhen}` : ""}`);
+  if (op.confirmation) {
+    lines.push(
+      `The instance requires a confirmation bound to this request (x-cavelon-confirmation)${op.confirmationWhen ? `: ${op.confirmationWhen}` : ""}`,
+      "cavelon asks the person; the instance does not verify their answer.",
+    );
+  }
   if (Object.keys(request.query).length) lines.push(`Query: ${JSON.stringify(request.query)}`);
   if (Object.keys(request.headers).length) lines.push(`Headers: ${JSON.stringify(request.headers)}`);
   if (request.body !== null) lines.push("Body:", JSON.stringify(request.body, null, 2));
@@ -582,8 +587,8 @@ export const apiDescribe: CommandSpec = {
     if (secrets.length) lines.push(`Secret values (x-cavelon-secret): ${secrets.join(", ")}. A person enters them; an agent leaves them out.`);
     if (op.confirmation) {
       lines.push(
-        `A person confirms it (x-cavelon-confirmation)${op.confirmationWhen ? `: ${op.confirmationWhen}` : "."} cavelon asks the instance for the ` +
-          "confirmation once the person approved the call: in their own terminal, or in the MCP client's dialog.",
+        `Bound confirmation required (x-cavelon-confirmation)${op.confirmationWhen ? `: ${op.confirmationWhen}` : "."} cavelon asks the instance for the ` +
+          "confirmation once the person approved the call: in their own terminal, or in the MCP client's dialog. The instance binds the id to the token, tenant and exact request; it does not verify the person's answer.",
       );
     }
     if (data.description && data.description !== op.summary) lines.push("", data.description);

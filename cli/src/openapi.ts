@@ -42,7 +42,8 @@ export interface Operation {
   personOnly?: { marked: boolean; reason?: string };
   /**
    * `x-cavelon-confirmation: required`: a personal access token sends the
-   * change with a confirmation id the person's yes gets (change-confirmation.ts),
+   * change with an id bound to that request (change-confirmation.ts),
+   * obtained by the kit only after it asks the person,
    * when `x-cavelon-confirmation-when` holds.
    */
   confirmation?: true;

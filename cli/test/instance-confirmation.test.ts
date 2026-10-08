@@ -12,7 +12,7 @@ import { startFakeServer, type FakeServer, type RecordedRequest } from "./fake-s
 import { askingClient, cli, login, sandbox, type PersonAtClient, type Sandbox } from "./helpers.js";
 
 /**
- * The instance's own check of a person's yes: a personal access token's
+ * The instance's request binding and the kit's separate human prompt: a personal access token's
  * guarded change carries a confirmation id the kit asks for only after the
  * person approved it, in their own terminal with --confirm or in the MCP
  * client's dialog, and sends with exactly that request. An instance that does
@@ -307,7 +307,7 @@ describe("an instance that does not enforce it", () => {
 
   it("api describe names a marked operation where the instance marks it", async () => {
     const described = await cli(sb, ["api", "describe", "deactivate_harness"]);
-    expect(described.stdout).toMatch(/A person confirms it \(x-cavelon-confirmation\): When the solution is active/);
+    expect(described.stdout).toMatch(/Bound confirmation required \(x-cavelon-confirmation\): When the solution is active/);
   });
 });
 

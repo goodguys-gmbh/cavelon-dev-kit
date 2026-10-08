@@ -1682,14 +1682,14 @@ export async function startFakeServer(): Promise<FakeServer> {
     const id = `cfm_${randomBytes(16).toString("hex")}`;
     const expiresAt = Date.now() + state.confirmationTtlMs;
     state.confirmationIds.set(id, { token, tenantId: tid, method: b.method, path: target.pathname, digest: changeDigest(b.method, b.path, b.body), expiresAt, used: false });
-    return send(res, 201, { confirmation_id: id, expires_at: new Date(expiresAt).toISOString(), summary: `${b.method} ${target.pathname}, confirmed by its person.` });
+    return send(res, 201, { confirmation_id: id, expires_at: new Date(expiresAt).toISOString(), summary: `${b.method} ${target.pathname}.` });
   }
 
   /** The 428 body for a guarded change without its confirmation, or undefined when it carries the right one, which is used once the change succeeds. */
   function checkConfirmation(req: http.IncomingMessage, res: http.ServerResponse, url: URL, token: string, tid: string, method: string, json: unknown): Record<string, unknown> | undefined {
     const next = { confirmations: "/api/v1/confirmations", header: "X-Cavelon-Confirmation" };
     const given = String(req.headers["x-cavelon-confirmation"] ?? "").trim();
-    if (!given) return coded("confirmation_required", "This change needs a person's confirmation. Nothing was changed.", next);
+    if (!given) return coded("confirmation_required", "This change needs a confirmation: a personal access token's client asks its person, then sends the X-Cavelon-Confirmation header from POST /api/v1/confirmations. Nothing was changed.", next);
     const refuse = (reason: string) => coded("confirmation_invalid", `The confirmation id is ${reason}. Nothing was changed.`, { reason, ...next });
     const issued = state.confirmationIds.get(given);
     if (!issued) return refuse("unknown");

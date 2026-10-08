@@ -227,8 +227,8 @@ repeat them:
   A change that reaches live traffic, the whole tenant, or cannot be taken
   back also needs your own yes, which the agent cannot give: `tenant_create`,
   `variables_set` where it replaces a value (every solution of the tenant
-  reads it), `loop_start` (a run acts as you and spends budget) except for a
-  trigger of a draft solution, `limits_set`, `models_set_limit`,
+  reads it), `variables_delete`, `loop_start` (a run acts as you and spends
+  budget) except for a trigger of a draft solution, `limits_set`, `models_set_limit`,
   `trigger_identity`, `harness_default` (which solution the tenant's chat and
   widget answer with), `activate` where it previews (a channel or trigger
   reaches the solution, activation takes the default route, reach or route
@@ -236,7 +236,10 @@ repeat them:
   out of live traffic), `api` for any operation that is not read-only, and
   `apply` where its preview needs a person: it changes the tenant-wide
   sections, reaches an active solution, deletes (or `mode` `replace`), or goes
-  to `env/prod`. Their previews say how in `needs_person`:
+  to `env/prod`, or creates or changes a database query
+  (`database_queries.would_write`). Query creation, changes and deletion through
+  `api` need your yes too, even on a draft. Their previews say how in
+  `needs_person`:
   - `"client"`: your agent client can ask you (MCP elicitation). When the
     agent calls the tool again with the token (for `apply`, the preview id),
     the client shows you the change, where it goes, and one question, **Make
@@ -249,17 +252,23 @@ repeat them:
     A call with the token is refused (`confirm_needs_person`, exit code 5,
     with the command in `details.person_command`).
 
-  Where the instance publishes `confirmations.enforced`, it checks your yes
-  too: after it, and only then, `cavelon` asks the instance for a
+  Asking you is the kit's responsibility alone. Where the instance publishes
+  `confirmations.enforced`, after your yes, and only then, `cavelon` asks it for a
   confirmation id for exactly the request it sends (an operation the
   instance's OpenAPI marks `x-cavelon-confirmation`), and sends it with that
-  request. An `api` preview of such an operation says so in
+  request. The id is bound to the token, tenant, method, path and canonical
+  body, usable once within 10 minutes, and audited. The same personal access
+  token issues it and sends the change, so it does not prove you answered.
+  The agent must wait for your answer to each guarded change and never answer
+  on your behalf. After your yes it makes the change directly; there is no
+  extra Admin approval step. An `api` preview of such an operation says so in
   `instance_confirmation`. The instance refuses such a change without one
   (`confirmation_required`, exit code 5), and one that expired, was used or
   names another change (`confirmation_invalid`, `details.reason`): nothing
   changes, and a new preview and your yes get a new one.
 
-  `apply` of a preview that needs no person (a draft, outside `env/prod`),
+  `apply` of a preview that needs no person (a draft outside `env/prod`, with
+  no query writes or other person requirement),
   `loop_start` of a draft's trigger, `loop_cancel`, `sandbox_seed` and
   `kb_upload` with `replace` confirm with the token alone: the fast loop on a
   draft in a test environment. `apply` with
