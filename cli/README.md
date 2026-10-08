@@ -848,3 +848,9 @@ extension and skills; project init copies shared skills only. The interactive
 CLI uses its built-in person form. Headless runs cancel that form without a
 change. System/additional config bindings and personal YAML are preserved.
 See [Goose](../docs/install/goose.md) for paths, lifecycle and approval limits.
+
+Unreleased: `cavelon setup --agents omp` installs OMP's own native profile,
+MCP entry, skills and bundled autoload extension. It preserves personal YAML
+and supports fresh TUI approval; print/RPC calls use the person's terminal.
+Use matching profile selection and a guarded launch. See
+[OMP](../docs/install/omp.md) for lifecycle and qualification limits.

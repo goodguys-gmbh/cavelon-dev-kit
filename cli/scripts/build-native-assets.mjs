@@ -10,7 +10,7 @@ const cli = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 if (process.argv.length > 2) throw new Error("Native assets are built only in dist/native-assets; output arguments are not accepted.");
 const target = path.join(cli, "dist", "native-assets");
 const version = JSON.parse(await readFile(path.join(cli, "package.json"), "utf8")).version;
-const entries = ["opencode-server", "opencode-tui", "pi-extension", "kilo-server", "kilo-tui"];
+const entries = ["opencode-server", "opencode-tui", "pi-extension", "kilo-server", "kilo-tui", "omp-extension"];
 await rm(target, { recursive: true, force: true });
 await mkdir(target, { recursive: true });
 const files = [];
@@ -62,6 +62,6 @@ for (const name of [...dependencies].toSorted((a, b) => a.localeCompare(b, "en")
 await add("THIRD-PARTY-NOTICES", notices.join("\n\n---\n\n"));
 await writeFile(path.join(target, "manifest.json"), JSON.stringify({
   format: 1, version,
-  entries: { opencode: ["opencode-server.mjs", "opencode-tui.mjs"], pi: ["pi-extension.mjs"], kilo: ["kilo-server.mjs", "kilo-tui.mjs"] },
+  entries: { omp: ["omp-extension.mjs"], opencode: ["opencode-server.mjs", "opencode-tui.mjs"], pi: ["pi-extension.mjs"], kilo: ["kilo-server.mjs", "kilo-tui.mjs"] },
   files: files.toSorted((a, b) => a.path.localeCompare(b.path, "en")),
 }, null, 2) + "\n");

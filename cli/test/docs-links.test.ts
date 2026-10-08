@@ -58,7 +58,7 @@ describe("documentation links", () => {
     const index = readFileSync(path.join(ROOT, "docs", "install", "README.md"), "utf8");
     expect(readme).toContain("(docs/install/README.md)");
     expect(installation).toContain("(install/README.md)");
-    for (const page of ["claude-code", "codex", "cursor", "vscode-copilot", "kiro", "gemini-cli", "opencode", "pi", "qwen-code", "cline", "kilo", "goose", "cloud-and-ci"]) {
+    for (const page of ["claude-code", "codex", "cursor", "vscode-copilot", "kiro", "gemini-cli", "opencode", "pi", "qwen-code", "cline", "kilo", "goose", "omp", "cloud-and-ci"]) {
       expect(index, page).toContain(`(${page}.md)`);
       // The update notice links to #update (update-check.ts).
       const headings = anchors(path.join(ROOT, "docs", "install", `${page}.md`));

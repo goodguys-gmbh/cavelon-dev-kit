@@ -1,3 +1,4 @@
+import { ompRuntimePolicy } from "../omp-config.js";
 import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import os from "node:os";
@@ -8,7 +9,7 @@ import { readJsoncEntry } from "../jsonc-config.js";
 export interface NativeProfile {
   /** Version 2 project paths resolve from the profile, so clones can move. */
   format?: 2;
-  client: "opencode" | "pi" | "kilo";
+  client: "opencode" | "pi" | "kilo" | "omp";
   version: string;
   configFile: string;
   entryHash: string;
@@ -107,22 +108,24 @@ export async function loadNativeRuntime(profileFile: string, client: NativeProfi
   const realConfig = await fs.realpath(configFile);
   if (profile.format === 2 && !inside(projectRoot!, realConfig)) throw new Error("Cavelon native configuration is outside its project.");
   const text = await fs.readFile(realConfig, "utf8");
-  if (client === "pi") {
+  const commandArgs = client === "pi" || client === "omp";
+  if (commandArgs) {
     try { JSON.parse(text); }
-    catch { throw new Error("The Pi MCP configuration requires plain JSON; review it before native startup."); }
+    catch { throw new Error(`The ${client === "pi" ? "Pi" : "OMP"} MCP configuration requires plain JSON; review it before native startup.`); }
   }
-  const selected = readJsoncEntry(text, [client === "pi" ? "mcpServers" : "mcp", "cavelon"]);
+  if (client === "omp") { const policy = await ompRuntimePolicy(configFile, process.env); if (policy) throw new Error(policy); }
+  const selected = readJsoncEntry(text, [commandArgs ? "mcpServers" : "mcp", "cavelon"]);
   if ("error" in selected || !selected.value || nativeEntryHash(selected.value) !== profile.entryHash) {
     throw new Error("The Cavelon MCP entry changed; review it and repeat setup before using native approval.");
   }
   const entry = selected.value as Record<string, unknown>;
-  if (entry.enabled !== false || (client !== "pi" && entry.type !== "local")) {
+  if (entry.enabled !== false || (!commandArgs && entry.type !== "local")) {
     throw new Error("Native approval must own only Cavelon; disable its duplicate built-in MCP entry.");
   }
-  const words = client !== "pi" ? entry.command : [entry.command, ...(Array.isArray(entry.args) ? entry.args : [])];
+  const words = !commandArgs ? entry.command : [entry.command, ...(Array.isArray(entry.args) ? entry.args : [])];
   if (!Array.isArray(words) || !words.length || !words.every(word => typeof word === "string") || !words[0]
-    || (client === "pi" && !Array.isArray(entry.args))) throw new Error("Invalid Cavelon MCP process command.");
-  const overrides = entry[client !== "pi" ? "environment" : "env"];
+    || (commandArgs && !Array.isArray(entry.args))) throw new Error("Invalid Cavelon MCP process command.");
+  const overrides = entry[!commandArgs ? "environment" : "env"];
   if (overrides !== undefined && (!overrides || typeof overrides !== "object" || Array.isArray(overrides)
     || Object.values(overrides).some(value => typeof value !== "string"))) throw new Error("Invalid Cavelon MCP environment.");
   const env = Object.fromEntries(Object.entries({ ...process.env, ...(overrides as Record<string, string> | undefined) }).filter((entry): entry is [string, string] => typeof entry[1] === "string"));

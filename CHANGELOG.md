@@ -13,6 +13,11 @@ CLI, the skills and the plugin.
 
 ### Added
 
+- OMP native profiles, autoload extension and skills, independently from Pi.
+  Preserve personal YAML and compatible MCP bindings, and recheck canonical
+  user policies before tool startup. Native TUI approval asks the person afresh,
+  while print/RPC uses the person’s terminal (#225).
+
 - Published database connection/query limits and current counts in `db instance`
   and `limits`, with source, platform defaults and key/source filtering.
   Operator tenant overrides work when metadata publishes only `tenant_change`;

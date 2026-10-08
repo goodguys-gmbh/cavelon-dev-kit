@@ -1,3 +1,4 @@
+import { ompConfig, ompDirectory, ompPolicy } from "./omp-config.js";
 import path from "node:path";
 import os from "node:os";
 import { promises as fs } from "node:fs";
@@ -11,7 +12,7 @@ import { homeDir } from "./paths.js";
 type Env = Record<string, string | undefined>;
 
 export interface NativeMcpConfig {
-  client: "opencode" | "pi" | "qwen" | "cline" | "kilo" | "goose";
+  client: "opencode" | "pi" | "qwen" | "cline" | "kilo" | "goose" | "omp";
   format: "native";
   file: string;
   /** Low to high precedence; never create a companion when one already exists. */
@@ -124,8 +125,8 @@ const qwenConfig = (file: string, env: Env, platform = process.platform): Native
 });
 
 /** A native configuration format does not imply a person-dialog adapter. */
-export function hasNativeApprovalAdapter(config: NativeMcpConfig): config is NativeMcpConfig & { client: "opencode" | "pi" | "kilo" } {
-  return config.client === "opencode" || config.client === "pi" || config.client === "kilo";
+export function hasNativeApprovalAdapter(config: NativeMcpConfig): config is NativeMcpConfig & { client: "opencode" | "pi" | "kilo" | "omp" } {
+  return config.client === "opencode" || config.client === "pi" || config.client === "kilo" || config.client === "omp";
 }
 
 const kiloNames = ["kilo.json", "kilo.jsonc", "opencode.json", "opencode.jsonc"];
@@ -171,6 +172,19 @@ function openCodeUserFiles(env: Env): string[] {
 }
 
 export const NATIVE_CLIENTS: NativeClient[] = [
+  {
+    name: "omp", label: "OMP (Oh My Pi)", aliases: ["oh-my-pi", "ohmypi"], commands: ["omp"], projectSkills: [".omp/skills"],
+    project: (env = {}) => ompConfig(env, true),
+    user: env => {
+      const { directory } = ompDirectory(env);
+      return { mcp: ompConfig(env), skills: path.join(directory, "skills"), folders: [directory] };
+    },
+    notes: [
+      "OMP is a separate client from Pi. Setup follows OMP_PROFILE / PI_PROFILE, PI_CONFIG_DIR and its default PI_CODING_AGENT_DIR override; use the same profile environment when launching OMP.",
+      "Setup installs an owned native autoload extension without rewriting YAML or legacy settings. It disables only the duplicate Cavelon MCP entry and preserves compatible client bindings and deny/force-enable policies.",
+      "The native TUI asks the person afresh for each guarded change. Print/RPC modes return an exact command for the person's own terminal. Launch OMP with CAVELON_AGENT=1; file checks cannot qualify actual UI loading or custom extension policies.",
+    ],
+  },
   {
     name: "goose", label: "Goose", aliases: ["goose-cli"], commands: ["goose"], projectSkills: [],
     project: () => undefined, user: gooseUser,
@@ -343,6 +357,10 @@ export async function resolveNativeMcp(config: NativeMcpConfig, root?: string): 
 > {
   const full = (file: string) => root ? path.resolve(root, file) : path.resolve(file);
   if (config.blocked) return { file: full(config.file), error: config.blocked };
+  if (config.client === "omp") {
+    const error = await ompPolicy(config, full);
+    if (error) return { file: full(config.file), error };
+  }
   if (config.client === "goose") {
     const error = await goosePolicy(config, full);
     if (error) return { file: full(config.file), error };

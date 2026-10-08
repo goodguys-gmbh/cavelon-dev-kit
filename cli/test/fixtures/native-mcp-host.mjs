@@ -9,7 +9,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: [
   { name: "change", description: "Synthetic exact preview", inputSchema: { type: "object", properties: { message: { type: "string" } }, required: ["message"] } },
 ] }));
 server.setRequestHandler(CallToolRequestSchema, async request => {
-  if (request.params.name === "read") return { content: [{ type: "text", text: "Grüße 東京 🐳" }] };
+  if (request.params.name === "read") return { isError: request.params.arguments?.fail === true, content: [{ type: "text", text: "Grüße 東京 🐳" }] };
   if (request.params.name !== "change") throw new Error("Unknown synthetic tool.");
   if (!server.getClientCapabilities()?.elicitation?.form) return { content: [{ type: "text", text: "person-terminal" }] };
   const answer = await server.elicitInput({ mode: "form", message: request.params.arguments.message, requestedSchema: {

@@ -333,3 +333,13 @@ and installs bundled skills without fetching an adapter or registry package.
 Person forms require an interactive CLI session; headless runs refuse them.
 See [Goose](install/goose.md). Full packaged offline qualification remains
 separate from configuration and client-loading evidence.
+
+## OMP
+
+A kit release with OMP includes its bundled adapter and four skills. Provision
+the released OMP client, compatible Bun runtime and approved model endpoint
+separately. Setup and adapter loading run no npm/npx fetch. Use the same profile
+selection for setup and OMP; native configuration stays in that profile's agent
+directory. See [OMP](install/omp.md) and the
+[qualification matrix](coding-agent-qualification.md). Actual network-policy
+and customer-provider pilots remain separate from synthetic offline checks.
