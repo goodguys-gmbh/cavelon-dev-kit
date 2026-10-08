@@ -180,6 +180,13 @@ activates. Over MCP, `cavelon` limits it further:
 
 ### When the agent runs `cavelon` in its shell
 
+Token login stays with the person. The unreleased kit refuses `cavelon login`
+in every recognized agent shell, including `--token-stdin`, before reading input,
+contacting the instance or changing the stored login (`operation_for_a_person`,
+exit 5). Log in once in a separate terminal, then let the agent use the stored
+credential through the kit. Ordinary CI can use its configured `CAVELON_TOKEN`;
+it does not need an agent to run `login`.
+
 An agent with a shell can run `cavelon api` itself instead of calling the MCP
 tool. When `cavelon` runs under a coding agent, `cavelon api` applies the same
 guards as the `api` tool:

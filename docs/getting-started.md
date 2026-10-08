@@ -59,6 +59,11 @@ In a terminal of your own (not in the agent's chat), run:
 cavelon login --instance https://cavelon.example.com
 ```
 
+The unreleased kit refuses login from a recognized coding-agent shell, including
+`--token-stdin`, before reading a token or contacting the instance. Some clients
+mark all their embedded terminals as agent terminals: use a separate terminal
+application to log in. Do not give the token to the agent or ask it to pipe one.
+
 Use the address of your Cavelon instance, the URL you open Cavelon at in the
 browser, in place of `https://cavelon.example.com`; the docs use that
 placeholder throughout. `login` asks for the token without showing what you type, checks it against the

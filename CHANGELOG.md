@@ -7,6 +7,12 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Fixed
+
+- Token login from recognized coding-agent shells is refused before reading
+  input, contacting the instance or replacing the stored login, including
+  `login --token-stdin`. Use the person's separate terminal (#208).
+
 ### Added
 
 - Native OpenCode/Pi installation through setup and project init, with owned
