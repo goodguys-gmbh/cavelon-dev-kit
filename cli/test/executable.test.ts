@@ -130,15 +130,21 @@ describe.skipIf(!EXECUTABLE)("the standalone executable", () => {
     expect((await run(["whoami", "--json"])).code).not.toBe(0);
   });
 
-  it("writes the skills it carries with init --agents", async () => {
+  it("writes its embedded skills and native adapter assets with init --agents", async () => {
     const token = server.addToken({ kind: "pat", tenantIds: [tenant], email: "ada@example.com" });
     const dir = path.join(home, "solution");
     mkdirSync(dir);
-    const init = await run(["init", "--tenant", tenant, "--agents", "claude", "--json"], { cwd: dir, env: { CAVELON_URL: server.url, CAVELON_TOKEN: token } });
+    const init = await run(["init", "--tenant", tenant, "--agents", "claude,opencode,pi", "--json"], { cwd: dir, env: { CAVELON_URL: server.url, CAVELON_TOKEN: token } });
     expect(init.code, init.stderr + init.stdout).toBe(0);
     for (const skill of ["cavelon-loop", "cavelon-authoring", "cavelon-testing", "cavelon-long-running"]) {
       const text = readFileSync(path.join(dir, ".claude", "skills", skill, "SKILL.md"), "utf8");
       expect(text).toContain(`(cavelon ${version})`);
+    }
+    for (const client of [".opencode", ".pi"]) {
+      const native = path.join(dir, client, "cavelon");
+      expect(JSON.parse(readFileSync(path.join(native, "profile.json"), "utf8"))).toMatchObject({ version, format: 2, scope: "project" });
+      expect(JSON.parse(readFileSync(path.join(native, "manifest.json"), "utf8"))).toMatchObject({ version, format: 1 });
+      expect(readFileSync(path.join(native, "MCP-SDK-LICENSE"), "utf8")).toContain("MIT");
     }
   });
 

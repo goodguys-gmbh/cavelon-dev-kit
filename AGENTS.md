@@ -11,14 +11,16 @@ the short version.
 ```bash
 cd cli
 npm ci --ignore-scripts
-npm run typecheck && npm run lint && npm test
-npm run build && node dist/cli.js --help
+npm run typecheck && npm run lint && npm run build && npm test
+node dist/cli.js --help
 ```
 
 Tests never need a real instance: a fake server in `cli/test/` serves the
 snapshots in `contracts/cavelon/`. After changing a command's options or help
 text, regenerate the command reference with `npm run docs:commands`; a test
 fails while `docs/commands.md` is out of date.
+Build before testing: native setup tests consume the bundled adapter assets in
+`dist/`. Asset rebuild tests use private copies so they cannot interrupt setup.
 
 ## Conventions
 

@@ -57,6 +57,18 @@ export async function assertNativeWorkspace(runtime: NativeRuntime, directory: s
   }
 }
 
+/** A verified project adapter takes precedence over the user's adapter. */
+export async function hasNativeProjectOwner(runtime: NativeRuntime, client: NativeProfile["client"], directory: string): Promise<boolean> {
+  if (runtime.scope !== "user") return false;
+  const file = path.join(directory, client === "pi" ? ".pi" : ".opencode", "cavelon", "profile.json");
+  const present = await fs.stat(file).then(() => true, error => { if (error.code === "ENOENT") return false; throw error; });
+  if (!present) return false;
+  const project = await loadNativeRuntime(file, client);
+  if (project.scope !== "project") throw new Error("The project native profile does not own this project.");
+  await assertNativeWorkspace(project, directory);
+  return true;
+}
+
 /** Re-read the selected configuration; personal edits invalidate native ownership. */
 function projectRootValid(profile: NativeProfile): boolean {
   if (profile.format === 2) return profile.scope === "project" && relativePath(profile.projectRoot);
@@ -74,7 +86,10 @@ function inside(root: string, file: string): boolean {
 }
 
 export async function loadNativeRuntime(profileFile: string, client: NativeProfile["client"]): Promise<NativeRuntime> {
-  const profile = JSON.parse(await fs.readFile(profileFile, "utf8")) as NativeProfile;
+  let profile: NativeProfile;
+  const profileText = await fs.readFile(profileFile, "utf8");
+  try { profile = JSON.parse(profileText) as NativeProfile; }
+  catch { throw new Error("Invalid Cavelon native profile; review it and repeat setup."); }
   if (!profile || ![undefined, 2].includes(profile.format)
     || profile.client !== client || typeof profile.version !== "string" || !/^\d+\.\d+\.\d+(?:-[\w.-]+)?$/.test(profile.version)
     || (profile.format === 2 ? !relativePath(profile.configFile) : typeof profile.configFile !== "string" || !path.isAbsolute(profile.configFile))
@@ -90,7 +105,10 @@ export async function loadNativeRuntime(profileFile: string, client: NativeProfi
   const realConfig = await fs.realpath(configFile);
   if (profile.format === 2 && !inside(projectRoot!, realConfig)) throw new Error("Cavelon native configuration is outside its project.");
   const text = await fs.readFile(realConfig, "utf8");
-  if (client === "pi") JSON.parse(text);
+  if (client === "pi") {
+    try { JSON.parse(text); }
+    catch { throw new Error("The Pi MCP configuration requires plain JSON; review it before native startup."); }
+  }
   const selected = readJsoncEntry(text, [client === "opencode" ? "mcp" : "mcpServers", "cavelon"]);
   if ("error" in selected || !selected.value || nativeEntryHash(selected.value) !== profile.entryHash) {
     throw new Error("The Cavelon MCP entry changed; review it and repeat setup before using native approval.");

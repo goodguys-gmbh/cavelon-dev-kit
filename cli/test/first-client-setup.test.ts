@@ -31,7 +31,7 @@ describe("OpenCode and Pi setup", () => {
     const record: AgentRecord = {};
     const changes = await applyPlan(plan, sb.env, installed, skills, record);
     expect(changes.every(change => change.outcome === "done")).toBe(true);
-    expect(JSON.parse(read(agent!.mcp.file))).toEqual({ mcp: { cavelon: { type: "local", command: ["cavelon", "mcp"] } } });
+    expect(JSON.parse(read(agent!.mcp.file))).toEqual({ mcp: { cavelon: { type: "local", command: ["cavelon", "mcp"], enabled: false } }, plugin: ["./cavelon/opencode-server-entry.mjs"] });
     for (const skill of skills) expect(existsSync(path.join(agent!.skills, skill.name, "SKILL.md"))).toBe(true);
   });
 
@@ -46,6 +46,9 @@ describe("OpenCode and Pi setup", () => {
       expect(result.code, result.stderr + result.stdout).toBe(0);
       const entry = JSON.parse(read(path.join(project, ".pi", "mcp.json"))).mcpServers.cavelon;
       expect(entry.args.at(-1)).toBe("mcp");
+      expect(entry.enabled).toBe(false);
+      expect(JSON.parse(read(path.join(project, ".pi", "cavelon", "profile.json")))).toMatchObject({ format: 2, scope: "project" });
+      expect(readJsoncEntry(read(path.join(project, ".pi", "settings.json")), ["extensions"])).toMatchObject({ value: ["./cavelon/pi-extension.mjs"] });
       for (const skill of await loadSkills()) expect(existsSync(path.join(project, ".pi", "skills", skill.name, "SKILL.md"))).toBe(true);
       expect(existsSync(path.join(project, "opencode.json"))).toBe(false);
       expect(result.stdout).toContain("project trust");
@@ -66,7 +69,8 @@ describe("OpenCode and Pi setup", () => {
       writeFileSync(jsoncFile, before);
       const openCode = await cli(sb, ["init", "--agents", "opencode-ai", "--json"], { cwd: openCodeProject });
       expect(openCode.code, openCode.stderr).toBe(0);
-      expect(readJsoncEntry(read(jsoncFile), ["mcp", "cavelon"])).toMatchObject({ value: { type: "local" } });
+      expect(readJsoncEntry(read(jsoncFile), ["mcp", "cavelon"])).toMatchObject({ value: { type: "local", enabled: false } });
+      expect(existsSync(path.join(openCodeProject, ".opencode", "cavelon", "installation.json"))).toBe(true);
       expect(read(jsoncFile)).toContain("// operator settings");
       expect(existsSync(path.join(openCodeProject, "opencode.json"))).toBe(false);
       expect(existsSync(path.join(openCodeProject, ".pi"))).toBe(false);
@@ -103,17 +107,17 @@ describe("OpenCode and Pi setup", () => {
     writeFileSync(file, before);
     chmodSync(file, 0o640);
     const { agent, skills, record, changes } = await setupClient("opencode", env);
-    expect(changes[0]!.target).toBe(file);
+    expect(changes[0]!.target).toBe(path.join(dir, "cavelon"));
     expect(read(file)).toContain('// personal model\r\n  "model": "internal/model"');
     expect(existsSync(agent.mcp.file)).toBe(false);
-    expect(record.mcp?.file).toBe(file);
+    expect(record.native?.directory).toBe(path.join(dir, "cavelon"));
     if (process.platform !== "win32") expect(statSync(file).mode & 0o777).toBe(0o640);
     const rerun = await planAgent(agent, {}, env, installed, skills);
     expect(rerun.changes.every(change => change.outcome === "unchanged")).toBe(true);
     const check = await checkAgent(agent, env, record);
     expect(check.ok, check.details.join("\n")).toBe(true);
     expect(check.servers).toEqual([installed]);
-    expect(check.details).toContain(`the "cavelon" tools server is in ${file}`);
+    expect(check.details.some(detail => detail.includes("native tools and person-dialog files"))).toBe(true);
     const moved = agentByName(setupAgents({ ...env, OPENCODE_CONFIG_DIR: path.join(sb.home, "later override") }), "opencode")!;
     await removeAgent(moved, record, env, skills, new Set());
     expect(readJsoncEntry(read(file), ["mcp", "cavelon"])).toMatchObject({ value: undefined });

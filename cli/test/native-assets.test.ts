@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, cpSync, mkdirSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, cpSync, mkdirSync, symlinkSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -14,11 +14,21 @@ import { KIT_VERSION } from "../src/version.js";
 // Dialogs in this suite are simulated. Actual person UI qualification is separate.
 let root: string;
 let assets: string;
+let buildScript: string;
 beforeAll(() => {
   root = mkdtempSync(path.join(os.tmpdir(), "cavelon-native-test-"));
   assets = path.join(root, "standalone-assets");
-  execFileSync(process.execPath, ["scripts/build-native-assets.mjs"], { timeout: 30_000 });
-  cpSync(path.resolve("dist/native-assets"), assets, { recursive: true });
+  // Other suites consume dist/ during setup; deterministic build checks use a private copy.
+  const cli = path.join(root, "build", "cli");
+  mkdirSync(path.join(cli, "scripts"), { recursive: true });
+  cpSync(path.resolve("src"), path.join(cli, "src"), { recursive: true });
+  cpSync(path.resolve("package.json"), path.join(cli, "package.json"));
+  cpSync(path.resolve("../LICENSE"), path.join(root, "build", "LICENSE"));
+  buildScript = path.join(cli, "scripts", "build-native-assets.mjs");
+  cpSync(path.resolve("scripts/build-native-assets.mjs"), buildScript);
+  symlinkSync(path.resolve("node_modules"), path.join(cli, "node_modules"), process.platform === "win32" ? "junction" : "dir");
+  execFileSync(process.execPath, [buildScript], { timeout: 30_000 });
+  cpSync(path.join(cli, "dist", "native-assets"), assets, { recursive: true });
 });
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 const nativeImport = (name: string) => import(pathToFileURL(path.join(assets, name + ".mjs")).href);
@@ -29,14 +39,14 @@ it("refuses an output-path argument before removing any personal file", () => {
   mkdirSync(personal);
   const sentinel = path.join(personal, "keep.txt");
   writeFileSync(sentinel, "personal file");
-  expect(() => execFileSync(process.execPath, ["scripts/build-native-assets.mjs", personal], { timeout: 30_000, stdio: "pipe" })).toThrow();
+  expect(() => execFileSync(process.execPath, [buildScript, personal], { timeout: 30_000, stdio: "pipe" })).toThrow();
   expect(readFileSync(sentinel, "utf8")).toBe("personal file");
 });
 
 it("ships deterministic self-contained native entry points with pinned dependency licenses", async () => {
   const other = path.join(root, "second-render");
-  execFileSync(process.execPath, ["scripts/build-native-assets.mjs"], { timeout: 30_000 });
-  cpSync(path.resolve("dist/native-assets"), other, { recursive: true });
+  execFileSync(process.execPath, [buildScript], { timeout: 30_000 });
+  cpSync(path.resolve(path.dirname(buildScript), "../dist/native-assets"), other, { recursive: true });
   const manifest = JSON.parse(readFileSync(path.join(assets, "manifest.json"), "utf8"));
   expect(manifest).toMatchObject({ format: 1, version: KIT_VERSION, entries: { opencode: ["opencode-server.mjs", "opencode-tui.mjs"], pi: ["pi-extension.mjs"] } });
   expect(readdirSync(assets).sort()).toEqual(readdirSync(other).sort());

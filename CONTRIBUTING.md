@@ -30,8 +30,8 @@ cd cli
 npm ci --ignore-scripts      # dependencies' install scripts never run
 npm run typecheck
 npm run lint
-npm test
 npm run build && node dist/cli.js --help
+npm test
 ```
 
 Use the clone's build from anywhere with `npm install -g .` in `cli/` (it links

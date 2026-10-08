@@ -9,29 +9,37 @@ CLI, the skills and the plugin.
 
 ### Added
 
+- Native OpenCode/Pi installation through setup and project init, with owned
+  assets/profiles, separate OpenCode server/TUI references, checking, updates
+  and removal. Only the duplicate Cavelon built-in entry is disabled. Personal
+  settings are preserved; edited assets/references, aliases and concurrent
+  config changes are refused. Failed writes roll back. Verified user/project
+  ownership avoids duplicate native tools. Actual packaged-client dialogs and
+  final client/platform qualification remain open (#201).
+
 - Portable project profiles for the native adapter build assets and scoped
   plugin/extension-list editing for their installer. OpenCode can load its
   adjacent profile without an absolute plugin-option path. Project native
   entry points refuse a different workspace; Pi still requires project trust.
-  Automatic native installation remains in development (#201).
+  Native installation uses these profiles and edits (#201).
 
 - Versioned, dependency-bundled OpenCode/Pi native adapter build assets, with
   hashes and redistribution licenses in npm and embedded standalone builds.
   Packaged-runtime checks cover session-bound native calls, headless refusal,
   cancellation, duplicate UI ownership and complete long Unicode previews.
-  Native setup/init installation and client/platform qualification remain in
-  development (#201).
+  Final client/platform qualification remains in development (#201).
 
 - Native person-approval transport foundation and the verified OpenCode/Pi
-  prototype design (#193). Native client installation and release qualification
-  remain in development; existing built-in MCP setup keeps its terminal route.
+  prototype design (#193). Native installation is added separately; final
+  release qualification remains in development. Built-in MCP keeps its
+  terminal route when used without the native adapters.
 
 - Project and user MCP/skill setup for OpenCode and Pi, including check, update
   and removal. OpenCode preserves existing JSONC configuration and command
   arrays; Pi uses native directories and honors `PI_CODING_AGENT_DIR`. Conflicts
   and managed overrides are reported without replacing personal entries.
-  Built-in MCP guarded changes still require the person's own terminal;
-  native dialog approval is qualified separately (#198, #193).
+  Built-in MCP guarded changes require the person's own terminal; the native
+  adapters add dialogs through the client extension systems (#198, #193, #201).
 
 ### Fixed
 

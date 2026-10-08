@@ -459,12 +459,17 @@ cavelon init --agents cursor,copilot
 | `copilot` | `.vscode/mcp.json` |
 | `gemini` | `.gemini/settings.json` |
 | `kiro` | `.kiro/settings/mcp.json` |
-| `opencode` | existing `opencode.json[c]` or `.opencode/opencode.json[c]`, otherwise `opencode.json` |
-| `pi` | `.pi/mcp.json` and native `.pi/skills/cavelon-*/` |
+| `opencode` | reuse verified user native setup, or native server/TUI references, a disabled duplicate MCP entry and portable `.opencode/cavelon/` assets |
+| `pi` | reuse verified user native setup, or `.pi/mcp.json`, a native extension reference in `.pi/settings.json`, portable `.pi/cavelon/` assets and `.pi/skills/cavelon-*/` |
 | `other` | no MCP entry; the shared skills and `AGENTS.md` |
 
 OpenCode/Pi setup is under **Unreleased**; see their install pages for the
-verified scope and the separate native approval qualification.
+verified scope and final native approval qualification. Their adapters and
+protocol dependencies are bundled. Setup/init/check/update/removal track exact
+configuration bindings, references and asset hashes; personal edits are
+preserved. For offline use, put the installed executable on PATH before setup
+or init. See [OpenCode](install/opencode.md) and [Pi](install/pi.md) for config
+precedence, trust, disabled duplicate entries and the person-terminal fallback.
 
 Every value also writes the skills to `.agents/skills/cavelon-*/` and
 `.claude/skills/cavelon-*/`, marked as generated, and a short Cavelon block in

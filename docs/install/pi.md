@@ -1,102 +1,132 @@
 # Pi
 
-Current Pi has built-in MCP and a native extension system. Cavelon setup uses
-the built-in configuration and native skill directories. It does not install a
-replacement MCP extension. Native form approval is being qualified separately
-in [#201](https://github.com/goodguys-gmbh/cavelon-dev-kit/issues/201), following
-the completed [native prototype](../native-approval-adapters.md#prototype-evidence).
+Cavelon setup installs a dependency-bundled native extension and all four
+shared skills. The extension owns Cavelon's MCP connection and carries its
+exact-change person dialog through Pi's UI. It disables only Cavelon's duplicate
+built-in MCP entry; other MCP servers keep using Pi's built-in implementation.
 
-These setup additions are under **Unreleased**. They are not in 0.1.15.
+These additions are **Unreleased** and are not in 0.1.15. Packaged-client
+qualification remains in [#201](https://github.com/goodguys-gmbh/cavelon-dev-kit/issues/201),
+following the completed [native prototype](../native-approval-adapters.md#prototype-evidence).
 
 ## Install
 
-With Pi and Cavelon already installed, run in your own terminal:
+The qualification target is `@earendil-works/pi-coding-agent` 1.1.0. Provision
+Pi and Cavelon, then run in your own terminal:
 
 ```bash
 cavelon setup --agents pi
 ```
 
-Setup writes `~/.pi/agent/mcp.json` and `~/.pi/agent/skills/`, honoring
-`PI_CODING_AGENT_DIR`. A solution's `cavelon init --agents pi` writes
-`.pi/mcp.json` and `.pi/skills/`, alongside the existing shared skill copies.
-It does not add other new clients' directories. The four authoritative skills
-and their resources are the same in every destination.
+Setup honors `PI_CODING_AGENT_DIR`, otherwise using `~/.pi/agent`. It adds its
+extension to `settings.json`, records a disabled Cavelon entry in `mcp.json`,
+and puts bundled adapters, licenses, profile and ownership record in `cavelon/`.
+Shared skills and their resources go into `skills/`. Plain JSON is required;
+comments, malformed files and personal Cavelon entries are refused. Other
+servers, extensions and existing file permissions remain intact.
 
-Pi requires plain JSON for `mcp.json`; setup refuses comments, malformed files
-and personal Cavelon entries rather than rewriting them. Other servers and
-existing file permissions stay intact. The installed/offline entry is:
+A solution's `cavelon init --agents pi` reuses a verified user native
+installation. Otherwise it creates `.pi/mcp.json`, a reference in
+`.pi/settings.json`, portable `.pi/cavelon/` assets and `.pi/skills/`, alongside
+the shared skill copies. It adds no other new client's directories. Where user
+and project native adapters coexist, the trusted project adapter owns the
+workspace and the user adapter yields. **Only the person grants Pi project
+trust**; setup does not grant it.
+
+Setup and init prefer `cavelon` on PATH, otherwise the npm release line with
+platform-aware spawning. For offline use, provision the standalone Cavelon
+executable on PATH **before** setup/init. Native dependencies are bundled;
+loading the adapter requires no package fetch. The client and model runtime
+must also be provisioned beforehand. Coding-model and instance execution
+providers are separate settings; setup does not install or select them.
+
+With the installed executable, the recorded entry looks like this:
 
 ```json
 {
   "mcpServers": {
-    "cavelon": { "command": "cavelon", "args": ["mcp"] }
+    "cavelon": { "command": "cavelon", "args": ["mcp"], "enabled": false }
   }
 }
 ```
 
-Setup prefers the installed executable, otherwise the pinned npm release line
-with platform-aware spawning. Init writes the npm fallback and keeps a
-recognized installed or alternate-platform entry during updates. For an
-offline project, use the entry above. Provision Pi, its model runtime and
-Cavelon before blocking external egress. Coding-model and instance execution
-providers are configured separately; setup does not install or select them.
+Its hash binds the native profile. Do not re-enable the duplicate or edit the
+recorded command manually: a changed binding refuses startup. Installing the
+executable and repeating setup/init updates a still-owned entry safely.
 
 ## Log in
 
-Log in once in your own terminal with
-`cavelon login --instance https://cavelon.example.com`; do not put the token in
-Pi settings.
+Run `cavelon login --instance https://cavelon.example.com` once in your own
+terminal. Credentials stay in Cavelon's store, never in Pi settings, adapter
+profiles or the repository.
 
 ## Check
 
-Run `cavelon setup --check --agents pi`, then check `/mcp` in Pi
-and load `/skill:cavelon-loop`. Pi reads project MCP only after **the person
-grants project trust**; a project server replaces a user server with the same
-name. Setup does not grant trust. Old `/mcp` replacement extensions can
-override the built-in implementation: inspect your loaded extensions in Pi
-and resolve that conflict yourself. File checks cannot certify arbitrary
-extensions or a native approval dialog.
+Run `cavelon setup --check --agents pi` and reload Pi. The file check verifies
+assets, ownership, references, server startup and login; it does not certify
+actual UI loading. In Pi, check that native `mcp__cavelon__` tools appear and
+invoke a read tool such as `mcp__cavelon__whoami`. The duplicate built-in Cavelon
+entry should be disabled in `/mcp`. Load `/skill:cavelon-loop` and check that all
+four skills are available.
+
+Old replacement `/mcp` extensions can conflict with native Cavelon tools.
+Inspect loaded extensions and resolve that conflict yourself; setup does not
+install, disable or grant trust to another extension. A root session serving
+several child solutions passes `solution_dir` on every tool call, including
+preview and confirmation; see [folder selection](../mcp.md#several-solutions-in-one-repository).
 
 ## Approval
 
-Pi's built-in MCP path lacks Cavelon's form approval. For every guarded change,
-the agent shows the returned exact command and stops; the person runs it in
-their own terminal outside the agent's control. Automatic tool permissions do
-not replace this answer. A native extension must pass the fresh-person-dialog
-checks before native approval is claimed. Database passwords and **Allow write
-queries** remain person-only in the Admin.
+Each guarded change displays its preview and requires a fresh answer in Pi's
+Cavelon confirmation dialog. Decline, cancel, timeout and an unavailable UI
+send no guarded mutation. Missing UI returns the exact command for your own
+terminal; the agent shows it and stops that change. Automatic tool permissions
+and remembered answers do not replace your answer. The instance binds the
+confirmation to the exact request; it does not verify that a person answered.
+Database passwords and **Allow write queries** remain person-only in the Admin.
 
 ## Guarded shell
 
 Pi 1.1.0 exposes `PI_SESSION_ID` to its bash tool, which Cavelon recognizes.
-If session-environment exposure is disabled, launch Pi with a process-scoped
-`CAVELON_AGENT=1 pi` on POSIX, or set `$env:CAVELON_AGENT='1'` only in the
-PowerShell terminal used to launch Pi. Never set the marker globally: the
-person's separate terminal must remain usable. Environment detection prevents
-mistakes; it is not an authorization boundary.
+If session-environment exposure is disabled, launch with a process-scoped
+`CAVELON_AGENT=1 pi` on POSIX. In PowerShell set `$env:CAVELON_AGENT='1'` only in
+the terminal used to launch Pi. Never set the marker globally: your separate
+terminal must remain usable. Environment detection prevents mistakes; it is
+not an authorization boundary.
 
 ## Update
 
-Update Cavelon and repeat `cavelon setup --agents pi`. In each existing solution
-run `cavelon init --update`, then reload Pi.
+Update Cavelon, repeat `cavelon setup --agents pi`, then run
+`cavelon init --update` in existing solutions and reload Pi. Owned assets and
+references update together. Edited assets, references and MCP entries are
+preserved and reported instead of overwritten. Moved projects keep their
+relative profiles. If `PI_CODING_AGENT_DIR` changes, remove the recorded user
+installation before setting up the new location.
 
 ## Remove
 
-Remove user integration with
-`cavelon setup --remove --agents pi`; personal MCP edits remain. Review project
-files in the repository when removing project integration.
+`cavelon setup --remove --agents pi` removes the recorded user adapter, its
+exact extension reference, Cavelon MCP entry and generated user skills.
+Original recorded paths are used even after an override changes. Personal
+settings and unrelated files remain. Edited native bindings or assets refuse
+removal so a surviving reference cannot lose its dependency; review the
+conflict manually.
+
+Project integration is tracked in the repository. Review and remove only its
+Cavelon extension reference, disabled MCP entry, generated adapter directory
+and skill copies, keeping the other settings and extensions.
 
 ## Qualification
 
-Qualification candidate: `@earendil-works/pi-coding-agent` 1.1.0. On Linux its
-released skill loader found all four generated native skills, and its native
-MCP runtime listed 64 tools and invoked `whoami` against a fake instance. The
-bash tool's marker and native extension loader were also exercised without
-model calls. A separate native prototype completed actual person No/Yes
-dialogs against the fake instance. Packaged native-dialog installation,
-full journeys and native Windows/WSL qualification remain outstanding;
-simulated protocol tests do not replace those person interactions.
+On Linux, Pi 1.1.0's skill loader found all four skills, its native MCP runtime
+listed tools and invoked `whoami` against a fake instance, and its bash marker
+and released extension loader were exercised without model calls. A separate
+prototype completed actual person No/Yes dialogs against the fake instance.
+Packaged lifecycle and simulated protocol tests cover ownership, rollback,
+project precedence and refusal. Actual packaged-client person dialogs, full
+journeys and native Windows/WSL qualification remain open; simulated tests do
+not replace those interactions.
 
-Primary client references:
+Primary references:
 [MCP and trust](https://github.com/earendil-works/pi/blob/1cedd32724abfcb0915f76cc61b6827e2c16dbad/packages/coding-agent/docs/mcp.md),
 [extensions](https://github.com/earendil-works/pi/blob/1cedd32724abfcb0915f76cc61b6827e2c16dbad/packages/coding-agent/docs/extensions.md).

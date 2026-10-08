@@ -261,6 +261,20 @@ new folder (`claude plugin marketplace remove cavelon-dev-kit`, then add the
 new folder and install again). `cavelon --version` still names the online
 update command; offline, the next bundle is the update.
 
+## Native OpenCode and Pi adapters (Unreleased)
+
+The standalone executable carries the same dependency-bundled native adapter
+assets as npm. With the executable already on PATH, `cavelon setup --agents
+opencode,pi` installs those assets and skills locally. Project init can reuse
+that verified user installation or write portable project profiles. No native
+dependency is downloaded while setup installs the bundled files.
+
+Provision the selected client and its model runtime separately before blocking
+external egress. The coding-model provider and the Cavelon instance's execution
+provider are separate settings. An offline artifact alone does not configure
+either one. Final real-client offline qualification remains open; see
+[OpenCode](install/opencode.md) and [Pi](install/pi.md).
+
 ## For an instance that serves the bundle
 
 An instance can keep the bundles beside itself and offer the one that fits its
@@ -279,5 +293,5 @@ version ([Which bundle fits an instance](#which-bundle-fits-an-instance)):
    platform's executable), extract them and check each against the manifest's
    size and SHA-256 first.
 
-Today's instances do not serve a bundle yet; until one does, bring the bundle
-in as described above.
+Until your instance serves a bundle, bring a verified copy in as described
+above.
