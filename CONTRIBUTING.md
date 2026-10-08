@@ -87,6 +87,11 @@ environment without coding-agent markers. Agent login refusal is checked
 separately; inheriting the developer's agent marker would refuse the fixture
 before it can compare the two stores.
 
+The native-asset determinism case has a 60-second build/import budget; its
+build subprocess stays bounded at 30 seconds. This allows a slow Windows
+runner to finish the byte/license and module checks within a consistent
+deadline, without changing the ordinary suite timeout.
+
 ### The plugin packages
 
 `plugin/` is the one source of the plugin. Claude Code and Codex install it as
