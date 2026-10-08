@@ -62,7 +62,7 @@ jobs:
       - name: Run two ordinary draft workflows on scripted loopback fixtures
         env:
           CAVELON_QUALIFY_CLIENT: ${{ matrix.client }}
-        run: npx vitest run test/coding-client-runtime.test.ts
+        run: node node_modules/vitest/vitest.mjs run test/coding-client-runtime.test.ts
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:

@@ -9,9 +9,16 @@ import { fileURLToPath } from 'node:url';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const pins = JSON.parse(await readFile(path.join(repo, 'cli/test/fixtures/coding-client-runtimes.json'), 'utf8'));
-const client = process.argv[2];
-const pin = Object.hasOwn(pins, client) ? pins[client] : undefined;
-if (!pin) throw new Error('Choose cline, kilo, goose or omp.');
+// Assign only literal supported names: CLI input is never a path or command.
+let client;
+switch (process.argv[2]) {
+  case 'cline': client = 'cline'; break;
+  case 'kilo': client = 'kilo'; break;
+  case 'goose': client = 'goose'; break;
+  case 'omp': client = 'omp'; break;
+  default: throw new Error('Choose cline, kilo, goose or omp.');
+}
+const pin = pins[client];
 const runtime = path.resolve(process.env.CAVELON_CLIENT_RUNTIME ?? path.join(repo, '.wt/client-runtime', client));
 const evidence = path.join(repo, '.wt/coding-client-runtime');
 await mkdir(runtime, { recursive: true });
@@ -54,7 +61,7 @@ if (pin.package) {
   const extracted = path.join(runtime, 'extracted');
   await mkdir(extracted, { recursive: true });
   // The Windows system tar is bsdtar and reads ZIP; Git Bash's tar does not.
-  const tar = process.platform === 'win32' ? path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32/tar.exe') : 'tar';
+  const tar = process.platform === 'win32' ? path.join(process.env.SystemRoot ?? 'C:/Windows', 'System32/tar.exe') : 'tar';
   execute(tar, ['-xf', archive, '-C', extracted]);
   const binaryName = process.platform === 'win32' ? 'goose.exe' : 'goose';
   async function findBinary(folder) {
