@@ -7,6 +7,7 @@ import { callStable } from "../invoke.js";
 import { cavelonCommand, fill } from "../printed.js";
 import { isUuid } from "../session.js";
 import { accessFor, requirePersonForIdentityChoice } from "../access.js";
+import { databaseLimitRows, databaseLimitsText, type DatabaseTenantLimits } from "../database-limits.js";
 
 /**
  * `cavelon db`: what the instance offers for database connections (its
@@ -78,6 +79,7 @@ interface InstanceOffer {
   network: { egress_ips: string[]; connections_per_process: number };
   write_queries?: boolean;
   max_affected_rows_limit?: number;
+  limits?: DatabaseTenantLimits | null;
 }
 
 interface QueryParameter {
@@ -321,11 +323,12 @@ function firewallSentence(offer: InstanceOffer): string {
 
 export const dbInstance: CommandSpec = {
   name: "db instance",
-  summary: "What this instance offers for database connections: dialects, firewall addresses and write-query support where published.",
+  summary: "Database dialects, firewall addresses, write-query support and the tenant's caps and counts where published.",
   description:
     "Read it before a database connection is set up: a connection of a dialect the instance does not run can be saved, but\n" +
     "its test and queries answer unavailable, and the customer's database must let the instance's egress addresses in. An\n" +
-    "instance older than this route says only its dialects, in its capabilities.",
+    "instance older than this route says only its dialects, in its capabilities.\n" +
+    "Published limits show current connection/query counts, effective caps, their source and the platform default; missing counts stay missing.",
   readOnly: true,
   idempotent: true,
   mcpTool: "db_instance",
@@ -347,6 +350,7 @@ export const dbInstance: CommandSpec = {
       };
     }
     const firewall = firewallSentence(offer);
+    const counts = databaseLimitRows(offer.limits);
     return {
       data: { published: true, ...offer, firewall },
       text: [
@@ -359,6 +363,7 @@ export const dbInstance: CommandSpec = {
         ]),
         "",
         firewall,
+        ...(counts.length ? ["", databaseLimitsText(counts)] : []),
         ...(offer.runnable_dialects.length ? [] : ["", "This instance runs no database dialect: a connection can be saved, but its test and queries answer unavailable."]),
       ].join("\n"),
     };

@@ -13,6 +13,11 @@ CLI, the skills and the plugin.
 
 ### Added
 
+- Published database connection/query limits and current counts in `db instance`
+  and `limits`, with source, platform defaults and key/source filtering.
+  Operator tenant overrides work when metadata publishes only `tenant_change`;
+  an omitted explicit tenant now gives actionable guidance. Refreshed response
+  schemas, both creation-refusal codes and database-limit documentation (#221).
 - Kilo-native CLI/editor settings and skills, preserved compatible OpenCode
   and operator configurations, ownership-based lifecycle and bundled CLI
   server/TUI approval plugins. Effective binding changes refuse tool dispatch;

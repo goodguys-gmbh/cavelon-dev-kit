@@ -678,7 +678,7 @@ Read what the instance offers for database connections, and the connections, sav
 
 ### cavelon db instance
 
-What this instance offers for database connections: dialects, firewall addresses and write-query support where published.
+Database dialects, firewall addresses, write-query support and the tenant's caps and counts where published.
 
 **read-only** · MCP tool: `db_instance`
 
@@ -686,7 +686,7 @@ What this instance offers for database connections: dialects, firewall addresses
 cavelon db instance
 ```
 
-Read it before a database connection is set up: a connection of a dialect the instance does not run can be saved, but its test and queries answer unavailable, and the customer's database must let the instance's egress addresses in. An instance older than this route says only its dialects, in its capabilities.
+Read it before a database connection is set up: a connection of a dialect the instance does not run can be saved, but its test and queries answer unavailable, and the customer's database must let the instance's egress addresses in. An instance older than this route says only its dialects, in its capabilities. Published limits show current connection/query counts, effective caps, their source and the platform default; missing counts stay missing.
 
 Examples:
 
@@ -1031,7 +1031,7 @@ Show the instance's limits for this tenant, who can change each, and the tenant'
 cavelon limits [options]
 ```
 
-Read them before planning a solution: upload sizes and file types, run and tool limits, timeouts, rate limits, licence caps. Grouped by source (tenant, platform, licence); each names who changes it (a tenant admin or the operator) and the setting. A run cap also names its origin when the instance says: a platform setting (the Admin), the environment or the default. A limit that binds only while another is on says so (the archive caps apply while archive uploads are on). Branch concurrency: the width per node, the ceiling per process, and whether branches run concurrently (and which switch is off). The tenant quotas include the monthly Processing Step cap with this billing month's use, where the instance publishes it. A limit the instance does not list does not bind there. An instance older than the published limits lists none.
+Read them before planning a solution: upload sizes and file types, run and tool limits, timeouts, rate limits, licence caps. Grouped by source (tenant, platform, licence); each names who changes it (a tenant admin or the operator) and the setting. A run cap also names its origin when the instance says: a platform setting (the Admin), the environment or the default. A limit that binds only while another is on says so (the archive caps apply while archive uploads are on). Branch concurrency: the width per node, the ceiling per process, and whether branches run concurrently (and which switch is off). The tenant quotas include the monthly Processing Step cap with this billing month's use, where the instance publishes it. Database connection/query limits include current counts from the connector where published, including counts above a lowered cap. A limit the instance does not list does not bind there. An instance older than the published limits lists none.
 
 | Option | Description | MCP |
 |---|---|---|
@@ -1056,7 +1056,7 @@ Change a limit through the operation the instance names: a tenant's, or an opera
 cavelon limits set <key> <value> [options]
 ```
 
-Reads the limit's published change (operation, body field, bounds, permissions, roles) and checks the value against it before sending. Without --confirm, shows the old and new value, the operation and who may run it, and changes nothing. Also changes the tenant quotas in tenant_quotas.changes (the inference budget, the monthly Processing Step cap). An operator's change (a run cap) is sent only with a personal access token in Platform mode of a role it names, without X-Tenant-Id; --tenant &lt;id\|slug&gt; then sets one tenant's own run cap. An environment or licence limit, a value out of bounds, an instance that does not publish how to change the limit, and a credential without the permission or the role are refused before anything is sent. Propose the change to the person; never raise a limit on your own. A coding agent cannot confirm it: over MCP the client asks the person, and from an agent's shell the person runs the confirm in their own terminal.
+Reads the limit's published change (operation, body field, bounds, permissions, roles) and checks the value against it before sending. Without --confirm, shows the old and new value, the operation and who may run it, and changes nothing. Also changes the tenant quotas in tenant_quotas.changes (the inference budget, the monthly Processing Step cap). An operator's change (a run cap) is sent only with a personal access token in Platform mode of a role it names, without X-Tenant-Id; --tenant &lt;id\|slug&gt; then sets one tenant's override, including database connection/query caps. An environment or licence limit, a value out of bounds, an instance that does not publish how to change the limit, and a credential without the permission or the role are refused before anything is sent. Propose the change to the person; never raise a limit on your own. A coding agent cannot confirm it: over MCP the client asks the person, and from an agent's shell the person runs the confirm in their own terminal.
 
 | Argument | Description |
 |---|---|

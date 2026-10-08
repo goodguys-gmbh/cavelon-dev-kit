@@ -43,6 +43,9 @@ their requests and let the instance decide.
 
 ## Checked before sending
 
+Database creation limits are checked by the instance, including in an import
+preview; see [Database connections and queries](#database-connections-and-queries).
+
 - **`kb upload`** refuses a file larger than `kb_upload_max_file_size_mb` or of
   a type outside `kb_upload_allowed_extensions` (exit 3), naming the files, the
   limit, and who changes it. `--dry-run` runs the same checks and uploads
@@ -59,13 +62,48 @@ their requests and let the instance decide.
   the limits an earlier command cached for the same tenant, so it stays
   offline; each tenant's limits are cached apart.
 
+## Database connections and queries
+
+When the database connector is on, the instance publishes
+`database_connections_per_tenant` and `database_queries_per_tenant` in its
+limits. `cavelon db instance` and `cavelon limits` show effective caps, current
+counts, their source and the platform defaults. `limits --key` and `--source`
+filter those rows too; JSON includes `database_limits` where counts are
+published. Older instances omit them, and an unreadable count does not hide
+the metadata limits.
+
+The defaults are 10 connections and 200 queries. Only new entries use the
+remaining allowance: existing connections and queries keep working above a
+lowered cap, and changing or deleting them remains possible. A connection
+creation answers `database_connection_limit_reached` at the cap; a query
+creation or import preview answers `database_query_limit_reached`. Read either
+code with `cavelon explain <code>`, remove entries no longer needed, or ask the
+operator to raise the cap before retrying the preview.
+
+A platform admin or superadmin with `limits.manage` can set one tenant's own
+cap using a personal access token in Platform mode. Tenant Owners cannot
+raise these caps. An explicit `--tenant` is required because these entries
+publish only a `tenant_change`, with no platform runtime `change`:
+
+```bash
+cavelon limits set database_connections_per_tenant 20 --tenant acme
+cavelon limits set database_queries_per_tenant 250 --tenant acme
+```
+
+Review the preview and confirm each change through the person's dialog or
+own terminal. `none` resets that tenant's override to the platform default.
+The instance publishes the allowed bounds (currently 1–1000 connections and
+1–10000 queries); the kit checks them before sending. This changes neither
+the connection password nor **Allow write queries**, which remain person-only
+Admin actions. See [Connect a database](connect-a-database.md).
+
 ## Who may change what
 
 | Who | What | How |
 |---|---|---|
 | **A tenant admin** | the tenant's upload defaults, archive uploads and caps, agent defaults, rate limits, the monthly inference budget | `cavelon limits set` with their personal access token or a tenant API key with the permission |
 | **A Tenant Owner** | additionally the monthly Processing Step cap | `cavelon limits set monthly_processing_step_cap …` |
-| **The instance operator** | platform values, the run caps, a single tenant's run cap, whether a tenant's branches run concurrently | the Admin, or `cavelon limits set … --tenant <tenant>` with a Platform-mode token |
+| **The instance operator** | platform values, the run caps, a single tenant's run cap or database connection/query caps, whether a tenant's branches run concurrently | the Admin, or `cavelon limits set … --tenant <tenant>` with a Platform-mode token |
 | **Nobody at runtime** | values from the licence or the instance's environment, without a published change | `limits` names the setting; the operator changes the deployment |
 
 The instance decides who holds which permission. `cavelon` reads the

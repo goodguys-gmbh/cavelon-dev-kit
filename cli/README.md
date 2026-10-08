@@ -204,6 +204,14 @@ release.
 
 ### Limits
 
+`cavelon db instance` and `cavelon limits` show published database connection
+and query caps, current counts, their source and platform defaults. Missing
+counts on older instances are left out. An operator with `limits.manage`
+uses a Platform-mode personal access token to preview an override with
+`cavelon limits set database_queries_per_tenant 250 --tenant acme` and sends
+it after the person's confirmation. `none` resets the override. Tenant Owners
+cannot raise these caps. See [Database limits](https://github.com/goodguys-gmbh/cavelon-dev-kit/blob/main/docs/limits.md#database-connections-and-queries).
+
 `cavelon limits` shows what the instance allows this tenant, from the `limits`
 it publishes in `/api/v1/meta/capabilities`: upload size and file types, agent
 turns and tool calls, timeouts, rate limits, the licence's cap on solutions.

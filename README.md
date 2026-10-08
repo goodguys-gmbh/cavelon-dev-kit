@@ -8,6 +8,9 @@ through the Admin.
   and activates solutions. It learns each instance's API, package schema, error
   codes and docs from what the instance publishes, so it works with every
   Cavelon version without an update.
+- **Database limits**: `cavelon db instance` and `cavelon limits` show the
+  tenant's connection/query caps and counts where published. An operator can
+  set a tenant override in Platform mode; see [Database limits](docs/limits.md#database-connections-and-queries).
 - **The Cavelon plugin** adds four skills that teach the agent the development
   loop, and the `cavelon` MCP server. Claude Code and Codex install it from this
   repository, Gemini CLI as an extension, and each release carries it as a

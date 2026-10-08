@@ -19,6 +19,7 @@ import {
   type QuotaValue,
 } from "../limits.js";
 import { cavelonCommand, fill } from "../printed.js";
+import { databaseLimitsText, readDatabaseLimits } from "../database-limits.js";
 
 /**
  * `cavelon limits`: what this instance lets the tenant's solution do, from
@@ -72,6 +73,7 @@ export const limits: CommandSpec = {
     "A limit that binds only while another is on says so (the archive caps apply while archive uploads are on).\n" +
     "Branch concurrency: the width per node, the ceiling per process, and whether branches run concurrently (and which switch is off).\n" +
     "The tenant quotas include the monthly Processing Step cap with this billing month's use, where the instance publishes it.\n" +
+    "Database connection/query limits include current counts from the connector where published, including counts above a lowered cap.\n" +
     "A limit the instance does not list does not bind there. An instance older than the published limits lists none.",
   readOnly: true,
   idempotent: true,
@@ -104,6 +106,7 @@ export const limits: CommandSpec = {
     const unknown = keys.filter((k) => !published.byKey.has(k));
     if (unknown.length) ctx.warn(`This instance lists no limit ${unknown.join(", ")}; it does not bind here.`);
     const groups = groupBySource(values);
+    const databaseLimits = await readDatabaseLimits(ctx, values.map(value => value.key));
 
     // The quotas are tenant objects with a use; filtering by limit key or source leaves them out.
     const quotas = keys.length || source ? undefined : await readQuotas(ctx, published);
@@ -141,6 +144,7 @@ export const limits: CommandSpec = {
     }
     if (branches) text += `\n\nBranch concurrency (fan-outs and Map loops):\n${branchConcurrencyText(branches)}`;
     if (!groups.length) text = keys.length || source ? "No published limit matches." : "This instance publishes no binding limit.";
+    if (databaseLimits.length) text += `\n\n${databaseLimitsText(databaseLimits)}`;
     if (quotas || quotaValues.length) {
       const rows = [
         ...(quotas?.items ?? []).map((q) => ({ quota: q.key, use: quotaUse(q), state: typeof q.details.state === "string" ? q.details.state : "", close: q.near ? "close to the quota" : "" })),
@@ -161,7 +165,7 @@ export const limits: CommandSpec = {
       if (owner.length) text += `; ${owner.join(", ")} only a Tenant Owner (settings.manage)`;
     }
     if (operatorChangeable.length) {
-      text += `\n\nAn operator changes ${operatorChangeable.join(", ")} with the same command and a personal access token in Platform mode of the role the change names; --tenant <id|slug> sets the tenant (one tenant's own run cap, its flag).`;
+      text += `\n\nAn operator changes ${operatorChangeable.join(", ")} with the same command and a personal access token in Platform mode of the role the change names; --tenant <id|slug> selects one tenant's override or flag.`;
     }
     const pages = [...new Set(values.map((v) => docsPage(v.docs)).filter(Boolean))];
     if (pages.length) text += `\n\nHow to change one: ${cavelonCommand("docs", "get", fill("page"))} (${pages.join(", ")})`;
@@ -179,6 +183,7 @@ export const limits: CommandSpec = {
         quota_values: quotaValues.map(({ near: isNear, ratio, ...q }) => ({ ...q, ratio, near: isNear })),
         near: near.map(({ text: _text, ...q }) => q),
         branch_concurrency: branches ?? null,
+        ...(databaseLimits.length ? { database_limits: databaseLimits } : {}),
       },
       text,
     };

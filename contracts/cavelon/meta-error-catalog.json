@@ -3867,6 +3867,20 @@
       "message": "A write query (INSERT, UPDATE, DELETE, or a SQL Server procedure that writes) did not run, a test run's dry run included, because its connection does not allow write queries. Nothing was changed.",
       "hint": "A tenant admin (the Owner or Admin role) switches on 'Allow write queries' on the connection under Settings → Databases. Use a separate connection with a login that may write only what the queries need; the setup guide has a script per dialect.",
       "docs": "/docs/troubleshooting/database-connections#error-codes"
+    },
+    {
+      "code": "database_connection_limit_reached",
+      "area": "database_connector",
+      "message": "The tenant holds as many database connections as its limit allows (DATABASE_CONNECTOR_MAX_CONNECTIONS_PER_TENANT, 10 by default, or the tenant's own limit a platform operator set), so a new one is refused. Existing connections keep working.",
+      "hint": "Delete a connection no query uses under Settings → Databases, or ask the platform operator to raise this tenant's limit (Settings › Limits, or max_database_connections on PATCH /api/v1/tenants/{id}/limits with limits.manage).",
+      "docs": "/docs/concepts/database-connections#limits-per-tenant"
+    },
+    {
+      "code": "database_query_limit_reached",
+      "area": "database_connector",
+      "message": "The tenant holds as many database queries as its limit allows (DATABASE_CONNECTOR_MAX_QUERIES_PER_TENANT, 200 by default, or the tenant's own limit a platform operator set), so a new one is refused, whether saved in the Admin, through a token or by a package import, whose preview names it as a blocker. Existing queries keep working.",
+      "hint": "Delete a query that is no longer needed under Settings → Databases, or ask the platform operator to raise this tenant's limit (Settings › Limits, or max_database_queries on PATCH /api/v1/tenants/{id}/limits with limits.manage), then save or preview again.",
+      "docs": "/docs/concepts/database-connections#limits-per-tenant"
     }
   ]
 }
