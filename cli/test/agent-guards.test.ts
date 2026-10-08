@@ -380,8 +380,8 @@ describe("cavelon api and the api tool, run by an agent and by a person", () => 
 
   describe("the shell of every agent cavelon setup sets up, and of others", () => {
     /**
-     * What each agent's shell tool puts into the environment of the commands
-     * it runs, as far as the kit can tell them: seen in a run where noted,
+     * Each client's marker, or its required guarded-launch environment:
+     * seen in a run where noted,
      * otherwise from the agent's source, shipped bundle or documentation.
      */
     const SHELLS: Record<string, Record<string, string>> = {
@@ -397,6 +397,8 @@ describe("cavelon api and the api tool, run by an agent and by a person", () => 
       gemini: { GEMINI_CLI: "1" },
       // Qwen Code 0.25.0's released shell execution service.
       qwen: { QWEN_CODE: "1" },
+      // Cline 3.0.70 inherits this required process-scoped launch marker in run_commands.
+      cline: { CAVELON_AGENT: "1" },
       // The Kiro IDE's agent terminal: no agent marker, TERM_PROGRAM in every terminal it opens.
       kiro: { TERM_PROGRAM: "kiro", Q_TERM_DISABLED: "1" },
       // kiro-cli: "only set when the agent is driving the command" (kiro.dev/docs/reference/built-in-tools).
