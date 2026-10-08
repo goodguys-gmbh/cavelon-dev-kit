@@ -824,3 +824,8 @@ which copy of the package schema it used.
 In the working directory, only `init`, `pull` and `apply` write, as described
 in "Solution as code", and `artifacts export`, which writes the tar it
 downloads to a new file.
+
+Unreleased: `cavelon setup --agents cline` writes shared native user settings
+and skills; `cavelon init --agents cline` copies project skills only. Guarded
+changes use the person’s own terminal. See [Cline](../docs/install/cline.md)
+for guarded launch, custom CLI paths and separate editor qualification.

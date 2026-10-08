@@ -8,7 +8,7 @@ import { homeDir } from "./paths.js";
 type Env = Record<string, string | undefined>;
 
 export interface NativeMcpConfig {
-  client: "opencode" | "pi" | "qwen";
+  client: "opencode" | "pi" | "qwen" | "cline";
   format: "native";
   file: string;
   /** Low to high precedence; never create a companion when one already exists. */
@@ -30,7 +30,7 @@ export interface NativeClient {
   aliases: string[];
   commands: string[];
   projectSkills: string[];
-  project(env?: Env): NativeMcpConfig;
+  project(env?: Env): NativeMcpConfig | undefined;
   user(env: Env, platform?: NodeJS.Platform): { mcp: NativeMcpConfig; skills: string; folders: string[] };
   notes: string[];
 }
@@ -44,6 +44,19 @@ const piConfig = (file: string): NativeMcpConfig => ({
 });
 
 const piDir = (env: Env) => env.PI_CODING_AGENT_DIR || path.join(homeDir(env), ".pi", "agent");
+
+function clineUser(env: Env): ReturnType<NativeClient["user"]> {
+  const candidate = env.HOME?.trim();
+  const profile = env.USERPROFILE?.trim() || (env.HOMEDRIVE?.trim() && env.HOMEPATH?.trim() ? `${env.HOMEDRIVE.trim()}${env.HOMEPATH.trim()}` : undefined);
+  const home = homeDir({ HOME: candidate && candidate !== "~" ? candidate : undefined, USERPROFILE: profile });
+  const dir = env.CLINE_DIR?.trim() || path.join(home, ".cline");
+  const data = env.CLINE_DATA_DIR?.trim() || path.join(dir, "data");
+  const file = env.CLINE_MCP_SETTINGS_PATH?.trim() || path.join(data, "settings", "cline_mcp_settings.json");
+  return {
+    mcp: { client: "cline", format: "native", file, files: [file], syntax: "json", keys: ["mcpServers", "cavelon"], entryFormat: "command-args", extra: { type: "stdio" } },
+    skills: path.join(dir, "skills"), folders: [...new Set([dir, data])],
+  };
+}
 
 function qwenDir(env: Env): string {
   const raw = env.QWEN_HOME;
@@ -117,6 +130,16 @@ export const NATIVE_CLIENTS: NativeClient[] = [
     notes: [
       "Qwen Code CLI 0.25.0 reads native Cavelon skills and MCP settings; project settings depend on project trust. System MCP policies and personal servers are preserved.",
       "This client does not advertise MCP form elicitation. Guarded changes return a preview and a command for the person's own terminal; tool permission approval and automatic modes cannot confirm the Cavelon change.",
+    ],
+  },
+  {
+    name: "cline", label: "Cline CLI / current VS Code extension", aliases: ["cline-cli", "cline-vscode"], commands: ["cline"], projectSkills: [".cline/skills"],
+    project: () => undefined,
+    user: clineUser,
+    notes: [
+      "Cline CLI 3.0.70 and VS Code extension 4.1.23 use shared user MCP settings; project init copies native skills only. Run cavelon setup --agents cline for the MCP entry. Older editor profiles and other surfaces require separate verification.",
+      "Set the same absolute CLINE_DIR, CLINE_DATA_DIR and CLINE_MCP_SETTINGS_PATH overrides for setup and the CLI. Mirror CLI --config / --data-dir in setup's environment. The editor's compatibility UI retains legacy path handling: use default shared paths and check its settings and skills independently. Setup does not migrate older editor profiles.",
+      "This client's MCP transport does not advertise form elicitation. Guarded changes return an exact command for the person's own terminal; automatic tool approval cannot confirm the change. Launch the coding client with CAVELON_AGENT=1 so its shell commands keep the kit's person-only guards.",
     ],
   },
 ];

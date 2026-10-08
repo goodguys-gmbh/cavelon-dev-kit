@@ -389,3 +389,13 @@ Behind a proxy or a TLS-inspecting firewall, see
   with the command, its output and `cavelon --version`. Leave out tokens,
   secrets and customer data. A security problem goes through
   [SECURITY.md](../SECURITY.md) instead.
+
+## Cline finds no project MCP file or custom editor skills
+
+Cline reads shared user MCP settings; init copies native project skills only.
+Run `cavelon setup --agents cline` with the same configuration environment as
+the CLI. The released editor’s compatibility UI still uses legacy path rules;
+use default shared paths and check its settings/skill menu separately. Restart
+the client after changes. An older profile is not silently migrated by setup.
+See [Cline](install/cline.md#check) and its
+[guarded launch](install/cline.md#guarded-shell).

@@ -376,7 +376,7 @@ these lessons:
 ## Claude Code, Codex and other agents
 
 **`cavelon setup`, for you.** `cavelon setup` finds Claude Code, Codex, Cursor,
-VS Code with GitHub Copilot, Gemini CLI, Kiro, OpenCode and Pi on your computer and sets up
+VS Code with GitHub Copilot, Gemini CLI, Kiro, OpenCode, Pi, Qwen and (when included in your kit release) Cline on your computer and sets up
 each for your user, in every folder you open: Claude Code and Codex get the
 Cavelon plugin through their own plugin command, which also updates it, and
 Gemini CLI the Cavelon extension; the others get the skills and the MCP server

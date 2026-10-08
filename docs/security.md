@@ -243,6 +243,10 @@ reaches `cavelon` over MCP is guarded. A person in a plain terminal is
 unaffected: `cavelon api` sends at once, takes any path and sends
 any field.
 
+For Cline, launch the coding client with process-scoped `CAVELON_AGENT=1`;
+its own MCP/tool auto-approval does not answer a guarded Cavelon change. See
+[Cline](install/cline.md#guarded-shell) for CLI/editor launch details.
+
 If your Pi configuration disables session-environment exposure, launch that
 agent with process-scoped `CAVELON_AGENT=1`. Keep the person's separate terminal
 outside that launch environment. Environment detection guards mistakes; it

@@ -25,8 +25,9 @@ reading input. Log in from your own terminal; see [the login guide](docs/getting
 > [Pi](docs/install/pi.md) get bundled native approval dialogs and skills.
 > [Qwen Code CLI](docs/install/qwen-code.md) gets native settings and skills;
 > guarded changes use your own terminal. The [qualification matrix](docs/coding-agent-qualification.md)
-> names the tested versions, platforms and limits. Cline, Kilo, Goose and OMP
-> remain planned for a later release.
+> names the tested versions, platforms and limits.
+> **Unreleased:** [Cline](docs/install/cline.md) native setup and project skills,
+> with guarded changes in your own terminal. Kilo, Goose and OMP follow separately.
 
 ## Five-minute start
 

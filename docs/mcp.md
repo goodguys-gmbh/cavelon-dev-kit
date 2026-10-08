@@ -19,6 +19,9 @@ Since 0.1.16, setup installs dependency-bundled native adapters for
 exact-change dialog through their client UI. It also writes Qwen Code's native settings and skills.
 Its inspected MCP client does not advertise form elicitation: guarded previews
 return the command for the person's own terminal. See [Qwen Code](install/qwen-code.md#approval).
+Unreleased [Cline](install/cline.md) support uses that same terminal route,
+with native user settings and skills. Cline project init writes skills only;
+run user setup for its MCP server.
 
 **With the Cavelon plugin** installed by hand for Claude Code or Codex, the
 plugin starts the server. See [Installation](installation.md#install-the-plugin).

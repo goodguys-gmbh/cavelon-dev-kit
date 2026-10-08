@@ -195,7 +195,7 @@ it("updates an older owned native installation without duplicating personal or C
 it.each(["opencode", "pi"] as const)("%s project install remains valid after moving the clone and removes only recorded files", async name => {
   const root = path.join(sb.home, "project with spaces");
   mkdirSync(root);
-  const config = nativeClient(name)!.project(sb.env);
+  const config = nativeClient(name)!.project(sb.env)!;
   const plan = await planNativeInstallation(config, command, sb.env, { root });
   expect(plan.outcome, plan.reason).toBe("planned");
   await applyNativeInstallation(plan);
@@ -217,7 +217,7 @@ it.each(["opencode", "pi"] as const)("%s reuses verified user integration and gi
   const p = await install(name);
   const root = path.join(sb.home, "project");
   mkdirSync(root);
-  const config = nativeClient(name)!.project(sb.env);
+  const config = nativeClient(name)!.project(sb.env)!;
   expect(await planNativeInstallation(config, command, sb.env, { root })).toMatchObject({ outcome: "unchanged", reason: expect.stringContaining("user native") });
   const file = path.join(root, config.file);
   mkdirSync(path.dirname(file), { recursive: true });
