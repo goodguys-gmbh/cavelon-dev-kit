@@ -371,7 +371,7 @@ these lessons:
 ## Claude Code, Codex and other agents
 
 **`cavelon setup`, for you.** `cavelon setup` finds Claude Code, Codex, Cursor,
-VS Code with GitHub Copilot, Gemini CLI and Kiro on your computer and sets up
+VS Code with GitHub Copilot, Gemini CLI, Kiro, OpenCode and Pi on your computer and sets up
 each for your user, in every folder you open: Claude Code and Codex get the
 Cavelon plugin through their own plugin command, which also updates it, and
 Gemini CLI the Cavelon extension; the others get the skills and the MCP server
@@ -382,7 +382,7 @@ packages for Cursor, VS Code with GitHub Copilot and Kiro.
 `cavelon setup --check` says what works; `cavelon setup --remove` undoes it.
 
 **`cavelon init --agents`, for a repository.** To give everyone who clones a
-solution the skills and the MCP server, or for Pi or any other agent that reads
+solution the skills and the MCP server, or for any other agent that reads
 `AGENTS.md`, `cavelon init --agents <list>` writes them into the solution folder
 ([Agents without a plugin](installation.md#agents-without-a-plugin)); refresh
 them with `cavelon init --update` after updating `cavelon`. Both give the agent

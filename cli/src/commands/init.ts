@@ -2,7 +2,11 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { parseDocument } from "yaml";
 import { boolOption, listOption, stringOption, type CommandSpec, type Context } from "../command.js";
-import { AGENTS, bundledSkills, generatedCopy, parseAgents, SKILL_ROOTS, type AgentTarget, type McpTarget } from "../agents.js";
+import { AGENTS, bundledSkills, generatedCopy, parseAgents, KNOWN_SKILL_ROOTS, skillRootsFor, type AgentTarget, type McpTarget } from "../agents.js";
+import { nativeClient, resolveNativeMcp } from "../native-clients.js";
+import { isKitMcpEntry } from "../mcp-entry.js";
+import { upsertJsoncEntry } from "../jsonc-config.js";
+import { isDeepStrictEqual } from "node:util";
 import { CavelonError, ExitCode, usageError } from "../errors.js";
 import { confinedPath, realPath, within } from "../paths.js";
 import { readTextFile, withoutBom, writeFileAtomic } from "../fsutil.js";
@@ -246,7 +250,15 @@ async function writeSkills(root: string, roots: string[]): Promise<FileAction[]>
   return actions;
 }
 
-async function writeMcp(root: string, target: McpTarget, onlyExisting: boolean): Promise<FileAction> {
+async function writeMcp(root: string, target: McpTarget, onlyExisting: boolean, env: Record<string, string | undefined>): Promise<FileAction> {
+  if (target.format === "native") {
+    const config = { ...target, ...nativeClient(target.client)?.project(env) };
+    const selected = await resolveNativeMcp(config, root);
+    if ("error" in selected) return { file: rel(root, selected.file), action: "skipped", reason: selected.error };
+    if (target.others.some(entry => isDeepStrictEqual(entry, selected.current))) return { file: rel(root, selected.file), action: "unchanged" };
+    const result = upsertJsoncEntry(selected.text, target.keys, target.entry, { onlyExisting, matches: value => isKitMcpEntry(value, target.entryFormat, target.extra) });
+    return applyBlock(root, selected.file, result);
+  }
   const file = path.join(root, target.file);
   const existing = await readTextFile(file);
   if (existing !== undefined && holdsOtherForm(existing, target)) return { file: target.file, action: "unchanged" };
@@ -283,9 +295,9 @@ function holdsOtherForm(existing: string, target: McpTarget): boolean {
 }
 
 /** Skill folders and MCP entries a previous `init --agents` wrote, for `init --update`. */
-async function installedFallback(root: string): Promise<{ skillRoots: string[]; agents: AgentTarget[] }> {
+async function installedFallback(root: string, env: Record<string, string | undefined>): Promise<{ skillRoots: string[]; agents: AgentTarget[] }> {
   const skillRoots: string[] = [];
-  for (const skillRoot of SKILL_ROOTS) {
+  for (const skillRoot of KNOWN_SKILL_ROOTS) {
     try {
       const names = await fs.readdir(path.join(root, skillRoot));
       for (const name of names.filter((n) => n.startsWith("cavelon-"))) {
@@ -301,6 +313,11 @@ async function installedFallback(root: string): Promise<{ skillRoots: string[]; 
   const agents: AgentTarget[] = [];
   for (const agent of AGENTS) {
     if (!agent.mcp) continue;
+    if (agent.mcp.format === "native") {
+      const selected = await resolveNativeMcp({ ...agent.mcp, ...nativeClient(agent.name)?.project(env) }, root);
+      if ("error" in selected || selected.current !== undefined) agents.push(agent);
+      continue;
+    }
     const text = await readTextFile(path.join(root, agent.mcp.file));
     if (text?.includes("cavelon")) agents.push(agent);
   }
@@ -669,11 +686,11 @@ async function runInit(ctx: Context, input: Parameters<CommandSpec["run"]>[1]) {
     if (claude) actions.push(claude);
     actions.push(await block(root, ".gitignore", GITIGNORE_BLOCK, "hash", { onlyExisting: true }));
     actions.push(await installHook(root, !boolOption(input, "hook")));
-    const installed = await installedFallback(root);
-    const skillRoots = agents.length ? SKILL_ROOTS : installed.skillRoots;
+    const installed = await installedFallback(root, ctx.io.env);
+    const skillRoots = agents.length ? skillRootsFor(agents) : installed.skillRoots;
     if (skillRoots.length) actions.push(...(await writeSkills(root, skillRoots)));
     for (const agent of new Set([...installed.agents, ...agents])) {
-      if (agent.mcp) actions.push(await writeMcp(root, agent.mcp, !agents.includes(agent)));
+      if (agent.mcp) actions.push(await writeMcp(root, agent.mcp, !agents.includes(agent), ctx.io.env));
     }
     return { root, actions: actions.filter((a) => !(a.action === "skipped" && /does not exist|no cavelon (block|entry)/.test(a.reason ?? ""))), next, imported: undefined };
   }
@@ -746,8 +763,11 @@ async function runInit(ctx: Context, input: Parameters<CommandSpec["run"]>[1]) {
   const claude = await claudeImport(root, false);
   if (claude) actions.push(claude);
   if (agents.length) {
-    actions.push(...(await writeSkills(root, SKILL_ROOTS)));
-    for (const agent of agents) if (agent.mcp) actions.push(await writeMcp(root, agent.mcp, false));
+    actions.push(...(await writeSkills(root, skillRootsFor(agents))));
+    for (const agent of agents) {
+      if (agent.mcp) actions.push(await writeMcp(root, agent.mcp, false, ctx.io.env));
+      next.push(...(nativeClient(agent.name)?.notes ?? []));
+    }
   }
   if (boolOption(input, "hook")) actions.push(await installHook(root, false));
   else next.push(`Catch an invalid package before each commit: ${folderCommand("init", "--hook")}`);

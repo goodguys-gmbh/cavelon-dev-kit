@@ -7,6 +7,15 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Added
+
+- Project and user MCP/skill setup for OpenCode and Pi, including check, update
+  and removal. OpenCode preserves existing JSONC configuration and command
+  arrays; Pi uses native directories and honors `PI_CODING_AGENT_DIR`. Conflicts
+  and managed overrides are reported without replacing personal entries.
+  Built-in MCP guarded changes still require the person's own terminal;
+  native dialog approval is qualified separately (#198, #193).
+
 ### Fixed
 
 - Recognize Pi's native `PI_SESSION_ID` shell marker so person-only operations,

@@ -98,6 +98,7 @@ function planJson(plan: AgentPlan, changes: Change[] = plan.changes) {
     label: plan.agent.label,
     found: { command: plan.found.program ?? null, folder: plan.found.folder ?? null },
     method: plan.method,
+    ...(plan.agent.notes ? { notes: plan.agent.notes } : {}),
     changes: changes.map((c) => ({ kind: c.kind, summary: c.summary, target: c.target, outcome: c.outcome, ...(c.reason ? { reason: c.reason } : {}) })),
   };
 }
@@ -106,6 +107,7 @@ function planJson(plan: AgentPlan, changes: Change[] = plan.changes) {
 function planText(plans: AgentPlan[], notFound: SetupAgent[]): string {
   const lines: string[] = [];
   for (const plan of plans) {
+    for (const note of plan.agent.notes ?? []) lines.push(`  ${plan.agent.label}: ${note}`);
     const todo = plan.changes.filter((c) => c.outcome === "planned");
     const other = plan.changes.filter((c) => c.outcome !== "planned" && c.outcome !== "unchanged");
     if (!todo.length && !other.length) {
@@ -447,7 +449,7 @@ export const setup: CommandSpec = {
   tenantless: true,
   summary: "Set up your coding agents for Cavelon and log in, in one guided step.",
   description:
-    "Finds Claude Code, Codex, Cursor, VS Code with GitHub Copilot, Gemini CLI and Kiro, shows what it will change for each, asks once\n" +
+    "Finds Claude Code, Codex, Cursor, VS Code with GitHub Copilot, Gemini CLI, Kiro, OpenCode and Pi, shows what it will change for each, asks once\n" +
     "and does it: Claude Code and Codex get the Cavelon plugin through their own plugin command, Gemini CLI the extension of this\n" +
     "release (or the files, when the release has none); the others get the `cavelon` MCP server in their user MCP configuration\n" +
     "and the skills in their user skills folder. It touches nothing else in those files and\n" +
@@ -465,7 +467,7 @@ export const setup: CommandSpec = {
       type: "string",
       value: "<list>",
       multiple: true,
-      description: "Only these agents: claude, codex, cursor, copilot, gemini, kiro, or all (comma-separated). Default: every agent found.",
+      description: "Only these agents: claude, codex, cursor, copilot, gemini, kiro, opencode, pi, or all (comma-separated). Default: every agent found.",
     },
     yes: { type: "boolean", short: "y", description: "Make the changes without asking." },
     check: { type: "boolean", description: "Report what is set up and working; change nothing." },
