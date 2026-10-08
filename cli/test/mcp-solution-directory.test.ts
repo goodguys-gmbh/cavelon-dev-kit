@@ -1,5 +1,6 @@
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { realpath } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
@@ -99,7 +100,7 @@ it.each(["declines", "cannot ask"] as const)("selected child import still requir
     expect(imports()).toEqual([]);
     if (person === "cannot ask") {
       // macOS /var and Windows short temp paths resolve to their real spelling.
-      expect(result.body.error.details.person_command).toContain(`cd -- ${shellWord(realpathSync(path.join(root, directories[0]!)))} && cavelon apply`);
+      expect(result.body.error.details.person_command).toContain(`cd -- ${shellWord(await realpath(path.join(root, directories[0]!)))} && cavelon apply`);
     }
   } finally { await s.client.close(); }
 });
