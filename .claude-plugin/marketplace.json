@@ -11,7 +11,7 @@
       "name": "cavelon",
       "source": "./plugin",
       "description": "Build, seed, test and improve Cavelon solutions from a repository: the Cavelon skills and the cavelon MCP server.",
-      "version": "0.1.14",
+      "version": "0.1.15",
       "category": "development",
       "license": "Apache-2.0"
     }
