@@ -1,8 +1,8 @@
 # Coding-agent qualification
 
 Setup support and real-client qualification are recorded separately. Version
-0.1.16 adds the three open-source clients below. Unreleased Cline and Kilo
-checks are recorded separately; Goose and OMP remain planned. Existing clients
+0.1.16 adds the three open-source clients below. Unreleased Cline, Kilo and Goose
+checks are recorded separately; OMP remains planned. Existing clients
 keep their installation routes.
 
 | Client | Pinned version | Runtime checked | Guarded-change mode |
@@ -104,3 +104,26 @@ This person check made no model call and used no real database or instance.
 The complete offline workflow remains a next-release gate. No qualification is inherited from OpenCode. Other client versions,
 macOS/Windows/WSL UIs, JetBrains and customer network/model pilots remain
 separate. Installation and lifecycle: [Kilo](install/kilo.md).
+
+## Unreleased Goose integration
+
+| Surface | Pinned version | Runtime checked | Guarded-change mode |
+|---|---|---|---|
+| Goose CLI | 1.53.0 | Linux x64 released binary; four native skills, 64 MCP tools, read, child-solution deleting preview, sibling refusal and actual session shell guard | Built-in interactive MCP form; headless elicitation refuses; packaged fresh No/Yes passed |
+| Goose Desktop / ACP hosts | Separate surfaces | User configuration is described; actual host dialog qualification remains separate | Never infer a person dialog from CLI or file checks |
+
+Two setup regressions failed on the base. Focused configuration, YAML
+preservation, lifecycle, project-skill and shell tests pass. The actual released
+CLI used only scripted loopback responses and a fake instance. Headless
+confirmation cancelled with no instance confirmation or mutation. It set a
+session marker even without an inherited Cavelon marker. No real model,
+database or production call was made. A private offline npm consumer then passed
+the actual person's fresh No/Yes check in Goose's built-in form: No issued no
+confirmation or mutation; a new preview and Yes issued one exactly bound
+confirmation and import. It deleted one synthetic agent and changed a fake
+query's row limit from 5 to 10, with sibling previews still refused.
+
+Goose's form expires after five minutes; a late answer can report `Request not
+found` without approving the change. The complete offline workflow and final
+release candidate remain gates. No custom native adapter is needed for the CLI's
+built-in form. See [Goose](install/goose.md).

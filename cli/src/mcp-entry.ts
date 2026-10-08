@@ -6,18 +6,18 @@ export interface McpCommand {
   args: string[];
 }
 
-export type McpEntryFormat = "command-args" | "command-array";
+export type McpEntryFormat = "command-args" | "command-array" | "goose-stdio";
 
 /** Client-specific extras stay outside the platform-specific process command. */
 export function encodeMcpEntry(command: McpCommand, format: McpEntryFormat, extra: Record<string, unknown> = {}): Record<string, unknown> {
-  return format === "command-array" ? { ...extra, command: [command.command, ...command.args] } : { ...extra, command: command.command, args: command.args };
+  return format === "command-array" ? { ...extra, command: [command.command, ...command.args] } : { ...extra, [format === "goose-stdio" ? "cmd" : "command"]: command.command, args: command.args };
 }
 
 export function decodeMcpEntry(value: unknown, format: McpEntryFormat): McpCommand | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   const entry = value as Record<string, unknown>;
-  const words = format === "command-array" ? entry.command : [entry.command, ...(Array.isArray(entry.args) ? entry.args : [])];
-  if (format === "command-args" && !Array.isArray(entry.args)) return undefined;
+  const words = format === "command-array" ? entry.command : [entry[format === "goose-stdio" ? "cmd" : "command"], ...(Array.isArray(entry.args) ? entry.args : [])];
+  if (format !== "command-array" && !Array.isArray(entry.args)) return undefined;
   if (!Array.isArray(words) || !words.length || !words.every(word => typeof word === "string") || !words[0]) return undefined;
   return { command: words[0] as string, args: words.slice(1) as string[] };
 }

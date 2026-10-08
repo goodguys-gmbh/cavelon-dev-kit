@@ -37,6 +37,8 @@ export const AGENT_VARIABLES: ReadonlyArray<{ variable: string; value?: string; 
   { variable: "OPENCODE", agent: "OpenCode" },
   // Pi's shell tools expose the current session by default.
   { variable: "PI_SESSION_ID", agent: "Pi" },
+  // Goose's developer shell exposes its current session by default.
+  { variable: "AGENT_SESSION_ID", agent: "Goose or another agent exposing its session" },
   { variable: "GROK_AGENT", agent: "Grok Build" },
   // The cross-vendor variable newer agents set; last, so an agent's own variable is the one named.
   { variable: "AI_AGENT", agent: "an agent that follows the AI_AGENT convention" },

@@ -7,6 +7,10 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+- Goose native user YAML extension and skills, safe setup/check/update/removal,
+  preserved configuration layers and personal settings, and session shell guards.
+  Interactive CLI forms ask the person freshly; headless confirmation refuses.
+
 ### Added
 
 - Kilo-native CLI/editor settings and skills, preserved compatible OpenCode

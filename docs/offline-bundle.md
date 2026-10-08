@@ -323,3 +323,13 @@ and plugins. Provision the coding model and instance providers separately.
 Use the CLI’s fresh person dialog, or the person’s terminal in editor/headless
 mode; see [Kilo](install/kilo.md). Complete packaged offline qualification is
 still a next-release gate.
+
+## Goose
+
+When your kit release includes Goose setup, provision Goose and its model
+runtime separately. Install the verified Cavelon executable on PATH, then run
+`cavelon setup --agents goose`. It writes `cavelon mcp` into native user YAML
+and installs bundled skills without fetching an adapter or registry package.
+Person forms require an interactive CLI session; headless runs refuse them.
+See [Goose](install/goose.md). Full packaged offline qualification remains
+separate from configuration and client-loading evidence.

@@ -10,6 +10,7 @@ import { KIT_VERSION } from "./version.js";
 import { NATIVE_CLIENTS, nativeClient, hasNativeApprovalAdapter, readNativeMcp, resolveNativeMcp, type NativeMcpConfig } from "./native-clients.js";
 import { decodeMcpEntry, encodeMcpEntry, isKitMcpEntry } from "./mcp-entry.js";
 import { removeJsoncEntry, upsertJsoncEntry } from "./jsonc-config.js";
+import { removeYamlEntry, upsertYamlEntry } from "./yaml-config.js";
 import { applyNativeInstallation, checkNativeInstallation, planNativeInstallation, removeNativeInstallation, type NativeInstallPlan } from "./native-install.js";
 
 /**
@@ -399,7 +400,8 @@ async function mcpChange(mcp: McpFile, command: ServerCommand, apply: boolean, s
   if (mcp.format === "native") {
     const selected = await resolveNativeMcp(mcp);
     if ("error" in selected) return { kind: "mcp", summary, target: selected.file, outcome: "skipped", reason: `${selected.error}; the Cavelon entry is "${mcp.keys.join(".")}": ${JSON.stringify(encodeMcpEntry(command, mcp.entryFormat, mcp.extra))}` };
-    const result = upsertJsoncEntry(selected.text, mcp.keys, encodeMcpEntry(command, mcp.entryFormat, mcp.extra), { matches: value => isKitMcpEntry(value, mcp.entryFormat, mcp.extra) });
+    const upsert = mcp.syntax === "yaml" ? upsertYamlEntry : upsertJsoncEntry;
+    const result = upsert(selected.text, mcp.keys, encodeMcpEntry(command, mcp.entryFormat, mcp.extra), { matches: value => isKitMcpEntry(value, mcp.entryFormat, mcp.extra) });
     if (result.outcome === "skipped" || result.outcome === "unchanged") return { kind: "mcp", summary, target: selected.file, outcome: result.outcome, ...(result.reason ? { reason: result.reason } : {}) };
     if (!apply) return { kind: "mcp", summary, target: selected.file, outcome: "planned" };
     const createdDir = await topmostMissing(path.dirname(selected.file));
@@ -609,12 +611,13 @@ async function removeMcp(mcp: McpFile, record: FileRecord): Promise<Change> {
   const summary = 'remove the "cavelon" tools server from';
   const existing = await readTextFile(mcp.file);
   if (existing === undefined) return { kind: "mcp", summary, target: mcp.file, outcome: "unchanged" };
-  const result =
-    mcp.format === "native"
-      ? removeJsoncEntry(existing, mcp.keys, value => isKitMcpEntry(value, mcp.entryFormat, mcp.extra), record.kept ?? mcp.keys.length - 1)
-      : mcp.format === "json"
-      ? removeJsonEntry(existing, mcp.keys, (value) => isOwnJsonEntry(mcp, value), record.kept ?? mcp.keys.length - 1)
-      : removeBlock(existing, "hash");
+  let result: BlockResult & { empty?: boolean };
+  if (mcp.format === "native") {
+    const remove = mcp.syntax === "yaml" ? removeYamlEntry : removeJsoncEntry;
+    result = remove(existing, mcp.keys, value => isKitMcpEntry(value, mcp.entryFormat, mcp.extra), record.kept ?? mcp.keys.length - 1);
+  } else if (mcp.format === "json") {
+    result = removeJsonEntry(existing, mcp.keys, value => isOwnJsonEntry(mcp, value), record.kept ?? mcp.keys.length - 1);
+  } else result = removeBlock(existing, "hash");
   if (result.outcome === "unchanged") return { kind: "mcp", summary, target: mcp.file, outcome: "unchanged" };
   if (result.outcome === "skipped") return { kind: "mcp", summary, target: mcp.file, outcome: "skipped", reason: result.reason };
   if (result.empty && record.created) {
@@ -756,6 +759,7 @@ async function readEntry(mcp: McpFile): Promise<{ server?: ServerCommand; proble
     if ("error" in entry) return { problem: `${selected.file}: ${entry.error}` };
     const value = entry.value as Record<string, unknown> | undefined;
     if (value?.enabled === false || value?.disabled === true) return { problem: `the Cavelon server in ${selected.file} is disabled` };
+    if (mcp.client === "goose" && value && (value.type !== "stdio" || value.name !== "cavelon" || value.enabled !== true)) return { problem: `the Cavelon extension in ${selected.file} is not an enabled stdio binding` };
     const server = decodeMcpEntry(value, mcp.entryFormat);
     return server ? { server, file: selected.file } : { problem: `${selected.file} has no readable "cavelon" tools server` };
   }

@@ -435,3 +435,9 @@ folder.
 
 Report it privately, as [SECURITY.md](../SECURITY.md) describes, never in a
 public issue.
+
+Goose's interactive MCP form is separate from its automatic tool permissions.
+Headless Goose cancels a form without sending a confirmation or guarded change.
+Its developer shell sets `AGENT_SESSION_ID`; the kit recognizes it. Launch
+other modes with `CAVELON_AGENT=1` and keep person steps in a separate terminal.
+See [Goose](install/goose.md#guarded-shell).
