@@ -7,6 +7,9 @@ import { isGenerated, removeBlock, removeJsonEntry, upsertBlock, upsertJsonEntry
 import { cacheDir, homeDir } from "./paths.js";
 import { runProgram } from "./run-program.js";
 import { KIT_VERSION } from "./version.js";
+import { NATIVE_CLIENTS, nativeClient, readNativeMcp, resolveNativeMcp, type NativeMcpConfig } from "./native-clients.js";
+import { decodeMcpEntry, encodeMcpEntry, isKitMcpEntry } from "./mcp-entry.js";
+import { removeJsoncEntry, upsertJsoncEntry } from "./jsonc-config.js";
 
 /**
  * The coding agents `cavelon setup` sets up for the person, at user level:
@@ -36,6 +39,7 @@ export const GEMINI_SOURCE = `https://github.com/${MARKETPLACE_SOURCE}`;
 type PluginKind = "claude" | "codex" | "gemini";
 
 export type McpFile =
+  | NativeMcpConfig
   | { file: string; format: "json"; keys: string[]; extra: Record<string, unknown> }
   | { file: string; format: "toml" };
 
@@ -52,6 +56,7 @@ export interface SetupAgent {
   mcp: McpFile;
   /** Its user-level skills folder. */
   skills: string;
+  notes?: string[];
 }
 
 /** Where VS Code keeps the default profile's user settings. */
@@ -128,6 +133,7 @@ export function setupAgents(env: Env, platform: NodeJS.Platform = process.platfo
       mcp: json(path.join(home, ".kiro", "settings", "mcp.json")),
       skills: path.join(home, ".kiro", "skills"),
     },
+    ...NATIVE_CLIENTS.map(client => ({ name: client.name, label: client.label, commands: client.commands, ...client.user(env), notes: client.notes })),
   ];
 }
 
@@ -135,7 +141,7 @@ const ALIASES: Record<string, string> = { "claude-code": "claude", vscode: "copi
 
 export function agentByName(agents: SetupAgent[], raw: string): SetupAgent | undefined {
   const name = raw.trim().toLowerCase();
-  return agents.find((a) => a.name === (ALIASES[name] ?? name));
+  return agents.find((a) => a.name === (ALIASES[name] ?? nativeClient(name)?.name ?? name));
 }
 
 // ---------------------------------------------------------------------------
@@ -383,6 +389,17 @@ export async function planAgent(agent: SetupAgent, found: Found, env: Env, comma
 
 async function mcpChange(mcp: McpFile, command: ServerCommand, apply: boolean, state?: AgentRecord): Promise<Change> {
   const summary = 'add the "cavelon" tools server to';
+  if (mcp.format === "native") {
+    const selected = await resolveNativeMcp(mcp);
+    if ("error" in selected) return { kind: "mcp", summary, target: selected.file, outcome: "skipped", reason: `${selected.error}; the Cavelon entry is "${mcp.keys.join(".")}": ${JSON.stringify(encodeMcpEntry(command, mcp.entryFormat, mcp.extra))}` };
+    const result = upsertJsoncEntry(selected.text, mcp.keys, encodeMcpEntry(command, mcp.entryFormat, mcp.extra), { matches: value => isKitMcpEntry(value, mcp.entryFormat, mcp.extra) });
+    if (result.outcome === "skipped" || result.outcome === "unchanged") return { kind: "mcp", summary, target: selected.file, outcome: result.outcome, ...(result.reason ? { reason: result.reason } : {}) };
+    if (!apply) return { kind: "mcp", summary, target: selected.file, outcome: "planned" };
+    const createdDir = await topmostMissing(path.dirname(selected.file));
+    await writeKeepingMode(selected.file, result.content!);
+    if (state && !state.mcp) state.mcp = { file: selected.file, created: selected.text === undefined, kept: selected.kept, ...(createdDir ? { created_dir: createdDir } : {}) };
+    return { kind: "mcp", summary, target: selected.file, outcome: "done" };
+  }
   const existing = await readTextFile(mcp.file);
   let result: BlockResult;
   if (mcp.format === "json") {
@@ -567,11 +584,15 @@ async function removeFiles(agent: SetupAgent, record: AgentRecord, skills: Skill
 }
 
 async function removeMcp(mcp: McpFile, record: FileRecord): Promise<Change> {
+  // Overrides may have changed since setup: removal belongs to the recorded file.
+  mcp = { ...mcp, file: record.file };
   const summary = 'remove the "cavelon" tools server from';
   const existing = await readTextFile(mcp.file);
   if (existing === undefined) return { kind: "mcp", summary, target: mcp.file, outcome: "unchanged" };
   const result =
-    mcp.format === "json"
+    mcp.format === "native"
+      ? removeJsoncEntry(existing, mcp.keys, value => isKitMcpEntry(value, mcp.entryFormat, mcp.extra), record.kept ?? mcp.keys.length - 1)
+      : mcp.format === "json"
       ? removeJsonEntry(existing, mcp.keys, (value) => isOwnJsonEntry(mcp, value), record.kept ?? mcp.keys.length - 1)
       : removeBlock(existing, "hash");
   if (result.outcome === "unchanged") return { kind: "mcp", summary, target: mcp.file, outcome: "unchanged" };
@@ -651,6 +672,7 @@ export interface AgentCheck {
 export async function checkAgent(agent: SetupAgent, env: Env, record: AgentRecord | undefined, platform: NodeJS.Platform = process.platform): Promise<AgentCheck> {
   const found = await findAgent(agent, env, platform);
   const check: AgentCheck = { name: agent.name, label: agent.label, found: Boolean(found.program || found.folder), method: null, ok: true, details: [], servers: [] };
+  check.details.push(...(agent.notes ?? []));
   const state = agent.plugin && found.program ? await pluginState(agent.plugin, found.program, env) : undefined;
   // Gemini CLI without the extension may have the files instead (setup's fallback).
   const viaFiles = !state || (agent.plugin === "gemini" && ("error" in state || !state.installed));
@@ -677,7 +699,7 @@ export async function checkAgent(agent: SetupAgent, env: Env, record: AgentRecor
   }
   const entry = await readEntry(agent.mcp);
   if (entry.server) {
-    check.details.push(`the "cavelon" tools server is in ${agent.mcp.file}`);
+    check.details.push(`the "cavelon" tools server is in ${entry.file ?? agent.mcp.file}`);
     check.servers.push(entry.server);
   } else {
     check.ok = false;
@@ -700,7 +722,17 @@ export async function checkAgent(agent: SetupAgent, env: Env, record: AgentRecor
 }
 
 /** The server an agent's MCP file names for "cavelon", whoever wrote it. */
-async function readEntry(mcp: McpFile): Promise<{ server?: ServerCommand; problem?: string }> {
+async function readEntry(mcp: McpFile): Promise<{ server?: ServerCommand; problem?: string; file?: string }> {
+  if (mcp.format === "native") {
+    const selected = await resolveNativeMcp(mcp);
+    if ("error" in selected) return { problem: `${selected.file}: ${selected.error}` };
+    const entry = readNativeMcp(selected.text, mcp);
+    if ("error" in entry) return { problem: `${selected.file}: ${entry.error}` };
+    const value = entry.value as Record<string, unknown> | undefined;
+    if (value?.enabled === false || value?.disabled === true) return { problem: `the Cavelon server in ${selected.file} is disabled` };
+    const server = decodeMcpEntry(value, mcp.entryFormat);
+    return server ? { server, file: selected.file } : { problem: `${selected.file} has no readable "cavelon" tools server` };
+  }
   const text = await readTextFile(mcp.file);
   if (text === undefined) return { problem: `${mcp.file} does not exist` };
   if (mcp.format === "toml") {

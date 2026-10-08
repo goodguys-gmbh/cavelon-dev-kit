@@ -14,6 +14,8 @@ updating and removing.
 | VS Code with GitHub Copilot, Copilot CLI | the skills and MCP entry (`cavelon setup`), or the plugin from this repository's marketplace or the release's package | [VS Code and Copilot](vscode-copilot.md) |
 | Kiro | the skills and MCP entry (`cavelon setup`), or the Agent Plugins package as a power | [Kiro](kiro.md) |
 | Gemini CLI | the extension, from the release | [Gemini CLI](gemini-cli.md) |
+| OpenCode | native MCP entry and skills (`cavelon setup`, unreleased); native approval qualification pending | [OpenCode](opencode.md) |
+| Pi | native MCP entry and skills (`cavelon setup`, unreleased); native approval qualification pending | [Pi](pi.md) |
 | Cloud agents and CI | `npx` or `uvx`, with the skills committed to the repository | [Cloud agents and CI](cloud-and-ci.md) |
 
 **The quickest way** on your own computer: install `cavelon`

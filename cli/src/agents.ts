@@ -5,6 +5,11 @@ import { embeddedContent } from "./embedded.js";
 import { usageError } from "./errors.js";
 import { GENERATED_TOKEN } from "./markers.js";
 import { KIT_VERSION } from "./version.js";
+import { INSTALLED_MCP_COMMAND, mcpCommand } from "./mcp-command.js";
+import { encodeMcpEntry } from "./mcp-entry.js";
+import { NATIVE_CLIENTS, nativeClient, type NativeMcpConfig } from "./native-clients.js";
+
+export { MCP_COMMAND, INSTALLED_MCP_COMMAND, mcpCommand } from "./mcp-command.js";
 
 /**
  * The fallback for coding agents without the Cavelon plugin (plan 04,
@@ -12,26 +17,9 @@ import { KIT_VERSION } from "./version.js";
  * `cavelon mcp` entry in each agent's project MCP configuration.
  */
 
-// The released package through npx, as the plugin's .mcp.json starts it. The pin
-// is this version's minor: in 0.x a minor release may break, and it must not
-// reach a solution's MCP entry unannounced. A release of a new minor moves both.
-export const MCP_COMMAND = { command: "npx", args: ["-y", "@cavelon/cli@0.1", "mcp"] };
-
-// The installed executable (one-line install, Homebrew or npm i -g), for a team
-// without Node.js: `init` does not write it, but keeps an entry changed to it.
-export const INSTALLED_MCP_COMMAND = { command: "cavelon", args: ["mcp"] };
-
-/**
- * How an agent on `platform` starts the MCP server. On native Windows `npx` is
- * `npx.cmd`, which an agent that starts its servers without a shell cannot run,
- * so it goes through `cmd /c`.
- */
-export function mcpCommand(platform: NodeJS.Platform = process.platform): { command: string; args: string[] } {
-  return platform === "win32" ? { command: "cmd", args: ["/c", MCP_COMMAND.command, ...MCP_COMMAND.args] } : MCP_COMMAND;
-}
-
 export type McpTarget =
   | { file: string; format: "json"; keys: string[]; entry: Record<string, unknown>; others: Array<Record<string, unknown>> }
+  | (NativeMcpConfig & { entry: Record<string, unknown>; others: Array<Record<string, unknown>> })
   | { file: string; format: "toml"; block: string; others: string[] };
 
 export interface AgentTarget {
@@ -84,8 +72,12 @@ export const AGENTS: AgentTarget[] = [
   agent("copilot", "GitHub Copilot in VS Code", () => jsonServer(".vscode/mcp.json", "servers", { type: "stdio" })),
   agent("gemini", "Gemini CLI", () => jsonServer(".gemini/settings.json")),
   agent("kiro", "Kiro", () => jsonServer(".kiro/settings/mcp.json")),
+  ...NATIVE_CLIENTS.map(client => agent(client.name, client.label, () => {
+    const config = client.project();
+    return { ...config, entry: encodeMcpEntry(mcpCommand(), config.entryFormat, config.extra),
+      others: [...otherPlatforms().map(p => encodeMcpEntry(mcpCommand(p), config.entryFormat, config.extra)), encodeMcpEntry(INSTALLED_MCP_COMMAND, config.entryFormat, config.extra)] };
+  })),
   // Agents that read AGENTS.md and run shell commands, with no MCP entry to write.
-  agent("pi", "Pi"),
   agent("other", "any other agent with a shell"),
 ];
 
@@ -97,7 +89,7 @@ export function parseAgents(values: string[]): AgentTarget[] {
   if (names.includes("all")) return AGENTS;
   const out: AgentTarget[] = [];
   for (const raw of names) {
-    const name = ALIASES[raw] ?? raw;
+    const name = ALIASES[raw] ?? nativeClient(raw)?.name ?? raw;
     const target = AGENTS.find((a) => a.name === name);
     if (!target) throw usageError(`Unknown agent "${raw}".`, `Known: ${AGENTS.map((a) => a.name).join(", ")}, or all.`);
     if (!out.includes(target)) out.push(target);
@@ -107,6 +99,13 @@ export function parseAgents(values: string[]): AgentTarget[] {
 
 /** Where the skills go: `.agents/skills/` for most agents, `.claude/skills/` for Claude Code. */
 export const SKILL_ROOTS = [".agents/skills", ".claude/skills"];
+
+/** Keep existing generic copies and add native roots only for selected clients. */
+export function skillRootsFor(agents: AgentTarget[]): string[] {
+  return [...new Set([...SKILL_ROOTS, ...agents.flatMap(agent => nativeClient(agent.name)?.projectSkills ?? [])])];
+}
+
+export const KNOWN_SKILL_ROOTS = [...new Set([...SKILL_ROOTS, ...NATIVE_CLIENTS.flatMap(client => client.projectSkills)])];
 
 export interface SkillFile {
   /** Relative to the skill's folder, with forward slashes. */

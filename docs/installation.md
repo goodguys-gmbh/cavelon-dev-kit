@@ -15,7 +15,7 @@ your computer and logs you in ([Set up your coding agents](#set-up-your-coding-a
 This page covers that, the ways to do each part by hand, updating and
 removing. [Install the kit in your coding agent](install/README.md) has one page
 per client (Claude Code, Codex, Cursor, VS Code with GitHub Copilot, Kiro,
-Gemini CLI, and cloud agents and CI), each with its install, first login,
+Gemini CLI, OpenCode, Pi, and cloud agents and CI), each with its install, first login,
 check, update and removal. When you are done, continue with
 [Getting started](getting-started.md) or
 [Building a solution with a coding agent](coding-agents.md).
@@ -440,10 +440,10 @@ shows how to brief the agent and review its work.
 ## Agents without a plugin
 
 `cavelon setup` gives Cursor, GitHub Copilot in VS Code and Kiro (and Gemini
-CLI while its extension cannot be installed) the skills and the MCP server for
+CLI while its extension cannot be installed), OpenCode and Pi the skills and the MCP server for
 your user, in every folder. To put them into
 one solution's repository instead, so everyone who clones it gets them, or for
-Pi or any other agent that reads `AGENTS.md` and runs shell commands,
+any other agent that reads `AGENTS.md` and runs shell commands,
 `cavelon init` writes the skills and the MCP entry into the solution folder
 itself:
 
@@ -459,7 +459,12 @@ cavelon init --agents cursor,copilot
 | `copilot` | `.vscode/mcp.json` |
 | `gemini` | `.gemini/settings.json` |
 | `kiro` | `.kiro/settings/mcp.json` |
-| `pi`, `other` | nothing beyond `AGENTS.md` |
+| `opencode` | existing `opencode.json[c]` or `.opencode/opencode.json[c]`, otherwise `opencode.json` |
+| `pi` | `.pi/mcp.json` and native `.pi/skills/cavelon-*/` |
+| `other` | no MCP entry; the shared skills and `AGENTS.md` |
+
+OpenCode/Pi setup is under **Unreleased**; see their install pages for the
+verified scope and the separate native approval qualification.
 
 Every value also writes the skills to `.agents/skills/cavelon-*/` and
 `.claude/skills/cavelon-*/`, marked as generated, and a short Cavelon block in

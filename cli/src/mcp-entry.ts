@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
-import { INSTALLED_MCP_COMMAND, mcpCommand } from "./agents.js";
+import { INSTALLED_MCP_COMMAND, mcpCommand } from "./mcp-command.js";
 
 export interface McpCommand {
   command: string;
