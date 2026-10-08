@@ -411,3 +411,16 @@ resolving the conflict. Keep the built-in duplicate disabled. Restart the
 client and verify the native tools and four skills; file checks cannot certify
 UI loading. The editor/headless approval route is the person’s own terminal.
 See [Kilo](install/kilo.md#check).
+
+## Goose cancels a confirmation or finds a competing configuration
+
+Plain `goose run` is headless. An elicitation error in that mode sends no
+Cavelon confirmation or guarded mutation; use an interactive session or make
+a fresh preview and confirm it yourself in your separate terminal. Do not pipe
+answers. CLI forms and Desktop/ACP host UI checks are separate.
+
+Compare `goose info` with setup's configuration path. Keep path-root/XDG and
+additional configuration overrides the same. Setup refuses a Cavelon entry in
+system/additional layers, a competing extension name, an active allowlist or
+ambiguous YAML. Review that binding with the operator rather than adding a
+shadow entry. See [Goose](install/goose.md#check).

@@ -457,7 +457,7 @@ export const setup: CommandSpec = {
   tenantless: true,
   summary: "Set up your coding agents for Cavelon and log in, in one guided step.",
   description:
-    "Finds Claude Code, Codex, Cursor, VS Code with GitHub Copilot, Gemini CLI, Kiro, OpenCode, Pi, Qwen, Cline and Kilo, shows what it will change for each, asks once\n" +
+    "Finds Claude Code, Codex, Cursor, VS Code with GitHub Copilot, Gemini CLI, Kiro, OpenCode, Pi, Qwen, Cline, Kilo and Goose, shows what it will change for each, asks once\n" +
     "and does it: Claude Code and Codex get the Cavelon plugin through their own plugin command, Gemini CLI the extension of this\n" +
     "release (or the files, when the release has none); the others get the `cavelon` MCP server in their user MCP configuration\n" +
     "and the skills in their user skills folder. It touches nothing else in those files and\n" +

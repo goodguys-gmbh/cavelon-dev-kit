@@ -438,3 +438,12 @@ cache), and holds that first call at most 1.5 seconds for it; a failed lookup
 says nothing, and `CAVELON_NO_UPDATE_CHECK=1` turns it off.
 [When you work only through a coding agent](installation.md#when-you-work-only-through-a-coding-agent)
 shows the warning and what it names.
+
+## Goose interactive forms
+
+Unreleased [Goose](install/goose.md) setup uses native YAML and skills. Goose
+CLI 1.53.0 advertises form elicitation and requires a person's fresh answer in
+an interactive session. Plain `goose run` cancels elicitation even when launched
+from a terminal; use an interactive session or the person's own terminal route.
+An automatic tool permission cannot answer Cavelon's separate form. Desktop
+and ACP host qualification are separate from CLI and file checks.

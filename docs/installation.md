@@ -15,7 +15,7 @@ your computer and logs you in ([Set up your coding agents](#set-up-your-coding-a
 This page covers that, the ways to do each part by hand, updating and
 removing. [Install the kit in your coding agent](install/README.md) has one page
 per client (Claude Code, Codex, Cursor, VS Code with GitHub Copilot, Kiro,
-Gemini CLI, OpenCode, Pi, Qwen Code, Cline, Kilo, and cloud agents and CI), each with its install, first login,
+Gemini CLI, OpenCode, Pi, Qwen Code, Cline, Kilo, Goose, and cloud agents and CI), each with its install, first login,
 check, update and removal. When you are done, continue with
 [Getting started](getting-started.md) or
 [Building a solution with a coding agent](coding-agents.md).
@@ -321,6 +321,11 @@ Unreleased: [Kilo](install/kilo.md) setup uses native Kilo JSON/JSONC settings,
 CLI guarded changes use fresh native dialogs; editor/headless calls return a
 command for the person’s own terminal. Compatible OpenCode files and managed
 policies are inspected and preserved.
+
+Unreleased: [Goose](install/goose.md) setup adds a native user YAML extension
+and skills. Project init copies shared skills without inventing project MCP
+settings. Interactive CLI forms require the person's fresh answer; headless
+runs cancel them. System and additional configuration bindings are preserved.
 
 See [Qwen Code CLI](install/qwen-code.md) for project paths, managed policy,
 native skill discovery and its explicit terminal approval route. This entry

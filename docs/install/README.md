@@ -9,8 +9,8 @@ updating and removing.
 Version 0.1.16 adds OpenCode and Pi with bundled native adapters, and Qwen
 Code CLI with native settings and person-terminal approval. See the
 [qualification matrix](../coding-agent-qualification.md) for tested versions,
-platforms and limits. Unreleased Cline and Kilo support is described below;
-Goose and OMP remain planned separately.
+platforms and limits. Unreleased Cline, Kilo and Goose support is described below;
+OMP remains planned separately.
 
 | Client | Installs as | Page |
 |---|---|---|
@@ -24,6 +24,7 @@ Goose and OMP remain planned separately.
 | Pi | bundled native extension and skills (`cavelon setup`) | [Pi](pi.md) |
 | Qwen Code CLI | native MCP settings and skills (`cavelon setup`); guarded changes in the person's own terminal | [Qwen Code](qwen-code.md) |
 | Cline (unreleased) | shared native user MCP settings and skills; project skills only; person-terminal approval | [Cline](cline.md) |
+| Goose (unreleased) | native user YAML extension and skills; built-in interactive CLI form, headless refusal | [Goose](goose.md) |
 | Kilo (unreleased) | bundled server/TUI plugins and native skills; CLI dialogs, editor/headless person-terminal approval | [Kilo](kilo.md) |
 | Cloud agents and CI | `npx` or `uvx`, with the skills committed to the repository | [Cloud agents and CI](cloud-and-ci.md) |
 

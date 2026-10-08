@@ -4,13 +4,14 @@ import { promises as fs } from "node:fs";
 import { parseTree, type ParseError } from "jsonc-parser";
 import { readTextFile } from "./fsutil.js";
 import { readJsoncEntry } from "./jsonc-config.js";
+import { readYamlEntry } from "./yaml-config.js";
 import { isKitMcpEntry, type McpEntryFormat } from "./mcp-entry.js";
 import { homeDir } from "./paths.js";
 
 type Env = Record<string, string | undefined>;
 
 export interface NativeMcpConfig {
-  client: "opencode" | "pi" | "qwen" | "cline" | "kilo";
+  client: "opencode" | "pi" | "qwen" | "cline" | "kilo" | "goose";
   format: "native";
   file: string;
   /** Low to high precedence; never create a companion when one already exists. */
@@ -23,7 +24,7 @@ export interface NativeMcpConfig {
   compatibilityFiles?: string[];
   /** Opaque operator policies cannot be safely merged by file setup. */
   managedOpaqueFiles?: string[];
-  syntax: "json" | "jsonc" | "json-comments";
+  syntax: "json" | "jsonc" | "json-comments" | "yaml";
   keys: string[];
   entryFormat: McpEntryFormat;
   extra: Record<string, unknown>;
@@ -50,6 +51,33 @@ const piConfig = (file: string): NativeMcpConfig => ({
 });
 
 const piDir = (env: Env) => env.PI_CODING_AGENT_DIR || path.join(homeDir(env), ".pi", "agent");
+
+function gooseUser(env: Env, platform: NodeJS.Platform = process.platform): ReturnType<NativeClient["user"]> {
+  const home = homeDir(env);
+  const root = env.GOOSE_PATH_ROOT;
+  const dir = root && path.isAbsolute(root) ? path.join(root, "config")
+    : platform === "win32" ? path.join(env.APPDATA || path.join(home, "AppData", "Roaming"), "Block", "goose", "config")
+      : path.join(env.XDG_CONFIG_HOME && path.isAbsolute(env.XDG_CONFIG_HOME) ? env.XDG_CONFIG_HOME : path.join(home, ".config"), "goose");
+  const system = platform === "win32" ? path.join(env.PROGRAMDATA || "C:\\ProgramData", "goose", "config.yaml") : "/etc/goose/config.yaml";
+  // Rust split_paths strips Windows quotes and splits only outside them.
+  const additional: string[] = [];
+  let segment = "";
+  let quoted = false;
+  for (const char of env.GOOSE_ADDITIONAL_CONFIG_FILES ?? "") {
+    if (platform === "win32" && char === '"') quoted = !quoted;
+    else if (char === (platform === "win32" ? ";" : ":") && !quoted) { additional.push(segment); segment = ""; }
+    else segment += char;
+  }
+  if (segment || env.GOOSE_ADDITIONAL_CONFIG_FILES !== undefined) additional.push(segment);
+  const file = path.join(dir, "config.yaml");
+  return {
+    mcp: { client: "goose", format: "native", file, files: [file], syntax: "yaml", keys: ["extensions", "cavelon"], entryFormat: "goose-stdio",
+      extra: { type: "stdio", name: "cavelon", enabled: true }, managedFiles: [...new Set([system, ...additional])],
+      ...(additional.some(file => !file) ? { blocked: "GOOSE_ADDITIONAL_CONFIG_FILES contains an empty path; review it before setup" } :
+        env.GOOSE_ALLOWLIST ? { blocked: "Goose's extension allowlist is active; ask the operator to review Cavelon's binding in that policy" } : {}) },
+    skills: path.join(dir, "skills"), folders: [dir],
+  };
+}
 
 function clineUser(env: Env): ReturnType<NativeClient["user"]> {
   const candidate = env.HOME?.trim();
@@ -132,6 +160,14 @@ function openCodeUserFiles(env: Env): string[] {
 
 export const NATIVE_CLIENTS: NativeClient[] = [
   {
+    name: "goose", label: "Goose", aliases: ["goose-cli"], commands: ["goose"], projectSkills: [],
+    project: () => undefined, user: gooseUser,
+    notes: [
+      "Goose uses user YAML extension settings and native skills; project init copies .agents/skills only. Run cavelon setup --agents goose for the MCP entry. System and additional config layers are inspected without overriding their Cavelon binding. Keep GOOSE_PATH_ROOT, XDG_CONFIG_HOME and GOOSE_ADDITIONAL_CONFIG_FILES the same for setup and the client.",
+      "Goose CLI's interactive MCP form can ask the person for the exact change; headless clients must refuse or return the person's terminal route. Automatic tool permissions cannot answer that form. Launch Goose with CAVELON_AGENT=1 to guard shells in modes that do not set a session marker. Actual UI qualification is separate from setup checks.",
+    ],
+  },
+  {
     name: "kilo", label: "Kilo CLI / current VS Code extension", aliases: ["kilocode", "kilo-code"], commands: ["kilo", "kilocode"], projectSkills: [".kilo/skills"],
     project: (env = {}) => ({ ...kiloConfig("kilo.json", [...kiloFiles("."), ...kiloFiles(".kilocode"), ...kiloFiles(".kilo")], env, process.platform,
       env.KILO_DISABLE_PROJECT_CONFIG === "true" || env.KILO_DISABLE_PROJECT_CONFIG === "1" ? "Kilo project configuration is disabled" :
@@ -205,6 +241,7 @@ export const NATIVE_CLIENTS: NativeClient[] = [
 export const nativeClient = (name: string): NativeClient | undefined => NATIVE_CLIENTS.find(client => client.name === name || client.aliases.includes(name));
 
 export function readNativeMcp(text: string | undefined, config: NativeMcpConfig): ReturnType<typeof readJsoncEntry> {
+  if (config.syntax === "yaml") return readYamlEntry(text, config.keys);
   if (text !== undefined && config.syntax === "json") {
     try { JSON.parse(text); } catch { return { error: "this client requires plain JSON; correct the file before setup" }; }
   }
@@ -253,12 +290,41 @@ async function qwenPolicy(config: NativeMcpConfig, full: (file: string) => strin
   return undefined;
 }
 
+async function goosePolicy(config: NativeMcpConfig, full: (file: string) => string): Promise<string | undefined> {
+  for (const candidate of new Set([...(config.managedFiles ?? []), ...config.files])) {
+    const file = full(candidate);
+    const text = await readTextFile(file);
+    if (text === undefined) continue;
+    const extensions = readYamlEntry(text, ["extensions"]);
+    if ("error" in extensions) return `${file}: ${extensions.error}`;
+    if (extensions.value !== undefined) {
+      if (!extensions.value || typeof extensions.value !== "object" || Array.isArray(extensions.value)) return `the extensions in ${file} are not a mapping; review them manually`;
+      for (const [key, value] of Object.entries(extensions.value)) {
+        const name = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>).name : undefined;
+        const equivalent = (name: string) => name.replace(/\s/g, "").toLowerCase() === "cavelon";
+        if (equivalent(key) || (typeof name === "string" && equivalent(name))) {
+          if (config.managedFiles?.includes(candidate)) return `a system or additional Cavelon extension in ${file} is preserved; review its binding with the operator`;
+          if (key !== "cavelon" || (name !== undefined && name !== "cavelon")) return `another Cavelon extension name in ${file} would conflict; review that binding manually`;
+        }
+      }
+    }
+    const allowlist = readYamlEntry(text, ["GOOSE_ALLOWLIST"]);
+    if ("error" in allowlist) return `${file}: ${allowlist.error}`;
+    if (allowlist.value) return `Goose's extension allowlist in ${file} requires operator review before Cavelon setup`;
+  }
+  return undefined;
+}
+
 /** Refuse duplicate effective entries instead of guessing which a merged client config uses. */
 export async function resolveNativeMcp(config: NativeMcpConfig, root?: string): Promise<
   { file: string; text: string | undefined; current: unknown; kept: number } | { file: string; error: string }
 > {
   const full = (file: string) => root ? path.resolve(root, file) : path.resolve(file);
   if (config.blocked) return { file: full(config.file), error: config.blocked };
+  if (config.client === "goose") {
+    const error = await goosePolicy(config, full);
+    if (error) return { file: full(config.file), error };
+  }
   if (config.client === "kilo") {
     for (const file of config.managedOpaqueFiles ?? []) {
       if (await readTextFile(file) !== undefined) return { file: full(config.file), error: `managed preferences in ${file} may override Cavelon; review the binding with the operator` };

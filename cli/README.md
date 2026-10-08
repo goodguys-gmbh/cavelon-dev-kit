@@ -834,3 +834,9 @@ Unreleased: `cavelon setup --agents kilo` installs Kilo-native settings, skills
 and bundled server/TUI plugins. CLI TUI changes ask a fresh native dialog;
 editor/headless changes use the person’s terminal. See [Kilo](../docs/install/kilo.md)
 for preserved configuration precedence, guarded launch and lifecycle.
+
+Unreleased: `cavelon setup --agents goose` writes Goose's native user YAML
+extension and skills; project init copies shared skills only. The interactive
+CLI uses its built-in person form. Headless runs cancel that form without a
+change. System/additional config bindings and personal YAML are preserved.
+See [Goose](../docs/install/goose.md) for paths, lifecycle and approval limits.
