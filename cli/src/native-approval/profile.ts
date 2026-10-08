@@ -25,7 +25,12 @@ export interface NativeRuntime {
 
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
-  if (value && typeof value === "object") return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonical((value as Record<string, unknown>)[key])}`).join(",")}}`;
+  if (value && typeof value === "object") {
+    // Confirmation binding uses ordinal keys, independent of the host's locale.
+    const keys = Object.keys(value).toSorted((a, b) => a < b ? -1 : a > b ? 1 : 0);
+    const fields = keys.map(key => JSON.stringify(key) + ":" + canonical((value as Record<string, unknown>)[key]));
+    return "{" + fields.join(",") + "}";
+  }
   return JSON.stringify(value);
 }
 
@@ -43,13 +48,17 @@ export function nativeRuntimeDirectory(profileFile: string): string {
 }
 
 /** Re-read the selected configuration; personal edits invalidate native ownership. */
+function projectRootValid(profile: NativeProfile): boolean {
+  return profile.scope !== "project" || (typeof profile.projectRoot === "string" && path.isAbsolute(profile.projectRoot));
+}
+
 export async function loadNativeRuntime(profileFile: string, client: NativeProfile["client"]): Promise<NativeRuntime> {
   const profile = JSON.parse(await fs.readFile(profileFile, "utf8")) as NativeProfile;
   if (profile.client !== client || typeof profile.version !== "string" || !/^\d+\.\d+\.\d+(?:-[\w.-]+)?$/.test(profile.version)
     || typeof profile.configFile !== "string" || !path.isAbsolute(profile.configFile)
     || typeof profile.entryHash !== "string" || !/^[a-f0-9]{64}$/.test(profile.entryHash)
     || !["user", "project"].includes(profile.scope)
-    || (profile.scope === "project" && (typeof profile.projectRoot !== "string" || !path.isAbsolute(profile.projectRoot)))) {
+    || !projectRootValid(profile)) {
     throw new Error("Invalid Cavelon native profile; repeat cavelon setup or init.");
   }
   const text = await fs.readFile(profile.configFile, "utf8");

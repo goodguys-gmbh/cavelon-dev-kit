@@ -12,21 +12,24 @@ interface Manifest {
   files: Array<{ path: string; size: number; sha256: string }>;
 }
 
+async function readAssets(): Promise<NativeAsset[]> {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  // A checkout runs src/ in tests and dist/ in its CLI; neither fetches assets.
+  for (const directory of [path.join(here, "native-assets"), path.resolve(here, "..", "dist", "native-assets")]) {
+    let names: string[];
+    try { names = await fs.readdir(directory); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+      throw error;
+    }
+    return Promise.all(names.map(async name => ({ path: name, content: await fs.readFile(path.join(directory, name), "utf8") })));
+  }
+  throw new Error("Missing native assets; build or reinstall Cavelon.");
+}
+
 /** The npm and executable readers verify identical versioned assets before setup. */
 export async function bundledNativeAssets(): Promise<NativeAsset[]> {
-  let assets = embeddedContent()?.nativeAssets;
-  if (!assets) {
-    const here = path.dirname(fileURLToPath(import.meta.url));
-    // A checkout runs src/ in tests and dist/ in its CLI; neither fetches assets.
-    for (const directory of [path.join(here, "native-assets"), path.resolve(here, "..", "dist", "native-assets")]) {
-      let names: string[];
-      try { names = await fs.readdir(directory); }
-      catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") continue; throw error; }
-      assets = await Promise.all(names.map(async name => ({ path: name, content: await fs.readFile(path.join(directory, name), "utf8") })));
-      break;
-    }
-    if (!assets) throw new Error("Missing native assets; build or reinstall Cavelon.");
-  }
+  const assets = embeddedContent()?.nativeAssets ?? await readAssets();
   const raw = assets.find(asset => asset.path === "manifest.json");
   if (!raw) throw new Error("Missing native asset manifest; reinstall Cavelon.");
   const manifest = JSON.parse(raw.content) as Manifest;

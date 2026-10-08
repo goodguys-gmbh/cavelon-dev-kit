@@ -17,7 +17,8 @@ let assets: string;
 beforeAll(() => {
   root = mkdtempSync(path.join(os.tmpdir(), "cavelon-native-test-"));
   assets = path.join(root, "standalone-assets");
-  execFileSync(process.execPath, ["scripts/build-native-assets.mjs", assets], { timeout: 30_000 });
+  execFileSync(process.execPath, ["scripts/build-native-assets.mjs"], { timeout: 30_000 });
+  cpSync(path.resolve("dist/native-assets"), assets, { recursive: true });
 });
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 const nativeImport = (name: string) => import(pathToFileURL(path.join(assets, name + ".mjs")).href);
@@ -25,14 +26,15 @@ const command = () => ({ command: process.execPath, args: [path.resolve("test/fi
 
 it("ships deterministic self-contained native entry points with pinned dependency licenses", async () => {
   const other = path.join(root, "second-render");
-  execFileSync(process.execPath, ["scripts/build-native-assets.mjs", other], { timeout: 30_000 });
+  execFileSync(process.execPath, ["scripts/build-native-assets.mjs"], { timeout: 30_000 });
+  cpSync(path.resolve("dist/native-assets"), other, { recursive: true });
   const manifest = JSON.parse(readFileSync(path.join(assets, "manifest.json"), "utf8"));
   expect(manifest).toMatchObject({ format: 1, version: KIT_VERSION, entries: { opencode: ["opencode-server.mjs", "opencode-tui.mjs"], pi: ["pi-extension.mjs"] } });
   expect(readdirSync(assets).sort()).toEqual(readdirSync(other).sort());
   for (const file of readdirSync(assets)) expect(readFileSync(path.join(assets, file))).toEqual(readFileSync(path.join(other, file)));
   for (const file of manifest.files) {
     const bytes = readFileSync(path.join(assets, file.path));
-    expect(bytes.length).toBe(file.size);
+    expect(bytes).toHaveLength(file.size);
     expect(createHash("sha256").update(bytes).digest("hex")).toBe(file.sha256);
   }
   expect(manifest.files.map((file: any) => file.path)).toEqual(expect.arrayContaining(["MCP-SDK-LICENSE", "TYPEBOX-LICENSE", "ZOD-LICENSE", "JSONC-LICENSE"]));

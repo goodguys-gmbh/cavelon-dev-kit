@@ -7,7 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const cli = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const target = process.argv[2] ? path.resolve(process.argv[2]) : path.join(cli, "dist", "native-assets");
+const target = path.join(cli, "dist", "native-assets");
 const version = JSON.parse(await readFile(path.join(cli, "package.json"), "utf8")).version;
 const entries = ["opencode-server", "opencode-tui", "pi-extension"];
 await rm(target, { recursive: true, force: true });
@@ -47,7 +47,7 @@ for (const [name, source] of [
   ["TYPEBOX-LICENSE", "node_modules/typebox/license"],
 ]) await add(name, await readFile(path.resolve(cli, source)));
 const notices = [];
-for (const name of [...dependencies].sort()) {
+for (const name of [...dependencies].toSorted((a, b) => a.localeCompare(b, "en"))) {
   const directory = path.join(cli, "node_modules", name);
   const metadata = JSON.parse(await readFile(path.join(directory, "package.json"), "utf8"));
   let license;
@@ -62,5 +62,5 @@ await add("THIRD-PARTY-NOTICES", notices.join("\n\n---\n\n"));
 await writeFile(path.join(target, "manifest.json"), JSON.stringify({
   format: 1, version,
   entries: { opencode: ["opencode-server.mjs", "opencode-tui.mjs"], pi: ["pi-extension.mjs"] },
-  files: files.sort((a, b) => a.path.localeCompare(b.path, "en")),
+  files: files.toSorted((a, b) => a.path.localeCompare(b.path, "en")),
 }, null, 2) + "\n");
