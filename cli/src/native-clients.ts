@@ -1,4 +1,6 @@
 import path from "node:path";
+import os from "node:os";
+import { promises as fs } from "node:fs";
 import { parseTree, type ParseError } from "jsonc-parser";
 import { readTextFile } from "./fsutil.js";
 import { readJsoncEntry } from "./jsonc-config.js";
@@ -8,7 +10,7 @@ import { homeDir } from "./paths.js";
 type Env = Record<string, string | undefined>;
 
 export interface NativeMcpConfig {
-  client: "opencode" | "pi" | "qwen" | "cline";
+  client: "opencode" | "pi" | "qwen" | "cline" | "kilo";
   format: "native";
   file: string;
   /** Low to high precedence; never create a companion when one already exists. */
@@ -17,6 +19,10 @@ export interface NativeMcpConfig {
   shadowFiles?: string[];
   /** Read-only operator settings that must not be silently overridden. */
   managedFiles?: string[];
+  /** Compatible configs are inspected but belong to another client. */
+  compatibilityFiles?: string[];
+  /** Opaque operator policies cannot be safely merged by file setup. */
+  managedOpaqueFiles?: string[];
   syntax: "json" | "jsonc" | "json-comments";
   keys: string[];
   entryFormat: McpEntryFormat;
@@ -78,8 +84,45 @@ const qwenConfig = (file: string, env: Env, platform = process.platform): Native
 });
 
 /** A native configuration format does not imply a person-dialog adapter. */
-export function hasNativeApprovalAdapter(config: NativeMcpConfig): config is NativeMcpConfig & { client: "opencode" | "pi" } {
-  return config.client === "opencode" || config.client === "pi";
+export function hasNativeApprovalAdapter(config: NativeMcpConfig): config is NativeMcpConfig & { client: "opencode" | "pi" | "kilo" } {
+  return config.client === "opencode" || config.client === "pi" || config.client === "kilo";
+}
+
+const kiloNames = ["kilo.json", "kilo.jsonc", "opencode.json", "opencode.jsonc"];
+const kiloFiles = (dir: string) => kiloNames.map(name => path.join(dir, name));
+const kiloCompatibility = (files: string[]) => files.filter(file => ["opencode.json", "opencode.jsonc"].includes(path.basename(file)));
+
+async function kiloAncestorFiles(root: string): Promise<string[]> {
+  const files: string[] = [];
+  let dir = path.resolve(root);
+  while (path.dirname(dir) !== dir && !await fs.stat(path.join(dir, ".git")).then(() => true, () => false)) {
+    dir = path.dirname(dir);
+    files.push(...kiloFiles(dir), ...kiloFiles(path.join(dir, ".kilocode")), ...kiloFiles(path.join(dir, ".kilo")));
+  }
+  return files;
+}
+
+function kiloUser(env: Env) {
+  const home = (env.KILO_TEST_HOME ?? homeDir(env)).trim();
+  // Kilo uses xdg-basedir on every platform and removes CR/LF from its paths.
+  const xdg = env.XDG_CONFIG_HOME && path.isAbsolute(env.XDG_CONFIG_HOME) ? env.XDG_CONFIG_HOME : path.join(homeDir(env), ".config");
+  const global = path.join(xdg.replace(/[\r\n]/g, ""), "kilo");
+  const dir = env.KILO_CONFIG_DIR || global;
+  const files = [...new Set([path.join(global, "config.json"), ...kiloFiles(global), ...(env.KILO_CONFIG ? [env.KILO_CONFIG] : []),
+    ...kiloFiles(path.join(home, ".kilocode")), ...kiloFiles(path.join(home, ".kilo")), ...(dir !== global ? kiloFiles(dir) : [])])];
+  return { dir, global, files, compatibilityFiles: kiloCompatibility(files) };
+}
+
+function kiloConfig(file: string, files: string[], env: Env, platform: NodeJS.Platform, blocked?: string): NativeMcpConfig {
+  const managed = env.KILO_TEST_MANAGED_CONFIG_DIR || (platform === "darwin" ? "/Library/Application Support/kilo"
+    : platform === "win32" ? path.join(env.ProgramData || "C:\\ProgramData", "kilo") : "/etc/kilo");
+  return {
+    client: "kilo", format: "native", file, files, syntax: "jsonc", keys: ["mcp", "cavelon"], entryFormat: "command-array", extra: { type: "local" },
+    compatibilityFiles: kiloCompatibility(files), managedFiles: kiloFiles(managed),
+    managedOpaqueFiles: platform === "darwin" ? [path.join("/Library/Managed Preferences", os.userInfo().username, "ai.opencode.managed.plist"),
+      "/Library/Managed Preferences/ai.opencode.managed.plist"] : [],
+    ...(blocked ? { blocked } : env.KILO_CONFIG_CONTENT ? { blocked: "KILO_CONFIG_CONTENT overrides file settings; configure Cavelon in that managed configuration" } : {}),
+  };
 }
 
 function openCodeUserFiles(env: Env): string[] {
@@ -88,6 +131,21 @@ function openCodeUserFiles(env: Env): string[] {
 }
 
 export const NATIVE_CLIENTS: NativeClient[] = [
+  {
+    name: "kilo", label: "Kilo CLI / current VS Code extension", aliases: ["kilocode", "kilo-code"], commands: ["kilo", "kilocode"], projectSkills: [".kilo/skills"],
+    project: (env = {}) => ({ ...kiloConfig("kilo.json", [...kiloFiles("."), ...kiloFiles(".kilocode"), ...kiloFiles(".kilo")], env, process.platform,
+      env.KILO_DISABLE_PROJECT_CONFIG === "true" || env.KILO_DISABLE_PROJECT_CONFIG === "1" ? "Kilo project configuration is disabled" :
+        env.KILO_CONFIG_DIR ? "KILO_CONFIG_DIR may override project settings; use user setup for that directory" : undefined), shadowFiles: kiloUser(env).files }),
+    user: (env, platform = process.platform) => {
+      const { dir, global, files } = kiloUser(env);
+      return { mcp: kiloConfig(env.KILO_CONFIG || path.join(dir, "kilo.json"), files, env, platform), skills: path.join(dir, "skills"), folders: [...new Set([global, dir])] };
+    },
+    notes: [
+      "Kilo CLI and current VS Code extension 7.8.8 use Kilo's own MCP settings and skills. Compatible OpenCode files are inspected and preserved; setup does not migrate another client's binding.",
+      "Setup installs separate Kilo server/TUI plugins and disables only the duplicate Cavelon MCP entry. CLI TUI approval requires a fresh person dialog; the editor and headless modes return a command for the person's own terminal.",
+      "Start Kilo with CAVELON_AGENT=1 scoped to its process, including a fresh VS Code process for the editor. A separate person's terminal must not inherit that marker. Check effective cloud/organization policies in Kilo; file checks cannot certify remote settings or actual UI loading.",
+    ],
+  },
   {
     name: "opencode", label: "OpenCode", aliases: ["opencode-ai"], commands: ["opencode"], projectSkills: [],
     project: (env = {}) => ({ ...openCodeConfig("opencode.json", ["opencode.json", "opencode.jsonc", ".opencode/opencode.json", ".opencode/opencode.jsonc"],
@@ -201,6 +259,22 @@ export async function resolveNativeMcp(config: NativeMcpConfig, root?: string): 
 > {
   const full = (file: string) => root ? path.resolve(root, file) : path.resolve(file);
   if (config.blocked) return { file: full(config.file), error: config.blocked };
+  if (config.client === "kilo") {
+    for (const file of config.managedOpaqueFiles ?? []) {
+      if (await readTextFile(file) !== undefined) return { file: full(config.file), error: `managed preferences in ${file} may override Cavelon; review the binding with the operator` };
+    }
+    for (const candidate of [...(config.managedFiles ?? []), ...(config.compatibilityFiles ?? [])]) {
+      const file = full(candidate);
+      const selected = readNativeMcp(await readTextFile(file), config);
+      if ("error" in selected) return { file, error: selected.error };
+      if (selected.value !== undefined) return { file, error: `a managed or OpenCode-compatible Cavelon server in ${file} is preserved; review its binding before Kilo setup` };
+    }
+    if (root) for (const file of await kiloAncestorFiles(root)) {
+      const selected = readNativeMcp(await readTextFile(file), config);
+      if ("error" in selected) return { file, error: selected.error };
+      if (selected.value !== undefined) return { file, error: `an inherited Cavelon server in ${file} would be shadowed; review its binding before project setup` };
+    }
+  }
   if (config.client === "qwen") {
     const error = await qwenPolicy(config, full);
     if (error) return { file: full(config.file), error };
@@ -214,6 +288,7 @@ export async function resolveNativeMcp(config: NativeMcpConfig, root?: string): 
   }
   const found: Array<{ file: string; text: string; current: unknown; kept: number }> = [];
   for (const candidate of config.files) {
+    if (config.compatibilityFiles?.includes(candidate)) continue;
     const file = full(candidate);
     const text = await readTextFile(file);
     if (text === undefined) continue;

@@ -312,3 +312,14 @@ the verified local executable, then run `cavelon setup --agents cline`. Setup
 copies bundled skills and writes `cavelon mcp` without a runtime package fetch.
 Project init copies skills only. Keep guarded changes in your own terminal and
 launch the coding client with its guard marker; see [Cline](install/cline.md).
+
+## Kilo
+
+When your kit release includes Kilo setup, provision the client separately and
+put the installed offline Cavelon executable on PATH before setup/init. Its
+server/TUI plugins and dependencies are carried inside that executable. Setup
+records a disabled duplicate entry and owned profile, preserving other servers
+and plugins. Provision the coding model and instance providers separately.
+Use the CLI’s fresh person dialog, or the person’s terminal in editor/headless
+mode; see [Kilo](install/kilo.md). Complete packaged offline qualification is
+still a next-release gate.

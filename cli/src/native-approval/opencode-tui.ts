@@ -17,9 +17,9 @@ export interface OpenCodeTui {
   };
 }
 
-export async function startOpenCodeTui(api: OpenCodeTui, options: NativeRuntime) {
+export async function startOpenCodeTui(api: OpenCodeTui, options: NativeRuntime, client: "opencode" | "kilo" = "opencode") {
   await assertNativeWorkspace(options, api.state.path.directory);
-  if (await hasNativeProjectOwner(options, "opencode", api.state.path.directory)) return;
+  if (await hasNativeProjectOwner(options, client, api.state.path.directory)) return;
   const clients = new Map<string, Promise<NativeApprovalClient>>();
   const pending = new Set<AbortController>();
   const retiring = new Set<Promise<void>>();

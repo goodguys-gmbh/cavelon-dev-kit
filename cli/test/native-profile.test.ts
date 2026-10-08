@@ -9,11 +9,11 @@ let temp: string;
 beforeEach(async () => { temp = await fs.mkdtemp(path.join(os.tmpdir(), "cavelon-native-profile-")); });
 afterEach(async () => { await fs.rm(temp, { recursive: true, force: true }); });
 
-async function project(client: "opencode" | "pi", name = "project with spaces") {
+async function project(client: "opencode" | "pi" | "kilo", name = "project with spaces") {
   const root = path.join(temp, name);
-  const dir = path.join(root, client === "pi" ? ".pi" : ".opencode", "cavelon");
+  const dir = path.join(root, `.${client}`, "cavelon");
   await fs.mkdir(dir, { recursive: true });
-  const configFile = client === "pi" ? "../mcp.json" : "../../opencode.jsonc";
+  const configFile = client === "pi" ? "../mcp.json" : `../../${client}.jsonc`;
   const entry = client === "pi" ? { command: "cavelon", args: ["mcp"], enabled: false } : { type: "local", command: ["cavelon", "mcp"], enabled: false };
   const file = path.resolve(dir, configFile);
   await fs.writeFile(file, JSON.stringify({ [client === "pi" ? "mcpServers" : "mcp"]: { cavelon: entry } }));
@@ -23,7 +23,7 @@ async function project(client: "opencode" | "pi", name = "project with spaces") 
   return { root, dir, file, profile, profileFile };
 }
 
-it.each(["opencode", "pi"] as const)("loads %s's project profile after the whole clone moves", async client => {
+it.each(["opencode", "pi", "kilo"] as const)("loads %s's project profile after the whole clone moves", async client => {
   const p = await project(client);
   const moved = path.join(temp, "another clone");
   await fs.rename(p.root, moved);

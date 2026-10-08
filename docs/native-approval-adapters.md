@@ -5,11 +5,12 @@ part of [#192](https://github.com/goodguys-gmbh/cavelon-dev-kit/issues/192).
 Kit 0.1.16 installs bundled OpenCode/Pi native adapters. Their built-in MCP
 route still uses the person's separate terminal for guarded changes. See the
 [qualification matrix](coding-agent-qualification.md) for current packaged
-client evidence; the prototype record below is historical.
+client evidence; the prototype record below is historical. Unreleased Kilo
+support adds its own server/TUI entry points and configuration ownership.
 
 ## Decision
 
-Pursue native exact-change approval through both clients' extension systems.
+Pursue native exact-change approval through the clients' extension systems.
 Their inspected built-in MCP clients lack the required form capability, but
 both native UI prototypes completed Cavelon's existing elicitation exchange.
 No upstream change is needed to establish this initial native path.
@@ -49,8 +50,9 @@ not person interaction.
 The reusable transport is in `cli/src/native-approval/client.ts` with
 fake-instance tests in `cli/test/native-approval.test.ts`.
 
-The production adapter sources now build three self-contained native entry
-points: separate OpenCode server/TUI modules and a Pi extension. npm carries
+The adapter sources build self-contained native entry points: separate
+OpenCode server/TUI modules, a Pi extension and unreleased Kilo server/TUI
+modules. npm carries
 the versioned assets and their dependency licenses, hashes and manifest;
 standalone builds embed the same bytes for setup. The packaged adapters load
 from a directory without `node_modules`. `setup` and `init` install
@@ -85,7 +87,7 @@ Update/check/removal refuse edited
 assets or references, including additional absolute/file-URL aliases.
 
 User assets live in the selected client directory's `cavelon/`; project assets
-live in `.opencode/cavelon/` or `.pi/cavelon/`. A verified user installation can
+live in `.opencode/cavelon/`, `.pi/cavelon/` or `.kilo/cavelon/`. A verified user installation can
 serve a new project without duplicate project files. If both adapters already
 exist, a valid project profile owns its workspace and the user adapter yields;
 Pi requires project trust before this precedence applies. OpenCode's generated
@@ -148,6 +150,33 @@ rather than installing another general MCP replacement.
 
 Before shipping, qualify reload/new/resumed sessions, ownership, extension
 conflicts and coexistence with an unrelated native MCP server.
+
+## Kilo
+
+The released Kilo 7.8.8 v1 tool and TUI dialog contracts match the shared
+OpenCode transport. Kilo has separate entry points, client identity, user/project
+plugin IDs and profiles; it does not inherit OpenCode's configuration resolver
+or qualification. Its own native config chain includes compatible files and
+managed policies, which setup inspects without migrating another client's
+Cavelon binding.
+
+Kilo notifies plugins of its merged configuration through the `config` hook.
+The native server retains that config and verifies the current Cavelon entry's
+hash before every dispatch, including changes made by later plugin hooks.
+Calling the SDK config endpoint during plugin initialization would re-enter
+that initialization, so the adapter uses the supplied hook instead. A missing
+or changed effective binding refuses tool dispatch. The server's `shell.env`
+hook marks agent commands; a process-scoped guarded launch remains required
+when that plugin is unavailable.
+
+The CLI TUI provides the same fresh exact-change dialog, session confinement
+and refusal behavior. The current editor uses the backend server plugin but
+has no matching TUI owner; guarded changes return the person's terminal route.
+The packaged Kilo 7.8.8 CLI passed fresh person Cancel/Confirm: refusal made
+no confirmation or mutation, and the new approval applied one bound synthetic
+child-solution import. Full offline journeys remain a release gate, tracked
+separately from runtime loading and person interaction in the
+[qualification matrix](coding-agent-qualification.md).
 
 ## Packaging and completion gates
 
