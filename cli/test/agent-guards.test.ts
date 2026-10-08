@@ -399,6 +399,8 @@ describe("cavelon api and the api tool, run by an agent and by a person", () => 
       qwen: { QWEN_CODE: "1" },
       // Cline 3.0.70 inherits this required process-scoped launch marker in run_commands.
       cline: { CAVELON_AGENT: "1" },
+      // Kilo 7.8.8's guarded launch and the native plugin's shell.env hook.
+      kilo: { CAVELON_AGENT: "1" },
       // The Kiro IDE's agent terminal: no agent marker, TERM_PROGRAM in every terminal it opens.
       kiro: { TERM_PROGRAM: "kiro", Q_TERM_DISABLED: "1" },
       // kiro-cli: "only set when the agent is driving the command" (kiro.dev/docs/reference/built-in-tools).

@@ -1,8 +1,9 @@
 # Coding-agent qualification
 
-Setup support and real-client qualification are recorded separately. This
-release adds three open-source clients; Kilo, Goose and OMP remain
-planned for a later release. Existing clients keep their installation routes.
+Setup support and real-client qualification are recorded separately. Version
+0.1.16 adds the three open-source clients below. Unreleased Cline and Kilo
+checks are recorded separately; Goose and OMP remain planned. Existing clients
+keep their installation routes.
 
 | Client | Pinned version | Runtime checked | Guarded-change mode |
 |---|---|---|---|
@@ -74,3 +75,29 @@ and its MCP environment filters custom Cavelon state paths; see
 [Cline](install/cline.md). Packaged own-terminal approval and complete offline
 workflow qualification remain release gates. Other platforms, editor variants
 and customer model/network pilots remain separate work.
+
+## Unreleased Kilo integration
+
+| Surface | Pinned version | Runtime checked | Guarded-change mode |
+|---|---|---|---|
+| Kilo CLI | `@kilocode/cli` 7.8.8 | Linux x64 released binary; four skills, native server plugin, read, child-solution deleting preview, headless/sibling refusal and actual shell hook | CLI TUI native adapter; fresh person qualification pending; headless person-terminal route |
+| Kilo VS Code | `kilocode.kilo-code` 7.8.8, Linux x64 VSIX; VS Code 1.139.1 | Actual isolated editor host and bundled backend; four skills, 64 native tools, read, child-solution deleting preview, headless/sibling refusal and actual shell hook | Person's own terminal; no native editor Cavelon dialog |
+
+Both actual runtimes used a scripted loopback model endpoint and a fake local
+instance. They sent no confirmation or guarded import, and made no real model,
+database or production call. The editor was activated in its actual VS Code
+host; a private inspection facade exposed its existing connection service
+without replacing the client, backend, transport or tool logic.
+
+Two setup regressions failed on 0.1.16. The implementation passed 233 focused
+and neighboring checks, including Kilo configuration/managed-policy handling,
+portable profiles, native lifecycle, bundled dialog protocol, shell guards and
+documentation checks. Typecheck, lint and build passed. Simulated UI callbacks
+are protocol evidence and do not count as a person's answer.
+
+The private npm candidate loads without fetching an adapter dependency. Its
+actual Kilo TUI displayed the packaged exact-change dialog; the fresh person's
+Cancel/Confirm result and the complete offline workflow remain next-release
+gates. No qualification is inherited from OpenCode. Other client versions,
+macOS/Windows/WSL UIs, JetBrains and customer network/model pilots remain
+separate. Installation and lifecycle: [Kilo](install/kilo.md).

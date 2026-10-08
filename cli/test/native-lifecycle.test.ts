@@ -20,7 +20,7 @@ afterEach(() => sb.cleanup());
 const command = { command: "cavelon", args: ["mcp"] };
 const read = (file: string) => readFileSync(file, "utf8");
 
-async function install(name: "opencode" | "pi") {
+async function install(name: "opencode" | "pi" | "kilo") {
   const agent = agentByName(setupAgents(sb.env), name)!;
   const skills = await loadSkills();
   const record: AgentRecord = {};
@@ -29,12 +29,12 @@ async function install(name: "opencode" | "pi") {
   return { agent, skills, record, changes, dir: path.join(path.dirname(agent.skills), "cavelon") };
 }
 
-it.each(["opencode", "pi"] as const)("setup installs %s's bundled native adapter and disables only its Cavelon MCP duplicate", async name => {
+it.each(["opencode", "pi", "kilo"] as const)("setup installs %s's bundled native adapter and disables only its Cavelon MCP duplicate", async name => {
   const p = await install(name);
   expect(p.changes.every(change => change.outcome === "done"), JSON.stringify(p.changes)).toBe(true);
-  expect(readJsoncEntry(read(p.agent.mcp.file), [name === "opencode" ? "mcp" : "mcpServers", "cavelon"])).toMatchObject({ value: { enabled: false } });
+  expect(readJsoncEntry(read(p.agent.mcp.file), [name === "pi" ? "mcpServers" : "mcp", "cavelon"])).toMatchObject({ value: { enabled: false } });
   const settings = path.join(path.dirname(p.agent.skills), name === "pi" ? "settings.json" : "tui.json");
-  const member = name === "pi" ? "./cavelon/pi-extension.mjs" : "./cavelon/opencode-tui-entry.mjs";
+  const member = name === "pi" ? "./cavelon/pi-extension.mjs" : `./cavelon/${name}-tui-entry.mjs`;
   expect(readJsoncEntry(read(settings), [name === "pi" ? "extensions" : "plugin"])).toMatchObject({ value: [member] });
   expect(existsSync(path.join(p.dir, "profile.json"))).toBe(true);
   expect(existsSync(path.join(p.dir, "installation.json"))).toBe(true);
@@ -50,7 +50,7 @@ it.each(["opencode", "pi"] as const)("setup installs %s's bundled native adapter
   expect(p.record).toEqual({});
 });
 
-it.each(["opencode", "pi"] as const)("setup refuses an unowned %s native directory before changing MCP settings", async name => {
+it.each(["opencode", "pi", "kilo"] as const)("setup refuses an unowned %s native directory before changing MCP settings", async name => {
   const agent = agentByName(setupAgents(sb.env), name)!;
   const dir = path.join(path.dirname(agent.skills), "cavelon");
   mkdirSync(dir, { recursive: true });
@@ -61,9 +61,9 @@ it.each(["opencode", "pi"] as const)("setup refuses an unowned %s native directo
   expect(read(path.join(dir, "personal.txt"))).toBe("personal integration");
 });
 
-it.each(["opencode", "pi"] as const)("%s refuses updates, checks and removal of edited native assets", async name => {
+it.each(["opencode", "pi", "kilo"] as const)("%s refuses updates, checks and removal of edited native assets", async name => {
   const p = await install(name);
-  const file = path.join(p.dir, name === "pi" ? "pi-extension.mjs" : "opencode-server.mjs");
+  const file = path.join(p.dir, name === "pi" ? "pi-extension.mjs" : `${name}-server.mjs`);
   writeFileSync(file, read(file) + "\n// personal edit\n");
   const before = read(p.agent.mcp.file);
   const update = await planAgent(p.agent, {}, sb.env, command, p.skills, process.platform, p.record);
@@ -192,7 +192,7 @@ it("updates an older owned native installation without duplicating personal or C
   expect((await checkNativeInstallation(p.dir)).command).toEqual(command);
 });
 
-it.each(["opencode", "pi"] as const)("%s project install remains valid after moving the clone and removes only recorded files", async name => {
+it.each(["opencode", "pi", "kilo"] as const)("%s project install remains valid after moving the clone and removes only recorded files", async name => {
   const root = path.join(sb.home, "project with spaces");
   mkdirSync(root);
   const config = nativeClient(name)!.project(sb.env)!;
@@ -202,7 +202,7 @@ it.each(["opencode", "pi"] as const)("%s project install remains valid after mov
   expect(JSON.parse(read(path.join(plan.directory, "profile.json")))).toMatchObject({ format: 2, projectRoot: "../.." });
   const moved = path.join(sb.home, "moved 東京 project");
   renameSync(root, moved);
-  const directory = path.join(moved, name === "pi" ? ".pi" : ".opencode", "cavelon");
+  const directory = path.join(moved, `.${name}`, "cavelon");
   const runtime = await loadNativeRuntime(path.join(directory, "profile.json"), name);
   expect(runtime.projectRoot).toBe(await import("node:fs/promises").then(fs => fs.realpath(moved)));
   expect((await planNativeInstallation(config, command, sb.env, { root: moved })).outcome).toBe("unchanged");
@@ -213,7 +213,7 @@ it.each(["opencode", "pi"] as const)("%s project install remains valid after mov
   expect(existsSync(path.join(directory, "profile.json"))).toBe(false);
 });
 
-it.each(["opencode", "pi"] as const)("%s reuses verified user integration and gives a pre-existing project native adapter precedence", async name => {
+it.each(["opencode", "pi", "kilo"] as const)("%s reuses verified user integration and gives a pre-existing project native adapter precedence", async name => {
   const p = await install(name);
   const root = path.join(sb.home, "project");
   mkdirSync(root);
@@ -228,8 +228,8 @@ it.each(["opencode", "pi"] as const)("%s reuses verified user integration and gi
   const user = await loadNativeRuntime(path.join(p.dir, "profile.json"), name);
   expect(await hasNativeProjectOwner(user, name, root)).toBe(true);
   expect((await checkNativeInstallation(p.dir)).command).toEqual(command);
-  if (name === "opencode") {
-    const hooks = await startOpenCodeServer({ directory: root }, { ...user, command: { command: "must-not-start", args: [] } });
+  if (name !== "pi") {
+    const hooks = await startOpenCodeServer({ directory: root }, { ...user, command: { command: "must-not-start", args: [] } }, name);
     expect(hooks.tool).toEqual({});
     await hooks.dispose();
   } else {

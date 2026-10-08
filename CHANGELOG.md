@@ -9,6 +9,11 @@ CLI, the skills and the plugin.
 
 ### Added
 
+- Kilo-native CLI/editor settings and skills, preserved compatible OpenCode
+  and operator configurations, ownership-based lifecycle and bundled CLI
+  server/TUI approval plugins. Effective binding changes refuse tool dispatch;
+  editor/headless approval uses the person’s terminal. Its native shell hook
+  and guarded launch protect person-only commands (#220).
 - Cline shared native user MCP setup and skills, independent CLI configuration
   overrides, project skills without an ineffective project MCP file, and safe
   ownership-based check/update/remove. Guarded changes use the person’s own

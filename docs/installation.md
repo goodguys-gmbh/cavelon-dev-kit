@@ -15,7 +15,7 @@ your computer and logs you in ([Set up your coding agents](#set-up-your-coding-a
 This page covers that, the ways to do each part by hand, updating and
 removing. [Install the kit in your coding agent](install/README.md) has one page
 per client (Claude Code, Codex, Cursor, VS Code with GitHub Copilot, Kiro,
-Gemini CLI, OpenCode, Pi, Qwen Code, Cline, and cloud agents and CI), each with its install, first login,
+Gemini CLI, OpenCode, Pi, Qwen Code, Cline, Kilo, and cloud agents and CI), each with its install, first login,
 check, update and removal. When you are done, continue with
 [Getting started](getting-started.md) or
 [Building a solution with a coding agent](coding-agents.md).
@@ -316,6 +316,12 @@ Project init copies `.cline/skills/` only; MCP stays at user level. Custom CLI
 paths and editor path limits are documented separately. Guarded changes use
 the person’s own terminal, with a process-scoped guarded client launch.
 
+Unreleased: [Kilo](install/kilo.md) setup uses native Kilo JSON/JSONC settings,
+`skills/` and bundled server/TUI plugins under its own configuration directory.
+CLI guarded changes use fresh native dialogs; editor/headless calls return a
+command for the person’s own terminal. Compatible OpenCode files and managed
+policies are inspected and preserved.
+
 See [Qwen Code CLI](install/qwen-code.md) for project paths, managed policy,
 native skill discovery and its explicit terminal approval route. This entry
 does not qualify Qwen's editor surfaces or claim a native approval dialog.
@@ -475,6 +481,10 @@ cavelon init --agents cursor,copilot
 | `opencode` | reuse verified user native setup, or native server/TUI references, a disabled duplicate MCP entry and portable `.opencode/cavelon/` assets |
 | `pi` | reuse verified user native setup, or `.pi/mcp.json`, a native extension reference in `.pi/settings.json`, portable `.pi/cavelon/` assets and `.pi/skills/cavelon-*/` |
 | `other` | no MCP entry; the shared skills and `AGENTS.md` |
+
+Unreleased Kilo init reuses verified user setup or writes native project
+references, portable `.kilo/cavelon/` assets and `.kilo/skills/` copies.
+See [Kilo](install/kilo.md) for the client and approval limits.
 
 OpenCode/Pi native setup is included in 0.1.16. See the
 [qualification matrix](coding-agent-qualification.md) and install pages for

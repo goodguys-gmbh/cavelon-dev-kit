@@ -12,7 +12,7 @@ import { nativeEntryHash, type NativeProfile } from "./native-approval/profile.j
 import { KIT_VERSION } from "./version.js";
 
 type Env = Record<string, string | undefined>;
-type Client = "opencode" | "pi";
+type Client = "opencode" | "pi" | "kilo";
 interface Reference { file: string; key: "plugin" | "extensions"; member: string; created: boolean; kept: boolean }
 interface Installation {
   format: 1; client: Client; scope: "user" | "project"; version: string; projectRoot?: string;
@@ -57,7 +57,7 @@ async function readInstallation(directory: string): Promise<Installation | undef
   let record: Installation;
   try { record = JSON.parse(text) as Installation; }
   catch { throw new Error("Invalid native ownership record; inspect the installation before repeating setup."); }
-  if (record.format !== 1 || !["opencode", "pi"].includes(record.client) || !["user", "project"].includes(record.scope)
+  if (record.format !== 1 || !["opencode", "pi", "kilo"].includes(record.client) || !["user", "project"].includes(record.scope)
     || typeof record.version !== "string" || !record.files || typeof record.files !== "object" || Array.isArray(record.files)
     || !record.mcp || typeof record.mcp.file !== "string" || !/^[a-f0-9]{64}$/.test(record.mcp.hash)
     || typeof record.mcp.created !== "boolean" || !Number.isInteger(record.mcp.kept) || record.mcp.kept < 0 || record.mcp.kept > 1
@@ -121,20 +121,23 @@ async function chooseFile(files: string[], fallback: string): Promise<string> {
   return present.at(-1) ?? fallback;
 }
 
-/** OpenCode's TUI has its own config precedence, separate from OPENCODE_CONFIG. */
+/** Each command-array client's TUI config is separate from its MCP config. */
 async function references(client: Client, directory: string, mcpFile: string, env: Env, root?: string): Promise<Array<{ file: string; key: Reference["key"]; member: string }>> {
   if (client === "pi") return [{ file: path.join(path.dirname(directory), "settings.json"), key: "extensions", member: memberPath(path.join(path.dirname(directory), "settings.json"), path.join(directory, "pi-extension.mjs")) }];
-  const global = path.dirname(nativeClient(client)!.user({ ...env, OPENCODE_CONFIG_DIR: undefined }).skills);
-  const configDir = env.OPENCODE_CONFIG_DIR;
-  const files = root ? [path.join(root, "tui.json"), path.join(root, "tui.jsonc"), path.join(root, ".opencode", "tui.json"), path.join(root, ".opencode", "tui.jsonc")] :
-    [path.join(global, "tui.json"), path.join(global, "tui.jsonc"), ...(env.OPENCODE_TUI_CONFIG ? [env.OPENCODE_TUI_CONFIG] : []),
+  const prefix = client.toUpperCase();
+  const global = path.dirname(nativeClient(client)!.user({ ...env, [`${prefix}_CONFIG_DIR`]: undefined }).skills);
+  const configDir = env[`${prefix}_CONFIG_DIR`];
+  const tuiConfig = env[`${prefix}_TUI_CONFIG`];
+  const projectDirs = client === "kilo" ? [".kilocode", ".kilo"] : [".opencode"];
+  const files = root ? [path.join(root, "tui.json"), path.join(root, "tui.jsonc"), ...projectDirs.flatMap(dir => [path.join(root, dir, "tui.json"), path.join(root, dir, "tui.jsonc")])] :
+    [path.join(global, "tui.json"), path.join(global, "tui.jsonc"), ...(tuiConfig ? [tuiConfig] : []),
       ...(configDir ? [path.join(configDir, "tui.json"), path.join(configDir, "tui.jsonc")] : [])];
-  if (root && env.OPENCODE_TUI_CONFIG) throw new Error("OPENCODE_TUI_CONFIG overrides project UI settings; use user setup for that configuration.");
-  const fallback = !root && configDir ? path.join(configDir, "tui.json") : !root && env.OPENCODE_TUI_CONFIG ? env.OPENCODE_TUI_CONFIG : path.join(root ?? global, "tui.json");
+  if (root && tuiConfig) throw new Error(`${prefix}_TUI_CONFIG overrides project UI settings; use user setup for that configuration.`);
+  const fallback = !root && configDir ? path.join(configDir, "tui.json") : !root && tuiConfig ? tuiConfig : path.join(root ?? global, "tui.json");
   const tuiFile = await chooseFile(files, fallback);
   return [
-    { file: mcpFile, key: "plugin", member: memberPath(mcpFile, path.join(directory, "opencode-server-entry.mjs")) },
-    { file: tuiFile, key: "plugin", member: memberPath(tuiFile, path.join(directory, "opencode-tui-entry.mjs")) },
+    { file: mcpFile, key: "plugin", member: memberPath(mcpFile, path.join(directory, `${client}-server-entry.mjs`)) },
+    { file: tuiFile, key: "plugin", member: memberPath(tuiFile, path.join(directory, `${client}-tui-entry.mjs`)) },
   ];
 }
 
@@ -142,7 +145,7 @@ async function references(client: Client, directory: string, mcpFile: string, en
 export async function planNativeInstallation(config: NativeMcpConfig, command: McpCommand, env: Env, options: { root?: string; directory?: string; mcpRecord?: { file: string; created: boolean; kept?: number } } = {}): Promise<NativeInstallPlan> {
   if (!hasNativeApprovalAdapter(config)) throw new Error("This client has no native person-dialog adapter.");
   const root = options.root;
-  const expectedDirectory = root ? path.join(root, config.client === "pi" ? ".pi" : ".opencode", "cavelon") : path.join(path.dirname(nativeClient(config.client)!.user(env).skills), "cavelon");
+  const expectedDirectory = root ? path.join(root, `.${config.client}`, "cavelon") : path.join(path.dirname(nativeClient(config.client)!.user(env).skills), "cavelon");
   const directory = options.directory ?? expectedDirectory;
   const skipped = (reason: string): NativeInstallPlan => ({ directory, outcome: "skipped", reason, writes: [] });
   try {
@@ -176,8 +179,8 @@ export async function planNativeInstallation(config: NativeMcpConfig, command: M
       client: config.client, version: KIT_VERSION, scope: root ? "project" : "user", configFile: root ? portable(directory, selected.file) : selected.file, entryHash: nativeEntryHash(disabled) };
     const contents = new Map(assets.map(asset => [asset.path, asset.content]));
     contents.set("profile.json", json(profile));
-    if (config.client === "opencode") for (const surface of ["server", "tui"]) {
-      contents.set(`opencode-${surface}-entry.mjs`, `import adapter from "./opencode-${surface}.mjs";\nexport default { ...adapter, id: "cavelon.native-approval.${root ? "project" : "user"}" };\n`);
+    if (config.client !== "pi") for (const surface of ["server", "tui"]) {
+      contents.set(`${config.client}-${surface}-entry.mjs`, `import adapter from "./${config.client}-${surface}.mjs";\nexport default { ...adapter, id: "cavelon.native-approval.${config.client === "kilo" ? "kilo." : ""}${root ? "project" : "user"}" };\n`);
     }
     const writes = new Map<string, Write>();
     const replace = async (file: string, after: string | undefined) => {
@@ -196,7 +199,8 @@ export async function planNativeInstallation(config: NativeMcpConfig, command: M
         try { JSON.parse(before); }
         catch { return skipped("Pi settings require plain JSON; correct the file before native installation."); }
       }
-      for (const id of ["cavelon.native-approval", `cavelon.native-approval.${root ? "project" : "user"}`]) {
+      for (const id of ["cavelon.native-approval", `cavelon.native-approval.${root ? "project" : "user"}`,
+        ...(config.client === "kilo" ? ["cavelon.native-approval.kilo", `cavelon.native-approval.kilo.${root ? "project" : "user"}`] : [])]) {
         const enabled = readJsoncEntry(before, ["plugin_enabled", id]);
         if ("error" in enabled) return skipped(enabled.error);
         if (enabled.value === false) return skipped("The person turned off the Cavelon plugin; setup does not enable it.");
@@ -272,7 +276,8 @@ export async function checkNativeInstallation(directory: string): Promise<{ comm
     await verify(directory, record);
     for (const ref of record.references) {
       const text = await readTextFile(fileOf(directory, ref.file));
-      for (const id of ["cavelon.native-approval", `cavelon.native-approval.${record.scope}`]) {
+      for (const id of ["cavelon.native-approval", `cavelon.native-approval.${record.scope}`,
+        ...(record.client === "kilo" ? ["cavelon.native-approval.kilo", `cavelon.native-approval.kilo.${record.scope}`] : [])]) {
         const enabled = readJsoncEntry(text, ["plugin_enabled", id]);
         if ("error" in enabled) throw new Error(enabled.error);
         if (enabled.value === false) throw new Error("The person turned off the Cavelon plugin; enable it in the client only if intended.");

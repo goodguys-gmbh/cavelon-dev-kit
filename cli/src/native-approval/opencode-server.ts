@@ -13,9 +13,9 @@ function toolArguments(input: Parameters<typeof z.fromJSONSchema>[0]) {
   return schema.shape;
 }
 
-export async function startOpenCodeServer(input: { directory: string }, options: NativeRuntime) {
+export async function startOpenCodeServer(input: { directory: string }, options: NativeRuntime, client: "opencode" | "kilo" = "opencode") {
   await assertNativeWorkspace(options, input.directory);
-  if (await hasNativeProjectOwner(options, "opencode", input.directory)) return { dispose: async () => undefined, tool: {} };
+  if (await hasNativeProjectOwner(options, client, input.directory)) return { dispose: async () => undefined, tool: {} };
   const command = { ...options.command, cwd: input.directory };
   const discovery = await nativeStdioClient(command, false, options.version);
   const tools = await discovery.tools().finally(() => discovery.close());

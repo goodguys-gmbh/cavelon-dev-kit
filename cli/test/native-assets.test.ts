@@ -96,9 +96,9 @@ it("keeps every character of long Unicode previews visible and refuses tiny term
   expect(nativeRuntimeDirectory(deep)).not.toBe(nativeRuntimeDirectory(deep + "-other"));
 });
 
-it("the bundled OpenCode pair routes namespaced tools to fresh dialogs and preserves headless refusal", async () => {
-  const serverModule = await nativeImport("opencode-server");
-  const tuiModule = await nativeImport("opencode-tui");
+it.each(["opencode", "kilo"] as const)("the bundled %s pair routes namespaced tools to fresh dialogs and preserves headless refusal", async name => {
+  const serverModule = await nativeImport(`${name}-server`);
+  const tuiModule = await nativeImport(`${name}-tui`);
   let session = "synthetic-session";
   let dialog = false;
   let answer = false;
@@ -117,9 +117,9 @@ it("the bundled OpenCode pair routes namespaced tools to fresh dialogs and prese
       },
     },
   };
-  const options = { command: command(), version: KIT_VERSION, scope: "user", runtimeDir: nativeRuntimeDirectory(path.join(root, "opencode-profile.json")) };
-  const tui = await tuiModule.startOpenCodeTui(api, options);
-  const server = await serverModule.startOpenCodeServer({ directory: root }, options);
+  const options = { command: command(), version: KIT_VERSION, scope: "user", runtimeDir: nativeRuntimeDirectory(path.join(root, `${name}-profile.json`)) };
+  const tui = await tuiModule[name === "kilo" ? "startKiloTui" : "startOpenCodeTui"](api, options);
+  const server = await serverModule[name === "kilo" ? "startKiloServer" : "startOpenCodeServer"]({ directory: root }, options);
   const context = { sessionID: session, abort: new AbortController().signal };
   try {
     expect(Object.keys(server.tool)).toEqual(["cavelon_read", "cavelon_change"]);

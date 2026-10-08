@@ -829,3 +829,8 @@ Unreleased: `cavelon setup --agents cline` writes shared native user settings
 and skills; `cavelon init --agents cline` copies project skills only. Guarded
 changes use the person’s own terminal. See [Cline](../docs/install/cline.md)
 for guarded launch, custom CLI paths and separate editor qualification.
+
+Unreleased: `cavelon setup --agents kilo` installs Kilo-native settings, skills
+and bundled server/TUI plugins. CLI TUI changes ask a fresh native dialog;
+editor/headless changes use the person’s terminal. See [Kilo](../docs/install/kilo.md)
+for preserved configuration precedence, guarded launch and lifecycle.

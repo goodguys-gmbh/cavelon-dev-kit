@@ -243,9 +243,12 @@ reaches `cavelon` over MCP is guarded. A person in a plain terminal is
 unaffected: `cavelon api` sends at once, takes any path and sends
 any field.
 
-For Cline, launch the coding client with process-scoped `CAVELON_AGENT=1`;
+For Cline and Kilo, launch the coding client with process-scoped `CAVELON_AGENT=1`;
 its own MCP/tool auto-approval does not answer a guarded Cavelon change. See
-[Cline](install/cline.md#guarded-shell) for CLI/editor launch details.
+[Cline](install/cline.md#guarded-shell) and [Kilo](install/kilo.md#guarded-shell)
+for CLI/editor launch details. Kilo’s native server additionally marks shell
+calls through its released `shell.env` hook; generic auto-approval still cannot
+answer the Cavelon change dialog.
 
 If your Pi configuration disables session-environment exposure, launch that
 agent with process-scoped `CAVELON_AGENT=1`. Keep the person's separate terminal
