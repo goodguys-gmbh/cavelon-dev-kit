@@ -115,9 +115,13 @@ copies in version control separately.
 ## Qualification
 
 Configuration lifecycle tests cover comments, overrides, system policy,
-personal entries, update/removal and the shell marker. Released-client runtime,
-full solution journeys, platform and offline evidence are release gates;
-scripted responses never count as a person's approval.
+personal entries, update/removal and the shell marker. A Linux check of the
+released 0.25.0 settings and skill loaders, MCP transport and shell service
+loads the generated files, invokes a read and refuses a guarded deleting import
+from a multi-solution root. It uses a fake instance and minimal host registry
+stubs, with no model calls or person UI. Full solution journeys, person-terminal,
+platform and offline evidence remain release gates; scripted responses never
+count as a person's approval.
 
 Configuration and limitations follow Qwen's
 [settings](https://qwenlm.github.io/qwen-code-docs/en/users/configuration/settings/),

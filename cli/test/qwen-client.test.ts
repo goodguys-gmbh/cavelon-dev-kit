@@ -123,7 +123,7 @@ describe("Qwen Code integration", () => {
     expect(changes[0]!.outcome).toBe("skipped");
     expect(existsSync(agent.mcp.file)).toBe(false);
     expect(read(operator)).toBe(JSON.stringify(policy));
-    expect((await checkAgent(agent, env)).ok).toBe(false);
+    expect((await checkAgent(agent, env, undefined)).ok).toBe(false);
   });
 
   it("permits an operator allow-list that explicitly matches Cavelon", async () => {
@@ -131,7 +131,7 @@ describe("Qwen Code integration", () => {
     writeFileSync(operator, '{"mcp":{"allowed":["cav?l*"],"excluded":["other*"]}}');
     const env = { ...sb.env, QWEN_CODE_SYSTEM_SETTINGS_PATH: operator };
     const { agent } = await install(env);
-    expect((await checkAgent(agent, env)).ok).toBe(true);
+    expect((await checkAgent(agent, env, undefined)).ok).toBe(true);
   });
 
   it("does not shadow a personal user server with a project entry", async () => {
@@ -167,18 +167,22 @@ describe("Qwen Code integration", () => {
       expect(read(file)).toContain("// project model");
     } finally { await server.close(); }
   });
-  
-  it("guards login and a guarded change in a Qwen shell before any request", async () => {
+
+  it("guards login input and refuses guarded confirmation in a Qwen shell", async () => {
     const server = await startFakeServer();
     try {
       const tenant = server.addTenant("example", "Example");
-      await login(sb, server.url, server.addToken({ kind: "pat", tenantIds: [tenant], defaultTenant: tenant }));
+      await login(sb, server.url, server.addToken({ kind: "pat", tenantIds: [tenant], defaultTenant: tenant, mayActivate: true }));
+      server.state.harnesses.push({ id: "11111111-1111-4111-8111-111111111111", tenant_id: tenant, slug: "example", name: "Example", status: "active", is_default: false });
       const before = server.state.requests.length;
       const env = { ...sb.env, QWEN_CODE: "1" };
       expect((await cli(sb, ["login", "--instance", server.url, "--token-stdin", "--json"], { env, stdin: "synthetic-token" })).json()).toHaveProperty("error.code", "operation_for_a_person");
-      const change = await cli(sb, ["deactivate", "--harness", "example", "--confirm", "--json"], { env });
-      expect(change.json()).toHaveProperty("error.code", "confirm_needs_person");
       expect(server.state.requests.slice(before)).toEqual([]);
+      const change = await cli(sb, ["deactivate", "--harness", "example", "--confirm", "--json"], { env });
+      expect(change.code).toBe(5);
+      expect(change.json()).toMatchObject({ changed: false, needs_person: "terminal" });
+      expect(server.state.requests.slice(before).filter(request => request.method !== "GET")).toEqual([]);
+      expect(server.state.harnesses[0]!.status).toBe("active");
     } finally { await server.close(); }
   });
 });
