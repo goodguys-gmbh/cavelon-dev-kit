@@ -1,7 +1,7 @@
 import { Type } from "typebox";
 import { fileURLToPath } from "node:url";
 import { nativeStdioClient, type NativeApprovalClient } from "./client.js";
-import { loadNativeRuntime, type NativeRuntime } from "./profile.js";
+import { assertNativeWorkspace, loadNativeRuntime, type NativeRuntime } from "./profile.js";
 import { previewPages } from "./preview-pages.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 
@@ -35,9 +35,10 @@ export function installPiExtension(pi: PiApi, options: NativeRuntime): void {
     await (await previous?.catch(() => undefined))?.close();
   };
   const start = async (ctx: PiContext) => {
-    if (options.scope === "project" && (!ctx.isProjectTrusted() || ctx.cwd !== options.projectRoot)) {
+    if (options.scope === "project" && !ctx.isProjectTrusted()) {
       throw new Error("Cavelon project integration requires the person's trust for this project.");
     }
+    await assertNativeWorkspace(options, ctx.cwd);
     const previous = opening;
     if (previous && (await previous).closed && opening === previous) opening = undefined;
     if (!opening) {

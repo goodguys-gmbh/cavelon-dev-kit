@@ -6,6 +6,8 @@ import type { StdioServerParameters } from "@modelcontextprotocol/sdk/client/std
 import { readJsoncEntry } from "../jsonc-config.js";
 
 export interface NativeProfile {
+  /** Version 2 project paths resolve from the profile, so clones can move. */
+  format?: 2;
   client: "opencode" | "pi";
   version: string;
   configFile: string;
@@ -47,21 +49,47 @@ export function nativeRuntimeDirectory(profileFile: string): string {
   return path.join(temp, `cavelon-native-${suffix}`);
 }
 
+/** A project integration cannot be reused as another workspace's UI owner. */
+export async function assertNativeWorkspace(runtime: NativeRuntime, directory: string): Promise<void> {
+  if (runtime.scope !== "project") return;
+  if (!runtime.projectRoot || await fs.realpath(directory) !== await fs.realpath(runtime.projectRoot)) {
+    throw new Error("Cavelon project integration requires its matching project workspace.");
+  }
+}
+
 /** Re-read the selected configuration; personal edits invalidate native ownership. */
 function projectRootValid(profile: NativeProfile): boolean {
+  if (profile.format === 2) return profile.scope === "project" && relativePath(profile.projectRoot);
   return profile.scope !== "project" || (typeof profile.projectRoot === "string" && path.isAbsolute(profile.projectRoot));
+}
+
+function relativePath(value: unknown): value is string {
+  // Portable profiles use forward slashes and cannot contain drive-relative paths.
+  return typeof value === "string" && Boolean(value.trim()) && !/[\0\\:]/.test(value) && !path.isAbsolute(value);
+}
+
+function inside(root: string, file: string): boolean {
+  const relative = path.relative(root, file);
+  return relative === "" || (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
 }
 
 export async function loadNativeRuntime(profileFile: string, client: NativeProfile["client"]): Promise<NativeRuntime> {
   const profile = JSON.parse(await fs.readFile(profileFile, "utf8")) as NativeProfile;
-  if (profile.client !== client || typeof profile.version !== "string" || !/^\d+\.\d+\.\d+(?:-[\w.-]+)?$/.test(profile.version)
-    || typeof profile.configFile !== "string" || !path.isAbsolute(profile.configFile)
+  if (!profile || ![undefined, 2].includes(profile.format)
+    || profile.client !== client || typeof profile.version !== "string" || !/^\d+\.\d+\.\d+(?:-[\w.-]+)?$/.test(profile.version)
+    || (profile.format === 2 ? !relativePath(profile.configFile) : typeof profile.configFile !== "string" || !path.isAbsolute(profile.configFile))
     || typeof profile.entryHash !== "string" || !/^[a-f0-9]{64}$/.test(profile.entryHash)
     || !["user", "project"].includes(profile.scope)
     || !projectRootValid(profile)) {
     throw new Error("Invalid Cavelon native profile; repeat cavelon setup or init.");
   }
-  const text = await fs.readFile(profile.configFile, "utf8");
+  const base = path.dirname(await fs.realpath(profileFile));
+  const projectRoot = profile.scope === "project" ? await fs.realpath(path.resolve(base, profile.projectRoot!)) : undefined;
+  const configFile = path.resolve(base, profile.configFile);
+  if (profile.format === 2 && !inside(projectRoot!, configFile)) throw new Error("Cavelon native configuration is outside its project.");
+  const realConfig = await fs.realpath(configFile);
+  if (profile.format === 2 && !inside(projectRoot!, realConfig)) throw new Error("Cavelon native configuration is outside its project.");
+  const text = await fs.readFile(realConfig, "utf8");
   if (client === "pi") JSON.parse(text);
   const selected = readJsoncEntry(text, [client === "opencode" ? "mcp" : "mcpServers", "cavelon"]);
   if ("error" in selected || !selected.value || nativeEntryHash(selected.value) !== profile.entryHash) {
@@ -79,7 +107,7 @@ export async function loadNativeRuntime(profileFile: string, client: NativeProfi
     || Object.values(overrides).some(value => typeof value !== "string"))) throw new Error("Invalid Cavelon MCP environment.");
   const env = Object.fromEntries(Object.entries({ ...process.env, ...(overrides as Record<string, string> | undefined) }).filter((entry): entry is [string, string] => typeof entry[1] === "string"));
   return {
-    version: profile.version, scope: profile.scope, ...(profile.projectRoot ? { projectRoot: profile.projectRoot } : {}),
+    version: profile.version, scope: profile.scope, ...(projectRoot ? { projectRoot } : {}),
     runtimeDir: nativeRuntimeDirectory(profileFile), command: { command: words[0], args: words.slice(1), env },
   };
 }

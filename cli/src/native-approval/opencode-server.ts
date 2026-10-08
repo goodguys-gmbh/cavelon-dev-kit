@@ -1,7 +1,8 @@
 import { z } from "zod";
+import { fileURLToPath } from "node:url";
 import { nativeStdioClient, type NativeApprovalClient } from "./client.js";
 import { callUi, NativeUiUnavailable } from "./ipc.js";
-import { loadNativeRuntime, type NativeRuntime } from "./profile.js";
+import { assertNativeWorkspace, loadNativeRuntime, type NativeRuntime } from "./profile.js";
 import { PERSON_WAIT_MS } from "../approval-policy.js";
 
 interface ToolContext { sessionID: string; abort: AbortSignal }
@@ -13,6 +14,7 @@ function toolArguments(input: Parameters<typeof z.fromJSONSchema>[0]) {
 }
 
 export async function startOpenCodeServer(input: { directory: string }, options: NativeRuntime) {
+  await assertNativeWorkspace(options, input.directory);
   const command = { ...options.command, cwd: input.directory };
   const discovery = await nativeStdioClient(command, false, options.version);
   const tools = await discovery.tools().finally(() => discovery.close());
@@ -62,7 +64,8 @@ export async function startOpenCodeServer(input: { directory: string }, options:
 export default {
   id: "cavelon.native-approval",
   async server(input: { directory: string }, options: { profile?: unknown } | undefined) {
-    if (typeof options?.profile !== "string") throw new Error("Cavelon native approval needs its setup profile.");
-    return startOpenCodeServer(input, await loadNativeRuntime(options.profile, "opencode"));
+    const profile = options?.profile === undefined ? fileURLToPath(new URL("./profile.json", import.meta.url)) : options.profile;
+    if (typeof profile !== "string") throw new Error("Cavelon native approval needs its setup profile.");
+    return startOpenCodeServer(input, await loadNativeRuntime(profile, "opencode"));
   },
 };

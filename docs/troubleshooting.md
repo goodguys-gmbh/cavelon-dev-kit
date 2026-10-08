@@ -61,6 +61,18 @@ meaning.
 `cavelon whoami` says which instance and tenant a command uses, and where each
 came from. The order is in [Concepts](concepts.md#tenant).
 
+## A root MCP session cannot find a child solution's environment or preview
+
+In a multi-solution repository, `No env/test.yaml in this solution` or
+`preview_unknown` can mean the MCP server is reading the root folder.
+`harness` selects the solution on the instance; it does not choose local files.
+The unreleased kit adds `solution_dir`: pass the child folder, such as
+`solutions/review`, on the preview, confirmation and subsequent MCP calls.
+See [MCP folder selection](mcp.md#several-solutions-in-one-repository).
+On 0.1.15, start a separate MCP session in the child solution, or run the
+previewed command in your own terminal from that folder. The agent still
+cannot answer a guarded-change confirmation on your behalf.
+
 ## Logging in and permissions
 
 | Code | Exit | Cause and fix |

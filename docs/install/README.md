@@ -6,6 +6,13 @@ skills (`cavelon-loop`, `cavelon-authoring`, `cavelon-testing`,
 the first login, how to check that the agent lists the skills and tools,
 updating and removing.
 
+OpenCode and Pi configuration setup is **Unreleased**, with native adapter
+installation and qualification still in development. The next release also
+includes Cline, Kilo, Goose, OMP and Qwen Code; their install pages will name
+the exact qualified client surfaces and approval modes. An integration's
+native prototype does not certify its packaged release. See
+[native approval details](../native-approval-adapters.md).
+
 | Client | Installs as | Page |
 |---|---|---|
 | Claude Code | the plugin, from this repository's marketplace | [Claude Code](claude-code.md) |
@@ -20,7 +27,7 @@ updating and removing.
 
 **The quickest way** on your own computer: install `cavelon`
 ([Installation](../installation.md#install-the-cli)), then run `cavelon setup`. It
-finds every client above that is installed and sets each up the way its page
+finds the clients supported by your installed release and sets each up the way its page
 recommends, then logs you in. The pages say what it does per client and how to
 do the same by hand.
 

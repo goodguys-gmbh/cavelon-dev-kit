@@ -70,11 +70,15 @@ function removalEdits(text: string, root: Node, keys: string[]): Edit[] {
   const children = parent?.children ?? [];
   const index = children.findIndex(property => property.children?.[0]?.value === keys.at(-1));
   if (index < 0) return [];
-  const property = children[index]!;
-  const edits: Edit[] = [{ offset: property.offset, length: property.length, content: "" }];
-  // Delete the property and one separator, leaving adjacent comments and trivia byte-for-byte.
+  return itemRemovalEdits(text, children, index);
+}
+
+function itemRemovalEdits(text: string, children: Node[], index: number): Edit[] {
+  const item = children[index]!;
+  const edits: Edit[] = [{ offset: item.offset, length: item.length, content: "" }];
+  // Delete the item and one separator, leaving adjacent comments and trivia byte-for-byte.
   const scanner = createScanner(text, true);
-  scanner.setPosition(property.offset + property.length);
+  scanner.setPosition(item.offset + item.length);
   if (scanner.scan() === SyntaxKind.CommaToken) edits.push({ offset: scanner.getTokenOffset(), length: 1, content: "" });
   else if (index > 0) {
     const previous = children[index - 1]!;
@@ -85,16 +89,20 @@ function removalEdits(text: string, root: Node, keys: string[]): Edit[] {
   return edits;
 }
 
+function checkedEdits(text: string, edits: Edit[]): BlockResult {
+  const content = applyEdits(text, edits);
+  const parsed = document(content);
+  if ("error" in parsed) return { outcome: "skipped", reason: parsed.error };
+  if (!same(comments(text), comments(content))) return { outcome: "skipped", reason: "changing this entry would remove a personal comment; edit it manually" };
+  return content === text ? { outcome: "unchanged" } : { outcome: "updated", content };
+}
+
 function edit(text: string, keys: string[], value: unknown): BlockResult {
   try {
     const before = document(text);
     if ("error" in before) return { outcome: "skipped", reason: before.error };
     // Without formatting options, edits cannot reformat adjacent personal settings.
-    const content = applyEdits(text, value === undefined ? removalEdits(text, before.root, keys) : modify(text, keys, value, {}));
-    const parsed = document(content);
-    if ("error" in parsed) return { outcome: "skipped", reason: parsed.error };
-    if (!same(comments(text), comments(content))) return { outcome: "skipped", reason: "changing this entry would remove a personal comment; edit it manually" };
-    return content === text ? { outcome: "unchanged" } : { outcome: "updated", content };
+    return checkedEdits(text, value === undefined ? removalEdits(text, before.root, keys) : modify(text, keys, value, {}));
   } catch {
     return { outcome: "skipped", reason: "this configuration cannot be edited safely" };
   }
@@ -145,4 +153,48 @@ export function removeJsoncEntry(existing: string | undefined, keys: string[], m
   const parsed = document(content);
   const empty = "root" in parsed && !parsed.root.children?.length && comments(content).length === 0;
   return { outcome: "updated", content, empty };
+}
+
+/** Native plugin lists share one array with personal entries; never replace it. */
+export function appendJsoncMember(existing: string | undefined, keys: string[], member: unknown): BlockResult {
+  const current = readJsoncEntry(existing, keys);
+  if ("error" in current) return { outcome: "skipped", reason: current.error };
+  if (current.value === undefined) return upsertJsoncEntry(existing, keys, [member]);
+  if (!Array.isArray(current.value)) return { outcome: "skipped", reason: `its "${keys.join(".")}" is not an array` };
+  const count = current.value.filter(item => same(item, member)).length;
+  if (count > 1) return { outcome: "skipped", reason: "the Cavelon member occurs more than once; resolve duplicate entries manually" };
+  if (count === 1) return { outcome: "unchanged" };
+  try {
+    const result = checkedEdits(existing!, modify(existing!, [...keys, current.value.length], member, { isArrayInsertion: true }));
+    return result.outcome === "updated" ? { ...result, outcome: "appended" } : result;
+  } catch {
+    return { outcome: "skipped", reason: "this configuration cannot be edited safely" };
+  }
+}
+
+/** Remove only the exact recorded member, retaining edited members and comments. */
+export function removeJsoncMember(existing: string | undefined, keys: string[], member: unknown, options: { removeEmpty?: boolean } = {}): BlockResult & { empty?: boolean } {
+  const current = readJsoncEntry(existing, keys);
+  if ("error" in current) return { outcome: "skipped", reason: current.error };
+  if (current.value === undefined) return { outcome: "unchanged" };
+  if (!Array.isArray(current.value)) return { outcome: "skipped", reason: `its "${keys.join(".")}" is not an array` };
+  const indices = current.value.flatMap((item, index) => same(item, member) ? [index] : []);
+  if (!indices.length) return { outcome: "unchanged" };
+  if (indices.length > 1) return { outcome: "skipped", reason: "the Cavelon member occurs more than once; resolve duplicate entries manually" };
+  try {
+    const before = document(existing!);
+    if ("error" in before) return { outcome: "skipped", reason: before.error };
+    const node = findNodeAtLocation(before.root, keys)!;
+    const result = checkedEdits(existing!, itemRemovalEdits(existing!, node.children!, indices[0]!));
+    if (result.outcome !== "updated") return result;
+    const parsed = document(result.content!);
+    if ("error" in parsed) return { outcome: "skipped", reason: parsed.error };
+    const remaining = findNodeAtLocation(parsed.root, keys)!;
+    if (options.removeEmpty && !remaining.children?.length && !comments(result.content!.slice(remaining.offset, remaining.offset + remaining.length)).length) {
+      return removeJsoncEntry(result.content, keys, value => Array.isArray(value) && !value.length, keys.length - 1);
+    }
+    return { ...result, empty: !parsed.root.children?.length && comments(result.content!).length === 0 };
+  } catch {
+    return { outcome: "skipped", reason: "this configuration cannot be edited safely" };
+  }
 }

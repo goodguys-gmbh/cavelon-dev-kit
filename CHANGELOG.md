@@ -9,6 +9,12 @@ CLI, the skills and the plugin.
 
 ### Added
 
+- Portable project profiles for the native adapter build assets and scoped
+  plugin/extension-list editing for their installer. OpenCode can load its
+  adjacent profile without an absolute plugin-option path. Project native
+  entry points refuse a different workspace; Pi still requires project trust.
+  Automatic native installation remains in development (#201).
+
 - Versioned, dependency-bundled OpenCode/Pi native adapter build assets, with
   hashes and redistribution licenses in npm and embedded standalone builds.
   Packaged-runtime checks cover session-bound native calls, headless refusal,
