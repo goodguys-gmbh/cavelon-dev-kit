@@ -158,6 +158,10 @@ other tests prove something.
 
 ### Checking against a live instance
 
+Native person-approval adapter design and the distinction between simulated
+protocol checks and supervised client UI evidence are recorded in
+[docs/native-approval-adapters.md](docs/native-approval-adapters.md).
+
 Before a release, run the [getting-started tutorial](docs/getting-started.md)
 against a test instance with personal access tokens and the operations API on,
 using a token for a test tenant. Check that each step's output matches what the
