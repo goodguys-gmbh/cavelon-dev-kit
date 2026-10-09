@@ -21,11 +21,12 @@ in Windows PowerShell. With Python, `uvx cavelon` runs the same executable from
 PyPI, and `uv tool install cavelon` or `pipx install cavelon` installs it. Then
 `cavelon setup` sets up your coding agents and logs you in.
 
-Version 0.1.16 adds OpenCode and Pi with bundled native approval dialogs and
-Qwen Code CLI with native settings, skills and person-terminal confirmation:
+Version 0.1.17 adds Cline, Kilo, Goose and OMP to the OpenCode, Pi and Qwen
+Code integrations. Each has native settings and four skills; guarded changes
+use the qualified client dialog or the person’s own terminal:
 
 ```bash
-cavelon setup --agents opencode,pi,qwen
+cavelon setup --agents opencode,pi,qwen,cline,kilo,goose,omp
 ```
 
 See the [client install pages](https://github.com/goodguys-gmbh/cavelon-dev-kit/blob/main/docs/install/README.md)
@@ -833,23 +834,23 @@ In the working directory, only `init`, `pull` and `apply` write, as described
 in "Solution as code", and `artifacts export`, which writes the tar it
 downloads to a new file.
 
-Unreleased: `cavelon setup --agents cline` writes shared native user settings
+Version 0.1.17: `cavelon setup --agents cline` writes shared native user settings
 and skills; `cavelon init --agents cline` copies project skills only. Guarded
 changes use the person’s own terminal. See [Cline](../docs/install/cline.md)
 for guarded launch, custom CLI paths and separate editor qualification.
 
-Unreleased: `cavelon setup --agents kilo` installs Kilo-native settings, skills
+Version 0.1.17: `cavelon setup --agents kilo` installs Kilo-native settings, skills
 and bundled server/TUI plugins. CLI TUI changes ask a fresh native dialog;
 editor/headless changes use the person’s terminal. See [Kilo](../docs/install/kilo.md)
 for preserved configuration precedence, guarded launch and lifecycle.
 
-Unreleased: `cavelon setup --agents goose` writes Goose's native user YAML
+Version 0.1.17: `cavelon setup --agents goose` writes Goose's native user YAML
 extension and skills; project init copies shared skills only. The interactive
 CLI uses its built-in person form. Headless runs cancel that form without a
 change. System/additional config bindings and personal YAML are preserved.
 See [Goose](../docs/install/goose.md) for paths, lifecycle and approval limits.
 
-Unreleased: `cavelon setup --agents omp` installs OMP's own native profile,
+Version 0.1.17: `cavelon setup --agents omp` installs OMP's own native profile,
 MCP entry, skills and bundled autoload extension. It preserves personal YAML
 and supports fresh TUI approval; print/RPC calls use the person's terminal.
 Use matching profile selection and a guarded launch. See

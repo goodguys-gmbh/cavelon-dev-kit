@@ -3,7 +3,7 @@
     "cavelon": {
       "command": "sh",
       "args": ["-c", "if command -v cavelon >/dev/null 2>&1; then exec cavelon mcp; else exec npx -y @cavelon/cli@0.1 mcp; fi"],
-      "env": { "CAVELON_PLUGIN_VERSION": "0.1.16" }
+      "env": { "CAVELON_PLUGIN_VERSION": "0.1.17" }
     }
   }
 }

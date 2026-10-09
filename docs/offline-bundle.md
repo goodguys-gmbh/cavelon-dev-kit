@@ -321,8 +321,8 @@ server/TUI plugins and dependencies are carried inside that executable. Setup
 records a disabled duplicate entry and owned profile, preserving other servers
 and plugins. Provision the coding model and instance providers separately.
 Use the CLI’s fresh person dialog, or the person’s terminal in editor/headless
-mode; see [Kilo](install/kilo.md). Complete packaged offline qualification is
-still a next-release gate.
+mode; see [Kilo](install/kilo.md). The Linux candidate passed the complete
+locally installed workflow; see the [qualification matrix](coding-agent-qualification.md).
 
 ## Goose
 
@@ -331,8 +331,8 @@ runtime separately. Install the verified Cavelon executable on PATH, then run
 `cavelon setup --agents goose`. It writes `cavelon mcp` into native user YAML
 and installs bundled skills without fetching an adapter or registry package.
 Person forms require an interactive CLI session; headless runs refuse them.
-See [Goose](install/goose.md). Full packaged offline qualification remains
-separate from configuration and client-loading evidence.
+See [Goose](install/goose.md). Its Linux candidate passed the complete locally
+installed workflow, separately from configuration and client-loading evidence.
 
 ## OMP
 

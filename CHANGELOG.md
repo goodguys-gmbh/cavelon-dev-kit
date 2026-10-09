@@ -7,11 +7,23 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+## [0.1.17] - 2026-10-08
+
+Cline, Kilo, Goose and OMP native setup complete the seven-client extension;
+database tenant limits show published caps and counts. Qualification and
+person-only release steps are tracked separately.
+
+### Added
+
+- Reproducible released-client CLI workflows for all seven pinned clients on
+  native Linux x64, macOS arm64 and Windows x64. Each uses generated setup and
+  the standalone Cavelon artifact for two synthetic draft/test/trace journeys;
+  Qwen uses its native deferred tool search/call flow. No person answer or
+  real provider is used; human UI and customer network/model checks stay separate.
+
 - Goose native user YAML extension and skills, safe setup/check/update/removal,
   preserved configuration layers and personal settings, and session shell guards.
   Interactive CLI forms ask the person freshly; headless confirmation refuses.
-
-### Added
 
 - OMP native profiles, autoload extension and skills, independently from Pi.
   Preserve personal YAML and compatible MCP bindings, and recheck canonical

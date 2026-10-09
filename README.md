@@ -24,16 +24,13 @@ The kit also refuses token login from recognized agent shells before
 reading input. Log in from your own terminal; see [the login guide](docs/getting-started.md#2-log-in).
 
 > [!NOTE]
-> **New in 0.1.16:** [OpenCode](docs/install/opencode.md) and
-> [Pi](docs/install/pi.md) get bundled native approval dialogs and skills.
-> [Qwen Code CLI](docs/install/qwen-code.md) gets native settings and skills;
-> guarded changes use your own terminal. The [qualification matrix](docs/coding-agent-qualification.md)
-> names the tested versions, platforms and limits.
-> **Unreleased:** [Cline](docs/install/cline.md) native setup and project skills,
-> with guarded changes in your own terminal, and [Kilo](docs/install/kilo.md)
-> native setup with CLI dialogs and editor terminal approval. [Goose](docs/install/goose.md)
-> gets native YAML settings, skills and its built-in interactive form.
-> [OMP](docs/install/omp.md) gets its own native profile, skills and TUI extension.
+> **New in 0.1.17:** [Cline](docs/install/cline.md), [Kilo](docs/install/kilo.md),
+> [Goose](docs/install/goose.md) and [OMP](docs/install/omp.md) join
+> [OpenCode](docs/install/opencode.md), [Pi](docs/install/pi.md) and
+> [Qwen Code CLI](docs/install/qwen-code.md). Each gets native setup and all
+> four skills. Guarded changes use a fresh client dialog where qualified,
+> otherwise your own terminal. See the [qualification matrix](docs/coding-agent-qualification.md)
+> for pinned versions, tested surfaces and limits.
 > All seven released CLI runtimes have [native platform workflow checks](CONTRIBUTING.md#released-coding-client-runtimes);
 > these scripted fixtures leave human UI qualification separate.
 

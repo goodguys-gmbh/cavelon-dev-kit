@@ -310,19 +310,19 @@ What it changes, per agent, for your user only (never a project's files):
 | Pi | bundled native extension; separate exact-change dialog | `~/.pi/agent/mcp.json` and `settings.json`, or `<PI_CODING_AGENT_DIR>/` | the selected directory's `skills/` |
 | Qwen Code CLI | files; guarded changes in the person's own terminal | `~/.qwen/settings.json`, or `<QWEN_HOME>/settings.json` | `~/.qwen/skills/`, or `<QWEN_HOME>/skills/` |
 
-Unreleased: [Cline](install/cline.md) setup writes
+Version 0.1.17: [Cline](install/cline.md) setup writes
 `~/.cline/data/settings/cline_mcp_settings.json` and `~/.cline/skills/`.
 Project init copies `.cline/skills/` only; MCP stays at user level. Custom CLI
 paths and editor path limits are documented separately. Guarded changes use
 the person’s own terminal, with a process-scoped guarded client launch.
 
-Unreleased: [Kilo](install/kilo.md) setup uses native Kilo JSON/JSONC settings,
+Version 0.1.17: [Kilo](install/kilo.md) setup uses native Kilo JSON/JSONC settings,
 `skills/` and bundled server/TUI plugins under its own configuration directory.
 CLI guarded changes use fresh native dialogs; editor/headless calls return a
 command for the person’s own terminal. Compatible OpenCode files and managed
 policies are inspected and preserved.
 
-Unreleased: [Goose](install/goose.md) setup adds a native user YAML extension
+Version 0.1.17: [Goose](install/goose.md) setup adds a native user YAML extension
 and skills. Project init copies shared skills without inventing project MCP
 settings. Interactive CLI forms require the person's fresh answer; headless
 runs cancel them. System and additional configuration bindings are preserved.
@@ -487,7 +487,7 @@ cavelon init --agents cursor,copilot
 | `pi` | reuse verified user native setup, or `.pi/mcp.json`, a native extension reference in `.pi/settings.json`, portable `.pi/cavelon/` assets and `.pi/skills/cavelon-*/` |
 | `other` | no MCP entry; the shared skills and `AGENTS.md` |
 
-Unreleased Kilo init reuses verified user setup or writes native project
+Kilo init (0.1.17+) reuses verified user setup or writes native project
 references, portable `.kilo/cavelon/` assets and `.kilo/skills/` copies.
 See [Kilo](install/kilo.md) for the client and approval limits.
 
@@ -786,7 +786,7 @@ To try a change before it is released, or to contribute: see
 
 ## OMP
 
-Unreleased: [OMP](install/omp.md) setup follows its own profile and agent-directory
+Version 0.1.17: [OMP](install/omp.md) setup follows its own profile and agent-directory
 selection, installs native skills and a bundled autoload extension, and preserves
 personal YAML. A fresh TUI dialog approves a guarded change; print/RPC calls
 return a person-terminal command. Use the same OMP profile environment for setup

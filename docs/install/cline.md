@@ -1,6 +1,6 @@
 # Cline
 
-Unreleased setup support targets `cline` CLI 3.0.70 and the default shared
+Setup support in kit 0.1.17 targets `cline` CLI 3.0.70 and the default shared
 configuration used by VS Code extension `saoudrizwan.claude-dev` 4.1.23.
 CLI and editor evidence are recorded separately in the
 [qualification matrix](../coding-agent-qualification.md). Older extensions,
