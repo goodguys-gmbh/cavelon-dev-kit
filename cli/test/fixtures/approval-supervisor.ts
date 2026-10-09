@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createInterface } from "node:readline/promises";
 import { detectShell, shellWord } from "../../src/shell.js";
-import { checkEvidence, createApprovalFixture, digest, execute, personEnv, requirePersonTerminal, selected, toolBody, writeJson, type Evidence, type Observation } from "./approval-qualification.js";
+import { checkEvidence, cleanupOwnedChild, createApprovalFixture, digest, execute, observeExit, personEnv, requirePersonTerminal, selected, toolBody, writeJson, type Evidence, type Observation } from "./approval-qualification.js";
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const pins = JSON.parse(await fs.readFile(path.join(repo, "cli/test/fixtures/coding-client-runtimes.json"), "utf8"));
@@ -33,6 +33,7 @@ async function start() {
   await fs.mkdir(path.dirname(run), { recursive: true });
   const fixture = await createApprovalFixture(run, { command: path.resolve(executable), args: [] });
   let child: ReturnType<typeof spawn> | undefined, ended = false, cancelled = false, succeeded = false;
+  let childExit: ReturnType<typeof observeExit> | undefined;
   const cancel = () => { cancelled = true; };
   process.on("SIGINT", cancel); process.on("SIGTERM", cancel);
   const observations: Record<string, Observation> = {};
@@ -94,6 +95,7 @@ async function start() {
       // The wrapper loads setup's unmodified bytes once; no autoload duplicate owner.
       child = spawn(engine, [entry, "--provider", "fixture", "--model", "synthetic-fixture", "--no-session", "--no-extensions", "-e", path.join(repo, "cli/test/fixtures/approval-native-driver.mjs"),
         ...(name === "pi" ? ["--offline"] : ["--no-title", "--no-lsp", "--no-pty"])], { env, cwd: fixture.root, stdio: "inherit", detached: process.platform !== "win32" });
+      childExit = observeExit(child);
       child.once("exit", () => { ended = true; });
       child.once("error", () => { ended = true; });
       const ready = await wait("native-ready.json");
@@ -128,15 +130,14 @@ async function start() {
     throw error;
   } finally {
     let cleanupFailure: unknown;
-    try { if (child?.pid) {
-      if (process.platform === "win32") {
-        await execute({ command: "taskkill.exe", args: [] }, ["/PID", String(child.pid), "/T", "/F"], fixture.env, fixture.root);
-      } else {
-        try { process.kill(-child.pid, "SIGTERM"); } catch (e: any) { if (e.code !== "ESRCH") cleanupFailure = e; }
-        if (!ended) await Promise.race([new Promise(resolve => child!.once("exit", resolve)), new Promise(resolve => setTimeout(resolve, 3000))]);
-        try { process.kill(-child.pid, "SIGKILL"); } catch (e: any) { if (e.code !== "ESRCH") cleanupFailure = e; }
+    try {
+      if (child?.pid && childExit) {
+        const pid = child.pid;
+        await cleanupOwnedChild({ platform: process.platform, pid, exit: childExit,
+          windowsKill: () => execute({ command: "taskkill.exe", args: [] }, ["/PID", String(pid), "/T", "/F"], fixture.env, fixture.root),
+          signalGroup: signal => process.kill(-pid, signal) });
       }
-    } } catch (error) { cleanupFailure = error; }
+    } catch (error) { cleanupFailure = error; }
     try { await fixture.close(); } catch (error) { cleanupFailure ??= error; }
     await fs.rm(path.join(run, "terminal-session.json"), { force: true });
     await write("supervisor-state.json", { status: succeeded && !cleanupFailure ? "completed" : "failed", cleanup_completed: !cleanupFailure,

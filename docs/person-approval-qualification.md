@@ -111,6 +111,10 @@ node cli/scripts/qualify-approval.mjs check --run .wt/person-terminal
 ```
 
 `check` recomputes the machine-readable invariants and writes `export.json`.
+Request binding uses the fake instance's canonical JSON and normalized
+method/path semantics, so reordered object keys preserve the same change.
+The operator attestation digest intentionally binds the exact complete
+evidence JSON, including its ordering.
 Exit 0 means valid simulated evidence or valid operator-attested person
 evidence; exit 2 means the binding checks pass but the actual-person observation
 is still unattested; exit 1 means failure. Inspect `provenance`, not just the
@@ -138,6 +142,9 @@ For the terminal route the client name is the generated setup target, not
 evidence of a running client: `pinned_client_version` names the intended runtime;
 `client_version` is recorded only after the native route checks it. `check`
 also requires successful supervisor and cleanup completion for observed runs.
+Cleanup requires a positively observed owned-child exit after the bounded
+termination attempt. A failed Windows taskkill or unobserved POSIX exit fails
+closed, even when sending the termination command appeared to succeed.
 
 Keep the run directory until review. Only `export.json` is intended for sharing:
 `private/`, setup diagnostics and terminal-session files contain local paths and

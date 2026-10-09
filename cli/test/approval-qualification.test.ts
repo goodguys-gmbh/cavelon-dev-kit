@@ -1,8 +1,10 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { EventEmitter } from "node:events";
+import { spawn, type ChildProcess } from "node:child_process";
 import { afterAll, beforeAll, expect, it } from "vitest";
-import { checkEvidence, createApprovalFixture, execute, isolatedEnv, requirePersonTerminal, selected, toolBody, type Evidence, type Observation } from "./fixtures/approval-qualification.js";
+import { checkEvidence, cleanupOwnedChild, createApprovalFixture, digest, execute, isolatedEnv, observeExit, requirePersonTerminal, selected, toolBody, type Evidence, type Observation } from "./fixtures/approval-qualification.js";
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const directory = path.join(repo, ".wt/approval-qualification-tests", String(process.pid));
@@ -121,6 +123,37 @@ it.each(["count", "body", "result", "provenance", "scope"]) ("rejects altered %s
   expect(() => checkEvidence(altered)).toThrow();
 });
 
+it("accepts reordered canonical request keys while keeping attestation digests exact", () => {
+  const reverse = (value: any): any => Array.isArray(value) ? value.map(reverse) : value && typeof value === "object"
+    ? Object.fromEntries(Object.entries(value).reverse().map(([key, item]) => [key, reverse(item)])) : value;
+  const reordered = structuredClone(exported);
+  reordered.binding.confirmation = reverse(reordered.binding.confirmation);
+  expect(() => checkEvidence(reordered)).not.toThrow();
+  expect(digest(reordered)).not.toBe(digest(exported));
+});
+
+it.each(["windows-failed", "windows-unobserved", "posix-unobserved", "windows-exited", "posix-exited"]) (
+  "SIMULATED cleanup requires positive owned-child exit: %s", async scenario => {
+    const child = Object.assign(new EventEmitter(), { exitCode: null, signalCode: null }) as unknown as ChildProcess;
+    const exit = observeExit(child), signals: string[] = [];
+    const cleanup = cleanupOwnedChild({ platform: scenario.startsWith("windows") ? "win32" : "linux", pid: 123, exit, graceMs: 5, forceMs: 5,
+      windowsKill: async () => { if (scenario === "windows-exited") child.emit("exit", 0); return { code: scenario === "windows-failed" ? 1 : 0 }; },
+      signalGroup: signal => { signals.push(signal); if (scenario === "posix-exited" && signal === "SIGKILL") child.emit("exit", 0); },
+    });
+    if (scenario.endsWith("exited")) { await cleanup; expect(exit.observed()).toBe(true); }
+    else { await expect(cleanup).rejects.toThrow(/unverified/); expect(exit.observed()).toBe(false); }
+    if (scenario.startsWith("posix")) expect(signals).toEqual(["SIGTERM", "SIGKILL"]);
+  },
+);
+
+it("records a real owned subprocess exit without launching a client or form", async () => {
+  const child = spawn(process.execPath, ["-e", "process.exit(0)"], { stdio: "ignore" });
+  const exit = observeExit(child);
+  expect(exit.observed()).toBe(false);
+  expect(await exit.wait(3000)).toBe(true);
+  expect(exit.observed()).toBe(true);
+});
+
 it("refuses agent/headless terminal helpers and isolates personal provider/credential settings", () => {
   expect(() => requirePersonTerminal({ CODEX_THREAD_ID: "fixture" }, true)).toThrow(/person/);
   expect(() => requirePersonTerminal({}, false)).toThrow(/person/);
@@ -148,6 +181,10 @@ it("portable check requires a digest-bound person attestation for observed impor
   const file = path.join(directory, "evidence.json");
   try {
     await fs.writeFile(file, JSON.stringify({ ...exported, provenance: "unattested-observation", route: "terminal" }));
+    await fs.writeFile(path.join(directory, "supervisor-state.json"), JSON.stringify({ status: "failed", cleanup_completed: false }));
+    const unsafe = await execute(candidate, ["check", "--run", directory], fixture.env, repo);
+    expect(unsafe.code).toBe(1);
+    expect(unsafe.err).toContain("cleanup did not complete safely");
     await fs.writeFile(path.join(directory, "supervisor-state.json"), JSON.stringify({ status: "completed", cleanup_completed: true }));
     await fs.writeFile(path.join(directory, "person-attestation.json"), JSON.stringify({ provenance: "operator-attested-person", evidence_sha256: "wrong" }));
     const checked = await execute(candidate, ["check", "--run", directory], fixture.env, repo);

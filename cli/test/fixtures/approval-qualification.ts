@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { parse, stringify } from "yaml";
 import { AGENT_VARIABLES, agentVariable } from "../../src/agent-env.js";
 import { nativeStdioClient } from "../../src/native-approval/client.js";
 import { seedQueryTool } from "../fake-database.js";
-import { startFakeServer } from "../fake-server.js";
+import { changeDigest, startFakeServer } from "../fake-server.js";
 import { cli, login, type Sandbox } from "../helpers.js";
 
 export const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -19,6 +19,49 @@ export async function writeJson(file: string, value: unknown): Promise<void> {
   const temporary = file + ".tmp-" + process.pid;
   await fs.writeFile(temporary, JSON.stringify(value, null, 2), { mode: 0o600 });
   await fs.rename(temporary, file);
+}
+
+export function observeExit(child: ChildProcess) {
+  let observed = child.exitCode !== null || child.signalCode !== null;
+  const event = new Promise<void>(resolve => child.once("exit", () => { observed = true; resolve(); }));
+  return {
+    observed: () => observed,
+    async wait(timeoutMs: number): Promise<boolean> {
+      if (observed) return true;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        return await Promise.race([event.then(() => true), new Promise<boolean>(resolve => { timer = setTimeout(() => resolve(false), timeoutMs); })]);
+      } finally { clearTimeout(timer); }
+    },
+  };
+}
+
+export async function cleanupOwnedChild(options: {
+  platform: string; pid: number; exit: ReturnType<typeof observeExit>; graceMs?: number; forceMs?: number;
+  windowsKill: () => Promise<{ code: number | null }>;
+  signalGroup: (signal: "SIGTERM" | "SIGKILL") => void;
+}): Promise<void> {
+  if (options.platform === "win32") {
+    if (!options.exit.observed()) {
+      const result = await options.windowsKill();
+      if (result.code !== 0) throw new Error("Owned Windows taskkill failed; cleanup is unverified.");
+    }
+  } else {
+    const signal = (name: "SIGTERM" | "SIGKILL") => {
+      try { options.signalGroup(name); } catch (e: any) { if (e.code !== "ESRCH") throw e; }
+    };
+    signal("SIGTERM");
+    await options.exit.wait(options.graceMs ?? 3000);
+    signal("SIGKILL");
+  }
+  // A successful signal/OS command is not evidence that this owned child exited.
+  if (!await options.exit.wait(options.forceMs ?? 3000) || !options.exit.observed())
+    throw new Error("Owned child exit was not observed; cleanup is unverified.");
+}
+
+function bindingDigest(request: any): string {
+  if (!request || typeof request.method !== "string" || typeof request.path !== "string") throw new Error("Missing bound request.");
+  return changeDigest(request.method, request.path, request.body);
 }
 
 // Supply an allowlist rather than copying a person's credential/provider environment.
@@ -127,7 +170,7 @@ export function checkEvidence(e: Evidence): void {
     throw new Error("Invalid evidence provenance or fixture boundary.");
   if (e.confirmations !== 1 || e.imports !== 1 || e.query_max_rows !== 10 || !e.obsolete_agent_deleted
     || !e.binding.token_tenant_request_bound || !e.binding.selected_harness
-    || digest(e.binding.confirmation) !== digest(e.binding.import)) throw new Error("Guarded import count, result or exact binding failed.");
+    || bindingDigest(e.binding.confirmation) !== bindingDigest(e.binding.import)) throw new Error("Guarded import count, result or exact binding failed.");
   for (const name of ["headless", "sibling", "decline"]) {
     if (!e.observations[name]?.code || e.observations[name]?.applied || e.observations[name]?.confirmations !== 0 || e.observations[name]?.imports !== 0)
       throw new Error("Missing zero-request refusal evidence: " + name);
