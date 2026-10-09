@@ -123,7 +123,7 @@ Every command takes `--json` (one JSON document on stdout, errors included),
 
 | Command | Marked | What it does |
 |---|---|---|
-| `setup [--agents] [--yes] [--check] [--remove]` | changing (destructive) | Set up the coding agents on this computer (the plugin for Claude Code and Codex; the MCP server and skills in the user settings of Cursor, VS Code with GitHub Copilot, Gemini CLI and Kiro) and log in. `--check` reports what works, `--remove` undoes it. A person runs this; not an MCP tool. |
+| `setup [--agents] [--yes] [--check] [--remove]` | changing (destructive) | Set up supported coding agents with their plugin or native MCP configuration and all four skills, then log in. `--check` reports what works, `--remove` undoes it. A person runs this; not an MCP tool. |
 | `login [--token-stdin]` | changing | Store a token for an instance. A person runs this. |
 | `logout [--all]` | changing | Delete the stored token. |
 | `whoami` | read-only | Owner or key, tenant (name, slug and id), role, where the credential came from, whether it may enter Platform mode and which tenants it reaches. |

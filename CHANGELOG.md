@@ -7,11 +7,13 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
-## [0.1.17] - 2026-10-08
+## [0.1.17] - 2026-10-09
 
 Cline, Kilo, Goose and OMP native setup complete the seven-client extension;
-database tenant limits show published caps and counts. Qualification and
-person-only release steps are tracked separately.
+database tenant limits show published caps and counts. Linux person checks
+cover native dialogs in OpenCode, Pi, Kilo, Goose and OMP, and the person's own
+terminal for Qwen and Cline. Native platform workflows, human UI and customer
+pilots are recorded separately in the [qualification matrix](docs/coding-agent-qualification.md).
 
 ### Added
 

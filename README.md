@@ -31,6 +31,8 @@ reading input. Log in from your own terminal; see [the login guide](docs/getting
 > four skills. Guarded changes use a fresh client dialog where qualified,
 > otherwise your own terminal. See the [qualification matrix](docs/coding-agent-qualification.md)
 > for pinned versions, tested surfaces and limits.
+> Linux person checks cover native dialogs in OpenCode, Pi, Kilo, Goose and OMP,
+> and the person's own terminal for Qwen and Cline.
 > All seven released CLI runtimes have [native platform workflow checks](CONTRIBUTING.md#released-coding-client-runtimes);
 > these scripted fixtures leave human UI qualification separate.
 

@@ -2,9 +2,9 @@
 
 Setup support and real-client qualification are recorded separately. Version
 0.1.16 added OpenCode, Pi and Qwen Code CLI. The 0.1.17 candidate adds Cline,
-Kilo, Goose and OMP. Fresh Cline terminal and OMP person-dialog checks remain
-release gates; their launchers are prepared. Existing clients keep their
-installation routes.
+Kilo, Goose and OMP. Fresh Cline person-terminal and OMP native No/Yes checks
+passed on the packaged Linux candidate. Existing clients keep their installation
+routes.
 
 | Client | Pinned version | Runtime checked | Guarded-change mode |
 |---|---|---|---|
@@ -93,8 +93,18 @@ confirmation or import and do not supply a person's answer.
 Use the editor's default shared paths and launch a fresh process from the
 repository root. Its legacy compatibility UI has separate custom-path limits,
 and its MCP environment filters custom Cavelon state paths; see
-[Cline](install/cline.md). The 0.1.17 candidate passed complete npm and locally installed Linux offline workflows, each with two ordinary draft imports, synthetic suites and traces around one bounded prompt improvement. Packaged own-terminal approval remains a release gate. Other platforms, editor variants
-and customer model/network pilots remain separate work.
+[Cline](install/cline.md). The 0.1.17 candidate passed complete npm and locally
+installed Linux offline workflows, each with two ordinary draft imports,
+synthetic suites and traces around one bounded prompt improvement.
+
+The packaged own-terminal check passed with generated Cline setup in a
+multi-solution root. The agent and sibling-preview paths refused without a
+confirmation or import. The person's fresh terminal command sent one
+confirmation bound to exactly one synthetic child import, deleting an obsolete
+agent and changing a fake query limit from 5 to 10. It made no real model,
+database or production call. No native Cavelon dialog is claimed for Cline.
+Other platforms, editor variants and customer model/network pilots remain
+separate work.
 
 ## 0.1.17 candidate: Kilo integration
 
@@ -151,7 +161,7 @@ built-in form. See [Goose](install/goose.md).
 
 | Surface | Pinned version | Runtime checked | Guarded-change mode |
 |---|---|---|---|
-| OMP CLI | 18.8.5, Bun 1.3.14 | Linux x64 released npm CLI; four native skills, 64 essential Cavelon tools, read, deleting child preview, sibling refusal and actual guarded shell | Separate bundled native TUI extension; print-mode refusal passed; actual person dialog pending |
+| OMP CLI | 18.8.5, Bun 1.3.14 | Linux x64 released npm CLI; four native skills, 64 essential Cavelon tools, read, deleting child preview, sibling refusal and actual guarded shell | Separate bundled native TUI extension; print-mode refusal and packaged fresh No/Yes passed |
 | OMP RPC / ACP and other platforms | Separate surfaces | Configuration and lifecycle file checks do not qualify these runtimes | Missing UI uses the person's terminal; host dialogs require separate evidence |
 
 The setup regression failed on the base. Native configuration and profile
@@ -162,4 +172,13 @@ all 64 Cavelon tools and its instructions named all four skills. Read, validatio
 child-solution deleting preview, sibling-preview refusal and actual shell guards
 passed. Print-mode confirmation made no instance confirmation or mutation.
 Native errors propagate as error results. No real model, database or production
-call was used. The actual packaged OMP TUI loaded 64 tools and passed a read/validate readiness check without opening a form or calling a model. The 0.1.17 candidate passed complete npm and locally installed Linux offline workflows, each with two ordinary draft imports, synthetic suites and traces around one bounded prompt improvement. The fresh person’s TUI check remains a release gate. See [OMP](install/omp.md).
+call was used. The actual packaged OMP TUI loaded 64 tools and passed a
+read/validate readiness check. The 0.1.17 candidate passed complete npm and
+locally installed Linux offline workflows, each with two ordinary draft imports,
+synthetic suites and traces around one bounded prompt improvement.
+
+The actual person's fresh No/Yes TUI check passed on the packaged Linux
+candidate. No sent no confirmation or mutation; a fresh Yes issued one
+confirmation bound to exactly one synthetic import, deleting an obsolete agent
+and changing a fake query limit from 5 to 10. Sibling previews refused in both
+cases. No script supplied the person's answers. See [OMP](install/omp.md).

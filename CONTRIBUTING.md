@@ -63,9 +63,10 @@ CAVELON_EXECUTABLE="$PWD/build/cavelon-linux-x64" npm run test:executable
 `scripts/build-executable.mjs` hands the executable the version, skills and
 native adapter assets (`src/embedded.ts`), which the npm package reads from
 files beside it. `scripts/build-native-assets.mjs` bundles the protocol
-dependencies into separate OpenCode server/TUI entries and a Pi entry, with a
-versioned inventory and redistribution licenses. The native UI framework and
-the CLI's credential binding stay out of these adapter bundles. Each
+dependencies into separate OpenCode and Kilo server/TUI entries and Pi and OMP
+extension entries, with a versioned inventory and redistribution licenses.
+The native UI framework and the CLI's credential binding stay out of these
+adapter bundles. Each
 executable is built on its own platform, because it carries the native
 credential store binding (`@napi-rs/keyring`) that npm installed there. Bun
 was chosen over Node.js single executable applications because it bundles the
