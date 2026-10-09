@@ -267,7 +267,7 @@ evidence; unknown commit evidence stays unknown. Never retry
 covers statement rules, refusals and the current direct-node budget boundary.
 
 `cavelon db instance` says which dialects the instance runs (`postgresql`,
-`mysql`, `mssql` for SQL Server) and the addresses it connects to databases
+`mysql`, `mssql` for SQL Server, `oracle`) and the addresses it connects to databases
 from, which a customer allows through their database's firewall. SQL Server
 has no read-only transaction, so a connection whose login can write without
 allowing write queries runs no read query (`write_privileges_unacknowledged`) until the login may only read or a

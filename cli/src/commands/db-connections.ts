@@ -204,10 +204,13 @@ export const dbLoginScript: CommandSpec = {
   name: "db login-script", summary: "Print the instance's published read-only login SQL for a dialect or saved connection; no database is contacted.",
   description: "Needs database_connectors.view. The DBA replaces the script's password placeholder locally, outside the kit.\n" +
     "Only variants this instance publishes are offered; this build publishes read_only. Omitted inputs use its defaults.\n" +
-    "For SQL Server, connection_limit_enforced is false; --schema scopes SELECT instead of granting db_datareader.",
+    "For SQL Server, connection_limit_enforced is false; --schema scopes SELECT instead of granting db_datareader.\n" +
+    "For Oracle, --schema names the one schema READ covers (omitted: the placeholder YOUR_SCHEMA); a profile sets the limit.",
   readOnly: true, idempotent: true, mcpTool: "db_login_script", operations: ["GET /api/v1/database-connectors/login-script", `GET ${CONNECTION}/login-script`],
   positionals: [{ name: "dialect", description: "Database dialect; omit only with --connection." }],
   options: {
+    // The MCP tool already takes `dialect` as its argument, so the option is the terminal's spelling only.
+    dialect: { ...textOption("Database dialect, as the dialect argument; give one of the two.", "<dialect>"), cliOnly: true },
     connection: textOption("Use dialect, database, user and TLS from this saved connection (name or id).", "<connection>"),
     "database-name": textOption("Database the login may read (without --connection).", "<name>"),
     username: textOption("Database login name (without --connection).", "<name>"),
@@ -216,9 +219,16 @@ export const dbLoginScript: CommandSpec = {
     "connection-limit": textOption("Connections to allow; omitted uses the instance's pool size times four.", "<n>"),
     "require-tls": textOption("MySQL REQUIRE SSL (true or false, without --connection).", "<true|false>"),
   },
-  examples: ["cavelon db login-script postgresql --database-name shop --username cavelon_reader", "cavelon db login-script --connection shop-db --schema public"],
+  examples: [
+    "cavelon db login-script postgresql --database-name shop --username cavelon_reader",
+    "cavelon db login-script --dialect oracle --database-name SHOPPDB --username cavelon_ro --schema SHOP",
+    "cavelon db login-script --connection shop-db --schema public",
+  ],
   async run(ctx, input) {
-    const dialect = positional(input, "dialect");
+    const argument = positional(input, "dialect");
+    const option = stringOption(input, "dialect");
+    if (argument !== undefined && option !== undefined) throw usageError("Give the dialect once: as the argument or with --dialect, not both.");
+    const dialect = argument ?? option;
     const connectionRef = stringOption(input, "connection");
     if (Boolean(dialect) === Boolean(connectionRef)) throw usageError("Give a dialect or --connection, exactly one.");
     if (connectionRef && ["database-name", "username", "require-tls"].some(k => input.options[k] !== undefined)) throw usageError("With --connection, database, username and TLS come from the saved connection.");

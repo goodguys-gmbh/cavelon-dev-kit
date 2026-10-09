@@ -180,6 +180,10 @@ the Admin. Then:
   identity parameters included; it shows what the model would see. A list
   parameter's value is a JSON array: `--value 'skus=["X-1","X-2"]'`. Never put
   a real customer's data into a test file.
+- An Oracle query is test-run the same way. Save-time refusals of PL/SQL,
+  `DBMS_*`/`UTL_*` packages, database links or a write's `RETURNING`
+  (`forbidden_keyword`, `write_statement_refused`) come before any test run:
+  `cavelon validate` warns of them.
 - A read stored-procedure query (SQL Server) is test-run the same way; the
   instance refuses the run while the connection's login can write or the
   procedure's definition writes or cannot be read, with a code

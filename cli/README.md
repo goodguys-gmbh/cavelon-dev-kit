@@ -801,7 +801,7 @@ tools; a person runs them.
 ```json
 {
   "mcpServers": {
-    "cavelon": { "command": "npx", "args": ["-y", "@cavelon/cli@0.1", "mcp"] }
+    "cavelon": { "command": "npx", "args": ["-y", "@cavelon/cli@0.2", "mcp"] }
   }
 }
 ```

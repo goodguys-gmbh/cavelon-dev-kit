@@ -77,6 +77,20 @@ function withUploadReplace(text: string, kind: FakeState["uploadReplace"]): stri
   if (kind === "none") delete form.properties.replace_doc_ids;
   return JSON.stringify(doc);
 }
+/** The OpenAPI's database dialect enums without oracle, as an instance older than its Oracle support publishes them. */
+function withOracleDialect(text: string, on: boolean): string {
+  if (on) return text;
+  const strip = (node: unknown): void => {
+    if (Array.isArray(node)) return node.forEach(strip);
+    if (!node || typeof node !== "object") return;
+    const record = node as Record<string, unknown>;
+    if (Array.isArray(record.enum) && record.enum.includes("mssql")) record.enum = record.enum.filter((value) => value !== "oracle");
+    Object.values(record).forEach(strip);
+  };
+  const doc = JSON.parse(text) as unknown;
+  strip(doc);
+  return JSON.stringify(doc);
+}
 /** The OpenAPI without `include_tenant_wide` on the export and the import, as an instance older than it publishes it. */
 function withTenantWideFlag(text: string, on: boolean): string {
   if (on) return text;
@@ -359,6 +373,8 @@ export interface FakeState {
   personOnly: Record<string, string | false> | null;
   /** Operations ("METHOD /path") the served OpenAPI leaves out, as an instance older than them. */
   openapiWithout: string[];
+  /** False serves the OpenAPI's dialect enums without oracle, as an instance older than its Oracle support. */
+  oracleDialect: boolean;
   /** The chat turns the instance answered: the solution, the message and the session. */
   chats: Array<{ harness_id: string; message: string; session_id: string }>;
   /**
@@ -779,6 +795,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     chatUserEmailVerified: true,
     personOnly: {},
     openapiWithout: [],
+    oracleDialect: true,
     chats: [],
     secretFields: {},
     interruptions: [],
@@ -879,7 +896,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     if (p === "/openapi.json" || (p === "/api/v1/openapi.json" && !state.rootPathsReachApi)) {
       res.writeHead(200, { "content-type": "application/json" });
       const marked = withActivationRoute(withChatReaders(withConfirmations(withMarkers(state.personOnly, state.secretFields), state.confirmations !== null), state.readerOverrides, state.chatUserEmailVerified), state.activationRouteFields !== false);
-      return res.end(withoutOperations(withTenantWideFlag(withUploadReplace(marked, state.uploadReplace), state.tenantWideFlag), state.openapiWithout));
+      return res.end(withOracleDialect(withoutOperations(withTenantWideFlag(withUploadReplace(marked, state.uploadReplace), state.tenantWideFlag), state.openapiWithout), state.oracleDialect));
     }
 
     // Auth: every API and docs route needs a known bearer token.

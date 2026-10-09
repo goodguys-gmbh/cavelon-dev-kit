@@ -340,7 +340,7 @@ says who does what on the instance.
   tool_type: database_query
   scope: tenant_local
   database_query:
-    connection: { name: shop-db, dialect: postgresql }   # by name only: never a host, user or password; postgresql, mysql or mssql
+    connection: { name: shop-db, dialect: postgresql }   # by name only: never a host, user or password; postgresql, mysql, mssql or oracle
     sql_text: SELECT number, status, shipped_at FROM orders WHERE number = :order_no AND email = :email LIMIT 5
     parameters:
       - name: order_no
@@ -419,6 +419,13 @@ says who does what on the instance.
   reads (`procedure_definition_unreadable`, `procedure_definition_writes`):
   ask the person for a read-only login with `EXECUTE` and `VIEW DEFINITION`
   on procedures that read. Where a procedure is not needed, write a `SELECT`.
+- **Oracle.** On an `oracle` connection the instance also refuses PL/SQL
+  (`BEGIN`, `DECLARE`, `WITH FUNCTION`), transaction control, `DBMS_*` and
+  `UTL_*` packages, `HTTPURITYPE` and database links (`table@link`):
+  `forbidden_keyword` in a read, `write_statement_refused` in a write, which
+  also may not hold `RETURNING`. Text in `q'[…]'` literals, strings and
+  comments is not SQL, and one trailing semicolon is accepted. Bound rows with
+  `FETCH FIRST n ROWS ONLY`. `cavelon validate` warns of each.
 - `cavelon explain <code>` explains every code the connector uses: what
   `validate` and the preview name, the codes of a failed call (`timeout`,
   `identity_required`, …) and of a connection test.
@@ -441,7 +448,8 @@ parameters and replace the SQL and write settings with:
 ```
 
 One `INSERT`, `UPDATE` or `DELETE`; `UPDATE`/`DELETE` need a parameterized
-`WHERE`. Upserts and `RETURNING`/`OUTPUT` are allowed, a leading `WITH` and
+`WHERE`. Upserts and `RETURNING`/`OUTPUT` are allowed (not `RETURNING` on
+Oracle), a leading `WITH` and
 multiple statements are not (`write_statement_refused`). On SQL Server one
 `EXEC` of a writing procedure is allowed, subject to the instance's
 `write_procedure_definition_refused` checks, including no transaction

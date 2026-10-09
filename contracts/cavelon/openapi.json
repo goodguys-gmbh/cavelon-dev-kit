@@ -5796,7 +5796,8 @@
               "enum": [
                 "postgresql",
                 "mysql",
-                "mssql"
+                "mssql",
+                "oracle"
               ],
               "type": "string",
               "title": "Dialect"
@@ -22168,7 +22169,8 @@
             "enum": [
               "postgresql",
               "mysql",
-              "mssql"
+              "mssql",
+              "oracle"
             ],
             "title": "Dialect"
           },
@@ -22281,7 +22283,8 @@
                 "enum": [
                   "postgresql",
                   "mysql",
-                  "mssql"
+                  "mssql",
+                  "oracle"
                 ]
               },
               {
@@ -22433,7 +22436,8 @@
             "enum": [
               "postgresql",
               "mysql",
-              "mssql"
+              "mssql",
+              "oracle"
             ],
             "title": "Dialect"
           },

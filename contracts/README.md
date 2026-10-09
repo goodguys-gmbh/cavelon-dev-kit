@@ -241,6 +241,22 @@ operation or request shape changed. Capabilities, docs pages and all other
 entries stay as recorded. Tests also play an instance whose schema has no
 `list`.
 
+Later on 2026-10-09 the snapshot took the instance's Oracle dialect from an
+immutable merged instance build, without running it. The OpenAPI generator's
+checked-in output, trimmed as below, differs from the build before Oracle
+only in `oracle` in four dialect enums (the login script's `dialect` query
+parameter, `DatabaseConnectionCreate`, `DatabaseConnectionUpdate` and
+`DatabaseLoginScriptResponse`); only those are taken in (other differences in
+the trimmed output stay as recorded). From the package schema's source, only
+the connection reference's `dialect` description and the query's `sql_text`
+description, and from the error catalog's source only the message of
+`forbidden_keyword` and of `write_statement_refused`, which now name the
+Oracle refusals; no code, field or setting is new. The Database Connector
+Setup and Database Connectors pages take the build's Oracle changes, nothing
+else. Capabilities and every other entry stay as recorded; the default
+capabilities still list no dialect, as the connector is off. The fake server
+also plays an instance whose OpenAPI does not name `oracle`.
+
 | File | Source |
 |---|---|
 | `openapi.json` | `GET /openapi.json`, trimmed by `cli/scripts/trim-openapi.mjs` to the operations listed in [`kit-operations.json`](kit-operations.json) and the components they reference, without prose descriptions |

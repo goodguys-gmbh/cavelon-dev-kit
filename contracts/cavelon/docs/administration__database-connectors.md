@@ -45,7 +45,7 @@ The next tool call signs in with the new password: the platform opens new connec
 **Without downtime.** How you avoid a gap depends on the database:
 
 - **MySQL 8.0.14 and later** keep two passwords at once. Set the new one with `ALTER USER 'cavelon_ro'@'…' IDENTIFIED BY '<new>' RETAIN CURRENT PASSWORD;`, replace it here and test, and after about ten minutes drop the old one with `ALTER USER 'cavelon_ro'@'…' DISCARD OLD PASSWORD;`.
-- **PostgreSQL, MariaDB and SQL Server** keep one password per user. Change it in the database and replace it here right after. Calls that use an already open connection keep working; only a new connection opened in between fails with `auth_failed`, and the next call after your replacement succeeds.
+- **PostgreSQL, MariaDB, SQL Server and Oracle** keep one password per user. Change it in the database and replace it here right after. Calls that use an already open connection keep working; only a new connection opened in between fails with `auth_failed`, and the next call after your replacement succeeds.
 - **No gap at all** on any database: create a second read-only user with the new password, then change the connection's **User** to it and replace the password right after. Drop the old user about ten minutes later.
 
 **A new server needs the password again.** When you move a connection to another host, port or database type, the stored password is not sent to the new server: the change must carry the new server's password. A new database name or user on the same server keeps it.

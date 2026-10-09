@@ -24,6 +24,16 @@ The kit also refuses token login from recognized agent shells before
 reading input. Log in from your own terminal; see [the login guide](docs/getting-started.md#2-log-in).
 
 > [!NOTE]
+> **0.2.0** moves the release-line pin from `@cavelon/cli@0.1` to
+> `@cavelon/cli@0.2`; `setup` and `init --update` move the entries 0.1 wrote.
+> It also accepts the `oracle` database dialect where the instance publishes it.
+> [Upgrading from 0.1 to 0.2](docs/upgrading-to-0.2.md) says how to check that
+> the release is published, and how to move the CLI, the plugin, solution
+> repositories, CI and offline machines, or go back. Person approval on native
+> Windows, WSL and macOS, and each customer's model, network, offline and
+> database pilot, are still open; the [customer pilot](docs/customer-pilot.md)
+> checklist records a pilot.
+>
 > **New in 0.1.18:** Saved database queries support [list parameters](docs/connect-a-database.md)
 > for `IN` and `NOT IN` filters, JSON-array test values and workflow arguments,
 > where the instance publishes them. Repository tooling adds a
@@ -48,7 +58,8 @@ reading input. Log in from your own terminal; see [the login guide](docs/getting
 
 You need a Cavelon instance with personal access tokens turned on, and a coding
 agent: Claude Code, Codex, Cursor, VS Code with GitHub Copilot, Gemini CLI,
-Kiro, OpenCode, Pi or Qwen Code CLI. Provision that client first. The standalone
+Kiro, OpenCode, Pi, Qwen Code CLI, Cline, Kilo, Goose or OMP. Provision that
+client, and the model it uses, first. The standalone
 Cavelon tool needs no Node.js or administrator rights.
 
 Three steps: **install `cavelon`** on your computer once, **connect your coding
@@ -155,7 +166,8 @@ shows what is set up and working.
 >
 > ```bash
 > cavelon setup                    # every agent it finds; the ones already set up stay set up
-> cavelon setup --agents cursor    # or only the one you name: claude, codex, cursor, copilot, gemini, kiro
+> cavelon setup --agents cursor    # or only the ones you name: claude, codex, cursor, copilot, gemini, kiro,
+>                                  #   opencode, pi, qwen, cline, kilo, goose, omp
 > cavelon setup --check            # what is set up and working, for each agent
 > ```
 
@@ -164,7 +176,9 @@ shows what is set up and working.
 brings the skills it copied into Cursor, VS Code and Kiro up to the new
 release. Claude Code, Codex and Gemini CLI update the plugin with their own
 command; [Updating](docs/installation.md#updating-each-part) lists each one, and
-your agent tells you when something is behind.
+your agent tells you when something is behind. A new minor version (0.1 to
+0.2) also moves the pin in plugin, `setup` and `init --agents` entries:
+follow [Upgrading from 0.1 to 0.2](docs/upgrading-to-0.2.md).
 
 ### Step 3 · Build your first solution
 
@@ -278,7 +292,10 @@ how to review and test its work.
 | Page | What it covers |
 |---|---|
 | [Installation](docs/installation.md) | the one-line install, Homebrew, PyPI (uvx, uv, pipx, pip), npx and npm, `cavelon setup`, the plugin in Claude Code and Codex, other agents, updating, uninstalling, Windows/macOS/Linux, proxies |
-| [Install pages](docs/install/README.md) | one page per client, including OpenCode, Pi and Qwen setup; install, approval scope, updating, removal and plugin packages |
+| [Upgrading from 0.1 to 0.2](docs/upgrading-to-0.2.md) | the new release-line pin, what the version does not certify, and the steps for the CLI, agents, solution repositories, CI and offline machines |
+| [Install pages](docs/install/README.md) | one page per client, including OpenCode, Pi, Qwen Code, Cline, Kilo, Goose and OMP; install, approval scope, updating, removal and plugin packages |
+| [Qualification](docs/coding-agent-qualification.md) | which clients, versions and platforms were checked how: automated, simulated or by a person, and what remains open |
+| [Customer pilot](docs/customer-pilot.md) | the checklist and report template for one customer's platforms, model and network decisions, offline install and databases |
 | [Getting started](docs/getting-started.md) | a full tutorial from an empty folder to an active solution |
 | [Building with a coding agent](docs/coding-agents.md) | briefing the agent, the loop as it runs it, what stays with you, reviewing and testing its work, prompts to copy |
 | [Concepts](docs/concepts.md) | instance, tenant, solution, package, environments, preview and confirm, operations, tests, activation, Platform mode |
