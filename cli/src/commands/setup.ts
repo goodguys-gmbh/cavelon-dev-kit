@@ -475,7 +475,7 @@ export const setup: CommandSpec = {
       type: "string",
       value: "<list>",
       multiple: true,
-      description: "Only these agents: claude, codex, cursor, copilot, gemini, kiro, opencode, pi, qwen, cline, kilo, or all (comma-separated). Default: every agent found.",
+      description: "Only these agents: claude, codex, cursor, copilot, gemini, kiro, opencode, pi, qwen, cline, kilo, goose, omp, or all (comma-separated). Default: every agent found.",
     },
     yes: { type: "boolean", short: "y", description: "Make the changes without asking." },
     check: { type: "boolean", description: "Report what is set up and working; change nothing." },
