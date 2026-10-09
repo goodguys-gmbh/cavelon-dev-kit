@@ -644,7 +644,7 @@
           "description": "The connection the query runs on, by name and dialect."
         },
         "sql_text": {
-          "description": "One read-only statement starting with SELECT or WITH, at most 20,000 characters. Each value is a :name placeholder with a parameter of that name; a literal colon is written \\:. No INSERT, INTO, UPDATE, DELETE, EXEC, locking clause or second statement. Always bound the rows with LIMIT, TOP or FETCH FIRST. On an mssql connection it may instead be one stored-procedure call, EXEC [schema].[procedure] @p1 = :p1, @p2 = :p2, every argument a placeholder; the model gets its first result set, and the target's connection needs a login whose last test found no write privileges. With kind write instead exactly one INSERT, UPDATE or DELETE (on mssql also one EXEC of a procedure that writes), an UPDATE or DELETE with a WHERE that uses a :parameter.",
+          "description": "One read-only statement starting with SELECT or WITH, at most 20,000 characters. Each value is a :name placeholder with a parameter of that name; a literal colon is written \\:. No INSERT, INTO, UPDATE, DELETE, EXEC, locking clause or second statement. Always bound the rows with LIMIT, TOP or FETCH FIRST. On an mssql connection it may instead be one stored-procedure call, EXEC [schema].[procedure] @p1 = :p1, @p2 = :p2, every argument a placeholder; the model gets its first result set, and the target's connection needs a login whose last test found no write privileges. With kind write instead exactly one INSERT, UPDATE or DELETE (on mssql also one EXEC of a procedure that writes), an UPDATE or DELETE with a WHERE that uses a :parameter. A parameter with list true stands only as IN (:name) or NOT IN (:name).",
           "examples": [
             "SELECT number, status, shipped_at FROM orders WHERE number = :order_no AND email = :email LIMIT 5"
           ],
@@ -654,7 +654,7 @@
           "type": "string"
         },
         "parameters": {
-          "description": "Exactly one entry per :name placeholder, at most 20. A parameter with source 'model' becomes a property of the tool's schema; one with source end_user.* is filled by the platform from the signed-in visitor and never appears in the schema.",
+          "description": "Exactly one entry per :name placeholder, at most 20. A parameter with source 'model' becomes a property of the tool's schema; one with source end_user.* is filled by the platform from the signed-in visitor and never appears in the schema. A model parameter with list true is an array of one to max_items values in the schema.",
           "items": {
             "$ref": "#/$defs/QueryParameter"
           },
@@ -3154,7 +3154,7 @@
     },
     "QueryParameter": {
       "additionalProperties": false,
-      "description": "One parameter of a database query, as stored and as the API accepts it.\n\nThe SQL names it as ``:name``. A ``model`` parameter is a property of the\ntool's schema with its constraints; an ``end_user.*`` parameter is filled by\nthe platform, is always a required string and takes no constraint.",
+      "description": "One parameter of a database query, as stored and as the API accepts it.\n\nThe SQL names it as ``:name``. A ``model`` parameter is a property of the\ntool's schema with its constraints; an ``end_user.*`` parameter is filled by\nthe platform, is always a required string and takes no constraint.\n\nA ``list`` parameter takes one to ``max_items`` values; its\nconstraints apply to every item. The field is named ``list``, so the\nannotations below write ``List`` for the built-in type.",
       "examples": [
         {
           "description": "Order number as printed on the confirmation, e.g. A-10023",
@@ -3175,6 +3175,15 @@
           "minimum": 1,
           "name": "days",
           "type": "integer"
+        },
+        {
+          "description": "Order numbers as printed on the confirmations, e.g. A-10023",
+          "list": true,
+          "max_items": 10,
+          "max_length": 20,
+          "name": "order_nos",
+          "pattern": "^[A-Z]-[0-9]{4,8}$",
+          "type": "string"
         }
       ],
       "properties": {
@@ -3314,6 +3323,34 @@
           "default": null,
           "description": "The largest value allowed. Integer or number only.",
           "title": "Maximum"
+        },
+        "list": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "true: a list of values of the type, for IN (:name) or NOT IN (:name) and nowhere else in the SQL: the model gives one to max_items values, each checked against max_length, pattern, enum, minimum and maximum, and each bound as its own value. String, integer, number or date; always required; never a context parameter.",
+          "title": "List"
+        },
+        "max_items": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A list's most values; 20 when left out, at most 100. Lists only. A write query that asks the person first takes at most 20, the values its confirmation card shows.",
+          "title": "Max Items"
         }
       },
       "required": [

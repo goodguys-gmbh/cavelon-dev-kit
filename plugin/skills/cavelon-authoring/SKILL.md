@@ -398,6 +398,15 @@ says who does what on the instance.
   postal code) rather than one guessable key. Each `:name` in the SQL needs
   exactly one parameter of that name (a literal colon is `\:`); validate checks
   this (`bind_mismatch`) and each parameter's type and constraints.
+- **List parameters.** Where the instance's schema publishes `list` on a
+  parameter, `list: true` lets the model give one to `max_items` values
+  (20 when left out, at most 100) for `IN (:name)` or `NOT IN (:name)`, and
+  nowhere else in the SQL (`list_parameter_outside_in`). Only a required,
+  model-filled string, integer, number or date may be a list
+  (`parameter_list_optional`, `parameter_list_type`, `parameter_context_list`);
+  its constraints apply to each item. A write query that asks the person
+  first takes `max_items` of at most 20, what the confirmation card shows
+  (`list_too_long_to_confirm`). `cavelon validate` checks all of these.
 - **Read stored procedures (SQL Server only).** On an `mssql` connection the SQL
   may instead be exactly one call, `EXEC [schema].[procedure] @p1 = :p1, @p2 =
   :p2`: every argument a placeholder with a declared parameter, no literal,
@@ -464,7 +473,9 @@ payload is the query's arguments: only the model-sourced parameter names.
 Map workflow data with a Transform before the node; there is no per-node
 JSONPath argument mapping. Never include an identity parameter (such as
 `email`) or an unknown name: the call answers `invalid_arguments` and runs
-nothing. `config_overrides` do not apply to a query node.
+nothing. A list parameter takes a JSON array; declare it in `input_schema` as
+`type: array`, which `cavelon validate` checks. `config_overrides` do not
+apply to a query node.
 
 For `order_status` above, add this fragment to
 `package/registry_entities.yaml`, connect the workflow's entry to

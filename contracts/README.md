@@ -224,6 +224,23 @@ after this wording change gives identical bytes, and the confirmation
 operation and schemas still match this snapshot. No code, header, shape or
 confirmation flow changed. This build reaches production with its next deploy.
 
+On 2026-10-09 the snapshot took database query list parameters from an
+immutable merged instance build, without running it. The OpenAPI generator's
+checked-in output, trimmed as below, differs from the snapshot in
+`QueryParameter`'s `list` and `max_items` and its new example; only those are
+taken in (other differences in the trimmed output stay as recorded). The
+functions behind `/meta/package-schema` and `/meta/error-catalog`, read
+through the build's existing Python environment, supply only the same two
+fields with their descriptions, the parameter's description and example, the
+query's `sql_text` and `parameters` descriptions, the five list codes
+(`parameter_context_list`, `parameter_list_type`, `parameter_list_optional`,
+`list_parameter_outside_in`, `list_too_long_to_confirm`) and the hint of
+`parameter_constraint_not_applicable`, which now names `max_items`; then
+scrubbed as below. The test-run request already took any JSON value, so no
+operation or request shape changed. Capabilities, docs pages and all other
+entries stay as recorded. Tests also play an instance whose schema has no
+`list`.
+
 | File | Source |
 |---|---|
 | `openapi.json` | `GET /openapi.json`, trimmed by `cli/scripts/trim-openapi.mjs` to the operations listed in [`kit-operations.json`](kit-operations.json) and the components they reference, without prose descriptions |

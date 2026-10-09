@@ -88,6 +88,9 @@ interface QueryParameter {
   type?: string;
   description?: string;
   required?: boolean;
+  /** A list of one to max_items values; an older instance publishes neither field. */
+  list?: boolean | null;
+  max_items?: number | null;
   [key: string]: unknown;
 }
 
@@ -282,14 +285,17 @@ function lastTest(c: Connection): string {
 /** Who fills a parameter, as the editor says it. */
 const filledBy = (p: QueryParameter) => (!p.source || p.source === "model" ? "model" : p.source);
 
+/** A parameter's type as the editor says it: "list of string" for a list. */
+const typeOf = (p: QueryParameter) => (p.list === true ? `list of ${p.type ?? "string"}` : (p.type ?? "string"));
+
 function parameterRows(parameters: QueryParameter[]): Array<Record<string, unknown>> {
   return parameters.map((p) => ({
     name: p.name,
     filled_by: filledBy(p),
-    type: p.type ?? "string",
+    type: typeOf(p),
     required: p.required === false ? "no" : "yes",
     constraints:
-      ["max_length", "pattern", "enum", "minimum", "maximum"]
+      ["max_items", "max_length", "pattern", "enum", "minimum", "maximum"]
         .filter((k) => p[k] !== undefined && p[k] !== null)
         .map((k) => `${k} ${JSON.stringify(p[k])}`)
         .join(", ") || null,
@@ -671,6 +677,34 @@ function typed(parameter: QueryParameter | undefined, raw: string): unknown {
   return raw;
 }
 
+/**
+ * A list parameter's value: a JSON array of one to max_items items of its type.
+ * The kit checks the shape; the instance checks each item against the
+ * parameter's constraints. A refusal names an item's position, never its value.
+ */
+function listValue(parameter: QueryParameter, raw: string): unknown[] {
+  const type = parameter.type ?? "string";
+  const at = `--value ${parameter.name}`;
+  let items: unknown;
+  try {
+    items = JSON.parse(raw);
+  } catch {
+    items = undefined;
+  }
+  if (!Array.isArray(items)) {
+    const example = type === "integer" || type === "number" ? "[4711,4712]" : type === "date" ? '["2026-10-01","2026-10-02"]' : '["A-10023","A-10024"]';
+    throw usageError(`${at}: a list parameter takes a JSON array of ${type} values.`, `Give it as ${parameter.name}=${example}, quoted for your shell.`);
+  }
+  if (!items.length) throw usageError(`${at}: must hold at least 1 item.`);
+  if (typeof parameter.max_items === "number" && items.length > parameter.max_items) throw usageError(`${at}: must hold at most ${parameter.max_items} items.`);
+  items.forEach((item, index) => {
+    const fits =
+      type === "integer" ? Number.isInteger(item) : type === "number" ? typeof item === "number" && Number.isFinite(item) : typeof item === "string";
+    if (!fits) throw usageError(`${at}: item ${index + 1} ${item === null ? "is empty" : `is not ${type === "integer" ? "an integer" : type === "number" ? "a number" : type === "date" ? "a date (YYYY-MM-DD) string" : "a string"}`}.`);
+  });
+  return items;
+}
+
 /** The test run's values: one `name=value` per parameter, context parameters included. */
 function runValues(query: Query, given: string[]): Record<string, unknown> {
   const values: Record<string, unknown> = {};
@@ -682,10 +716,10 @@ function runValues(query: Query, given: string[]): Record<string, unknown> {
     if (!parameter) {
       throw usageError(
         `${query.slug} has no parameter "${name}".`,
-        `Its parameters: ${query.parameters.map((p) => `${p.name} (${filledBy(p)}, ${p.type ?? "string"})`).join(", ") || "none"}.`,
+        `Its parameters: ${query.parameters.map((p) => `${p.name} (${filledBy(p)}, ${typeOf(p)})`).join(", ") || "none"}.`,
       );
     }
-    values[name] = typed(parameter, pair.slice(at + 1));
+    values[name] = parameter.list === true ? listValue(parameter, pair.slice(at + 1)) : typed(parameter, pair.slice(at + 1));
   }
   return values;
 }
@@ -698,7 +732,9 @@ export const dbTestRun: CommandSpec = {
   description:
     "Needs the tenant Owner's permission (database_connectors.test); it reads the customer's own data. Give each parameter\n" +
     "with --value name=value, those the platform fills from the signed-in visitor (end_user.*) too: that is how an\n" +
-    "identity-scoped query is checked for one customer. The instance records the run (counts only) and audits it with your\n" +
+    "identity-scoped query is checked for one customer. A list parameter takes a JSON array (--value 'skus=[\"X-1\",\"X-2\"]'),\n" +
+    "one to max_items items of its type; the instance checks each item and names a refused one by position, never its value.\n" +
+    "The instance records the run (counts only; a list by its item count) and audits it with your\n" +
     "name. Where the instance publishes the matching needs_a_person_when restriction, the kit refuses an API key on an\n" +
     "end_user.* query before sending (exit 5): a person tests it in the Admin or with their personal access token. Ordinary queries\n" +
     "remain usable with an API key. On an older instance that omits the restriction, the server decides.\n" +
@@ -716,10 +752,14 @@ export const dbTestRun: CommandSpec = {
   operations: ["POST /api/v1/database-connectors/queries/{query_id}/test-run"],
   positionals: [{ name: "query", description: "The query's tool slug or id.", required: true }],
   options: {
-    value: { type: "string", multiple: true, value: "<name=value>", description: "One parameter's value, typed as the parameter's type." },
+    value: { type: "string", multiple: true, value: "<name=value>", description: "One parameter's value, typed as the parameter's type; a list parameter's is a JSON array." },
     rows: { type: "string", value: "<n>", description: `Show at most n rows in the text (default ${ROWS_SHOWN}); --json carries what the instance returned.` },
   },
-  examples: ["cavelon db test-run order_status --value order_no=A-10023 --value email=ada@example.com", "cavelon db test-run stock --value sku=4711 --json"],
+  examples: [
+    "cavelon db test-run order_status --value order_no=A-10023 --value email=ada@example.com",
+    "cavelon db test-run stock --value sku=4711 --json",
+    `cavelon db test-run stock_of_skus --value 'skus=["X-1","X-2"]'`,
+  ],
   async run(ctx, input) {
     const query = await resolveQuery(ctx, positional(input, "query")!);
     if (query.parameters.some(p => p.source?.startsWith("end_user."))) {

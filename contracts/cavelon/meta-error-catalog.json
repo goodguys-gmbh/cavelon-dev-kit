@@ -2672,6 +2672,13 @@
       "docs": "/docs/concepts/database-connections#queries-and-parameters"
     },
     {
+      "code": "list_parameter_outside_in",
+      "area": "database_connector",
+      "message": "A list parameter's placeholder stands somewhere other than IN (:name) or NOT IN (:name). A list binds one value per item, which only an IN list can take.",
+      "hint": "Write the list parameter as column IN (:name) or column NOT IN (:name), with nothing else inside the parentheses, wherever it is used; or make it a single value.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
       "code": "locking_clause",
       "area": "database_connector",
       "message": "The SQL locks rows (FOR UPDATE, FOR SHARE, LOCK IN SHARE MODE).",
@@ -2721,6 +2728,13 @@
       "docs": "/docs/concepts/database-connections#queries-and-parameters"
     },
     {
+      "code": "list_too_long_to_confirm",
+      "area": "database_connector",
+      "message": "A confirmation card shows at most 20 entries of a list, and a person must see every value an approved action runs with. Saving a database query: a write query that asks the person first declares a list parameter with max_items over 20. At run time: an action that asks first (an email, a share, a write query) was called with a list of more than 20 entries, so nothing was asked and nothing was done.",
+      "hint": "For a query, set max_items to 20 or less, or set requires_confirmation to false for a write that runs unattended. At run time, split the action into several of at most 20 entries each.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
       "code": "procedure_definition_unreadable",
       "area": "database_connector",
       "message": "The definition of the stored procedure a query calls could not be read: the procedure does not exist or the connection's login may not see it, the login lacks VIEW DEFINITION on it, it was created WITH ENCRYPTION, or the database did not answer. Cavelon checks every procedure's definition before a query may call it, so such a query cannot be saved, enabled or test-run.",
@@ -2766,7 +2780,7 @@
       "code": "parameter_constraint_not_applicable",
       "area": "database_connector",
       "message": "A parameter sets a constraint its type does not take.",
-      "hint": "max_length and pattern belong to a string, minimum and maximum to an integer or number, enum to a string, integer or number. Remove the constraint or change the type.",
+      "hint": "max_length and pattern belong to a string, minimum and maximum to an integer or number, enum to a string, integer or number, max_items to a list. Remove the constraint or change the type.",
       "docs": "/docs/concepts/database-connections#queries-and-parameters"
     },
     {
@@ -2774,6 +2788,13 @@
       "area": "database_connector",
       "message": "A context parameter (source end_user.*) sets max_length, pattern, enum, minimum or maximum.",
       "hint": "Remove the constraint; the platform fills the value from the verified identity, not the model.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
+      "code": "parameter_context_list",
+      "area": "database_connector",
+      "message": "A context parameter (source end_user.*) is declared a list.",
+      "hint": "Remove list and max_items; the platform binds exactly one value from the verified identity.",
       "docs": "/docs/concepts/database-connections#queries-and-parameters"
     },
     {
@@ -2809,6 +2830,20 @@
       "area": "database_connector",
       "message": "A parameter's enum lists the same value twice.",
       "hint": "List each allowed value once.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
+      "code": "parameter_list_optional",
+      "area": "database_connector",
+      "message": "A list parameter is marked optional. A list binds one to max_items values; without one, IN () would compare with NULL and match nothing, and NOT IN would match nothing either.",
+      "hint": "Remove required: false, or write a second query for the case without the list.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
+      "code": "parameter_list_type",
+      "area": "database_connector",
+      "message": "A list parameter has a type other than string, integer, number or date.",
+      "hint": "Make the items a string, integer, number or date, or declare a single value instead of a list.",
       "docs": "/docs/concepts/database-connections#queries-and-parameters"
     },
     {

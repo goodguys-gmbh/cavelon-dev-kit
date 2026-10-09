@@ -1,6 +1,6 @@
 import type { PackageSchema } from "./contracts.js";
 import type { TenantInventory } from "./commands/inventory.js";
-import { parameterSchema, QUERY_TOOL_TYPE, querySchema, queryTools, schemaKnowsQueries, schemaKnowsWrites, type QueryBaseline } from "./database-queries.js";
+import { parameterSchema, QUERY_TOOL_TYPE, querySchema, queryTools, schemaKnowsLists, schemaKnowsQueries, schemaKnowsWrites, type QueryBaseline } from "./database-queries.js";
 import { locate, type Finding, type PackageOnDisk } from "./package-files.js";
 
 export const WORKFLOW_QUERY_MISSING_CODE = "tool_call_database_query_missing";
@@ -121,6 +121,25 @@ function argumentNames(pkg: Json, query: QueryNode): Array<{ name: string; point
   return found;
 }
 
+/**
+ * A declared input_schema property whose type cannot carry what the query's
+ * parameter takes: a list takes a JSON array, a single value never one. The
+ * payload must satisfy both, so such a node fails on every run.
+ */
+function shapeMismatch(query: QueryNode, parameters: Json[], source: unknown): Array<{ name: string; list: boolean; declared: string[]; pointer: string }> {
+  const properties = object(object(query.config.input_schema)?.properties) ?? {};
+  const at = `/registry_entities/orchestration_nodes/${query.index}/config/input_schema/properties`;
+  return parameters.flatMap((parameter) => {
+    if ((parameter.source ?? source) !== source || typeof parameter.name !== "string" || !Object.hasOwn(properties, parameter.name)) return [];
+    const type = object(properties[parameter.name])?.type;
+    const declared = typeof type === "string" ? [type] : Array.isArray(type) ? type.filter((t): t is string => typeof t === "string") : [];
+    if (!declared.length) return [];
+    const list = parameter.list === true;
+    const carries = list ? declared.includes("array") : declared.some((t) => t !== "array");
+    return carries ? [] : [{ name: parameter.name, list, declared, pointer: `${at}/${pointerKey(parameter.name)}/type` }];
+  });
+}
+
 /** Schema checks still run separately; runtime alone checks dynamic payloads and identity. */
 export function checkWorkflowQueries(disk: PackageOnDisk, schema: PackageSchema, inventory: TenantInventory | undefined, baseline: QueryBaseline | undefined): Finding[] {
   if (!schemaRunsQueryNodes(schema) || disk.unreadable?.includes("tools")) return [];
@@ -153,6 +172,13 @@ export function checkWorkflowQueries(disk: PackageOnDisk, schema: PackageSchema,
         code: "invalid_arguments", severity: "error", ...locate(disk, argument.pointer),
         message: `Tool Call node "${String(node.slug ?? index)}" passes "${argument.name}" to query "${slug}": ${identity.has(argument.name) ? "an identity parameter is filled by the instance from the signed-in Chat User" : "the query has no model-sourced parameter of that name"}; the call answers invalid_arguments and runs nothing.`,
         hint: "Use a Transform before the query node to emit only its model-sourced parameter names. Identity parameters come from the signed-in Chat User, never workflow data; the query's parameters decide the accepted arguments, not input_schema.",
+      });
+    }
+    for (const mismatch of schemaKnowsLists(schema) ? shapeMismatch(queryNode, parameters, source) : []) {
+      findings.push({
+        code: "invalid_arguments", severity: "error", ...locate(disk, mismatch.pointer),
+        message: `Tool Call node "${String(node.slug ?? index)}" declares "${mismatch.name}" in its input_schema as ${mismatch.declared.join(" or ")}, but query "${slug}" takes ${mismatch.list ? "a list there: a JSON array" : "a single value there, never an array"}; the payload cannot satisfy both, so the call answers invalid_arguments or fails the input_schema and runs nothing.`,
+        hint: mismatch.list ? `Declare it as {"type": "array", "items": {…}} and pass the values as a JSON array of one to max_items items.` : "Declare the property with the parameter's own type, or make the query's parameter a list (list: true) used as IN (:name).",
       });
     }
     if ((identity.size || query.allows_anonymous !== true) && triggerReaches(disk.package, queryNode)) {
