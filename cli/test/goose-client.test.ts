@@ -64,7 +64,7 @@ it("preserves YAML comments, personal settings, extensions and modes through the
   if (process.platform !== "win32") expect(statSync(agent.mcp.file).mode & 0o777).toBe(0o640);
   expect(record.native).toBeUndefined();
   for (const skill of skills) expect(existsSync(path.join(agent.skills, skill.name, "SKILL.md"))).toBe(true);
-  const newer = { command: "cmd", args: ["/c", "npx", "-y", "@cavelon/cli@0.1", "mcp"] };
+  const newer = { command: "cmd", args: ["/c", "npx", "-y", "@cavelon/cli@0.2", "mcp"] };
   await applyPlan(await planAgent(agent, {}, env, newer, skills), env, newer, skills, record);
   expect(parse(read(agent.mcp.file)).extensions.cavelon.cmd).toBe("cmd");
   const moved = agentByName(setupAgents({ ...env, GOOSE_PATH_ROOT: path.join(sb.home, "later") }), "goose")!;

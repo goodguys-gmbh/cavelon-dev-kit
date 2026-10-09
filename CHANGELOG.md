@@ -7,6 +7,21 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Changed
+
+- The release line moves to 0.2: the plugin and the MCP entries that `setup`
+  and `init --agents` write start `npx -y @cavelon/cli@0.2 mcp` when no
+  `cavelon` is installed. Entries that start the installed `cavelon mcp`, and
+  the offline packages, are unchanged.
+
+### Fixed
+
+- An MCP entry an earlier release line wrote (`npx -y @cavelon/cli@0.1 mcp`,
+  or its `cmd /c` form) stays the kit's own: `cavelon setup` and
+  `cavelon init --update` move it to the 0.2 line and `cavelon setup --remove`
+  takes it out, instead of leaving it as a personal server. Other servers,
+  settings and comments in those files stay as they are.
+
 ## [0.1.18] - 2026-10-09
 
 Saved database queries accept list parameters for `IN` and `NOT IN` filters,

@@ -75,7 +75,7 @@ it("preserves other settings, servers and modes through install, check, update a
   expect((await planAgent(agent, {}, env, installed, skills)).changes.every(change => change.outcome === "unchanged")).toBe(true);
   if (process.platform !== "win32") expect(statSync(agent.mcp.file).mode & 0o777).toBe(0o640);
   for (const skill of skills) expect(existsSync(path.join(agent.skills, skill.name, "SKILL.md"))).toBe(true);
-  const newer = { command: "cmd", args: ["/c", "npx", "-y", "@cavelon/cli@0.1", "mcp"] };
+  const newer = { command: "cmd", args: ["/c", "npx", "-y", "@cavelon/cli@0.2", "mcp"] };
   await applyPlan(await planAgent(agent, {}, env, newer, skills), env, newer, skills, record);
   expect(JSON.parse(read(agent.mcp.file)).mcpServers.cavelon).toEqual({ type: "stdio", ...newer });
   const moved = agentByName(setupAgents({ ...env, CLINE_DIR: path.join(sb.home, "later") }), "cline")!;

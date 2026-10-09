@@ -74,7 +74,7 @@ describe("Qwen Code integration", () => {
     expect((await planAgent(agent, {}, env, installed, skills)).changes.every(change => change.outcome === "unchanged")).toBe(true);
     expect(await checkAgent(agent, env, record)).toMatchObject({ ok: true, servers: [installed] });
     for (const skill of skills) expect(existsSync(path.join(agent.skills, skill.name, "SKILL.md"))).toBe(true);
-    const newer = { command: "cmd", args: ["/c", "npx", "-y", "@cavelon/cli@0.1", "mcp"] };
+    const newer = { command: "cmd", args: ["/c", "npx", "-y", "@cavelon/cli@0.2", "mcp"] };
     const update = await planAgent(agent, {}, env, newer, skills);
     await applyPlan(update, env, newer, skills, record);
     expect(readJsoncEntry(read(file), ["mcpServers", "cavelon"])).toMatchObject({ value: newer });

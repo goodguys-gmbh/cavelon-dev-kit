@@ -35,8 +35,11 @@ The CLI, the skills and the plugin share one version.
      `CAVELON_PLUGIN_VERSION` in `plugin/.mcp.json` (the plugin's version that
      `cavelon mcp` compares with the latest release), which the tests hold in
      step;
-   - for a new minor version, moves the MCP entry's pin (`@cavelon/cli@0.1`)
-     in `plugin/.mcp.json` and `cli/src/agents.ts`, which the tests also check;
+   - for a new minor version, moves the MCP entry's pin (`@cavelon/cli@0.2`)
+     in `plugin/.mcp.json` and `cli/src/mcp-command.ts`, and adds the line it
+     leaves to `EARLIER_RELEASE_LINES` there, so `setup` and `init --update`
+     move entries of that line and `setup --remove` takes them out; the tests
+     check both;
    - turns `CHANGELOG.md`'s **Unreleased** section into the new version, with
      the release date.
 2. **Merge it** (squash) and note its commit on `main`:

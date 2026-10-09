@@ -18,8 +18,8 @@ import { cli, login, sandbox, type Sandbox } from "./helpers.js";
  */
 
 const FAKE_CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), "fake-agent-cli.mjs");
-const NPX = { command: "npx", args: ["-y", "@cavelon/cli@0.1", "mcp"] };
-const NPX_WINDOWS = { command: "cmd", args: ["/c", "npx", "-y", "@cavelon/cli@0.1", "mcp"] };
+const NPX = { command: "npx", args: ["-y", "@cavelon/cli@0.2", "mcp"] };
+const NPX_WINDOWS = { command: "cmd", args: ["/c", "npx", "-y", "@cavelon/cli@0.2", "mcp"] };
 const INSTALLED = { command: "cavelon", args: ["mcp"] };
 const SKILLS = ["cavelon-authoring", "cavelon-long-running", "cavelon-loop", "cavelon-testing"];
 
@@ -217,7 +217,7 @@ describe("cavelon setup writes each agent's user configuration", () => {
     expect(read(layout.cursorMcp)).toMatch(/^\{\n {4}"mcpServers"/);
     expect(readJson(layout.geminiSettings)).toEqual({ theme: "Dracula", mcpServers: { cavelon: NPX } });
     expect(read(layout.codexConfig).startsWith(codex + "\n# cavelon:begin\n[mcp_servers.cavelon]\n")).toBe(true);
-    expect(read(layout.kiroMcp)).toBe('{\r\n  "mcpServers": {\r\n    "cavelon": {\r\n      "command": "npx",\r\n      "args": [\r\n        "-y",\r\n        "@cavelon/cli@0.1",\r\n        "mcp"\r\n      ]\r\n    }\r\n  }\r\n}\r\n');
+    expect(read(layout.kiroMcp)).toBe('{\r\n  "mcpServers": {\r\n    "cavelon": {\r\n      "command": "npx",\r\n      "args": [\r\n        "-y",\r\n        "@cavelon/cli@0.2",\r\n        "mcp"\r\n      ]\r\n    }\r\n  }\r\n}\r\n');
     // A file with comments is left as it is, with what to add.
     expect(read(layout.vscodeMcp)).toBe(vscode);
     const copilot = result.json<any>().agents.find((a: any) => a.name === "copilot");
@@ -564,7 +564,7 @@ describe("login and --check", () => {
     const result = await cli(sb, ["setup", "--check"], { env: { PATH: "" } });
     expect(result.code).toBe(1);
     expect(result.stdout).toMatch(/No coding agent found/);
-    expect(result.stdout).toMatch(/no {2}The Cavelon tools start: (cmd \/c )?npx -y @cavelon\/cli@0\.1 mcp \(/);
+    expect(result.stdout).toMatch(/no {2}The Cavelon tools start: (cmd \/c )?npx -y @cavelon\/cli@0\.2 mcp \(/);
     expect(result.stdout).toMatch(/Login: not logged in/);
   });
 });

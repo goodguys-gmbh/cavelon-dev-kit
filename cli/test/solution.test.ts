@@ -327,13 +327,13 @@ describe("init", () => {
         expect(text).toContain("cavelon:generated");
       }
     }
-    expect(JSON.parse(read(path.join(dir, ".mcp.json")))).toEqual({ mcpServers: { cavelon: { command: "npx", args: ["-y", "@cavelon/cli@0.1", "mcp"] } } });
+    expect(JSON.parse(read(path.join(dir, ".mcp.json")))).toEqual({ mcpServers: { cavelon: { command: "npx", args: ["-y", "@cavelon/cli@0.2", "mcp"] } } });
     expect(read(path.join(dir, ".cursor", "mcp.json"))).toBe(
-      '{\n    "mcpServers": {\n        "other": {\n            "command": "x"\n        },\n        "cavelon": {\n            "command": "npx",\n            "args": [\n                "-y",\n                "@cavelon/cli@0.1",\n                "mcp"\n            ]\n        }\n    }\n}\n',
+      '{\n    "mcpServers": {\n        "other": {\n            "command": "x"\n        },\n        "cavelon": {\n            "command": "npx",\n            "args": [\n                "-y",\n                "@cavelon/cli@0.2",\n                "mcp"\n            ]\n        }\n    }\n}\n',
     );
     expect(read(path.join(dir, ".vscode", "mcp.json"))).toBe(jsonc);
     expect(read(path.join(dir, ".codex", "config.toml"))).toBe(
-      '# cavelon:begin\n[mcp_servers.cavelon]\ncommand = "npx"\nargs = ["-y", "@cavelon/cli@0.1", "mcp"]\n# cavelon:end\n',
+      '# cavelon:begin\n[mcp_servers.cavelon]\ncommand = "npx"\nargs = ["-y", "@cavelon/cli@0.2", "mcp"]\n# cavelon:end\n',
     );
     const warnings = result.json<{ warnings: string[] }>().warnings.join("\n");
     expect(warnings).toMatch(/\.claude\/skills\/cavelon-loop\/SKILL\.md as it is: it was not written by cavelon/);
@@ -428,12 +428,12 @@ describe("init", () => {
     const dir = folder();
     const result = await onPlatform("win32", () => cli(sb, ["init", "--instance", server.url, "--tenant", tenant, "--agents", "claude,codex", "--json"], { cwd: dir }));
     expect(result.code, result.stdout).toBe(0);
-    const windows = { command: "cmd", args: ["/c", "npx", "-y", "@cavelon/cli@0.1", "mcp"] };
+    const windows = { command: "cmd", args: ["/c", "npx", "-y", "@cavelon/cli@0.2", "mcp"] };
     expect(JSON.parse(read(path.join(dir, ".mcp.json")))).toEqual({ mcpServers: { cavelon: windows } });
-    expect(read(path.join(dir, ".codex", "config.toml"))).toContain('command = "cmd"\nargs = ["/c", "npx", "-y", "@cavelon/cli@0.1", "mcp"]');
+    expect(read(path.join(dir, ".codex", "config.toml"))).toContain('command = "cmd"\nargs = ["/c", "npx", "-y", "@cavelon/cli@0.2", "mcp"]');
 
     // Whoever is on the other system does not rewrite the entry someone wrote on theirs.
-    const posix = `${JSON.stringify({ mcpServers: { cavelon: { command: "npx", args: ["-y", "@cavelon/cli@0.1", "mcp"] } } }, null, 2)}\n`;
+    const posix = `${JSON.stringify({ mcpServers: { cavelon: { command: "npx", args: ["-y", "@cavelon/cli@0.2", "mcp"] } } }, null, 2)}\n`;
     writeFileSync(path.join(dir, ".mcp.json"), posix);
     const toml = read(path.join(dir, ".codex", "config.toml"));
     const updated = await onPlatform("win32", () => cli(sb, ["init", "--update", "--json"], { cwd: dir }));
