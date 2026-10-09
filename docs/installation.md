@@ -29,7 +29,7 @@ check, update and removal. When you are done, continue with
 | **A Cavelon instance** and an account on it | Its URL, for example `https://cavelon.example.com`. |
 | **Personal access tokens** turned on in that instance | `cavelon` logs in with a personal access token. The instance's operator turns them on. |
 | **The operations API** turned on, for waiting | `wait`, `watch` and every `--wait` follow work through it. Without it, the commands still start the work, but cannot wait for it. |
-| **A coding agent** (optional) | Claude Code, Codex, Cursor, VS Code with GitHub Copilot, Gemini CLI or Kiro; `cavelon setup` sets up each one it finds. Any other agent that reads `AGENTS.md` and runs shell commands works too: see [Agents without a plugin](#agents-without-a-plugin). |
+| **A coding agent** (optional) | Claude Code, Codex, Cursor, VS Code with GitHub Copilot, Gemini CLI, Kiro, OpenCode, Pi, Qwen Code CLI, Cline, Kilo, Goose or OMP, with its model already set up; `cavelon setup` sets up each one it finds ([one page per client](install/README.md)). Any other agent that reads `AGENTS.md` and runs shell commands works too: see [Agents without a plugin](#agents-without-a-plugin). |
 | **Node.js 20.3 or newer** (optional) | Only to run `cavelon` through `npx` or install it with npm instead: [With Node.js](#with-nodejs-npx-or-npm). |
 | **Python with uv, pipx or pip** (optional) | Only to install `cavelon` from PyPI instead: [With Python](#with-python-uvx-uv-pipx-or-pip). |
 
@@ -205,7 +205,7 @@ the system packages comes without npm; install the `npm` package too.
 
 Wherever the documentation says `cavelon`, write `npx -y @cavelon/cli`, and
 the same for a `cavelon …` command the CLI prints for you to run next. To stay
-on one release line, name it: `npx -y @cavelon/cli@0.1 whoami`. On Windows, if
+on one release line, name it: `npx -y @cavelon/cli@0.2 whoami`. On Windows, if
 PowerShell refuses `npx`, see [Windows](#windows).
 
 #### Type `cavelon` instead (optional)
@@ -359,8 +359,8 @@ Gemini CLI ([settings](https://geminicli.com/docs/reference/configuration),
 
 The MCP server starts as `cavelon mcp` when a `cavelon` is on your `PATH` (on
 Windows, the one-line install's `cavelon.exe`), and as
-`npx -y @cavelon/cli@0.1 mcp` otherwise; on
-native Windows that is `cmd /c npx -y @cavelon/cli@0.1 mcp`, because an agent
+`npx -y @cavelon/cli@0.2 mcp` otherwise; on
+native Windows that is `cmd /c npx -y @cavelon/cli@0.2 mcp`, because an agent
 starts its servers without a shell. On native Windows, Claude Code and Codex
 also get the server in their MCP file next to the plugin, since the plugin's
 own entry needs `sh` ([Windows](#windows)).
@@ -447,10 +447,12 @@ skills and the MCP server, write them into the repository with
 
 The plugin starts the MCP server through `sh`: `cavelon mcp` when a `cavelon`
 is on your `PATH` (the one-line install, Homebrew or `npm i -g`), and
-otherwise `npx -y @cavelon/cli@0.1 mcp`, the latest 0.1 release. So with the
+otherwise `npx -y @cavelon/cli@0.2 mcp`, the latest 0.2 release. So with the
 plugin you need nothing else as long as you have either. The pin keeps a
-release that may change behaviour (0.2) away from `npx` until you update the
-plugin; an installed `cavelon` is the version you installed.
+release that may change behaviour (0.3) away from `npx` until you update the
+plugin; an installed `cavelon` is the version you installed. A 0.1 plugin
+starts `npx -y @cavelon/cli@0.1 mcp` until you update it
+([Upgrading from 0.1 to 0.2](upgrading-to-0.2.md)).
 
 Native Windows has no `sh`: add the server yourself there, as
 [Windows](#windows) shows. In WSL, everything works as on Linux.
@@ -509,7 +511,7 @@ own files it changes only the block between its `cavelon:begin` and
 blocks and files after you update `cavelon`. Commit them, so everyone on the
 repository gets the same.
 
-The MCP entry it writes starts `npx -y @cavelon/cli@0.1 mcp`, which needs
+The MCP entry it writes starts `npx -y @cavelon/cli@0.2 mcp`, which needs
 Node.js on every machine that uses it. If your team installs `cavelon` with
 the one-line install instead, change the entry to start it directly,
 `{ "command": "cavelon", "args": ["mcp"] }` (in `.codex/config.toml`,
@@ -622,8 +624,18 @@ cavelon init --update                                   # in a solution set up w
 ```
 
 Through `npx`, `cavelon` needs no update: `npx -y @cavelon/cli` looks up the
-newest release each time it starts (`@cavelon/cli@0.1`: the newest 0.1
+newest release each time it starts (`@cavelon/cli@0.2`: the newest 0.2
 release). `cavelon --version` shows which one runs.
+
+### Moving to a new minor version
+
+While the kit is in 0.x, a new minor version may change behaviour, so the
+plugin, `setup` and `init --agents` entries pin the minor version they came
+with. Moving from 0.1 to 0.2 therefore takes one more step than a patch
+update: refresh the plugin and run `cavelon setup` and `cavelon init --update`
+again, and move the range in CI.
+[Upgrading from 0.1 to 0.2](upgrading-to-0.2.md) has each step, offline
+machines included, and how to stay on 0.1.
 
 `cavelon` learns each instance's API, package schema and docs from what the
 instance publishes, so a new Cavelon version on the server does not need a new
@@ -712,12 +724,12 @@ npm package with Node.js, and each standalone executable on its own platform.
   on native Windows `npx` is `npx.cmd`, which runs only through one:
 
   ```powershell
-  claude mcp add --scope user cavelon -- cmd /c npx -y @cavelon/cli@0.1 mcp
-  codex mcp add cavelon -- cmd /c npx -y @cavelon/cli@0.1 mcp
+  claude mcp add --scope user cavelon -- cmd /c npx -y @cavelon/cli@0.2 mcp
+  codex mcp add cavelon -- cmd /c npx -y @cavelon/cli@0.2 mcp
   ```
 
 - `cavelon init --agents` run on Windows therefore writes the entry as
-  `cmd /c npx -y @cavelon/cli@0.1 mcp`. In a repository people also use on
+  `cmd /c npx -y @cavelon/cli@0.2 mcp`. In a repository people also use on
   macOS or Linux, the entry stays in the form it was first written in, and
   `init --update` keeps it: whoever is on the other system adds the server
   for themselves (above).

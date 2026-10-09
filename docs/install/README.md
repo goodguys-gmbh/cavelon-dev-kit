@@ -10,6 +10,12 @@ Version 0.1.16 adds OpenCode and Pi with bundled native adapters, and Qwen
 Code CLI with native settings and person-terminal approval. See the
 [qualification matrix](../coding-agent-qualification.md) for tested versions,
 platforms and limits. Version 0.1.17 adds Cline, Kilo, Goose and OMP.
+Version 0.2.0 moves the release-line pin to `@cavelon/cli@0.2`; each page's
+**Update** section still applies, and
+[Upgrading from 0.1 to 0.2](../upgrading-to-0.2.md) adds the steps for the
+minor version. These pages describe setup; person approval on native
+Windows, WSL and macOS is still open, and a
+[customer pilot](../customer-pilot.md) records one customer's checks.
 
 | Client | Installs as | Page |
 |---|---|---|
@@ -62,8 +68,9 @@ mkdir cavelon-plugin && tar -xzf cavelon-agent-plugin.tar.gz -C cavelon-plugin
 
 (`tar` is part of Windows 10 and newer too.) Every package starts the MCP
 server the same way: on macOS and Linux `cavelon mcp` when a `cavelon` is on
-your `PATH`, and otherwise `npx -y @cavelon/cli@0.1 mcp`; the Windows packages
-start `cmd /c npx -y @cavelon/cli@0.1 mcp`, which needs Node.js. Each says its
+your `PATH`, and otherwise `npx -y @cavelon/cli@0.2 mcp`; the Windows packages
+start `cmd /c npx -y @cavelon/cli@0.2 mcp`, which needs Node.js. A package from
+a 0.1 release names `@0.1` there until you install the new one. Each says its
 version to `cavelon`, which tells the agent when a newer release is out
 ([Updating](../installation.md#when-you-work-only-through-a-coding-agent)).
 

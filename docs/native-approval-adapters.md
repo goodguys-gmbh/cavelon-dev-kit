@@ -200,4 +200,6 @@ The adapters, setup lifecycle, shell guards and bundled dependencies are part
 of 0.1.16. The [qualification matrix](coding-agent-qualification.md) separates
 automated checks from real-client loading and person interaction. Native UI
 checks on additional operating systems and customer model/network pilots remain
-separate work; no qualification is inherited from a related client.
+separate work; no qualification is inherited from a related client or from a
+new kit version. A [customer pilot](customer-pilot.md) records one customer's
+platforms, clients and decisions.

@@ -163,5 +163,8 @@ terminal transcript separately when the reviewer needs direct interaction eviden
 | Cline/Kilo/other editors | Exact editor/extension versions, isolated real editor host, generated settings and person-owned terminal where required; a CLI check does not qualify the editor |
 
 No Windows, WSL, macOS or editor acceptance is inferred from headless tests,
-an attestation alone, related-client behavior or existing Linux evidence.
-Customer model/network policy and database behavior need separate pilots.
+an attestation alone, related-client behavior or existing Linux evidence, or
+from a kit version: releasing 0.2 leaves these gates as they are.
+Customer model/network policy and database behavior need separate pilots; the
+[customer pilot](customer-pilot.md) checklist and report template record them
+with the same labels: automated, simulated or actual person.
