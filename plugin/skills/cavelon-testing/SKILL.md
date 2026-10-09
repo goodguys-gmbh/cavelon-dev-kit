@@ -182,8 +182,9 @@ the Admin. Then:
   a real customer's data into a test file.
 - An Oracle query is test-run the same way. Save-time refusals of PL/SQL,
   `DBMS_*`/`UTL_*` packages, database links or a write's `RETURNING`
-  (`forbidden_keyword`, `write_statement_refused`) come before any test run:
-  `cavelon validate` warns of them.
+  (`forbidden_keyword`, `write_statement_refused`) come before any test run.
+  `cavelon validate` warns of them in one recognizable read or write; a PL/SQL
+  block or several statements are refused only by the instance, on save.
 - A read stored-procedure query (SQL Server) is test-run the same way; the
   instance refuses the run while the connection's login can write or the
   procedure's definition writes or cannot be read, with a code

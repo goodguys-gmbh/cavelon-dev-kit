@@ -59,7 +59,7 @@ Finds Claude Code, Codex, Cursor, VS Code with GitHub Copilot, Gemini CLI, Kiro,
 
 | Option | Description |
 |---|---|
-| `--agents <list>` | Only these agents: claude, codex, cursor, copilot, gemini, kiro, opencode, pi, qwen, cline, kilo, or all (comma-separated). Default: every agent found. Repeatable. |
+| `--agents <list>` | Only these agents: claude, codex, cursor, copilot, gemini, kiro, opencode, pi, qwen, cline, kilo, goose, omp, or all (comma-separated). Default: every agent found. Repeatable. |
 | `-y, --yes` | Make the changes without asking. |
 | `--check` | Report what is set up and working; change nothing. |
 | `--strict` | With --check: fail for every agent found that is not set up, not only the ones setup set up. |
