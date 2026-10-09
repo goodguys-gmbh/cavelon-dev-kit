@@ -810,7 +810,7 @@ Run a saved query once with the values given, identity parameters included; show
 cavelon db test-run <query> [options]
 ```
 
-Needs the tenant Owner's permission (database_connectors.test); it reads the customer's own data. Give each parameter with --value name=value, those the platform fills from the signed-in visitor (end_user.*) too: that is how an identity-scoped query is checked for one customer. The instance records the run (counts only) and audits it with your name. Where the instance publishes the matching needs_a_person_when restriction, the kit refuses an API key on an end_user.* query before sending (exit 5): a person tests it in the Admin or with their personal access token. Ordinary queries remain usable with an API key. On an older instance that omits the restriction, the server decides. The rows come back once and are never stored. A failed run names its code; `cavelon explain <code>` says more. A write query's test is a dry run that rolls back; it still needs the connection to allow writes. The result reports kind, dry_run, rolled_back, affected_rows and committed only where published; an omitted value stays unknown. Never retry an ambiguous write outcome. A read stored-procedure query (SQL Server) shows the procedure's first result set; the instance refuses its run (exit 4) while the connection's last test found write privileges or the procedure's definition writes or cannot be read, and a run whose procedure ended the connector's transaction comes back with a notice saying so and whether the query was switched off.
+Needs the tenant Owner's permission (database_connectors.test); it reads the customer's own data. Give each parameter with --value name=value, those the platform fills from the signed-in visitor (end_user.*) too: that is how an identity-scoped query is checked for one customer. A list parameter takes a JSON array (--value 'skus=["X-1","X-2"]'), one to max_items items of its type; the instance checks each item and names a refused one by position, never its value. The instance records the run (counts only; a list by its item count) and audits it with your name. Where the instance publishes the matching needs_a_person_when restriction, the kit refuses an API key on an end_user.* query before sending (exit 5): a person tests it in the Admin or with their personal access token. Ordinary queries remain usable with an API key. On an older instance that omits the restriction, the server decides. The rows come back once and are never stored. A failed run names its code; `cavelon explain <code>` says more. A write query's test is a dry run that rolls back; it still needs the connection to allow writes. The result reports kind, dry_run, rolled_back, affected_rows and committed only where published; an omitted value stays unknown. Never retry an ambiguous write outcome. A read stored-procedure query (SQL Server) shows the procedure's first result set; the instance refuses its run (exit 4) while the connection's last test found write privileges or the procedure's definition writes or cannot be read, and a run whose procedure ended the connector's transaction comes back with a notice saying so and whether the query was switched off.
 
 | Argument | Description |
 |---|---|
@@ -818,7 +818,7 @@ Needs the tenant Owner's permission (database_connectors.test); it reads the cus
 
 | Option | Description | MCP |
 |---|---|---|
-| `--value <name=value>` | One parameter's value, typed as the parameter's type. Repeatable. | yes |
+| `--value <name=value>` | One parameter's value, typed as the parameter's type; a list parameter's is a JSON array. Repeatable. | yes |
 | `--rows <n>` | Show at most n rows in the text (default 20); --json carries what the instance returned. | yes |
 
 Examples:
@@ -826,6 +826,7 @@ Examples:
 ```bash
 cavelon db test-run order_status --value order_no=A-10023 --value email=ada@example.com
 cavelon db test-run stock --value sku=4711 --json
+cavelon db test-run stock_of_skus --value 'skus=["X-1","X-2"]'
 ```
 
 ## Variables and secrets

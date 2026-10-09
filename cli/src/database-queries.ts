@@ -81,6 +81,22 @@ export function parameterSchema(schema: PackageSchema): Json | undefined {
   return isObject(parameters) ? resolveRef(schema, parameters.items) : undefined;
 }
 
+/** Only where published: an older instance's parameter has no `list`, and then the kit checks no list of its own. */
+export function schemaKnowsLists(schema: PackageSchema): boolean {
+  const properties = parameterSchema(schema)?.properties;
+  return isObject(properties) && "list" in properties;
+}
+
+/**
+ * The list rules the instance states only in prose (the `list` and `max_items`
+ * descriptions and the catalog's list codes): the item types a list may have,
+ * its `max_items` when left out, and the most entries a confirmation card
+ * shows. The bound of 100 is the schema's own `maximum`.
+ */
+export const LIST_ITEM_TYPES = ["string", "integer", "number", "date"];
+export const LIST_MAX_ITEMS_DEFAULT = 20;
+export const CONFIRMATION_LIST_LIMIT = 20;
+
 /** Only where published; an older schema gives no write-query knowledge. */
 export function schemaKnowsWrites(schema: PackageSchema): boolean {
   const kind = (querySchema(schema)?.properties as Record<string, Json> | undefined)?.kind;
@@ -146,7 +162,7 @@ const problem = (code: string, message: string, at?: string): Problem => ({ code
 const isNumber = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
 /** One parameter's problems, as the instance refuses them when the query is saved. */
-function parameterProblems(p: Json, index: number, defaults: { source: unknown; type: unknown; required: unknown }): Problem[] {
+function parameterProblems(p: Json, index: number, defaults: { source: unknown; type: unknown; required: unknown }, lists: boolean): Problem[] {
   const name = typeof p.name === "string" ? p.name : `#${index + 1}`;
   const source = p.source ?? defaults.source;
   const type = typeof (p.type ?? defaults.type) === "string" ? String(p.type ?? defaults.type) : "string";
@@ -154,8 +170,10 @@ function parameterProblems(p: Json, index: number, defaults: { source: unknown; 
   const at = `parameters/${index}`;
   const said = (what: string) => `parameter '${name}': ${what}`;
   const set = CONSTRAINTS.filter((key) => p[key] !== undefined && p[key] !== null);
-  // A parameter the platform fills from the signed-in visitor: a required string without constraints.
+  const maxItems = p.max_items !== undefined && p.max_items !== null;
+  // A parameter the platform fills from the signed-in visitor: one required string without constraints.
   if (typeof source === "string" && source !== defaults.source) {
+    if (lists && (p.list === true || maxItems)) return [problem("parameter_context_list", said(`a context parameter (${source}) binds one value, never a list`), `${at}/${p.list === true ? "list" : "max_items"}`)];
     if (type !== "string") return [problem("parameter_context_not_string", said(`a context parameter (${source}) has type string`), `${at}/type`)];
     if (required === false) return [problem("parameter_context_optional", said(`a context parameter (${source}) is always required`), `${at}/required`)];
     if (set.length) return [problem("parameter_context_constrained", said(`the platform fills a context parameter, so ${set.join(", ")} does not apply`), `${at}/${set[0]}`)];
@@ -164,6 +182,20 @@ function parameterProblems(p: Json, index: number, defaults: { source: unknown; 
   const problems: Problem[] = [];
   if (typeof p.description !== "string" || !p.description.trim()) {
     problems.push(problem("parameter_description_missing", said("the model needs a description of what to fill in"), at));
+  }
+  if (lists && p.list !== true && maxItems) {
+    problems.push(problem("parameter_constraint_not_applicable", said("max_items applies to a list only"), `${at}/max_items`));
+    return problems;
+  }
+  if (lists && p.list === true) {
+    if (!LIST_ITEM_TYPES.includes(type)) {
+      problems.push(problem("parameter_list_type", said(`a list's items are a string, integer, number or date, not ${type}`), `${at}/type`));
+      return problems;
+    }
+    if (required === false) {
+      problems.push(problem("parameter_list_optional", said("a list parameter is always required"), `${at}/required`));
+      return problems;
+    }
   }
   const misplaced = set.filter((key) => !(CONSTRAINTS_BY_TYPE[type] ?? []).includes(key));
   if (misplaced.length) {
@@ -198,7 +230,8 @@ export function queryProblems(query: Json, schema: PackageSchema): Problem[] {
   const names = parameters.map((p) => p.name).filter((n): n is string => typeof n === "string");
   const repeated = [...new Set(names.filter((n, i) => names.indexOf(n) !== i))].sort((a, b) => a.localeCompare(b, "en"));
   if (repeated.length) problems.push(problem("parameter_names_repeat", `parameter names repeat: ${repeated.join(", ")}`, "parameters"));
-  parameters.forEach((p, index) => problems.push(...parameterProblems(p, index, defaults)));
+  const lists = schemaKnowsLists(schema);
+  parameters.forEach((p, index) => problems.push(...parameterProblems(p, index, defaults, lists)));
   if (typeof query.sql_text === "string" && query.sql_text.trim()) {
     const found = bindNames(query.sql_text);
     const missing = found.filter((n) => !names.includes(n)).sort((a, b) => a.localeCompare(b, "en"));
@@ -210,6 +243,24 @@ export function queryProblems(query: Json, schema: PackageSchema): Problem[] {
       ];
       problems.push(problem("bind_mismatch", `The SQL and its parameters disagree; ${parts.join("; ")}.`, "sql_text"));
     }
+    // A context parameter declared a list is refused as such (parameter_context_list), never placed.
+    const listed = lists ? parameters.filter((p) => p.list === true && (p.source ?? defaults.source) === defaults.source && typeof p.name === "string").map((p) => p.name as string) : [];
+    const dialect = isObject(query.connection) && typeof query.connection.dialect === "string" ? query.connection.dialect : undefined;
+    const outside = dialect ? listOutsideIn(query.sql_text, dialect, listed) : undefined;
+    if (outside) problems.push(problem("list_parameter_outside_in", `The list parameter :${outside} may stand only as IN (:${outside}) or NOT IN (:${outside}).`, "sql_text"));
+  }
+  const confirmation = (querySchema(schema)?.properties as Record<string, Json | undefined> | undefined)?.requires_confirmation;
+  if (lists && schemaKnowsWrites(schema) && query.kind === "write" && confirmation && (query.requires_confirmation ?? confirmation.default) === true) {
+    parameters.forEach((p, index) => {
+      if (p.list !== true || (isNumber(p.max_items) ? p.max_items : LIST_MAX_ITEMS_DEFAULT) <= CONFIRMATION_LIST_LIMIT) return;
+      problems.push(
+        problem(
+          "list_too_long_to_confirm",
+          `The confirmation card shows at most ${CONFIRMATION_LIST_LIMIT} values of a list, so a write that asks the person first takes max_items of at most ${CONFIRMATION_LIST_LIMIT}: ${String(p.name)}.`,
+          `parameters/${index}/max_items`,
+        ),
+      );
+    });
   }
   const context = parameters.some((p) => typeof p.source === "string" && p.source !== defaults.source);
   if (query.allows_anonymous === true && context) {
@@ -260,11 +311,41 @@ function closing(sql: string, start: number, quote: string, backslash: boolean):
   return undefined;
 }
 
+/** Where a block comment opened at `start` ends; PostgreSQL nests them. Undefined when it never closes. */
+function blockCommentEnd(sql: string, start: number, nested: boolean): number | undefined {
+  let depth = 0;
+  for (let i = start; i < sql.length - 1; ) {
+    const pair = sql.slice(i, i + 2);
+    if (pair === "/*") {
+      if (nested || depth === 0) depth++;
+      i += 2;
+    } else if (pair === "*/") {
+      depth--;
+      i += 2;
+      if (depth === 0) return i;
+    } else i++;
+  }
+  return undefined;
+}
+
+/** MySQL needs whitespace (or the end) after "--", where "a--1" is arithmetic, and also reads "#" as a comment. */
+function startsLineComment(sql: string, i: number, dialect: string): boolean {
+  if (sql.startsWith("--", i)) return dialect !== "mysql" || i + 2 >= sql.length || /\s/.test(sql[i + 2]!);
+  return dialect === "mysql" && sql[i] === "#";
+}
+
+/** The tag of a PostgreSQL dollar-quoted string opening at `i` (`$$` or `$tag$`). */
+function dollarTagAt(sql: string, i: number): string | undefined {
+  const tag = /\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$/y;
+  tag.lastIndex = i;
+  return tag.exec(sql)?.[0];
+}
+
 /**
- * The SQL as the instance's check reads it, far enough to find an `EXEC` and
- * check its form: strings, quoted identifiers and comments are one token each,
- * so a keyword inside one is no keyword. Undefined for SQL with an unclosed
- * quote or comment, which the instance refuses with a code of its own.
+ * The SQL as the instance's check reads it, token for token: strings, quoted
+ * identifiers and comments are one token each, so a keyword or placeholder
+ * inside one is neither. Undefined for SQL with an unclosed quote or comment,
+ * which the instance refuses with a code of its own.
  */
 function sqlTokens(sql: string, dialect: string): Token[] | undefined {
   const tokens: Token[] = [];
@@ -277,17 +358,17 @@ function sqlTokens(sql: string, dialect: string): Token[] | undefined {
     }
     let end: number | undefined;
     let kind: Token["kind"];
-    if (sql.startsWith("--", i)) {
+    if (startsLineComment(sql, i, dialect)) {
       const newline = sql.indexOf("\n", i);
       end = newline === -1 ? sql.length : newline;
       kind = "comment";
     } else if (sql.startsWith("/*", i)) {
-      const close = sql.indexOf("*/", i + 2);
-      if (close === -1) return undefined;
-      end = close + 2;
+      end = blockCommentEnd(sql, i, dialect === "postgresql");
       kind = "comment";
     } else if (char === "'") {
-      end = closing(sql, i, "'", dialect === "mysql");
+      // PostgreSQL reads backslash escapes only in E'…'; MySQL in every literal.
+      const escapePrefix = i > 0 && /[eE]/.test(sql[i - 1]!) && (i < 2 || !/[\p{L}\p{N}]/u.test(sql[i - 2]!));
+      end = closing(sql, i, "'", dialect === "mysql" || (dialect === "postgresql" && escapePrefix));
       kind = "string";
     } else if (char === '"') {
       end = closing(sql, i, '"', dialect === "mysql");
@@ -298,6 +379,11 @@ function sqlTokens(sql: string, dialect: string): Token[] | undefined {
     } else if (char === "[" && dialect === PROCEDURE_DIALECT) {
       end = closing(sql, i, "]", false);
       kind = "identifier";
+    } else if (char === "$" && dialect === "postgresql" && dollarTagAt(sql, i)) {
+      const tag = dollarTagAt(sql, i)!;
+      const close = sql.indexOf(tag, i + tag.length);
+      end = close === -1 ? undefined : close + tag.length;
+      kind = "string";
     } else if (WORD_START.test(char)) {
       end = i + 1;
       while (end < sql.length && WORD_PART.test(sql[end]!)) end++;
@@ -407,6 +493,35 @@ export function isProcedureCall(sql: string, dialect: string | undefined): boole
     "EXEC",
     "EXECUTE",
   );
+}
+
+// ---------------------------------------------------------------------------
+// Where a list parameter may stand
+// ---------------------------------------------------------------------------
+
+/**
+ * The first list parameter whose placeholder stands anywhere but `IN (:name)`
+ * or `NOT IN (:name)`, every use counted, comments between the tokens skipped:
+ * the instance's own placement rule, read with its tokenizer. Undefined when
+ * every use is placed, and for SQL the instance refuses with another code
+ * first: an unclosed quote or comment, or a placeholder inside a literal or
+ * comment (`bind_in_literal`).
+ */
+export function listOutsideIn(sql: string, dialect: string, listNames: string[]): string | undefined {
+  if (!listNames.length) return undefined;
+  const tokens = sqlTokens(sql, dialect);
+  if (!tokens) return undefined;
+  const code = tokens.filter((t) => t.kind !== "comment");
+  const byStart = new Map(code.map((token, index) => [token.start, index]));
+  for (const match of sql.matchAll(BIND)) {
+    const name = match[1]!;
+    if (!listNames.includes(name)) continue;
+    const index = byStart.get(match.index);
+    if (index === undefined) continue;
+    const placed = index >= 2 && isWord(code[index - 2], "IN") && isSymbol(code[index - 1], "(") && code[index + 1]?.kind === "word" && code[index + 1]!.text === name && isSymbol(code[index + 2], ")");
+    if (!placed) return name;
+  }
+  return undefined;
 }
 
 // ---------------------------------------------------------------------------

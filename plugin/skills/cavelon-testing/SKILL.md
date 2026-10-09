@@ -177,7 +177,8 @@ the Admin. Then:
   follow the command's actionable refusal and ask its operator for support.
 - To check what an identity-scoped query returns for one customer, the tenant
   Owner runs it once with `cavelon db test-run <query> --value <name>=<value>`,
-  identity parameters included; it shows what the model would see. Never put
+  identity parameters included; it shows what the model would see. A list
+  parameter's value is a JSON array: `--value 'skus=["X-1","X-2"]'`. Never put
   a real customer's data into a test file.
 - A read stored-procedure query (SQL Server) is test-run the same way; the
   instance refuses the run while the connection's login can write or the

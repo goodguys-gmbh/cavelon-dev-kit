@@ -16491,6 +16491,30 @@
               }
             ],
             "title": "Maximum"
+          },
+          "list": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "List"
+          },
+          "max_items": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 100,
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Items"
           }
         },
         "additionalProperties": false,
@@ -16517,6 +16541,14 @@
             "minimum": 1,
             "name": "days",
             "type": "integer"
+          },
+          {
+            "list": true,
+            "max_items": 10,
+            "max_length": 20,
+            "name": "order_nos",
+            "pattern": "^[A-Z]-[0-9]{4,8}$",
+            "type": "string"
           }
         ]
       },

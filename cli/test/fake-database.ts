@@ -177,7 +177,8 @@ function queryView(state: DatabaseState, q: FakeQuery) {
     parameters: q.parameters,
     params_json_schema: {
       type: "object",
-      properties: Object.fromEntries(model.map((p) => [p.name, { type: p.type ?? "string" }])),
+      // A list is an array of its items, as the instance's tool schema gives it to the model.
+      properties: Object.fromEntries(model.map((p) => [p.name, p.list === true ? { type: "array", items: { type: p.type ?? "string" }, minItems: 1, maxItems: p.max_items ?? 20 } : { type: p.type ?? "string" }])),
       required: model.filter((p) => p.required !== false).map((p) => p.name),
       additionalProperties: false,
     },
@@ -400,6 +401,16 @@ export function handleDatabase(state: DatabaseState, rc: DatabaseRoute): boolean
         const parameter = unknown ?? String(missing!.name);
         rc.send(422, { detail: { code: "invalid_arguments", parameter, message: `${parameter}: ${unknown ? "is not a parameter of this query" : "is required"}` } });
         return true;
+      }
+      // A list's refusal names the item's position, never its value, as the instance's does.
+      for (const p of query.parameters.filter((p) => p.list === true)) {
+        const value = values[String(p.name)];
+        const limit = typeof p.max_items === "number" ? p.max_items : 20;
+        const reason = !Array.isArray(value) ? "must be a list" : !value.length ? "must hold at least 1 item" : value.length > limit ? `must hold at most ${limit} items` : value.findIndex((item) => item === null) >= 0 ? `item ${value.indexOf(null) + 1} is empty` : undefined;
+        if (reason) {
+          rc.send(422, { detail: { code: "invalid_arguments", parameter: p.name, message: `${String(p.name)}: ${reason}` } });
+          return true;
+        }
       }
       if (query.refusal) {
         rc.send(409, { detail: query.refusal });
