@@ -7,6 +7,13 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+## [0.1.18] - 2026-10-09
+
+Saved database queries accept list parameters for `IN` and `NOT IN` filters,
+including JSON-array test values and workflow arguments. Maintained repository
+tooling prepares supervised person-approval checks on additional hosts; actual
+Windows, WSL, macOS and customer qualification remain separate.
+
 ### Added
 
 - Maintained portable person-approval supervisor for loopback child-solution

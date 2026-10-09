@@ -24,7 +24,13 @@ The kit also refuses token login from recognized agent shells before
 reading input. Log in from your own terminal; see [the login guide](docs/getting-started.md#2-log-in).
 
 > [!NOTE]
-> **New in 0.1.17:** [Cline](docs/install/cline.md), [Kilo](docs/install/kilo.md),
+> **New in 0.1.18:** Saved database queries support [list parameters](docs/connect-a-database.md)
+> for `IN` and `NOT IN` filters, JSON-array test values and workflow arguments,
+> where the instance publishes them. Repository tooling adds a
+> [portable person-approval supervisor](docs/person-approval-qualification.md);
+> actual additional-host and customer qualification remain separate.
+>
+> **Seven-client support since 0.1.17:** [Cline](docs/install/cline.md), [Kilo](docs/install/kilo.md),
 > [Goose](docs/install/goose.md) and [OMP](docs/install/omp.md) join
 > [OpenCode](docs/install/opencode.md), [Pi](docs/install/pi.md) and
 > [Qwen Code CLI](docs/install/qwen-code.md). Each gets native setup and all
