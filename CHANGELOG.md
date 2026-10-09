@@ -45,8 +45,9 @@ customer's model, network, offline and database pilot, remain separate gates.
 - The release-line pin is `@cavelon/cli@0.2` in the plugin and in the MCP
   entries `setup` and `init --agents` write. Entries that start the installed
   `cavelon mcp`, and the offline packages, are unchanged. Documentation, MCP
-  and CI examples name `@cavelon/cli@0.2` and `cavelon>=0.2,<0.3`; an entry
-  you added or changed yourself keeps its pin until you change it.
+  and CI examples name `@cavelon/cli@0.2` and `cavelon>=0.2,<0.3`. An entry
+  with personal options or another command or range keeps its pin until you
+  change it.
 
 ### Fixed
 

@@ -173,9 +173,11 @@ never its host, login, password, certificate or write-enable flag.
 On an `oracle` connection the instance refuses more SQL when it saves a
 query: a PL/SQL block or declaration (`BEGIN`, `DECLARE`, `WITH FUNCTION`),
 transaction control, a `DBMS_*` or `UTL_*` package, an URI type that fetches
-a URL (`HTTPURITYPE`) or a database link (`orders@remote`). A read gets
-`forbidden_keyword`, a write `write_statement_refused`; a write may not hold
-`RETURNING` either. A quoted identifier counts by its name
+a URL (`HTTPURITYPE`) or a database link (`orders@remote`). Oracle's own
+refusal is `forbidden_keyword` in a read and `write_statement_refused` in a
+write, and a write may not hold `RETURNING` either; SQL that an earlier
+general check refuses (a read that does not start with `SELECT` or `WITH`,
+several statements) keeps that check's code. A quoted identifier counts by its name
 (`"DBMS_LOCK".SLEEP`). `validate` warns of these with the instance's code
 when the query is one statement it recognizes: a read that starts with
 `SELECT` or `WITH`, or an `INSERT`, `UPDATE` or `DELETE`. A PL/SQL block
