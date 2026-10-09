@@ -396,9 +396,11 @@ the 0.1 release line:
   environment you set it up with, then `cavelon setup --check`.
 - **A solution's committed files**: run `cavelon init --update` in that
   solution's folder and commit the result.
-- **An entry you added or changed yourself** (such as `claude mcp add …` or a
-  `uvx` range) stays yours: neither `setup` nor `init --update` changes it.
-  Change it to `cavelon mcp` or `@cavelon/cli@0.2` by hand.
+- **An entry neither recognizes**: `setup` and `init --update` move only an
+  entry that is exactly a form the kit writes, in a file they manage. One
+  with other options, another command or a `uvx` range, or one in a file they
+  do not manage, stays as it is. Change it to `cavelon mcp` or
+  `@cavelon/cli@0.2` by hand.
 
 A `cavelon` installed in more than one way can also hide the new one: the
 plugin starts the first `cavelon` on the `PATH`, and `cavelon --version` names

@@ -266,9 +266,9 @@ command; offline, the next bundle is the update.
 The bundle's entries start the installed `cavelon mcp`, so a new minor version
 (0.1 to 0.2) needs no `npx` pin change offline; verify the new bundle against
 its own tag. [Upgrading from 0.1 to 0.2](upgrading-to-0.2.md#5-machines-without-internet-access)
-has the steps in order. Provision the coding clients, their model endpoint and
-the instance's model provider separately; the bundle changes none of them, and
-a [customer pilot](customer-pilot.md) records how they were checked.
+has the steps in order. The bundle does not install the coding clients or set
+their model endpoints; a [customer pilot](customer-pilot.md) records how those
+were provisioned and checked.
 
 ## Qwen Code CLI
 

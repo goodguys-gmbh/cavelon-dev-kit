@@ -64,11 +64,10 @@ Model quality and a customer's complete deployment need their own evaluation.
 
 ## Version 0.2 and these records
 
-Version 0.2.0 (upcoming until its release is published) moves the release-line
-pin to `@cavelon/cli@0.2` and adds the `oracle` database dialect where the
-instance publishes it. It qualifies no new client, version or platform on its
-own: every result on this page stays tied to the version and platform it names,
-and a new version repeats no person check by itself.
+Version 0.2.0 moves the release-line pin to `@cavelon/cli@0.2` and adds the
+`oracle` database dialect where the instance publishes it. It adds no person
+check: every result on this page holds for the client version and platform it
+names.
 
 | Evidence | Kind | Covers |
 |---|---|---|
@@ -77,13 +76,13 @@ and a new version repeats no person check by itself.
 | Native dialog and own-terminal approval checks | actual person | Linux x64, the clients and versions named in this page |
 | Supervisor fixture safety checks | simulated | protocol behaviour only; never a person's answer |
 
-Still open, and not closed by a version number: person approval on native
-Windows, WSL and macOS ([remaining host gates](person-approval-qualification.md#remaining-host-gates)),
-editor, desktop, ACP and RPC surfaces, and each customer's internal model,
+Still open: person approval on native Windows, WSL and macOS
+([remaining host gates](person-approval-qualification.md#remaining-host-gates));
+editor, desktop, ACP and RPC surfaces; and each customer's internal model,
 network policy, offline install and databases, Oracle included. The kit's
 database checks run against the instance's published contract and a fake
-server, never a real database. Record those in a
-[customer pilot](customer-pilot.md), one combination at a time.
+server, never a real database. A [customer pilot](customer-pilot.md) records
+one combination at a time.
 [Upgrading from 0.1 to 0.2](upgrading-to-0.2.md) has the upgrade steps.
 
 The maintained [supervisor fixture](person-approval-qualification.md) prepares

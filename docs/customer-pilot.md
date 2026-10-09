@@ -5,8 +5,8 @@ hosts and operating systems, their coding client, their model and network
 decisions, their databases and a test tenant on their instance. It answers the
 questions the kit's own tests cannot: the kit is tested against snapshots of
 what an instance publishes, a fake local instance and scripted model responses
-([qualification matrix](coding-agent-qualification.md)). A kit version, 0.2
-included, never means a customer pilot passed.
+([qualification matrix](coding-agent-qualification.md)), and no release
+records a customer's pilot.
 
 This page is the checklist and the report template. Copy the template, fill it
 in as you go, and keep it with the customer's records.
@@ -23,12 +23,18 @@ in as you go, and keep it with the customer's records.
   a chat, a ticket, a screenshot, a repository or a coding agent's prompt. The
   report names who held a credential (by role) and what it may do, never its
   value.
-- **Model and provider decisions are separate, and the customer's.** Two
-  different settings are involved, and the kit configures neither:
-  - the **coding model**: the endpoint the coding client (Claude Code, Codex,
-    OpenCode, …) uses to write the solution, set up in that client;
-  - the **instance's execution provider**: the model the instance runs the
-    solution with, set by the instance's operator.
+- **Model decisions are the customer's, and there are two of them.**
+  - The **coding model**: the endpoint the coding client (Claude Code, Codex,
+    OpenCode, …) uses to write the solution. It is configured in that client,
+    outside the kit.
+  - The **instance's models**: the tenant's Model Registry, which the
+    customer's instance governance decides. Within what the tenant offers,
+    the kit authors a solution's model bindings (an agent's `llm_model` and
+    `llm_provider`, from `cavelon models list`). `cavelon models set-limit`
+    changes a self-hosted endpoint's `max_concurrent_requests` only with a
+    person's yes. A `model_registry` import (`apply --include-tenant-wide`)
+    changes every solution of the tenant, so a pilot leaves it to that
+    governance.
 
   The report records each decision and who made it, never a key.
 - **Only a person's answer is a person's approval.** A scripted or simulated
@@ -49,7 +55,7 @@ in as you go, and keep it with the customer's records.
 | Install route: one-line install, Homebrew, PyPI, npm, or the [offline bundle](offline-bundle.md) | customer IT | route and kit version |
 | Network posture: open, through a proxy, or no internet access | customer security | which hosts the machines reach |
 | Coding model endpoint | customer | provider class (hosted, internal, self-hosted) and approval |
-| Instance execution provider | instance operator | provider class and approval |
+| Models the tenant offers to solutions | customer's instance governance | provider class and approval |
 | Databases and dialects to connect, and their read-only accounts | customer DBA | dialect and version, never credentials |
 | Who holds the token with **May activate**, if anyone | customer | role |
 
@@ -128,8 +134,9 @@ pilot. [Connect a database](connect-a-database.md) has each step.
 - [ ] The coding client used the approved coding model; it called the Cavelon
       tools and followed the skills. Record what was observed, not a quality
       rating.
-- [ ] The test suite ran on the instance's approved execution provider;
-      record its results and anything the traces show about the provider.
+- [ ] The solution's agents name models the tenant offers
+      (`cavelon models list`), and the test suite ran on them; record its
+      results and anything the traces show about the models.
 
 ## Report template
 
@@ -156,7 +163,7 @@ rather than guess.
 | Decision | Choice (class, not secret) | Decided by (role) |
 |---|---|---|
 | Coding model endpoint |  |  |
-| Instance execution provider |  |  |
+| Models the tenant offers to solutions |  |  |
 | Network posture |  |  |
 | Databases and dialects |  |  |
 | Token holders and permissions |  |  |

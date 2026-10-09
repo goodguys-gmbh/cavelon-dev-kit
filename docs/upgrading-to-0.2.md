@@ -1,17 +1,20 @@
 # Upgrading from 0.1 to 0.2
 
-Version 0.2.0 is the next minor release of the dev-kit: the CLI, the skills and
-the plugin move together. **It is upcoming until its release is published.**
-Until `v0.2.0` appears on the
-[releases page](https://github.com/goodguys-gmbh/cavelon-dev-kit/releases) and
-`npm view @cavelon/cli version` names it, the install and update commands
-below that name no version still bring you the newest 0.1 release, and the
-ones that name 0.2 find nothing. Read the 0.2.0 entry in the
-[changelog](../CHANGELOG.md) before you upgrade.
+Version 0.2.0 is a minor release of the dev-kit: the CLI, the skills and the
+plugin move together. This page says what changes, which acceptance checks
+are still open, and how to move each part: the CLI, your coding agents, your
+solution repositories, CI, and machines without internet access. Read the
+0.2.0 entry in the [changelog](../CHANGELOG.md) first.
 
-This page says what changes for you, what the version number does not mean,
-and how to move each part: the CLI, your coding agents, your solution
-repositories, CI, and machines without internet access.
+Check that the release is published before you run a command that names 0.2:
+
+```bash
+gh release view v0.2.0 --repo goodguys-gmbh/cavelon-dev-kit   # or the releases page
+npm view @cavelon/cli version                                 # 0.2.0 or newer
+```
+
+Until both name it, commands without a version still bring the newest 0.1
+release, and commands that name 0.2 find nothing.
 
 ## What changes
 
@@ -46,10 +49,10 @@ What stays the same:
   not from the kit version, so your `package/`, `tests/` and `env/` files need
   no migration.
 
-## What the version number does not mean
+## Acceptance still open
 
-0.2 is a version number, not a certificate. These gates are recorded on their
-own and are not passed by publishing 0.2:
+Publishing 0.2.0 changes none of these. Each row says what has been checked
+and what is still missing:
 
 | Gate | Where it stands | Record |
 |---|---|---|
@@ -112,12 +115,16 @@ cavelon setup
 cavelon setup --check
 ```
 
-`setup` replaces the skills and the server entries it wrote and recorded, and
-changes nothing else. An entry you changed yourself, or one you added by hand
-(such as `claude mcp add cavelon -- npx -y @cavelon/cli@0.1 mcp`), stays yours:
-`setup` reports it, and you change it to `cavelon mcp` or to
-`@cavelon/cli@0.2` yourself. `setup --check` shows the command each agent's
-Cavelon tools start, so an entry still on `@cavelon/cli@0.1` stands out.
+`setup` replaces the skills it wrote and moves the server entries it
+recognizes to this release's entry: `cavelon mcp` when `cavelon` is installed,
+otherwise `npx -y @cavelon/cli@0.2 mcp`. It recognizes an entry that is exactly a form the kit
+writes, `cavelon mcp` or `npx -y @cavelon/cli@0.1 mcp` (or `@0.2`; on Windows
+`cmd /c npx …`), in a file it manages, even when a person typed it there.
+OpenCode, Pi, Kilo and OMP move through the installation `setup` recorded. An
+entry with anything else (other options, another command or range, extra
+environment) is preserved and reported, and you change it yourself.
+`setup --check` shows the command each agent's Cavelon tools start, so an
+entry still on `@cavelon/cli@0.1` stands out.
 
 Clients that install the plugin update it with their own commands:
 
@@ -152,10 +159,11 @@ cavelon validate
 git add -A && git commit -m "Update the Cavelon dev-kit files to 0.2"
 ```
 
-`init --update` changes only the blocks between its markers and the files a
-previous `init` wrote; an MCP entry you changed (for example to
-`uvx` or to `cavelon mcp`) stays as you wrote it. Everyone who pulls the commit
-gets the same skills and entries.
+`init --update` changes the blocks between its markers, the files a previous
+`init` wrote, and MCP entries in the exact 0.1 form, which it rewrites in the
+form for the system it runs on. An entry you customized (for example to `uvx`)
+stays as you wrote it. Everyone who pulls the commit gets the same skills and
+entries.
 
 ## 4. CI and cloud agents
 
@@ -210,9 +218,9 @@ The bundle's plugin turns the daily update lookup off; elsewhere
 `CAVELON_NO_UPDATE_CHECK=1` does, and without a network the lookup fails
 quietly anyway.
 
-The bundle does not install or configure the coding clients, their model
-endpoint, or the instance's model provider: those are provisioned and decided
-separately, and the [customer pilot](customer-pilot.md) records them.
+The bundle does not install the coding clients or set their model
+endpoints; provision those separately. The [customer pilot](customer-pilot.md)
+records those decisions.
 
 ## 6. Check
 
@@ -229,15 +237,43 @@ anything changes. Never test that on production.
 
 ## Staying on 0.1, or going back
 
-Nothing moves you to 0.2 on its own: entries pinned to `@0.1` and installs you
-do not update stay on 0.1. To go back, install 0.1.18 exactly and keep the
-0.1 pins:
+To stay on 0.1, update nothing and keep the `@0.1` and `'cavelon>=0.1,<0.2'`
+pins. Unpinned `npx -y @cavelon/cli` and `uvx cavelon` take the newest release,
+so pin them too.
 
-```bash
-curl -fsSL https://github.com/goodguys-gmbh/cavelon-dev-kit/releases/latest/download/install.sh | sh -s -- --version 0.1.18
-npm i -g @cavelon/cli@0.1.18                # or: uv tool install 'cavelon==0.1.18'
-```
+To go back after upgrading, undo in this order. 0.1.18 does not recognize the
+entries 0.2 writes, so 0.2 has to remove them:
 
-Offline, install from the verified 0.1.18 bundle and point the marketplace at
-its folder again. Then run `cavelon setup` and `cavelon init --update` with
-that version, so the skills match it.
+1. With 0.2 still installed, remove what `setup` set up (your login stays):
+
+   ```bash
+   cavelon setup --remove
+   ```
+
+2. In each solution repository, revert the commit from step 3 rather than
+   running `init --update` with 0.1.18:
+
+   ```bash
+   git revert <the "Update the Cavelon dev-kit files to 0.2" commit>
+   ```
+
+3. Install 0.1.18 exactly:
+
+   ```bash
+   curl -fsSL https://github.com/goodguys-gmbh/cavelon-dev-kit/releases/latest/download/install.sh | sh -s -- --version 0.1.18
+   npm i -g @cavelon/cli@0.1.18                # or: uv tool install 'cavelon==0.1.18'
+   ```
+
+4. Give Claude Code and Codex the 0.1.18 plugin before running `setup`: its
+   own marketplace step adds this repository as it is now, with the 0.2
+   plugin. Add the marketplace from the `v0.1.18` release's
+   `cavelon-marketplace.tar.gz`, unpacked into a folder you keep, or from the
+   0.1.18 offline bundle's folder
+   ([Claude Code](install/claude-code.md#install), [Codex](install/codex.md#install)).
+   Gemini CLI's extension follows the version of `cavelon` that installs it.
+5. Run `cavelon setup` and `cavelon setup --check` with 0.1.18.
+6. Change any entry you wrote yourself with `@0.2`, and your CI pins, back to
+   `@0.1` by hand.
+
+Offline, install from the verified 0.1.18 bundle in step 3 and use its folder
+in step 4.

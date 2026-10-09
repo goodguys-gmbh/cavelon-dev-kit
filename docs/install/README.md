@@ -10,12 +10,12 @@ Version 0.1.16 adds OpenCode and Pi with bundled native adapters, and Qwen
 Code CLI with native settings and person-terminal approval. See the
 [qualification matrix](../coding-agent-qualification.md) for tested versions,
 platforms and limits. Version 0.1.17 adds Cline, Kilo, Goose and OMP.
-Version 0.2.0, upcoming until its release is published, moves the
-release-line pin to `@cavelon/cli@0.2`; each page's **Update** section still
-applies, and [Upgrading from 0.1 to 0.2](../upgrading-to-0.2.md) adds the
-steps for the minor version. A setup page is not a qualification: native
-Windows, WSL and macOS person checks and customer pilots are recorded
-separately ([customer pilot](../customer-pilot.md)).
+Version 0.2.0 moves the release-line pin to `@cavelon/cli@0.2`; each page's
+**Update** section still applies, and
+[Upgrading from 0.1 to 0.2](../upgrading-to-0.2.md) adds the steps for the
+minor version. These pages describe setup; person approval on native
+Windows, WSL and macOS is still open, and a
+[customer pilot](../customer-pilot.md) records one customer's checks.
 
 | Client | Installs as | Page |
 |---|---|---|

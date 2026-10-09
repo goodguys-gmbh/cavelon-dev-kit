@@ -24,16 +24,15 @@ The kit also refuses token login from recognized agent shells before
 reading input. Log in from your own terminal; see [the login guide](docs/getting-started.md#2-log-in).
 
 > [!NOTE]
-> **Coming in 0.2.0:** the next minor release moves the kit's release-line pin
-> from `@cavelon/cli@0.1` to `@cavelon/cli@0.2` and adds the `oracle` database
-> dialect where the instance publishes it. Until the 0.2.0 release is
-> published, the install lines below bring the newest 0.1 release.
-> [Upgrading from 0.1 to 0.2](docs/upgrading-to-0.2.md) moves the CLI, the
-> plugin, `setup`'s files, solution repositories, CI and offline machines.
-> The version number does not mean that native Windows, WSL or macOS person
-> checks, or a customer's model, network, offline or database pilot, passed;
-> those stay separate gates, and the [customer pilot](docs/customer-pilot.md)
-> checklist records them.
+> **0.2.0** moves the release-line pin from `@cavelon/cli@0.1` to
+> `@cavelon/cli@0.2`; `setup` and `init --update` move the entries 0.1 wrote.
+> It also accepts the `oracle` database dialect where the instance publishes it.
+> [Upgrading from 0.1 to 0.2](docs/upgrading-to-0.2.md) says how to check that
+> the release is published, and how to move the CLI, the plugin, solution
+> repositories, CI and offline machines, or go back. Person approval on native
+> Windows, WSL and macOS, and each customer's model, network, offline and
+> database pilot, are still open; the [customer pilot](docs/customer-pilot.md)
+> checklist records a pilot.
 >
 > **New in 0.1.18:** Saved database queries support [list parameters](docs/connect-a-database.md)
 > for `IN` and `NOT IN` filters, JSON-array test values and workflow arguments,

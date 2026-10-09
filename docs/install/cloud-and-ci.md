@@ -16,7 +16,8 @@ the repository, and the token from its secret store. Other clients:
 | uvx | `uvx 'cavelon>=0.2,<0.3' <command>` | uv |
 
 Both take the newest 0.2 release, so a release that may change behaviour (0.3)
-waits until you move the range. Until 0.2.0 is published, keep `@0.1` and
+waits until you move the range. Before you move to 0.2, check that it is
+published (`npm view @cavelon/cli version`); until then keep `@0.1` and
 `'cavelon>=0.1,<0.2'`. Name an exact version to stay on one:
 `@cavelon/cli@0.2.0` for npx, `cavelon@0.2.0` for uvx (where `cavelon@0.2`
 would mean exactly 0.2.0). The PyPI wheels, which `uvx` runs, are published

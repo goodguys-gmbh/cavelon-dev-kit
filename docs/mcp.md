@@ -55,9 +55,10 @@ The entry pins the kit's minor version (`@0.2`): while the kit is in 0.x, a new
 minor version may change behaviour, and it reaches your agent only when you
 update the plugin or run `cavelon setup` or `cavelon init --update`. The
 server's first result of a session says when either is due
-([Results and errors](#results-and-errors)). An entry you added by hand keeps
-the pin you wrote; [Upgrading from 0.1 to 0.2](upgrading-to-0.2.md) covers
-moving from `@0.1`.
+([Results and errors](#results-and-errors)). `setup` and `init --update` move
+an entry that is exactly the 0.1 form to 0.2, and keep an entry you
+customized as you wrote it;
+[Upgrading from 0.1 to 0.2](upgrading-to-0.2.md) covers the move.
 
 ## Before the agent starts
 
