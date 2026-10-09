@@ -39,7 +39,7 @@ or receive project assets and references. See [Agents without a plugin](installa
 ```json
 {
   "mcpServers": {
-    "cavelon": { "command": "npx", "args": ["-y", "@cavelon/cli@0.1", "mcp"] }
+    "cavelon": { "command": "npx", "args": ["-y", "@cavelon/cli@0.2", "mcp"] }
   }
 }
 ```
@@ -48,13 +48,16 @@ With `cavelon` installed (the one-line install, Homebrew or `npm i -g`),
 `{ "command": "cavelon", "args": ["mcp"] }` works as well, without Node.js, and
 `cavelon init --update` keeps an entry changed to it. In Claude Code:
 `claude mcp add cavelon -- cavelon mcp`, or
-`claude mcp add cavelon -- npx -y @cavelon/cli@0.1 mcp`. The plugin's entry
+`claude mcp add cavelon -- npx -y @cavelon/cli@0.2 mcp`. The plugin's entry
 starts the installed `cavelon` when there is one, and `npx` otherwise.
 
-The entry pins the kit's minor version (`@0.1`): while the kit is in 0.x, a new
+The entry pins the kit's minor version (`@0.2`): while the kit is in 0.x, a new
 minor version may change behaviour, and it reaches your agent only when you
-update the plugin or run `cavelon init --update`. The server's first result of
-a session says when either is due ([Results and errors](#results-and-errors)).
+update the plugin or run `cavelon setup` or `cavelon init --update`. The
+server's first result of a session says when either is due
+([Results and errors](#results-and-errors)). An entry you added by hand keeps
+the pin you wrote; [Upgrading from 0.1 to 0.2](upgrading-to-0.2.md) covers
+moving from `@0.1`.
 
 ## Before the agent starts
 

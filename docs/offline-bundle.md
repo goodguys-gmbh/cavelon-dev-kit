@@ -258,8 +258,17 @@ which already is a marketplace.
 Install the next release's bundle the same way: `install.sh` or `install.ps1`
 replaces `cavelon`, and in Claude Code and Codex, point the marketplace at the
 new folder (`claude plugin marketplace remove cavelon-dev-kit`, then add the
-new folder and install again). `cavelon --version` still names the online
-update command; offline, the next bundle is the update.
+new folder and install again). Then run `cavelon setup` again, and
+`cavelon init --update` in each solution set up with `--agents`, so the skills
+match the new executable. `cavelon --version` still names the online update
+command; offline, the next bundle is the update.
+
+The bundle's entries start the installed `cavelon mcp`, so a new minor version
+(0.1 to 0.2) needs no `npx` pin change offline; verify the new bundle against
+its own tag. [Upgrading from 0.1 to 0.2](upgrading-to-0.2.md#5-machines-without-internet-access)
+has the steps in order. Provision the coding clients, their model endpoint and
+the instance's model provider separately; the bundle changes none of them, and
+a [customer pilot](customer-pilot.md) records how they were checked.
 
 ## Qwen Code CLI
 

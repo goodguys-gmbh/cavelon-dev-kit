@@ -12,13 +12,14 @@ the repository, and the token from its secret store. Other clients:
 
 | With | Run | Needs |
 |---|---|---|
-| npx | `npx -y @cavelon/cli@0.1 <command>` | Node.js 20.3 or newer |
-| uvx | `uvx 'cavelon>=0.1,<0.2' <command>` | uv |
+| npx | `npx -y @cavelon/cli@0.2 <command>` | Node.js 20.3 or newer |
+| uvx | `uvx 'cavelon>=0.2,<0.3' <command>` | uv |
 
-Both take the newest 0.1 release, so a release that may change behaviour (0.2)
-waits until you move the range. Name an exact version to stay on one:
-`@cavelon/cli@0.1.12` for npx, `cavelon@0.1.12` for uvx (where `cavelon@0.1`
-would mean exactly 0.1.0). The PyPI wheels, which `uvx` runs, are published
+Both take the newest 0.2 release, so a release that may change behaviour (0.3)
+waits until you move the range. Until 0.2.0 is published, keep `@0.1` and
+`'cavelon>=0.1,<0.2'`. Name an exact version to stay on one:
+`@cavelon/cli@0.2.0` for npx, `cavelon@0.2.0` for uvx (where `cavelon@0.2`
+would mean exactly 0.2.0). The PyPI wheels, which `uvx` runs, are published
 from the first release after 0.1.11 on.
 
 **The skills and the MCP server** for a cloud agent come from the repository it
@@ -30,11 +31,11 @@ cavelon init --agents claude,codex,copilot,cursor
 ```
 
 It writes the skills to `.agents/skills/` and `.claude/skills/`, an MCP entry
-per agent that starts `npx -y @cavelon/cli@0.1 mcp`, and a Cavelon block in
+per agent that starts `npx -y @cavelon/cli@0.2 mcp`, and a Cavelon block in
 `AGENTS.md`, so Claude Code on the web, Codex cloud, GitHub's Copilot coding
 agent or Cursor's background agents find them when they open the repository.
 Where the environment has uv instead of Node.js, change the entry to
-`{ "command": "uvx", "args": ["cavelon>=0.1,<0.2", "mcp"] }`; `cavelon init --update`
+`{ "command": "uvx", "args": ["cavelon>=0.2,<0.3", "mcp"] }`; `cavelon init --update`
 keeps an entry you changed.
 
 ## Log in
@@ -65,16 +66,16 @@ A GitHub Actions job, for example:
     CAVELON_URL: ${{ vars.CAVELON_URL }}
     CAVELON_TOKEN: ${{ secrets.CAVELON_TOKEN }}
   run: |
-    npx -y @cavelon/cli@0.1 validate
-    npx -y @cavelon/cli@0.1 test run --wait --timeout 10m --json
+    npx -y @cavelon/cli@0.2 validate
+    npx -y @cavelon/cli@0.2 test run --wait --timeout 10m --json
 ```
 
 ## Check
 
 ```bash
-npx -y @cavelon/cli@0.1 --version        # the version, and "installed with: npx"
-npx -y @cavelon/cli@0.1 whoami --json    # as whom, in which tenant
-uvx 'cavelon>=0.1,<0.2' whoami --json
+npx -y @cavelon/cli@0.2 --version        # the version, and "installed with: npx"
+npx -y @cavelon/cli@0.2 whoami --json    # as whom, in which tenant
+uvx 'cavelon>=0.2,<0.3' whoami --json
 ```
 
 `whoami` exits 7 without a token and 2 without an instance
@@ -88,7 +89,9 @@ On a fresh runner, `npx` and `uvx` take the newest release of the range each
 time. Where uv's cache stays between runs, `uvx` reuses the release it cached:
 add `--refresh` to look again. Move the range (`0.1` to `0.2`) when you choose
 to, and run `cavelon init --update` in the solution folder to refresh the
-committed skills.
+committed skills and entries; an entry you changed (such as to `uvx`) keeps
+its old range until you move it yourself
+([Upgrading from 0.1 to 0.2](../upgrading-to-0.2.md#4-ci-and-cloud-agents)).
 
 ## Remove
 

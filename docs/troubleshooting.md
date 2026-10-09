@@ -383,6 +383,28 @@ Behind a proxy or a TLS-inspecting firewall, see
 | `loop_not_resumable` | 4 | The loop cannot be resumed; the message says what to do instead (cancel, start again). |
 | `loop_state_conflict` | 4 | The loop changed between reading and acting. Read it again and repeat. |
 
+## After upgrading to 0.2, an agent still runs 0.1
+
+The session warns that the plugin or a solution's skills are behind, or
+`cavelon setup --check` shows an agent's tools starting
+`npx -y @cavelon/cli@0.1 mcp`. Something that starts the server still names
+the 0.1 release line:
+
+- **The plugin**: update it with the client's own commands, then start a new
+  session ([Refresh your coding agents](upgrading-to-0.2.md#2-refresh-your-coding-agents)).
+- **An entry `setup` wrote**: run `cavelon setup` again with the same
+  environment you set it up with, then `cavelon setup --check`.
+- **A solution's committed files**: run `cavelon init --update` in that
+  solution's folder and commit the result.
+- **An entry you added or changed yourself** (such as `claude mcp add …` or a
+  `uvx` range) stays yours: neither `setup` nor `init --update` changes it.
+  Change it to `cavelon mcp` or `@cavelon/cli@0.2` by hand.
+
+A `cavelon` installed in more than one way can also hide the new one: the
+plugin starts the first `cavelon` on the `PATH`, and `cavelon --version` names
+which one that is. [Upgrading from 0.1 to 0.2](upgrading-to-0.2.md) has the
+whole sequence.
+
 ## Still stuck
 
 - Run the command with `--json` and read the whole error, including `details`.
