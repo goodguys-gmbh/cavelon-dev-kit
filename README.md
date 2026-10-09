@@ -281,7 +281,7 @@ how to review and test its work.
 | [Limits](docs/limits.md) | reading and changing limits, and who may change what |
 | [Troubleshooting](docs/troubleshooting.md) | exit codes and error codes, with what to do |
 | [Security](docs/security.md) | where the token lives, what the agent sees, what is sent where |
-| [Connect a database](docs/connect-a-database.md) | create a connection, set its password in the Admin, upload a public CA, test it and explore its schema |
+| [Connect a database](docs/connect-a-database.md) | create a connection, set its password in the Admin, upload a public CA, test it, explore its schema, and write and test list parameters for `IN (:name)` |
 | [Offline bundle](docs/offline-bundle.md) | installing without internet access: the signed bundle each release carries, its format, verifying it with cosign |
 | [FAQ](docs/faq.md) | common questions |
 

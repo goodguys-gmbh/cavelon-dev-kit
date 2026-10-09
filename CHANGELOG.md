@@ -14,6 +14,16 @@ CLI, the skills and the plugin.
   TUI drivers, simulated safety checks and separately attested machine-readable
   evidence. Windows, WSL, macOS and editor qualification remain open.
 
+- Database query list parameters, where the instance publishes them: `list`
+  and `max_items` travel through pull, fmt and apply. `validate` refuses a
+  context, optional or non-string/integer/number/date list, `max_items`
+  without a list, a list outside `IN (:name)` or `NOT IN (:name)`, and a write
+  query that asks the person first with `max_items` above 20, by the
+  instance's codes, which `explain` explains. `db test-run --value` takes a
+  list as a JSON array. A workflow Tool Call node's `input_schema` must
+  declare a list argument as an array. An older instance gets no list checks
+  and scalar values as before.
+
 ## [0.1.17] - 2026-10-09
 
 Cline, Kilo, Goose and OMP native setup complete the seven-client extension;

@@ -154,6 +154,61 @@ on an older instance that omits it, the server decides the request.
 A package carries only the query's connection reference (name and dialect),
 never its host, login, password, certificate or write-enable flag.
 
+## List parameters
+
+On an instance whose package schema publishes `list` on a query parameter, a
+model-filled parameter can take several values for an `IN` list. Set
+`list: true` and, optionally, `max_items` (20 when left out, at most 100):
+
+```yaml
+    sql_text: SELECT sku, qty FROM stock WHERE sku IN (:skus) LIMIT 50
+    parameters:
+      - name: skus
+        type: string
+        list: true
+        max_items: 10
+        max_length: 20
+        description: Article numbers as printed on the shelf label, e.g. X-1
+```
+
+The model gives one to `max_items` values, each checked against the
+parameter's constraints. `validate` refuses what the instance refuses when it
+saves the query, with the instance's codes:
+
+| Code | Rule |
+|---|---|
+| `parameter_list_type` | Only a string, integer, number or date may be a list. |
+| `parameter_list_optional` | A list is always required. |
+| `parameter_context_list` | An `end_user.*` parameter is never a list. |
+| `parameter_constraint_not_applicable` | `max_items` belongs to a list only. |
+| `list_parameter_outside_in` | The placeholder stands only as `IN (:name)` or `NOT IN (:name)`, nothing else inside the parentheses, wherever it is used. |
+| `list_too_long_to_confirm` | A write query that asks the person first takes `max_items` of at most 20, the entries its confirmation card shows. |
+
+`validate` reads the SQL with the instance's own rules for comments, strings
+and quoted identifiers; a placeholder inside a string or comment is the
+instance's `bind_in_literal`, which the instance reports at save time.
+
+Test a list with a JSON array, quoted for your shell:
+
+```bash
+cavelon db test-run stock_of_skus --value 'skus=["X-1","X-2"]'
+```
+
+The kit refuses before sending anything a value that is not a JSON array, an
+empty one, an item of the wrong JSON type, or one longer than the `max_items`
+the saved query returns. Where the query returns no `max_items`, the kit sends
+the list and the instance applies its default of 20, refusing a longer list
+with `invalid_arguments`. The instance also checks each item's constraints.
+Both name a refused item by its position, never its value. A single-value parameter keeps its text
+as given, even if it looks like JSON. A workflow Tool Call node passes a list
+as a JSON array in its payload; `validate` refuses a node whose
+`input_schema` declares that argument as anything but `array` (or declares an
+array for a single value), since such a call answers `invalid_arguments`.
+The instance's run logs and test-run audit entry carry each list's item count
+(`list_items`), never its values. `cavelon explain <code>` reads each code from the
+instance's catalog. On an older instance whose schema has no `list`, the kit
+checks no list rules and sends every value as before.
+
 ## Write queries
 
 On an instance whose schema publishes write queries, choose `kind: write`
