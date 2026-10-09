@@ -35,6 +35,8 @@ reading input. Log in from your own terminal; see [the login guide](docs/getting
 > and the person's own terminal for Qwen and Cline.
 > All seven released CLI runtimes have [native platform workflow checks](CONTRIBUTING.md#released-coding-client-runtimes);
 > these scripted fixtures leave human UI qualification separate.
+> A [portable supervisor fixture](docs/person-approval-qualification.md) prepares
+> actual-person checks on other hosts and exports separately labeled evidence.
 
 ## Five-minute start
 

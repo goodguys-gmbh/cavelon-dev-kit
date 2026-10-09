@@ -9,6 +9,11 @@ CLI, the skills and the plugin.
 
 ### Added
 
+- Maintained portable person-approval supervisor for loopback child-solution
+  deleting imports and query-limit changes, with own-terminal and Pi/OMP native
+  TUI drivers, simulated safety checks and separately attested machine-readable
+  evidence. Windows, WSL, macOS and editor qualification remain open.
+
 - Database query list parameters, where the instance publishes them: `list`
   and `max_items` travel through pull, fmt and apply. `validate` refuses a
   context, optional or non-string/integer/number/date list, `max_items`

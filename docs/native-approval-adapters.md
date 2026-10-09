@@ -25,6 +25,12 @@ The instance binds its confirmation to the token, tenant and exact request; it
 does not verify the person's answer. Database passwords, privilege acknowledgement
 and **Allow write queries** remain person-only in the Admin.
 
+Use the maintained [person-approval supervisor](person-approval-qualification.md)
+for portable fake-instance checks on another host. It keeps simulated protocol
+evidence, observed binding and operator-attested person provenance distinct,
+and drives the existing Pi/OMP bundled adapters without supplying UI answers.
+Other native/editor host prerequisites remain explicit qualification gates.
+
 ## Prototype evidence
 
 Released Linux clients, a fake local instance and fixed tool calls were used,

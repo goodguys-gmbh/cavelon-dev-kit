@@ -130,6 +130,12 @@ them through `tool_call`; the fixture preserves that released client behavior.
 Native human UI, editor/desktop/ACP/RPC, WSL and customer model/network
 qualification remain separate; see the [qualification matrix](docs/coding-agent-qualification.md).
 
+For supervised checks on another host, use the maintained
+[person-approval fixture](docs/person-approval-qualification.md). It provides
+portable start/check commands, simulated safety regressions and separately
+attested own-terminal or Pi/OMP native TUI evidence against a loopback instance.
+It neither supplies a person's answer nor qualifies an unavailable platform.
+
 ### The plugin packages
 
 `plugin/` is the one source of the plugin. Claude Code and Codex install it as
