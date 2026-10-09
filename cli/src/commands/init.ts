@@ -79,8 +79,9 @@ async function applyBlock(root: string, file: string, result: BlockResult, mode?
 }
 
 async function block(root: string, relative: string, body: string, style: CommentStyle, options: { onlyExisting?: boolean } = {}): Promise<FileAction> {
-  const file = await solutionPath(root, path.join(root, relative));
-  return applyBlock(root, file, upsertBlock(await readTextFile(file), body, style, options));
+  const file = path.join(root, relative);
+  const target = await solutionPath(root, file);
+  return applyBlock(root, file, upsertBlock(await readTextFile(target), body, style, options));
 }
 
 /** CLAUDE.md gets the `@AGENTS.md` import, unless it is AGENTS.md itself (a symlink). */
@@ -264,8 +265,8 @@ async function writeMcp(root: string, target: McpTarget, onlyExisting: boolean, 
     await applyNativeInstallation(plan);
     return { file: rel(root, plan.directory), action: exists ? "updated" : "created" };
   }
-  const file = await solutionPath(root, path.join(root, target.file));
-  const existing = await readTextFile(file);
+  const file = path.join(root, target.file);
+  const existing = await readTextFile(await solutionPath(root, file));
   if (existing !== undefined && holdsOtherForm(existing, target)) return { file: target.file, action: "unchanged" };
   if (target.format === "toml") return applyBlock(root, file, upsertBlock(existing, target.block, "hash", { onlyExisting }));
   if (onlyExisting) {
