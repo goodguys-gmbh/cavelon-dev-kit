@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
-import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { Context } from "./command.js";
 import { CavelonError, ExitCode } from "./errors.js";
 import { findProject } from "./project.js";
+import { realPath, within } from "./file-boundary.js";
+export { realPath, within } from "./file-boundary.js";
 
 /**
  * Where the kit keeps its state on the user's machine, never in the
@@ -30,6 +31,12 @@ export function cacheDir(env: Env): string {
   if (env.XDG_CACHE_HOME) return path.join(env.XDG_CACHE_HOME, "cavelon");
   if (process.platform === "win32" && env.LOCALAPPDATA) return path.join(env.LOCALAPPDATA, "cavelon", "cache");
   return path.join(homeDir(env), ".cache", "cavelon");
+}
+
+/** Match filesystem reads: relative private directories belong to the process cwd,
+ * never the per-call solution_dir selected by an MCP request. */
+export function privateDirs(env: Env): string[] {
+  return [configDir(env), cacheDir(env)].map(dir => path.resolve(dir));
 }
 
 /**
@@ -69,8 +76,8 @@ export async function confinedPath(ctx: Context, raw: string, what: string, conf
       hint: "Name a file inside the solution folder, or ask the person to run the command in their terminal.",
     });
   }
-  for (const dir of [configDir(ctx.io.env), cacheDir(ctx.io.env)]) {
-    if (within(await realPath(path.resolve(ctx.io.cwd, dir)), real, true)) {
+  for (const dir of privateDirs(ctx.io.env)) {
+    if (within(await realPath(dir), real, true)) {
       throw new CavelonError(ExitCode.usage, {
         code: "path_in_kit_directory",
         message: `${what} ${raw} is in cavelon's own directory ${dir}, which holds its login and cache; no tool reads or writes there.`,
@@ -78,31 +85,4 @@ export async function confinedPath(ctx: Context, raw: string, what: string, conf
     }
   }
   return resolved;
-}
-
-/** The real path of a file, or of its nearest existing folder plus the rest, for a file still to be written. */
-export async function realPath(file: string): Promise<string> {
-  const rest: string[] = [];
-  let current = file;
-  for (;;) {
-    try {
-      return path.join(await fs.realpath(current), ...rest.reverse());
-    } catch (error) {
-      const parent = path.dirname(current);
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT" || parent === current) throw error;
-      rest.push(path.basename(current));
-      current = parent;
-    }
-  }
-}
-
-/**
- * Whether `file` is `dir` or under it. `fold` ignores case, as the default file
- * systems of Windows and macOS do; it only ever widens a refusal, never what a
- * tool may reach, since a case-sensitive volume can hold both spellings.
- */
-export function within(dir: string, file: string, fold = false): boolean {
-  const norm = (p: string) => (fold && (process.platform === "win32" || process.platform === "darwin") ? p.toLowerCase() : p);
-  const rel = path.relative(norm(dir), norm(file));
-  return rel === "" || (rel !== ".." && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel));
 }

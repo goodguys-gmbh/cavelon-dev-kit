@@ -9,10 +9,11 @@ import { serverCommand } from "../setup-agents.js";
 import { encodeMcpEntry, isCurrentMcpEntry, isKitMcpEntry } from "../mcp-entry.js";
 import { upsertJsoncEntry } from "../jsonc-config.js";
 import { CavelonError, ExitCode, usageError } from "../errors.js";
-import { confinedPath, realPath, within } from "../paths.js";
+import { privateDirs, confinedPath, realPath, within } from "../paths.js";
+import { solutionPath, solutionPaths } from "../file-boundary.js";
 import { readTextFile, withoutBom, writeFileAtomic } from "../fsutil.js";
 import { git } from "../git.js";
-import { ensureStateDir, fileDigests, rememberAppliedFiles, STATE_DIR } from "../local-state.js";
+import { checkStatePaths, ensureStateDir, fileDigests, rememberAppliedFiles, STATE_DIR } from "../local-state.js";
 import { isGenerated, upsertBlock, upsertJsonEntry, type BlockResult, type CommentStyle } from "../markers.js";
 import { packageVersionOf } from "../package-check.js";
 import { MANIFEST_SECTION, PERSONA_SECTION, personaYaml, requiredFields, sectionFields } from "../package-format.js";
@@ -67,18 +68,9 @@ function rel(root: string, file: string): string {
   return path.relative(root, file).split(path.sep).join("/");
 }
 
-/** The file a path names, through symlinks: a customer's link stays a link. */
-async function realFile(file: string): Promise<string> {
-  try {
-    return await fs.realpath(file);
-  } catch {
-    return file;
-  }
-}
-
-async function applyBlock(root: string, file: string, result: BlockResult, mode?: number): Promise<FileAction> {
+async function applyBlock(root: string, file: string, result: BlockResult, mode?: number, boundary = root): Promise<FileAction> {
   if (result.content !== undefined && result.outcome !== "unchanged" && result.outcome !== "skipped") {
-    const target = await realFile(file);
+    const target = await solutionPath(boundary, file);
     // An existing file keeps its permissions.
     const current = await fs.stat(target).then((st) => st.mode & 0o777, () => undefined);
     await writeFileAtomic(target, result.content, current ?? mode);
@@ -88,14 +80,15 @@ async function applyBlock(root: string, file: string, result: BlockResult, mode?
 
 async function block(root: string, relative: string, body: string, style: CommentStyle, options: { onlyExisting?: boolean } = {}): Promise<FileAction> {
   const file = path.join(root, relative);
-  return applyBlock(root, file, upsertBlock(await readTextFile(file), body, style, options));
+  const target = await solutionPath(root, file);
+  return applyBlock(root, file, upsertBlock(await readTextFile(target), body, style, options));
 }
 
 /** CLAUDE.md gets the `@AGENTS.md` import, unless it is AGENTS.md itself (a symlink). */
 async function claudeImport(root: string, onlyExisting: boolean): Promise<FileAction | undefined> {
-  const claude = path.join(root, "CLAUDE.md");
+  const claude = await solutionPath(root, path.join(root, "CLAUDE.md"));
   if ((await readTextFile(claude)) === undefined) return undefined;
-  if ((await realFile(claude)) === (await realFile(path.join(root, "AGENTS.md")))) {
+  if ((await realPath(claude)) === (await realPath(path.join(root, "AGENTS.md")))) {
     return { file: "CLAUDE.md", action: "unchanged", reason: "it is AGENTS.md" };
   }
   return block(root, "CLAUDE.md", "@AGENTS.md", "html", { onlyExisting });
@@ -103,7 +96,7 @@ async function claudeImport(root: string, onlyExisting: boolean): Promise<FileAc
 
 /** A file only the kit writes: created when missing, otherwise left as it is. */
 async function ownFile(root: string, relative: string, content: string): Promise<FileAction> {
-  const file = path.join(root, relative);
+  const file = await solutionPath(root, path.join(root, relative));
   if ((await readTextFile(file)) !== undefined) return { file: relative, action: "unchanged" };
   await writeFileAtomic(file, content);
   return { file: relative, action: "created" };
@@ -206,7 +199,7 @@ async function manifestFile(ctx: Context, session: Session, project: ProjectConf
 
 /** A generated fallback file: created, or replaced when the kit wrote it; never someone else's. */
 async function generatedFile(root: string, relative: string, content: string): Promise<FileAction> {
-  const file = path.join(root, relative);
+  const file = await solutionPath(root, path.join(root, relative));
   const existing = await readTextFile(file);
   if (existing === undefined) {
     await writeFileAtomic(file, content);
@@ -219,7 +212,7 @@ async function generatedFile(root: string, relative: string, content: string): P
 }
 
 async function folder(root: string, relative: string): Promise<FileAction[]> {
-  const dir = path.join(root, relative);
+  const dir = await solutionPath(root, path.join(root, relative));
   try {
     await fs.stat(dir);
     return [];
@@ -273,7 +266,7 @@ async function writeMcp(root: string, target: McpTarget, onlyExisting: boolean, 
     return { file: rel(root, plan.directory), action: exists ? "updated" : "created" };
   }
   const file = path.join(root, target.file);
-  const existing = await readTextFile(file);
+  const existing = await readTextFile(await solutionPath(root, file));
   if (existing !== undefined && holdsOtherForm(existing, target)) return { file: target.file, action: "unchanged" };
   if (target.format === "toml") return applyBlock(root, file, upsertBlock(existing, target.block, "hash", { onlyExisting }));
   if (onlyExisting) {
@@ -357,12 +350,14 @@ async function installHook(root: string, onlyExisting: boolean): Promise<FileAct
       reason: `core.hooksPath points to ${path.dirname(file)}, outside this repository, where other repositories' hooks may be; add the block yourself if you want it there`,
     };
   }
+  const boundary = own[inside.indexOf(true)]!;
+  await solutionPath(boundary, file);
   const body = HOOK_LINES(prefix).join("\n");
   const existing = await readTextFile(file);
   let result = upsertBlock(existing, body, "hash", { onlyExisting, afterShebang: true });
   if (result.outcome === "created") result = { ...result, content: `#!/bin/sh\n${result.content}` };
   // A new hook is the owner's alone; an existing one keeps its permissions.
-  const action = await applyBlock(root, file, result, 0o700);
+  const action = await applyBlock(root, file, result, 0o700, boundary);
   if (action.action !== "skipped" && action.action !== "unchanged") {
     const mode = (await fs.stat(file)).mode & 0o777;
     if (!(mode & 0o100)) await fs.chmod(file, mode | 0o100).catch(() => undefined);
@@ -674,6 +669,19 @@ async function importPackage(ctx: Context, project: ProjectConfig, from: string,
   return { from, files, ignored, package_version: version ?? null };
 }
 
+/** Check generated destinations before init can create a remote draft or local files. */
+async function checkInitPaths(ctx: Context, root: string, agents: AgentTarget[], update: boolean): Promise<void> {
+  const project = (await ctx.session()).project;
+  const layouts = project?.root === root ? [project.layout.package, ...Object.values(project.layout.items)] : ["package", "tests"];
+  const roots = update ? KNOWN_SKILL_ROOTS : agents.length ? skillRootsFor(agents) : [];
+  const skills = roots.length ? await bundledSkills() : [];
+  const files = [PROJECT_FILE, ...layouts, "tests", "seeds", "env/test.yaml", "env/prod.yaml", STATE_DIR, "AGENTS.md", "CLAUDE.md", ".gitignore",
+    ...roots, ...roots.flatMap(dir => skills.flatMap(skill => skill.files.map(file => `${dir}/${skill.name}/${file.path}`))),
+    ...(update ? AGENTS : agents).flatMap(agent => agent.mcp && agent.mcp.format !== "native" ? [agent.mcp.file] : [])];
+  await solutionPaths(root, files, privateDirs(ctx.io.env));
+  await checkStatePaths(root);
+}
+
 async function runInit(ctx: Context, input: Parameters<CommandSpec["run"]>[1]) {
   const update = boolOption(input, "update");
   const from = stringOption(input, "from");
@@ -688,6 +696,7 @@ async function runInit(ctx: Context, input: Parameters<CommandSpec["run"]>[1]) {
   if (boolOption(input, "new") && (update || (!stringOption(input, "harness") && !from))) {
     throw usageError("--new needs the new solution's name: --harness <name>.", `\`${cavelonCommand("init", "--harness", fill("name"), "--new")}\` creates it as a draft, even when an existing solution has a similar name.`);
   }
+  await checkInitPaths(ctx, update ? session.project?.root ?? ctx.io.cwd : ctx.io.cwd, agents, update);
   // Read the file before anything is written: a wrong path changes nothing.
   const imported = from ? await readImportFile(ctx, from) : undefined;
 
@@ -757,7 +766,7 @@ async function runInit(ctx: Context, input: Parameters<CommandSpec["run"]>[1]) {
     if (version) values.package_version = version;
     values.layout = defaultLayoutFor(schema);
     const note = tenant && (tenant.name || tenant.id !== tenant.ref) ? commentText([tenant.name, tenant.id !== tenant.ref ? tenant.id : undefined].filter(Boolean).join(", ")) : undefined;
-    await writeFileAtomic(path.join(root, PROJECT_FILE), solutionYaml(values, note));
+    await writeFileAtomic(await solutionPath(root, path.join(root, PROJECT_FILE)), solutionYaml(values, note));
     actions.push({ file: PROJECT_FILE, action: "created" });
   }
 

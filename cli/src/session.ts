@@ -1,3 +1,4 @@
+import { privateDirs as kitPrivateDirs } from "./paths.js";
 import { CavelonError, ExitCode, notLoggedIn, usageError } from "./errors.js";
 import { ApiClient, TENANT_ID_HINT } from "./http.js";
 import { readToken } from "./credentials.js";
@@ -129,14 +130,15 @@ function sameUrl(input: string | undefined, url: string, env: Env): boolean {
 }
 
 export async function resolveSession(env: Env, cwd: string, globals: GlobalOptions): Promise<Session> {
-  const project = await findProject(cwd);
+  const privateDirs = kitPrivateDirs(env);
+  const project = await findProject(cwd, privateDirs);
   const config = await loadUserConfig(env);
   let envFile: EnvFile | undefined;
   if (globals.solutionEnv) {
     if (!project) {
       throw usageError(`--env ${globals.solutionEnv} needs a solution folder.`, `Run it inside a folder with cavelon.yaml, or run \`${cavelonCommand("init")}\` first.`);
     }
-    envFile = await readEnvFile(project, globals.solutionEnv);
+    envFile = await readEnvFile(project, globals.solutionEnv, privateDirs);
   }
 
   // A source is normalised (and refused) only where it is the one chosen: an

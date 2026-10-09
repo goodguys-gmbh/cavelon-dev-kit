@@ -7,6 +7,25 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-09
+
+This patch keeps solution-owned files within their solution and preserves the
+private configuration/cache boundary across MCP solution selection. Update the
+CLI and plugin together; existing 0.2 MCP entries keep their release-line pin.
+
+### Fixed
+
+- Check generated files, local state, previews, manifests and environment files
+  through the same solution boundary, including files that do not exist yet.
+  Initialization checks destinations before creating a draft or writing files.
+- Keep relative private configuration and cache locations anchored to the MCP
+  process directory when a tool selects a child solution. Internal solution
+  links and repository-owned worktree hooks remain supported.
+- Preserve Windows drive roots during manifest discovery in the standalone
+  executable, avoiding an incorrect `path_outside_solution` refusal. (#253)
+- Report initialization filenames relative to the selected solution even when
+  its directory has another filesystem path spelling.
+
 ## [0.2.0] - 2026-10-09
 
 The release line moves to 0.2: the plugin and the MCP entries the kit writes

@@ -1,5 +1,5 @@
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
@@ -54,8 +54,8 @@ beforeEach(() => {
 });
 afterAll(async () => { sb.cleanup(); await server.close(); });
 
-async function session(person: PersonAtClient = "approves") {
-  const io: Io = { stdout: { write: () => true }, stderr: { write: () => true }, stdin: Readable.from([]) as unknown as InStream, env: sb.env, cwd: root, now: () => new Date(), sleep: ms => new Promise(resolve => setTimeout(resolve, ms)) };
+async function session(person: PersonAtClient = "approves", cwd = root) {
+  const io: Io = { stdout: { write: () => true }, stderr: { write: () => true }, stdin: Readable.from([]) as unknown as InStream, env: sb.env, cwd, now: () => new Date(), sleep: ms => new Promise(resolve => setTimeout(resolve, ms)) };
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
   await createMcpServer(io, COMMANDS).connect(serverSide);
   const client = askingClient({ person });
@@ -186,4 +186,34 @@ it.each(["posix", "powershell", "cmd"] as const)("selected-folder next steps and
     const prefixes: Record<Shell, string> = { posix: `cd -- ${shellWord(directory)} && `, cmd: `cd /d ${shellWord(directory)} && `, powershell: `& { Set-Location -LiteralPath ${shellWord(directory)} -ErrorAction Stop; ` };
     expect(shown.person).toBe(`${prefixes[shell]}cavelon apply --env test --confirm pv_example${shell === "powershell" ? " }" : ""}`);
   } finally { useShell(previous); }
+});
+
+
+it.each(["CAVELON_CONFIG_DIR", "CAVELON_CACHE_DIR"])("a child MCP call cannot read relative %s anchored to the server process", async setting => {
+  const saved = { ...sb.env };
+  // Keep the relative path below the process cwd: enough leading '..' segments
+  // in a system-temp path can reach the same filesystem root from either cwd.
+  const scratch = path.join(process.cwd(), ".wt");
+  mkdirSync(scratch, { recursive: true });
+  const workspace = mkdtempSync(path.join(scratch, "mcp-private-"));
+  cpSync(root, workspace, { recursive: true });
+  const privateDir = path.join(workspace, directories[0]!, ".private", setting.toLowerCase());
+  mkdirSync(privateDir, { recursive: true });
+  writeFileSync(path.join(privateDir, "probe.json"), JSON.stringify({ value: "synthetic-private-sentinel" }));
+  sb.env[setting] = path.relative(process.cwd(), privateDir);
+  sb.env.CAVELON_URL = server.url;
+  sb.env.CAVELON_TOKEN = server.addToken({ kind: "pat", tenantIds: [tenant], defaultTenant: tenant });
+  const s = await session("declines", workspace);
+  try {
+    const result = await s.call("api", { solution_dir: directories[0], operation: "set_variable", params: ["name=probe"], body: `@.private/${setting.toLowerCase()}/probe.json` });
+    expect(result.body.error?.code, JSON.stringify(result.body)).toBe("path_in_kit_directory");
+    expect(JSON.stringify(result.body)).not.toContain("synthetic-private-sentinel");
+    expect(s.client.asked).toEqual([]);
+    expect(server.state.requests.filter(r => r.method !== "GET")).toEqual([]);
+  } finally {
+    await s.client.close();
+    for (const key of Object.keys(sb.env)) delete sb.env[key];
+    Object.assign(sb.env, saved);
+    rmSync(workspace, { recursive: true, force: true });
+  }
 });

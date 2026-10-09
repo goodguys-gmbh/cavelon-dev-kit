@@ -22,6 +22,8 @@ Your token stays with you: `cavelon` never takes it as an argument, keeps it in
 your system's credential store, and your agent never sees it.
 The kit also refuses token login from recognized agent shells before
 reading input. Log in from your own terminal; see [the login guide](docs/getting-started.md#2-log-in).
+Solution-owned files and directory links must stay inside the solution, separate
+from the kit's login and cache; see [local file safety](docs/security.md#files-on-your-machine).
 
 > [!NOTE]
 > **0.2.0** moves the release-line pin from `@cavelon/cli@0.1` to

@@ -37,6 +37,10 @@ Build before testing: native setup tests consume the bundled adapter assets in
   fallback for one that does not publish it, and test both in the fake server.
 - **Secrets stay with people.** Never accept a token or secret value as a
   command-line argument, never log one, never write one to a repository.
+- **Solution files stay inside the solution.** Use `file-boundary.ts` for generated
+  paths and `statePath` for local state; resolve existing ancestors even when the
+  final file is missing. Internal links are allowed; login/cache paths are excluded.
+  Private directories follow the process cwd, never an MCP call's `solution_dir`.
 - **Never overwrite a customer's file** the kit did not create; change only the
   blocks between the kit's markers.
 - **Regular expressions:** no quantified group anchored at the end (such as

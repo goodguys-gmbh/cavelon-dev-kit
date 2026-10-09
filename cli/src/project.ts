@@ -5,6 +5,7 @@ import { readTextFile } from "./fsutil.js";
 import { CavelonError, ExitCode, usageError } from "./errors.js";
 import { layoutFrom, type Layout } from "./package-files.js";
 import { cavelonCommand } from "./printed.js";
+import { solutionPath, solutionPaths } from "./file-boundary.js";
 
 /**
  * The solution a working directory belongs to: the nearest `cavelon.yaml`
@@ -38,11 +39,12 @@ function stringField(value: unknown, ...keys: string[]): string | undefined {
   return undefined;
 }
 
-export async function findProject(cwd: string): Promise<ProjectConfig | undefined> {
+export async function findProject(cwd: string, privateDirs: string[] = []): Promise<ProjectConfig | undefined> {
   let dir = path.resolve(cwd);
   for (;;) {
     const file = path.join(dir, PROJECT_FILE);
-    const text = await readTextFile(file);
+    await solutionPaths(dir, [file], privateDirs);
+    const text = await readTextFile(await solutionPath(dir, file));
     if (text !== undefined) return parseProject(file, text);
     const parent = path.dirname(dir);
     if (parent === dir) return undefined;
@@ -122,7 +124,7 @@ export function envFilePath(project: ProjectConfig, name: string): string {
 export async function envNames(project: ProjectConfig): Promise<string[]> {
   let entries: string[];
   try {
-    entries = await fs.readdir(path.join(project.root, ENV_DIR));
+    entries = await fs.readdir(await solutionPath(project.root, path.join(project.root, ENV_DIR)));
   } catch {
     return [];
   }
@@ -138,9 +140,10 @@ export async function envNames(project: ProjectConfig): Promise<string[]> {
  * `--env prod`, or a prod file nobody has written yet, would otherwise act in
  * cavelon.yaml's tenant and report success.
  */
-export async function readEnvFile(project: ProjectConfig, name: string): Promise<EnvFile> {
+export async function readEnvFile(project: ProjectConfig, name: string, privateDirs: string[] = []): Promise<EnvFile> {
   const file = envFilePath(project, name);
-  const text = await readTextFile(file);
+  await solutionPaths(project.root, [file], privateDirs);
+  const text = await readTextFile(await solutionPath(project.root, file));
   if (text === undefined) {
     const known = await envNames(project);
     throw usageError(

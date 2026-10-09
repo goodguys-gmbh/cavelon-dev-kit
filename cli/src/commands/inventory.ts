@@ -1,10 +1,9 @@
-import path from "node:path";
 import type { Context } from "../command.js";
 import { CavelonError } from "../errors.js";
 import { table } from "../format.js";
 import { readJsonFile } from "../fsutil.js";
 import { callStable } from "../invoke.js";
-import { STATE_DIR, stateDir, writeState } from "../local-state.js";
+import { STATE_DIR, statePath, writeState } from "../local-state.js";
 
 /**
  * `.cavelon/inventory.md`: what the tenant holds, from the last pull, for the
@@ -50,7 +49,7 @@ export interface TenantInventory {
 }
 
 export async function readInventory(root: string): Promise<TenantInventory | undefined> {
-  const inventory = await readJsonFile<TenantInventory>(path.join(stateDir(root), INVENTORY_JSON));
+  const inventory = await readJsonFile<TenantInventory>(await statePath(root, INVENTORY_JSON));
   return inventory && typeof inventory === "object" && inventory.names && typeof inventory.names === "object" ? inventory : undefined;
 }
 

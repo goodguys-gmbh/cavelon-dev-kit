@@ -103,6 +103,9 @@ stored in another folder is unavailable here; make a new preview rather than
 copying it. Tool hints carry the selected folder. If the client cannot ask,
 the own-terminal command includes the selected working directory.
 
+Relative kit config/cache paths keep the same process-directory anchor across
+all selected solutions; no child tool can read those private files.
+
 Selection cannot leave the startup workspace, including through a symlink,
 or enter the kit's credential/cache directories. File arguments are then
 confined to the selected solution as usual.

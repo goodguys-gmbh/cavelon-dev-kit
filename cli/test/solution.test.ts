@@ -301,6 +301,24 @@ describe("init", () => {
     expect(result.stderr).toMatch(/warning: Left AGENTS.md as it is: its .* markers are not one well-formed pair/);
   });
 
+  it("reports instruction and MCP files relative to a linked solution root", async () => {
+    const dir = folder();
+    const linked = path.join(sb.home, `linked-solution-${dirCount}`);
+    symlinkSync(dir, linked, process.platform === "win32" ? "junction" : "dir");
+    const broken = "# Ours\n<!-- cavelon:begin -->\nhalf a block\n";
+    writeFileSync(path.join(dir, "AGENTS.md"), broken);
+    const result = await cli(sb, ["init", "--instance", server.url, "--tenant", tenant, "--agents", "codex", "--json"], { cwd: linked });
+    expect(result.code, result.stdout + result.stderr).toBe(0);
+    const output = result.json<{ files: Array<{ file: string; action: string }>; warnings: string[] }>();
+    expect(output.files).toEqual(expect.arrayContaining([
+      { file: ".gitignore", action: "created" },
+      { file: ".codex/config.toml", action: "created" },
+      expect.objectContaining({ file: "AGENTS.md", action: "skipped" }),
+    ]));
+    expect(output.warnings.join("\n")).toMatch(/Left AGENTS.md as it is/);
+    expect(read(path.join(dir, "AGENTS.md"))).toBe(broken);
+  });
+
   it("--agents writes the fallback skills and each agent's MCP entry, never over a customer's file", async () => {
     const dir = folder();
     mkdirSync(path.join(dir, ".cursor"), { recursive: true });
