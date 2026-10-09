@@ -6,7 +6,7 @@ A database connector lets an agent answer from your live relational database: th
 
 This page is the Owner's tutorial for the screens under **Settings › Security & access › Databases**, from an empty tenant to an agent that answers from the database. A superadmin in Tenant mode can follow it the same way. The rules behind every field (parameters, identity, limits, packages) are in [Live Database Connections](/docs/concepts/database-connections); what the tenant's other roles see and do is in [Database Connectors](/docs/administration/database-connectors).
 
-The section appears only on instances where the connector is switched on (see [Instance settings](#instance-settings)). PostgreSQL, MySQL/MariaDB and Microsoft SQL Server are supported. A database type whose driver this instance lacks is shown disabled in the form, with the reason.
+The section appears only on instances where the connector is switched on (see [Instance settings](#instance-settings)). PostgreSQL, MySQL/MariaDB, Microsoft SQL Server and Oracle Database are supported. A database type whose driver this instance lacks is shown disabled in the form, with the reason.
 
 ## Who may change what
 
@@ -56,14 +56,14 @@ Below the form, **Network and read-only user** has what you send to the database
 
 ### Per database type
 
-| | PostgreSQL | MySQL and MariaDB | Microsoft SQL Server |
-|---|---|---|---|
-| Default port | 5432 | 3306 | 1433 |
-| Read-only user script | A login role with `CONNECTION LIMIT`, `default_transaction_read_only`, `SELECT` on one schema | One account per outbound address with `MAX_USER_CONNECTIONS` (and `REQUIRE SSL` unless TLS is off), `SELECT` on the database | A login and a database user that is a member of `db_datareader` only; no per-login limit |
-| Read-only transaction | Yes | Yes | No: the login is the boundary, and the connection needs a passing write-privilege check (below) |
-| Schema explorer schema | `public` first, listed only when it holds a table the user may read | The connection's database | `dbo` first; schemas without a readable table are not listed |
-| Quoted names | `"schema"."table"` | `` `schema`.`table` `` | `[schema].[table]` |
-| Watch for | `:id::int` binds `:i`; write `CAST(:id AS int)` | `DATETIME` values are compared in UTC; a lone `SELECT SLEEP(n)` stopped by the timeout returns 1 | One stored-procedure call `EXEC [schema].[procedure] @p = :p, …` allowed, only on a login tested without write privileges; T-SQL statement keywords are refused; a server that redirects is refused; give the server a certificate |
+| | PostgreSQL | MySQL and MariaDB | Microsoft SQL Server | Oracle Database |
+|---|---|---|---|---|
+| Default port | 5432 | 3306 | 1433 | 2484 (TCPS); 1521 for plain TCP |
+| Read-only user script | A login role with `CONNECTION LIMIT`, `default_transaction_read_only`, `SELECT` on one schema | One account per outbound address with `MAX_USER_CONNECTIONS` (and `REQUIRE SSL` unless TLS is off), `SELECT` on the database | A login and a database user that is a member of `db_datareader` only; no per-login limit | A profile with `SESSIONS_PER_USER`, a user with `CREATE SESSION` and `READ` on one schema's tables |
+| Read-only transaction | Yes | Yes | No: the login is the boundary, and the connection needs a passing write-privilege check (below) | Yes, and commits inside PL/SQL are refused |
+| Schema explorer schema | `public` first, listed only when it holds a table the user may read | The connection's database | `dbo` first; schemas without a readable table are not listed | Users that own a table or view the login may read; Oracle's own schemas are not listed |
+| Quoted names | `"schema"."table"` | `` `schema`.`table` `` | `[schema].[table]` | `"SCHEMA"."TABLE"` (upper case unless created quoted) |
+| Watch for | `:id::int` binds `:i`; write `CAST(:id AS int)` | `DATETIME` values are compared in UTC; a lone `SELECT SLEEP(n)` stopped by the timeout returns 1 | One stored-procedure call `EXEC [schema].[procedure] @p = :p, …` allowed, only on a login tested without write privileges; T-SQL statement keywords are refused; a server that redirects is refused; give the server a certificate | The database field is the service name; a listener that redirects (SCAN, shared server) is refused; no `RETURNING`, PL/SQL, `DBMS_*`/`UTL_*` or database links |
 
 ## Step 2: Test the connection
 
@@ -209,7 +209,7 @@ DATABASE_CONNECTOR_PRIVATE_TARGETS=[{"tenant_id":"<tenant id>","cidr":"10.40.12.
 
 Startup fails on an entry that touches loopback, link-local or `100.64.0.0/10`, or that is too wide. An entry that contains an address of the process's own network interfaces admits nothing and is logged at startup as `database_private_target_refused`; keep entries clear of the container networks on the host. Every admission is logged at WARNING as `database_private_target_admitted` with the tenant id and the entry's index, never the address. For a test database in a container, admit that container's address as a `/32` for the test tenant.
 
-**Drivers.** The standard images carry the drivers for all three database types: psycopg2 for PostgreSQL, PyMySQL for MySQL and MariaDB, and python-tds with pyOpenSSL for SQL Server. A host without one of them keeps running; that database type is shown disabled in the connection form, and its connections answer `unavailable`.
+**Drivers.** The standard images carry the drivers for all four database types: psycopg2 for PostgreSQL, PyMySQL for MySQL and MariaDB, python-tds with pyOpenSSL for SQL Server, and python-oracledb in thin mode (no Oracle Client libraries) for Oracle. A host without one of them keeps running; that database type is shown disabled in the connection form, and its connections answer `unavailable`.
 
 ## Related pages
 

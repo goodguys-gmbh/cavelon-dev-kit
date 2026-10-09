@@ -264,7 +264,7 @@ export function handleDatabase(state: DatabaseState, rc: DatabaseRoute): boolean
     const dialect = saved?.dialect ?? rc.url.searchParams.get("dialect");
     rc.send(200, {
       dialect, kind: "read_only", database_name: saved?.fields?.database_name ?? rc.url.searchParams.get("database_name") ?? "your_database",
-      username: saved?.fields?.username ?? rc.url.searchParams.get("username") ?? "cavelon_reader", schema: rc.url.searchParams.get("schema"),
+      username: saved?.fields?.username ?? rc.url.searchParams.get("username") ?? "cavelon_reader", schema: rc.url.searchParams.get("schema") ?? (dialect === "oracle" ? "YOUR_SCHEMA" : null),
       egress_ips: rc.url.searchParams.has("egress_ips") ? rc.url.searchParams.getAll("egress_ips") : state.instance.network.egress_ips,
       connection_limit: Number(rc.url.searchParams.get("connection_limit") ?? 20), connection_limit_enforced: dialect !== "mssql",
       require_tls: saved ? saved.fields?.tls_mode !== "disable" : rc.url.searchParams.get("require_tls") !== "false",

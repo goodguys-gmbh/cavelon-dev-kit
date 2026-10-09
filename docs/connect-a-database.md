@@ -36,7 +36,9 @@ the operator sets others. Existing entries still work above a lowered cap;
 only new entries count against it. See [limits and operator overrides](limits.md#database-connections-and-queries).
 
 Send the SQL from `db login-script` to the DBA. The instance supplies the
-script; this build publishes only `kind: read_only`. The DBA replaces its
+script; this build publishes only `kind: read_only`. `db login-script`
+takes the dialect as its argument or as `--dialect`, not both
+(`cavelon db login-script --dialect oracle`). The DBA replaces its
 password placeholder locally, outside the kit. `--egress-ip` is repeatable;
 omitting it uses the instance's configured addresses. Set
 `--connection-limit` to the pool size times the number of processes that run
@@ -47,6 +49,12 @@ agents; omitted, the instance uses pool size times four, as the Admin does.
 | PostgreSQL | `postgresql` | 5432 | Read-only login, connection limit and SELECT on `public` unless a schema is named |
 | MySQL/MariaDB | `mysql` | 3306 | Account per outbound address, connection limit and REQUIRE SSL; grants cover the database |
 | SQL Server | `mssql` | 1433 | Login and database user; `--schema sales` grants SELECT on that schema, omitted grants `db_datareader`; no per-login connection limit |
+| Oracle Database | `oracle` | 2484 (TCPS); 1521 for plain TCP | Profile whose `SESSIONS_PER_USER` is the connection limit, a user with `CREATE SESSION`, and `READ` on one schema's tables and views; `--schema` names it, omitted the script names the placeholder `YOUR_SCHEMA` for the DBA to replace |
+
+The dialects an instance accepts are the ones its OpenAPI publishes: on an
+instance older than its Oracle support that serves its OpenAPI,
+`db connections create --dialect oracle` is refused locally and nothing is
+sent.
 
 ## Step 1: Create the connection and set its password in the Admin
 
@@ -104,6 +112,12 @@ no write privileges, plus the instance's procedure-definition checks.
 `allows_writes`, if a newer instance returns it, is read-only kit output;
 enabling writes stays in the dashboard. It never enters a package.
 
+On Oracle the database name is the service name (a pluggable database, not
+the CDB root), and reads run in a read-only transaction. A listener that
+redirects the session to another host or port (a RAC SCAN listener,
+shared-server dispatchers elsewhere) is refused by design: name a listener
+that serves the session directly.
+
 ## Step 3: Explore the schema
 
 ```bash
@@ -153,6 +167,28 @@ on an older instance that omits it, the server decides the request.
 
 A package carries only the query's connection reference (name and dialect),
 never its host, login, password, certificate or write-enable flag.
+
+## Oracle queries
+
+On an `oracle` connection the instance refuses more SQL when it saves a
+query, and `validate` warns of each with the instance's code: a PL/SQL block
+or declaration (`BEGIN`, `DECLARE`, `WITH FUNCTION`), transaction control, a
+`DBMS_*` or `UTL_*` package, an URI type that fetches a URL (`HTTPURITYPE`)
+or a database link (`orders@remote`). A read gets `forbidden_keyword`, a
+write `write_statement_refused`; a write may not hold `RETURNING` either. A
+quoted identifier counts by its name (`"DBMS_LOCK".SLEEP`). Text inside
+Oracle's `q'[…]'` literals (any delimiter, also `nq'…'`), strings and
+comments is not SQL. A single trailing semicolon is accepted, and the
+instance strips it; a second statement is its `multiple_statements`. Bound
+the rows with `FETCH FIRST n ROWS ONLY`:
+
+```yaml
+    connection: { name: erp-db, dialect: oracle }
+    sql_text: SELECT status, shipped_at FROM orders WHERE order_no = :order_no FETCH FIRST 5 ROWS ONLY
+```
+
+On the other dialects none of these Oracle rules apply. The instance's own
+check at save time decides; a clean `validate` does not prove a query.
 
 ## List parameters
 
@@ -229,8 +265,9 @@ tools.database_query`. For example, adapt the earlier order query:
 Keep its declared `order_no` and identity-bound `email` parameters. Write
 exactly one `INSERT`, `UPDATE` or `DELETE`; `UPDATE` and `DELETE` need a
 `WHERE` containing a `:parameter`. Upserts and `RETURNING`/`OUTPUT` are
-allowed; a leading `WITH`, schema changes, transaction control and multiple
-statements are refused (`write_statement_refused`). On SQL Server one
+allowed (on Oracle not `RETURNING`); a leading `WITH`, schema changes,
+transaction control and multiple statements are refused
+(`write_statement_refused`). On SQL Server one
 `EXEC` of a writing procedure is also allowed. Its definition must pass the
 instance's checks, including no transaction control or `SET NOCOUNT ON`
 (`write_procedure_definition_refused`). The instance checks statements and
