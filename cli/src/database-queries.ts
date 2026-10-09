@@ -1,7 +1,6 @@
-import path from "node:path";
 import type { PackageSchema } from "./contracts.js";
 import { readJsonFile } from "./fsutil.js";
-import { stateDir, writeState } from "./local-state.js";
+import { statePath, writeState } from "./local-state.js";
 import { locate, type Finding, type PackageOnDisk } from "./package-files.js";
 import { canonical, settledForm } from "./package-format.js";
 
@@ -646,7 +645,7 @@ function baselineOf(schema: PackageSchema, tool: Json): BaselineTool {
 }
 
 export async function readQueryBaseline(root: string): Promise<QueryBaseline | undefined> {
-  const stored = await readJsonFile<QueryBaseline>(path.join(stateDir(root), BASELINE_FILE));
+  const stored = await readJsonFile<QueryBaseline>(await statePath(root, BASELINE_FILE));
   return stored && isObject(stored.tools) ? stored : undefined;
 }
 

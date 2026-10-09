@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { readJsonFile, readTextFile, writeFileAtomic } from "./fsutil.js";
+import { solutionPath, solutionPaths } from "./file-boundary.js";
 
 /**
  * `.cavelon/` in a solution folder: local state, never committed (it ignores
@@ -57,22 +58,39 @@ export function stateDir(root: string): string {
   return path.join(root, STATE_DIR);
 }
 
+/** State is solution-owned even when a directory or an individual file is linked. */
+export async function statePath(root: string, name: string): Promise<string> {
+  return solutionPath(root, path.join(stateDir(root), name));
+}
+
+/** Refuse linked state before a command can change the instance or other local files. */
+export async function checkStatePaths(root: string): Promise<void> {
+  const names = [".gitignore", "pull.json", "pulled-files.json", "inventory.md", "inventory.json", "database-queries.json", "retired-previews.json", "previews"];
+  await solutionPaths(root, names.map(name => path.join(STATE_DIR, name)));
+  const dir = await statePath(root, "previews");
+  const entries = await fs.readdir(dir).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  });
+  await solutionPaths(root, entries.map(name => path.join(STATE_DIR, "previews", name)));
+}
+
 /** Create `.cavelon/` with a `.gitignore` that ignores everything in it. */
 export async function ensureStateDir(root: string): Promise<boolean> {
-  const dir = stateDir(root);
-  const ignore = path.join(dir, ".gitignore");
+  const ignore = await statePath(root, ".gitignore");
   if ((await readTextFile(ignore)) !== undefined) return false;
   await writeFileAtomic(ignore, "# Local cavelon state; never committed.\n*\n");
   return true;
 }
 
 export async function writeState(root: string, name: string, content: string): Promise<void> {
+  const file = await statePath(root, name);
   await ensureStateDir(root);
-  await writeFileAtomic(path.join(stateDir(root), name), content);
+  await writeFileAtomic(file, content);
 }
 
 export async function readPull(root: string): Promise<PullRecord | undefined> {
-  return readJsonFile<PullRecord>(path.join(stateDir(root), "pull.json"));
+  return readJsonFile<PullRecord>(await statePath(root, "pull.json"));
 }
 
 /** The package files' digests as the last pull or apply left them (the name is older than the apply). */
@@ -88,7 +106,7 @@ export async function fileDigest(file: string): Promise<string | undefined> {
 export async function fileDigests(root: string, files: string[]): Promise<Record<string, string>> {
   const digests: Record<string, string> = {};
   for (const file of files) {
-    const value = await fileDigest(path.join(root, file));
+    const value = await fileDigest(await solutionPath(root, path.join(root, file)));
     if (value) digests[file] = value;
   }
   return digests;
@@ -100,7 +118,7 @@ interface PulledFiles {
   items?: Record<string, Record<string, string>>;
 }
 
-const readPulled = async (root: string) => (await readJsonFile<PulledFiles>(path.join(stateDir(root), PULLED_FILES))) ?? {};
+const readPulled = async (root: string) => (await readJsonFile<PulledFiles>(await statePath(root, PULLED_FILES))) ?? {};
 
 /**
  * The package files as the last pull left them, by digest. Outside git, and
@@ -142,25 +160,25 @@ export function digest(value: unknown): string {
 }
 
 /** A file name for a preview id, whatever characters the instance put into it. */
-function previewFile(root: string, previewId: string): string {
+async function previewFile(root: string, previewId: string): Promise<string> {
   const safe = /^[A-Za-z0-9._-]{1,100}$/.test(previewId) ? previewId : createHash("sha256").update(previewId).digest("hex").slice(0, 32);
-  return path.join(stateDir(root), "previews", `${safe}.json`);
+  return statePath(root, path.join("previews", `${safe}.json`));
 }
 
 export async function savePreview(root: string, preview: StoredPreview): Promise<string> {
+  const file = await previewFile(root, preview.preview_id);
   await ensureStateDir(root);
-  const file = previewFile(root, preview.preview_id);
   await writeFileAtomic(file, JSON.stringify(preview, null, 2));
   return file;
 }
 
 export async function loadPreview(root: string, previewId: string): Promise<StoredPreview | undefined> {
-  const stored = await readJsonFile<StoredPreview>(previewFile(root, previewId));
+  const stored = await readJsonFile<StoredPreview>(await previewFile(root, previewId));
   return stored?.preview_id === previewId ? stored : undefined;
 }
 
 export async function deletePreview(root: string, previewId: string): Promise<void> {
-  await fs.rm(previewFile(root, previewId), { force: true });
+  await fs.rm(await previewFile(root, previewId), { force: true });
 }
 
 /** Why a preview can no longer be confirmed. */
@@ -180,7 +198,7 @@ const RETIRED_PREVIEWS = "retired-previews.json";
 const RETIRED_KEPT = 200;
 
 async function readRetired(root: string): Promise<RetiredPreview[]> {
-  const stored = await readJsonFile<RetiredPreview[]>(path.join(stateDir(root), RETIRED_PREVIEWS));
+  const stored = await readJsonFile<RetiredPreview[]>(await statePath(root, RETIRED_PREVIEWS));
   return Array.isArray(stored) ? stored.filter((r) => typeof r?.preview_id === "string") : [];
 }
 
@@ -217,7 +235,7 @@ export type OpenPreview = Pick<StoredPreview, "preview_id" | "created_at" | "env
 
 /** The open previews, newest first, each with when it expires. */
 export async function listPreviews(root: string, now: Date): Promise<OpenPreview[]> {
-  const dir = path.join(stateDir(root), "previews");
+  const dir = await statePath(root, "previews");
   let names: string[];
   try {
     names = await fs.readdir(dir);
@@ -226,7 +244,7 @@ export async function listPreviews(root: string, now: Date): Promise<OpenPreview
   }
   const out = [];
   for (const name of names.filter((n) => n.endsWith(".json"))) {
-    const stored = await readJsonFile<StoredPreview>(path.join(dir, name));
+    const stored = await readJsonFile<StoredPreview>(await statePath(root, path.join("previews", name)));
     if (stored?.preview_id) {
       out.push({ preview_id: stored.preview_id, created_at: stored.created_at, env: stored.env, harness: stored.harness, ...previewExpiry(stored.created_at, now) });
     }

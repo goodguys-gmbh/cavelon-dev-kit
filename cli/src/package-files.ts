@@ -4,6 +4,7 @@ import { CST, LineCounter, Parser, parseDocument, type Document, type YAMLError 
 import type { PackageSchema } from "./contracts.js";
 import { CavelonError, ExitCode } from "./errors.js";
 import { readTextFile, withoutBom, writeFileAtomic } from "./fsutil.js";
+import { realPath, solutionPaths, within } from "./file-boundary.js";
 import { canonical, MANIFEST_SECTION, PERSONA_SECTION, sameEntry, sameSectionValue, sectionContent, sectionFields, toYaml } from "./package-format.js";
 
 export { canonical, toYaml };
@@ -152,14 +153,8 @@ async function listFiles(dir: string): Promise<string[]> {
  * the instance with apply, or have pull write over it.
  */
 export async function contentPath(root: string, file: string): Promise<string | undefined> {
-  let real: string;
-  try {
-    real = await fs.realpath(file);
-  } catch {
-    return file;
-  }
-  const relative = path.relative(await fs.realpath(root).catch(() => root), real);
-  return relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative) ? real : undefined;
+  const real = await realPath(file);
+  return within(await realPath(root), real) ? real : undefined;
 }
 
 /** A package file's text through its link, or the finding that it cannot be read. */
@@ -242,6 +237,7 @@ function parseFile(root: string, file: string, text: string): { value?: unknown;
 
 /** Read the package files of a solution into one package. */
 export async function readPackage(root: string, layout: Layout): Promise<PackageOnDisk> {
+  await solutionPaths(root, [layout.package, ...Object.values(layout.items)]);
   const pkg: Record<string, unknown> = {};
   const sources: PackageOnDisk["sources"] = {};
   const findings: Finding[] = [];
@@ -456,6 +452,7 @@ export async function writePackage(
   schema: PackageSchema | null,
   options: WriteOptions = {},
 ): Promise<WriteReport> {
+  await solutionPaths(root, [layout.package, ...Object.values(layout.items)]);
   const dryRun = options.dryRun === true;
   const skip = options.skip ?? new Set<string>();
   const report: WriteReport = { written: [], unchanged: [], removed: [], kept: [], refused: [], tenant_wide: [] };

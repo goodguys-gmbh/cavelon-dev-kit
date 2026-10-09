@@ -429,7 +429,12 @@ its markers in your `AGENTS.md`, `CLAUDE.md`, `.gitignore` or git hook. It
 leaves a hooks folder outside the repository alone, such as one a global
 `core.hooksPath` names, since every repository of yours runs it. `validate`,
 `apply` and `pull` follow a symlinked package file only inside the solution
-folder.
+folder. The same boundary covers linked directories, including new files whose
+parent directory already exists. `init` checks its generated destinations before
+creating a draft or writing files; local state and previews in `.cavelon/`,
+environment files, and instruction files must also stay inside the solution.
+A link cannot point into the kit's credential or cache directory, even when that
+directory is inside the workspace. Links within the solution remain supported.
 
 ## Reporting a vulnerability
 

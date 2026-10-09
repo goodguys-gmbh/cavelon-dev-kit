@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
-import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { Context } from "./command.js";
 import { CavelonError, ExitCode } from "./errors.js";
 import { findProject } from "./project.js";
+import { realPath, within } from "./file-boundary.js";
+export { realPath, within } from "./file-boundary.js";
 
 /**
  * Where the kit keeps its state on the user's machine, never in the
@@ -78,31 +79,4 @@ export async function confinedPath(ctx: Context, raw: string, what: string, conf
     }
   }
   return resolved;
-}
-
-/** The real path of a file, or of its nearest existing folder plus the rest, for a file still to be written. */
-export async function realPath(file: string): Promise<string> {
-  const rest: string[] = [];
-  let current = file;
-  for (;;) {
-    try {
-      return path.join(await fs.realpath(current), ...rest.reverse());
-    } catch (error) {
-      const parent = path.dirname(current);
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT" || parent === current) throw error;
-      rest.push(path.basename(current));
-      current = parent;
-    }
-  }
-}
-
-/**
- * Whether `file` is `dir` or under it. `fold` ignores case, as the default file
- * systems of Windows and macOS do; it only ever widens a refusal, never what a
- * tool may reach, since a case-sensitive volume can hold both spellings.
- */
-export function within(dir: string, file: string, fold = false): boolean {
-  const norm = (p: string) => (fold && (process.platform === "win32" || process.platform === "darwin") ? p.toLowerCase() : p);
-  const rel = path.relative(norm(dir), norm(file));
-  return rel === "" || (rel !== ".." && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel));
 }

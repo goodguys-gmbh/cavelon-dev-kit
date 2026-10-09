@@ -6,6 +6,11 @@ import { ApiClient } from "./http.js";
 import { colorEnabled, styleFor, type Io } from "./io.js";
 import { requireInstance, requireToken, resolveSession, resolveTenantId, type GlobalOptions, type Session } from "./session.js";
 import { detectShell, useShell } from "./shell.js";
+import { checkStatePaths } from "./local-state.js";
+import { promises as fs } from "node:fs";
+import { checkPrivatePaths, solutionPaths } from "./file-boundary.js";
+import { cacheDir, configDir } from "./paths.js";
+import path from "node:path";
 
 export function createContext(io: Io, globals: GlobalOptions, mode: "cli" | "mcp" = "cli"): Context {
   const warnings: string[] = [];
@@ -26,7 +31,25 @@ export function createContext(io: Io, globals: GlobalOptions, mode: "cli" | "mcp
       if (!warnings.includes(message)) warnings.push(message);
     },
     session() {
-      sessionPromise ??= resolveSession(io.env, io.cwd, globals);
+      sessionPromise ??= (async () => {
+        const session = await resolveSession(io.env, io.cwd, globals);
+        const project = session.project;
+        if (project) {
+          const privateDirs = [configDir(io.env), cacheDir(io.env)].map(dir => path.resolve(io.cwd, dir));
+          const dirs = [project.layout.package, ...Object.values(project.layout.items), ".cavelon", "env"];
+          await solutionPaths(project.root, dirs, privateDirs);
+          await checkStatePaths(project.root);
+          for (const dir of [...dirs, ".cavelon/previews"]) {
+            const files = await fs.readdir(path.resolve(project.root, dir)).catch((error: NodeJS.ErrnoException) => {
+              if (error.code === "ENOENT") return [];
+              throw error;
+            });
+            await checkPrivatePaths(project.root, files.map(file => path.join(dir, file)), privateDirs);
+          }
+          await checkPrivatePaths(project.root, [project.file], privateDirs);
+        }
+        return session;
+      })();
       return sessionPromise;
     },
     async client(options = {}) {
