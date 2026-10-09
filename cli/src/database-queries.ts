@@ -334,6 +334,32 @@ function startsLineComment(sql: string, i: number, dialect: string): boolean {
   return dialect === "mysql" && sql[i] === "#";
 }
 
+/** The dialect whose queries the instance also checks for PL/SQL, supplied packages and database links. */
+const ORACLE_DIALECT = "oracle";
+
+/** The closing partner of an Oracle `q'…'` delimiter; any other character closes itself. */
+const ORACLE_Q_CLOSERS: Record<string, string> = { "[": "]", "{": "}", "(": ")", "<": ">" };
+
+/**
+ * The length of an Oracle `q'` or `nq'` prefix at `i`, where it opens a
+ * literal: not when it ends a longer name (`colq'…'`). Zero otherwise.
+ */
+function oracleQuoteAt(sql: string, i: number): number {
+  const prefix = /[nN]?[qQ]'/y;
+  prefix.lastIndex = i;
+  const match = prefix.exec(sql);
+  if (!match || (i > 0 && /[\p{L}\p{N}_$#]/u.test(sql[i - 1]!))) return 0;
+  return match[0].length;
+}
+
+/** Where an Oracle `q'<delimiter>…<closer>'` literal ends, its delimiter at `start`. Undefined when it never closes. */
+function oracleQuoteEnd(sql: string, start: number): number | undefined {
+  if (start >= sql.length || /\s/.test(sql[start]!)) return undefined;
+  const closer = `${ORACLE_Q_CLOSERS[sql[start]!] ?? sql[start]!}'`;
+  const end = sql.indexOf(closer, start + 1);
+  return end === -1 ? undefined : end + closer.length;
+}
+
 /** The tag of a PostgreSQL dollar-quoted string opening at `i` (`$$` or `$tag$`). */
 function dollarTagAt(sql: string, i: number): string | undefined {
   const tag = /\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$/y;
@@ -365,6 +391,9 @@ function sqlTokens(sql: string, dialect: string): Token[] | undefined {
     } else if (sql.startsWith("/*", i)) {
       end = blockCommentEnd(sql, i, dialect === "postgresql");
       kind = "comment";
+    } else if (dialect === ORACLE_DIALECT && oracleQuoteAt(sql, i)) {
+      end = oracleQuoteEnd(sql, i + oracleQuoteAt(sql, i));
+      kind = "string";
     } else if (char === "'") {
       // PostgreSQL reads backslash escapes only in E'…'; MySQL in every literal.
       const escapePrefix = i > 0 && /[eE]/.test(sql[i - 1]!) && (i < 2 || !/[\p{L}\p{N}]/u.test(sql[i - 2]!));
@@ -493,6 +522,72 @@ export function isProcedureCall(sql: string, dialect: string | undefined): boole
     "EXEC",
     "EXECUTE",
   );
+}
+
+// ---------------------------------------------------------------------------
+// Oracle's own refusals
+// ---------------------------------------------------------------------------
+
+/** Words a read query holds on no dialect, which the instance refuses before Oracle's own check. */
+const READ_FORBIDDEN_WORDS = [
+  "INSERT", "UPDATE", "DELETE", "MERGE", "UPSERT", "INTO", "TRUNCATE", "DROP", "ALTER", "CREATE", "GRANT", "REVOKE", "COPY", "CALL", "EXEC", "EXECUTE",
+  "UPDLOCK", "XLOCK", "HOLDLOCK", "TABLOCKX",
+];
+/** `FOR` followed by one of these locks rows (`FOR UPDATE`, `FOR SHARE`, `FOR KEY SHARE`, `FOR NO KEY UPDATE`). */
+const LOCKING_AFTER_FOR = ["SHARE", "KEY", "NO", "UPDATE"];
+
+/** PL/SQL blocks and declarations (`WITH FUNCTION`), transaction control, and the URI types that fetch a URL from the database server. */
+const ORACLE_FORBIDDEN_WORDS = ["BEGIN", "DECLARE", "FUNCTION", "PROCEDURE", "PACKAGE", "PRAGMA", "COMMIT", "ROLLBACK", "SAVEPOINT", "HTTPURITYPE", "DBURITYPE", "XDBURITYPE"];
+/** Oracle's supplied packages, which reach the network, files, dynamic SQL and sleeps. */
+const ORACLE_FORBIDDEN_PREFIXES = ["DBMS_", "UTL_"];
+
+/** Whether the instance refuses a read with forbidden_keyword or locking_clause on every dialect, before Oracle's check. */
+function commonReadRefusal(code: Token[]): boolean {
+  return code.some((token, i) => {
+    if (token.kind !== "word") return false;
+    const word = token.text.toUpperCase();
+    const next = code[i + 1];
+    return READ_FORBIDDEN_WORDS.includes(word) || (word === "FOR" && next?.kind === "word" && LOCKING_AFTER_FOR.includes(next.text.toUpperCase())) || (word === "LOCK" && isWord(next, "IN"));
+  });
+}
+
+/**
+ * What the instance refuses on an Oracle connection on top of every
+ * dialect's rules, as its save-time check reads the SQL: a PL/SQL block or
+ * declaration, a `DBMS_*` or `UTL_*` package, an URI type that fetches a URL,
+ * a database link (`table@link`), and in a write `RETURNING`. A quoted
+ * identifier counts by its name, and `q'[…]'` literals are text. A read is
+ * refused with `forbidden_keyword`, a write with `write_statement_refused`.
+ * Undefined on another dialect, and for SQL the instance refuses with another
+ * code first: an unclosed quote or comment, an executable comment, a second
+ * statement (a single trailing semicolon is accepted), the wrong first
+ * keyword, or a read's keyword or locking clause that no dialect allows.
+ */
+export function oracleQueryProblem(sql: string, dialect: string | undefined, write: boolean): Problem | undefined {
+  if (dialect !== ORACLE_DIALECT) return undefined;
+  const tokens = sqlTokens(sql, dialect);
+  if (!tokens || tokens.some((t) => t.kind === "comment" && /^\/\*M?!/.test(t.text))) return undefined;
+  const code = tokens.filter((t) => t.kind !== "comment");
+  if (code.some((t, i) => t.kind === "semicolon" && i !== code.length - 1)) return undefined;
+  if (write ? !isWord(code[0], "INSERT", "UPDATE", "DELETE") : !isWord(code.find((t) => !isSymbol(t, "(")), "SELECT", "WITH") || commonReadRefusal(code)) return undefined;
+  const refused = (message: string) => problem(write ? "write_statement_refused" : "forbidden_keyword", message, "sql_text");
+  for (const token of code) {
+    if (isSymbol(token, "@")) return refused("The SQL may not reach another database: a database link (table@link) is not allowed.");
+    const name = token.kind === "word" ? token.text.toUpperCase() : token.kind === "identifier" ? token.text.slice(1, -1).replaceAll('""', '"').toUpperCase() : undefined;
+    if (name === undefined) continue;
+    if (ORACLE_FORBIDDEN_WORDS.includes(name)) return refused(write ? `A write query may not hold ${name}.` : `The SQL may only read: ${name} is not allowed on Oracle.`);
+    if (ORACLE_FORBIDDEN_PREFIXES.some((prefix) => name.startsWith(prefix))) {
+      return refused(
+        write
+          ? `A write query may not call ${token.text}: Oracle's supplied packages are refused.`
+          : `The SQL may not call ${token.text}: Oracle's DBMS_* and UTL_* packages reach the network, files or dynamic SQL.`,
+      );
+    }
+    if (write && (name === "RETURNING" || name === "RETURN")) {
+      return refused("On Oracle a write query may not hold RETURNING: its INTO needs output binds, which a write query does not have. Read the changed rows with a separate read query.");
+    }
+  }
+  return undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -640,6 +735,15 @@ export function checkQueryTools(disk: PackageOnDisk, schema: PackageSchema, base
         severity: "warning",
         ...locate(disk, `/${TOOLS_SECTION}/${index}/${QUERY_FIELD}/${call.at}`),
         message: `Query tool "${slug}": ${call.message}`,
+      });
+    }
+    const oracle = typeof query.sql_text === "string" ? oracleQueryProblem(query.sql_text, dialect, write) : undefined;
+    if (oracle) {
+      findings.push({
+        code: oracle.code,
+        severity: "warning",
+        ...locate(disk, `/${TOOLS_SECTION}/${index}/${QUERY_FIELD}/${oracle.at}`),
+        message: `Query tool "${slug}": ${oracle.message} The instance refuses it when the query is saved (${oracle.code}).`,
       });
     }
     const connection = isObject(query.connection) ? query.connection : undefined;

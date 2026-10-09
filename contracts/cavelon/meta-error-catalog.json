@@ -2667,7 +2667,7 @@
     {
       "code": "forbidden_keyword",
       "area": "database_connector",
-      "message": "The SQL names a keyword that writes, creates or calls something (INSERT, INTO, DELETE, EXEC, …); on SQL Server also a statement keyword T-SQL would run as a second statement (COMMIT, DECLARE, SET, WAITFOR, …) or a function that reaches another server (OPENROWSET, OPENQUERY).",
+      "message": "The SQL names a keyword that writes, creates or calls something (INSERT, INTO, DELETE, EXEC, …); on SQL Server also a statement keyword T-SQL would run as a second statement (COMMIT, DECLARE, SET, WAITFOR, …) or a function that reaches another server (OPENROWSET, OPENQUERY); on Oracle also a PL/SQL block or declaration (BEGIN, DECLARE, WITH FUNCTION), a DBMS_* or UTL_* package, HTTPURITYPE, or a database link (table@link).",
       "hint": "Remove the keyword; a query only reads. A column or table of that name is written as a quoted identifier.",
       "docs": "/docs/concepts/database-connections#queries-and-parameters"
     },
@@ -3892,7 +3892,7 @@
     {
       "code": "write_statement_refused",
       "area": "database_connector",
-      "message": "A write query is not the one statement it may be: exactly one INSERT, UPDATE or DELETE (on SQL Server also one EXEC of a stored procedure), an UPDATE or DELETE with a WHERE that uses at least one :parameter, and never DDL (CREATE, ALTER, DROP), TRUNCATE, GRANT or REVOKE, transaction control, MERGE, COPY, LOAD DATA, SELECT … INTO (OUTFILE), a second write inside it, or a function that reads or writes the server's files or reaches another server (pg_read_file, lo_export, dblink, LOAD_FILE, OPENROWSET).",
+      "message": "A write query is not the one statement it may be: exactly one INSERT, UPDATE or DELETE (on SQL Server also one EXEC of a stored procedure), an UPDATE or DELETE with a WHERE that uses at least one :parameter, and never DDL (CREATE, ALTER, DROP), TRUNCATE, GRANT or REVOKE, transaction control, MERGE, COPY, LOAD DATA, SELECT … INTO (OUTFILE), a second write inside it, or a function that reads or writes the server's files or reaches another server (pg_read_file, lo_export, dblink, LOAD_FILE, OPENROWSET); on Oracle also RETURNING, a DBMS_* or UTL_* package, PL/SQL or a database link.",
       "hint": "Write one INSERT, UPDATE or DELETE whose WHERE names the row by a :parameter, for example UPDATE orders SET status = 'cancelled' WHERE number = :order_no AND email = :email. Keep schema changes and bulk loads out of the assistant. A SELECT is a read query (kind read).",
       "docs": "/docs/concepts/database-connections#queries-and-parameters"
     },

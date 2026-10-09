@@ -1960,7 +1960,7 @@ Print the instance's published read-only login SQL for a dialect or saved connec
 cavelon db login-script [dialect] [options]
 ```
 
-Needs database_connectors.view. The DBA replaces the script's password placeholder locally, outside the kit. Only variants this instance publishes are offered; this build publishes read_only. Omitted inputs use its defaults. For SQL Server, connection_limit_enforced is false; --schema scopes SELECT instead of granting db_datareader.
+Needs database_connectors.view. The DBA replaces the script's password placeholder locally, outside the kit. Only variants this instance publishes are offered; this build publishes read_only. Omitted inputs use its defaults. For SQL Server, connection_limit_enforced is false; --schema scopes SELECT instead of granting db_datareader. For Oracle, --schema names the one schema READ covers (omitted: the placeholder YOUR_SCHEMA); a profile sets the limit.
 
 | Argument | Description |
 |---|---|
@@ -1968,6 +1968,7 @@ Needs database_connectors.view. The DBA replaces the script's password placehold
 
 | Option | Description | MCP |
 |---|---|---|
+| `--dialect <dialect>` | Database dialect, as the dialect argument; give one of the two. | CLI only |
 | `--connection <connection>` | Use dialect, database, user and TLS from this saved connection (name or id). | yes |
 | `--database-name <name>` | Database the login may read (without --connection). | yes |
 | `--username <name>` | Database login name (without --connection). | yes |
@@ -1980,6 +1981,7 @@ Examples:
 
 ```bash
 cavelon db login-script postgresql --database-name shop --username cavelon_reader
+cavelon db login-script --dialect oracle --database-name SHOPPDB --username cavelon_ro --schema SHOP
 cavelon db login-script --connection shop-db --schema public
 ```
 

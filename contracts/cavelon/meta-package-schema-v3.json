@@ -619,7 +619,7 @@
           "type": "string"
         },
         "dialect": {
-          "description": "The connection's dialect: postgresql, mysql or mssql. /meta/capabilities lists under database_connector.dialects the ones this instance runs.",
+          "description": "The connection's dialect: postgresql, mysql, mssql or oracle. /meta/capabilities lists under database_connector.dialects the ones this instance runs.",
           "examples": [
             "postgresql"
           ],
@@ -644,7 +644,7 @@
           "description": "The connection the query runs on, by name and dialect."
         },
         "sql_text": {
-          "description": "One read-only statement starting with SELECT or WITH, at most 20,000 characters. Each value is a :name placeholder with a parameter of that name; a literal colon is written \\:. No INSERT, INTO, UPDATE, DELETE, EXEC, locking clause or second statement. Always bound the rows with LIMIT, TOP or FETCH FIRST. On an mssql connection it may instead be one stored-procedure call, EXEC [schema].[procedure] @p1 = :p1, @p2 = :p2, every argument a placeholder; the model gets its first result set, and the target's connection needs a login whose last test found no write privileges. With kind write instead exactly one INSERT, UPDATE or DELETE (on mssql also one EXEC of a procedure that writes), an UPDATE or DELETE with a WHERE that uses a :parameter. A parameter with list true stands only as IN (:name) or NOT IN (:name).",
+          "description": "One read-only statement starting with SELECT or WITH, at most 20,000 characters. Each value is a :name placeholder with a parameter of that name; a literal colon is written \\:. No INSERT, INTO, UPDATE, DELETE, EXEC, locking clause or second statement. Always bound the rows with LIMIT, TOP or FETCH FIRST. On an oracle connection also no PL/SQL (BEGIN, DECLARE, WITH FUNCTION), DBMS_* or UTL_* package or database link (table@link). On an mssql connection it may instead be one stored-procedure call, EXEC [schema].[procedure] @p1 = :p1, @p2 = :p2, every argument a placeholder; the model gets its first result set, and the target's connection needs a login whose last test found no write privileges. With kind write instead exactly one INSERT, UPDATE or DELETE (on mssql also one EXEC of a procedure that writes), an UPDATE or DELETE with a WHERE that uses a :parameter. A parameter with list true stands only as IN (:name) or NOT IN (:name). On oracle a write has no RETURNING.",
           "examples": [
             "SELECT number, status, shipped_at FROM orders WHERE number = :order_no AND email = :email LIMIT 5"
           ],

@@ -132,8 +132,9 @@ use it when you parse the result.
   in the Admin; preserve `credential_required_for_target_change`.
   Older instances may lack these routes or keep management person-only;
   follow their published gate and direct a person to their dashboard.
-  The dialects are `postgresql`, `mysql` and
-  `mssql` (SQL Server). A SQL Server login that can write keeps the
+  The dialects are `postgresql`, `mysql`,
+  `mssql` (SQL Server) and `oracle`; an instance accepts those its OpenAPI
+  publishes. A SQL Server login that can write keeps the
   connection's queries from running (`write_privileges_unacknowledged`) until
   it may only read or the Owner acknowledges it in the Admin, so ask for a
   read-only login. A stored-procedure query (`EXEC`, SQL Server only) needs
