@@ -195,9 +195,11 @@ cavelon db test-run stock_of_skus --value 'skus=["X-1","X-2"]'
 ```
 
 The kit refuses before sending anything a value that is not a JSON array, an
-empty one, one longer than the query's `max_items` or an item of the wrong
-JSON type. The instance checks each item's constraints. Both name a refused
-item by its position, never its value. A single-value parameter keeps its text
+empty one, an item of the wrong JSON type, or one longer than the `max_items`
+the saved query returns. Where the query returns no `max_items`, the kit sends
+the list and the instance applies its default of 20, refusing a longer list
+with `invalid_arguments`. The instance also checks each item's constraints.
+Both name a refused item by its position, never its value. A single-value parameter keeps its text
 as given, even if it looks like JSON. A workflow Tool Call node passes a list
 as a JSON array in its payload; `validate` refuses a node whose
 `input_schema` declares that argument as anything but `array` (or declares an
