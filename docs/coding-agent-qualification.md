@@ -62,6 +62,12 @@ remain separate work.
 
 Model quality and a customer's complete deployment need their own evaluation.
 
+The maintained [supervisor fixture](person-approval-qualification.md) prepares
+portable loopback deleting-import/query-limit checks for another host. Its
+automated evidence is labeled simulated; the own-terminal and Pi/OMP native
+routes require actual person interaction and separate operator attestation.
+It adds tooling, not Windows, WSL, macOS or editor acceptance.
+
 Multi-solution checks start the MCP server at a root `cavelon.yaml` without a
 harness. Child folders have separate configuration, environments and previews.
 Use `solution_dir` on each call; `harness` alone does not select a folder.

@@ -7,6 +7,13 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Added
+
+- Maintained portable person-approval supervisor for loopback child-solution
+  deleting imports and query-limit changes, with own-terminal and Pi/OMP native
+  TUI drivers, simulated safety checks and separately attested machine-readable
+  evidence. Windows, WSL, macOS and editor qualification remain open.
+
 ## [0.1.17] - 2026-10-09
 
 Cline, Kilo, Goose and OMP native setup complete the seven-client extension;
