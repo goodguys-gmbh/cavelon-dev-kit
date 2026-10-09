@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
-import { INSTALLED_MCP_COMMAND, mcpCommand } from "./mcp-command.js";
+import { currentMcpCommands, kitMcpCommands } from "./mcp-command.js";
 
 export interface McpCommand {
   command: string;
@@ -22,8 +22,17 @@ export function decodeMcpEntry(value: unknown, format: McpEntryFormat): McpComma
   return { command: words[0] as string, args: words.slice(1) as string[] };
 }
 
-/** Extra personal options mean the entry is no longer owned by setup. */
+/** Extra personal options mean the entry is no longer owned by setup; an earlier release line's entry still is. */
 export function isKitMcpEntry(value: unknown, format: McpEntryFormat, extra: Record<string, unknown> = {}): boolean {
+  return matchesAny(kitMcpCommands(), value, format, extra);
+}
+
+/** The kit's entry as this release writes it, for any system: nothing to update. */
+export function isCurrentMcpEntry(value: unknown, format: McpEntryFormat, extra: Record<string, unknown> = {}): boolean {
+  return matchesAny(currentMcpCommands(), value, format, extra);
+}
+
+function matchesAny(commands: McpCommand[], value: unknown, format: McpEntryFormat, extra: Record<string, unknown>): boolean {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  return [INSTALLED_MCP_COMMAND, mcpCommand("linux"), mcpCommand("win32")].some(command => isDeepStrictEqual(encodeMcpEntry(command, format, extra), value));
+  return commands.some(command => isDeepStrictEqual(encodeMcpEntry(command, format, extra), value));
 }

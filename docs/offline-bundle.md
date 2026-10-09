@@ -236,9 +236,11 @@ codex plugin add cavelon@cavelon-dev-kit
 
 The marketplace has the same name as the one on GitHub, `cavelon-dev-kit`, so
 `cavelon setup` then finds the plugin installed and sets up the other agents:
-Cursor, VS Code with GitHub Copilot, Gemini CLI and Kiro get the skills the
-executable carries and the `cavelon mcp` entry, with no network. Its login
-reaches only your instance.
+Cursor, VS Code with GitHub Copilot and Kiro get the skills the executable
+carries and the `cavelon mcp` entry, with no network. Where Gemini CLI is
+installed without the Cavelon extension, `setup` installs the extension from
+GitHub, so offline install it first from `plugin-packages/` (below), or leave
+it out with `--agents`. Its login reaches only your instance.
 
 **Without `cavelon setup`**, copy `skills/` into the agent's skills folder and
 the entry in `mcp/cavelon.mcp.json` into its MCP configuration; the

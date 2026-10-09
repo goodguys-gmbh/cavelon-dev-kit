@@ -103,7 +103,10 @@ bundle first ([Verify the bundle](offline-bundle.md#verify-the-bundle)).
 
 - [ ] With the customer's egress rules in force, setup, the MCP server and the
       loop worked without reaching npm, PyPI or GitHub. Offline setup writes
-      `cavelon mcp`, never `npx`.
+      `cavelon mcp`, never `npx`, once each selected plugin client (Claude
+      Code, Codex, Gemini CLI) has its plugin installed from the bundle, or
+      when `--agents` names only clients set up through files; otherwise
+      setup fetches the missing plugin or extension from GitHub.
 - [ ] A proxy, if used, worked as [Behind a proxy](installation.md#behind-a-proxy)
       describes.
 - [ ] The daily update lookup stayed quiet, or was turned off with

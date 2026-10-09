@@ -9,6 +9,7 @@ import { runProgram } from "./run-program.js";
 import { KIT_VERSION } from "./version.js";
 import { NATIVE_CLIENTS, nativeClient, hasNativeApprovalAdapter, readNativeMcp, resolveNativeMcp, type NativeMcpConfig } from "./native-clients.js";
 import { decodeMcpEntry, encodeMcpEntry, isKitMcpEntry } from "./mcp-entry.js";
+import { kitMcpCommands } from "./mcp-command.js";
 import { removeJsoncEntry, upsertJsoncEntry } from "./jsonc-config.js";
 import { removeYamlEntry, upsertYamlEntry } from "./yaml-config.js";
 import { applyNativeInstallation, checkNativeInstallation, planNativeInstallation, removeNativeInstallation, type NativeInstallPlan } from "./native-install.js";
@@ -197,17 +198,12 @@ export async function serverCommand(env: Env, platform: NodeJS.Platform = proces
   return (await findProgram("cavelon", env, platform, [".exe"])) ? INSTALLED_MCP_COMMAND : mcpCommand(platform);
 }
 
-/** Every form of the entry the kit writes, on any system: the kit's own, and so its to replace or remove. */
-function knownCommands(): ServerCommand[] {
-  return [INSTALLED_MCP_COMMAND, mcpCommand("linux"), mcpCommand("win32")];
-}
-
 function jsonEntry(mcp: Extract<McpFile, { format: "json" }>, command: ServerCommand): Record<string, unknown> {
   return { ...mcp.extra, command: command.command, args: command.args };
 }
 
 function isOwnJsonEntry(mcp: Extract<McpFile, { format: "json" }>, value: unknown): boolean {
-  return knownCommands().some((c) => JSON.stringify(jsonEntry(mcp, c)) === JSON.stringify(value));
+  return kitMcpCommands().some((c) => JSON.stringify(jsonEntry(mcp, c)) === JSON.stringify(value));
 }
 
 function tomlBlock(command: ServerCommand): string {

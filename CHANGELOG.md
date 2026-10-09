@@ -7,6 +7,59 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-09
+
+The release line moves to 0.2: the plugin and the MCP entries the kit writes
+start `npx -y @cavelon/cli@0.2 mcp` when no `cavelon` is installed, and
+`setup` and `init --update` move the entries 0.1 wrote. Database connections
+accept the `oracle` dialect where the instance publishes it.
+[Upgrading from 0.1 to 0.2](docs/upgrading-to-0.2.md) says how to move each
+part, or go back. Person approval on native Windows, WSL and macOS, and each
+customer's model, network, offline and database pilot, remain separate gates.
+
+### Added
+
+- Oracle database connections, where the instance's OpenAPI publishes the
+  dialect: `db connections create --dialect oracle`, and `db login-script
+  oracle` (or `--dialect oracle`) prints the instance's profile-based
+  read-only login script (`YOUR_SCHEMA` when no `--schema` is given).
+  `validate` warns of what the instance refuses at save time in one
+  recognizable `SELECT`/`WITH` read or `INSERT`/`UPDATE`/`DELETE` write:
+  `DBMS_*`/`UTL_*` packages, `HTTPURITYPE`, database links and PL/SQL
+  keywords (`forbidden_keyword`), and in a write also `RETURNING`
+  (`write_statement_refused`); a PL/SQL block or several statements are left
+  to the instance. `q'[…]'` literals are read as text and a trailing semicolon
+  is accepted. An instance older than Oracle refuses the dialect locally
+  where it serves its OpenAPI. (#237)
+- [Upgrading from 0.1 to 0.2](docs/upgrading-to-0.2.md): the new pin, and
+  steps for each install route, the plugin and `setup`'s files, solution
+  repositories (`init --update`), CI ranges and offline machines, with a way
+  to stay on or go back to 0.1.
+- A [customer pilot](docs/customer-pilot.md) checklist and report template:
+  credentials stay with people, the coding model and the instance's
+  execution provider are separate customer decisions, and evidence is
+  labeled automated, simulated or actual person.
+
+### Changed
+
+- The release-line pin is `@cavelon/cli@0.2` in the plugin and in the MCP
+  entries `setup` and `init --agents` write. Entries that start the installed
+  `cavelon mcp`, and the offline packages, are unchanged. Documentation, MCP
+  and CI examples name `@cavelon/cli@0.2` and `cavelon>=0.2,<0.3`. An entry
+  with personal options or another command or range keeps its pin until you
+  change it.
+
+### Fixed
+
+- An MCP entry in the exact form an earlier release line wrote
+  (`npx -y @cavelon/cli@0.1 mcp`, or its `cmd /c` form) stays the kit's own:
+  `setup` and `init --update` move it to the 0.2 line and `setup --remove`
+  takes it out, instead of leaving it as a personal server. Entries with
+  personal options, and other servers, settings and comments, stay as they
+  are. (#240)
+- `setup --agents` help names `goose` and `omp`, which setup already
+  accepted. (#242)
+
 ## [0.1.18] - 2026-10-09
 
 Saved database queries accept list parameters for `IN` and `NOT IN` filters,

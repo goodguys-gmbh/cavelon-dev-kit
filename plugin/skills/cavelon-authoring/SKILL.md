@@ -425,7 +425,10 @@ says who does what on the instance.
   `forbidden_keyword` in a read, `write_statement_refused` in a write, which
   also may not hold `RETURNING`. Text in `q'[…]'` literals, strings and
   comments is not SQL, and one trailing semicolon is accepted. Bound rows with
-  `FETCH FIRST n ROWS ONLY`. `cavelon validate` warns of each.
+  `FETCH FIRST n ROWS ONLY`. `cavelon validate` warns of these in one
+  `SELECT`/`WITH` read or `INSERT`/`UPDATE`/`DELETE` write; a PL/SQL block,
+  another first keyword or several statements get no local warning, and the
+  instance refuses them when it saves the query.
 - `cavelon explain <code>` explains every code the connector uses: what
   `validate` and the preview name, the codes of a failed call (`timeout`,
   `identity_required`, …) and of a connection test.

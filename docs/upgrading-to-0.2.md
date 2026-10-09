@@ -123,6 +123,8 @@ writes, `cavelon mcp` or `npx -y @cavelon/cli@0.1 mcp` (or `@0.2`; on Windows
 OpenCode, Pi, Kilo and OMP move through the installation `setup` recorded. An
 entry with anything else (other options, another command or range, extra
 environment) is preserved and reported, and you change it yourself.
+`setup --remove` undoes only what `setup` recorded on this computer: an entry
+it never wrote or moved stays where it is.
 `setup --check` shows the command each agent's Cavelon tools start, so an
 entry still on `@cavelon/cli@0.1` stands out.
 
@@ -208,9 +210,20 @@ claude plugin marketplace remove cavelon-dev-kit
 claude plugin marketplace add "$PWD" && claude plugin install cavelon@cavelon-dev-kit
 codex plugin marketplace remove cavelon-dev-kit
 codex plugin marketplace add "$PWD" && codex plugin add cavelon@cavelon-dev-kit
-cavelon setup                                         # writes `cavelon mcp` entries; fetches nothing
+cavelon setup                                         # writes `cavelon mcp` entries
 cavelon setup --check
 ```
+
+With `cavelon` installed from the bundle, every entry `setup` writes starts
+`cavelon mcp`, so the MCP server needs no network. Installing a client's
+plugin does: where Claude Code or Codex lacks the `cavelon-dev-kit`
+marketplace, `setup` adds it from GitHub, and where Gemini CLI is installed
+without the Cavelon extension, `setup` installs the extension from GitHub.
+Offline, those steps fail. So first install the plugin of every such client
+from the bundle (Claude Code and Codex above; Gemini CLI from the bundle's
+`plugin-packages/`, as [its page](install/gemini-cli.md#install) says for a
+downloaded package), or name only the agents `setup` sets up through files,
+for example `cavelon setup --agents cursor,kiro,qwen`.
 
 Then step 3 in each solution repository. Offline, `cavelon --version` still
 names the online update command; the next verified bundle is the update.
@@ -244,7 +257,8 @@ so pin them too.
 To go back after upgrading, undo in this order. 0.1.18 does not recognize the
 entries 0.2 writes, so 0.2 has to remove them:
 
-1. With 0.2 still installed, remove what `setup` set up (your login stays):
+1. With 0.2 still installed, remove what `setup` set up (your login stays;
+   entries `setup` did not record stay too, and step 6 covers them):
 
    ```bash
    cavelon setup --remove

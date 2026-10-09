@@ -6,7 +6,7 @@ import { AGENTS, bundledSkills, generatedCopy, parseAgents, KNOWN_SKILL_ROOTS, s
 import { nativeClient, resolveNativeMcp, hasNativeApprovalAdapter } from "../native-clients.js";
 import { applyNativeInstallation, planNativeInstallation } from "../native-install.js";
 import { serverCommand } from "../setup-agents.js";
-import { encodeMcpEntry, isKitMcpEntry } from "../mcp-entry.js";
+import { encodeMcpEntry, isCurrentMcpEntry, isKitMcpEntry } from "../mcp-entry.js";
 import { upsertJsoncEntry } from "../jsonc-config.js";
 import { CavelonError, ExitCode, usageError } from "../errors.js";
 import { confinedPath, realPath, within } from "../paths.js";
@@ -257,7 +257,7 @@ async function writeMcp(root: string, target: McpTarget, onlyExisting: boolean, 
     if (!hasNativeApprovalAdapter(config)) {
       const selected = await resolveNativeMcp(config, root);
       if ("error" in selected) return { file: rel(root, selected.file), action: "skipped", reason: selected.error };
-      if (selected.current !== undefined && isKitMcpEntry(selected.current, config.entryFormat, config.extra)) return { file: rel(root, selected.file), action: "unchanged" };
+      if (selected.current !== undefined && isCurrentMcpEntry(selected.current, config.entryFormat, config.extra)) return { file: rel(root, selected.file), action: "unchanged" };
       const value = encodeMcpEntry(await serverCommand(env), config.entryFormat, config.extra);
       return applyBlock(root, selected.file, upsertJsoncEntry(selected.text, config.keys, value,
         { onlyExisting, matches: current => isKitMcpEntry(current, config.entryFormat, config.extra) }));

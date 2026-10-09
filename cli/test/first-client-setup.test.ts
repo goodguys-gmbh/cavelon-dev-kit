@@ -74,7 +74,7 @@ describe("OpenCode and Pi setup", () => {
       expect(read(jsoncFile)).toContain("// operator settings");
       expect(existsSync(path.join(openCodeProject, "opencode.json"))).toBe(false);
       expect(existsSync(path.join(openCodeProject, ".pi"))).toBe(false);
-      const installedJsonc = '{\n// operator settings\n"mcp":{"cavelon":{"type":"local","command":["cmd","/c","npx","-y","@cavelon/cli@0.1","mcp"]}}\n}\n';
+      const installedJsonc = '{\n// operator settings\n"mcp":{"cavelon":{"type":"local","command":["cmd","/c","npx","-y","@cavelon/cli@0.2","mcp"]}}\n}\n';
       writeFileSync(jsoncFile, installedJsonc);
       expect((await cli(sb, ["init", "--update", "--json"], { cwd: openCodeProject })).code).toBe(0);
       expect(read(jsoncFile)).toBe(installedJsonc);
