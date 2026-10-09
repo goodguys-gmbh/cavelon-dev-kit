@@ -13,7 +13,7 @@ const temporary: string[] = [];
 afterEach(() => { for (const dir of temporary.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 
 it("provisions the locked client and transitive dependency without consulting a changing registry", async () => {
-  const dir = mkdtempSync(path.join(os.tmpdir(), "cavelon-provision-"));
+  const dir = mkdtempSync(path.join(os.tmpdir(), "cavelon-provision-~with space-"));
   temporary.push(dir);
   const scripts = path.join(dir, ".github/scripts");
   const locks = path.join(dir, "cli/test/fixtures/coding-client-locks");
@@ -32,7 +32,9 @@ it("provisions the locked client and transitive dependency without consulting a 
     const archive = path.join(dir, `${name}.tgz`);
     writeFileSync(archive, bytes);
     packages[`node_modules/${name}`] = {
-      version: manifest.version, resolved: pathToFileURL(archive).href,
+      // npm file specs are paths, not percent-encoded file URLs. This also
+      // avoids encoding the Windows runner's RUNNER~1 temporary directory.
+      version: manifest.version, resolved: `file:../${name}.tgz`,
       integrity: `sha512-${createHash("sha512").update(bytes).digest("base64")}`,
       ...(name === client ? { dependencies: manifest.dependencies } : {}),
     };
@@ -41,10 +43,14 @@ it("provisions the locked client and transitive dependency without consulting a 
   writeFileSync(path.join(locks, "cline.json"), lockBytes);
   writeFileSync(path.join(locks, "../coding-client-runtimes.json"), JSON.stringify({ cline: { package: client, version: "1.0.0" } }));
   const runtime = path.join(dir, "runtime");
+  // Windows environment keys are case-insensitive; an inherited uppercase
+  // NPM_CONFIG_CACHE must not win over the isolated fixture configuration.
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
+    !["npm_config_cache", "npm_config_offline", "npm_config_registry"].includes(key.toLowerCase())));
   const result = spawnSync(process.execPath, [path.join(scripts, "provision-coding-client.mjs"), "cline"], {
     encoding: "utf8", timeout: 15_000,
     // An empty cache and offline mode make any fresh registry resolution fail.
-    env: { ...process.env, CAVELON_CLIENT_RUNTIME: runtime, npm_config_cache: path.join(dir, "cache"), npm_config_offline: "true", npm_config_registry: "http://127.0.0.1:1" },
+    env: { ...env, CAVELON_CLIENT_RUNTIME: runtime, npm_config_cache: path.join(dir, "cache"), npm_config_offline: "true", npm_config_registry: "http://127.0.0.1:1" },
   });
   expect(result.status, result.stderr).toBe(0);
   for (const name of [client, dependency]) {
