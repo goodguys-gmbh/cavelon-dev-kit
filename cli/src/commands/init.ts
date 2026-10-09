@@ -9,7 +9,7 @@ import { serverCommand } from "../setup-agents.js";
 import { encodeMcpEntry, isCurrentMcpEntry, isKitMcpEntry } from "../mcp-entry.js";
 import { upsertJsoncEntry } from "../jsonc-config.js";
 import { CavelonError, ExitCode, usageError } from "../errors.js";
-import { cacheDir, configDir, confinedPath, realPath, within } from "../paths.js";
+import { privateDirs, confinedPath, realPath, within } from "../paths.js";
 import { solutionPath, solutionPaths } from "../file-boundary.js";
 import { readTextFile, withoutBom, writeFileAtomic } from "../fsutil.js";
 import { git } from "../git.js";
@@ -677,7 +677,7 @@ async function checkInitPaths(ctx: Context, root: string, agents: AgentTarget[],
   const files = [PROJECT_FILE, ...layouts, "tests", "seeds", "env/test.yaml", "env/prod.yaml", STATE_DIR, "AGENTS.md", "CLAUDE.md", ".gitignore",
     ...roots, ...roots.flatMap(dir => skills.flatMap(skill => skill.files.map(file => `${dir}/${skill.name}/${file.path}`))),
     ...(update ? AGENTS : agents).flatMap(agent => agent.mcp && agent.mcp.format !== "native" ? [agent.mcp.file] : [])];
-  await solutionPaths(root, files, [configDir(ctx.io.env), cacheDir(ctx.io.env)].map(dir => path.resolve(ctx.io.cwd, dir)));
+  await solutionPaths(root, files, privateDirs(ctx.io.env));
   await checkStatePaths(root);
 }
 

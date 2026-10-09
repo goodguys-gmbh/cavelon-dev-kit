@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import type { Io } from "./io.js";
 import { CavelonError, ExitCode, usageError } from "./errors.js";
-import { cacheDir, configDir, realPath, within } from "./paths.js";
+import { privateDirs, realPath, within } from "./paths.js";
 
 /** A per-call cwd; never change the process or another call's workspace. */
 export async function solutionDirectory(io: Io, selection: unknown): Promise<{ io: Io; selected?: string; directory?: string }> {
@@ -19,8 +19,8 @@ export async function solutionDirectory(io: Io, selection: unknown): Promise<{ i
       hint: "Select a folder inside the workspace, or start a separate MCP session in that repository.",
     });
   }
-  for (const privateDir of [configDir(io.env), cacheDir(io.env)]) {
-    if (within(await realPath(path.resolve(io.cwd, privateDir)), directory, true)) {
+  for (const privateDir of privateDirs(io.env)) {
+    if (within(await realPath(privateDir), directory, true)) {
       throw new CavelonError(ExitCode.usage, {
         code: "path_in_kit_directory",
         message: "solution_dir cannot select cavelon's credential or cache directory; nothing was done.",

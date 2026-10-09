@@ -9,7 +9,7 @@ import { detectShell, useShell } from "./shell.js";
 import { checkStatePaths } from "./local-state.js";
 import { promises as fs } from "node:fs";
 import { checkPrivatePaths, solutionPaths } from "./file-boundary.js";
-import { cacheDir, configDir } from "./paths.js";
+import { privateDirs as kitPrivateDirs } from "./paths.js";
 import path from "node:path";
 
 export function createContext(io: Io, globals: GlobalOptions, mode: "cli" | "mcp" = "cli"): Context {
@@ -35,7 +35,7 @@ export function createContext(io: Io, globals: GlobalOptions, mode: "cli" | "mcp
         const session = await resolveSession(io.env, io.cwd, globals);
         const project = session.project;
         if (project) {
-          const privateDirs = [configDir(io.env), cacheDir(io.env)].map(dir => path.resolve(io.cwd, dir));
+          const privateDirs = kitPrivateDirs(io.env);
           const dirs = [project.layout.package, ...Object.values(project.layout.items), ".cavelon", "env"];
           await solutionPaths(project.root, dirs, privateDirs);
           await checkStatePaths(project.root);

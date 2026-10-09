@@ -33,6 +33,12 @@ export function cacheDir(env: Env): string {
   return path.join(homeDir(env), ".cache", "cavelon");
 }
 
+/** Match filesystem reads: relative private directories belong to the process cwd,
+ * never the per-call solution_dir selected by an MCP request. */
+export function privateDirs(env: Env): string[] {
+  return [configDir(env), cacheDir(env)].map(dir => path.resolve(dir));
+}
+
 /**
  * A file-system-safe name for an instance URL: its host, port and path to read,
  * then a hash of the whole URL. The readable part folds `:` and `/` into `_` and
@@ -70,8 +76,8 @@ export async function confinedPath(ctx: Context, raw: string, what: string, conf
       hint: "Name a file inside the solution folder, or ask the person to run the command in their terminal.",
     });
   }
-  for (const dir of [configDir(ctx.io.env), cacheDir(ctx.io.env)]) {
-    if (within(await realPath(path.resolve(ctx.io.cwd, dir)), real, true)) {
+  for (const dir of privateDirs(ctx.io.env)) {
+    if (within(await realPath(dir), real, true)) {
       throw new CavelonError(ExitCode.usage, {
         code: "path_in_kit_directory",
         message: `${what} ${raw} is in cavelon's own directory ${dir}, which holds its login and cache; no tool reads or writes there.`,

@@ -187,3 +187,26 @@ it.each(["posix", "powershell", "cmd"] as const)("selected-folder next steps and
     expect(shown.person).toBe(`${prefixes[shell]}cavelon apply --env test --confirm pv_example${shell === "powershell" ? " }" : ""}`);
   } finally { useShell(previous); }
 });
+
+
+it.each(["CAVELON_CONFIG_DIR", "CAVELON_CACHE_DIR"])("a child MCP call cannot read relative %s anchored to the server process", async setting => {
+  const saved = { ...sb.env };
+  const privateDir = path.join(root, directories[0]!, ".private", setting.toLowerCase());
+  mkdirSync(privateDir, { recursive: true });
+  writeFileSync(path.join(privateDir, "probe.json"), JSON.stringify({ value: "synthetic-private-sentinel" }));
+  sb.env[setting] = path.relative(process.cwd(), privateDir);
+  sb.env.CAVELON_URL = server.url;
+  sb.env.CAVELON_TOKEN = server.addToken({ kind: "pat", tenantIds: [tenant], defaultTenant: tenant });
+  const s = await session("declines");
+  try {
+    const result = await s.call("api", { solution_dir: directories[0], operation: "set_variable", params: ["name=probe"], body: `@.private/${setting.toLowerCase()}/probe.json` });
+    expect(result.body.error?.code, JSON.stringify(result.body)).toBe("path_in_kit_directory");
+    expect(JSON.stringify(result.body)).not.toContain("synthetic-private-sentinel");
+    expect(s.client.asked).toEqual([]);
+    expect(server.state.requests.filter(r => r.method !== "GET")).toEqual([]);
+  } finally {
+    await s.client.close();
+    for (const key of Object.keys(sb.env)) delete sb.env[key];
+    Object.assign(sb.env, saved);
+  }
+});

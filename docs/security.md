@@ -434,7 +434,9 @@ parent directory already exists. `init` checks its generated destinations before
 creating a draft or writing files; local state and previews in `.cavelon/`,
 environment files, and instruction files must also stay inside the solution.
 A link cannot point into the kit's credential or cache directory, even when that
-directory is inside the workspace. Links within the solution remain supported.
+directory is inside the workspace. Links within the solution remain supported. Relative config/cache locations stay
+anchored to the server process directory when an MCP call selects a child
+solution; selection never moves the private-file exclusion.
 
 ## Reporting a vulnerability
 
