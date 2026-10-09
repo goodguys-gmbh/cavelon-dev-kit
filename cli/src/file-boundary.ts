@@ -1,6 +1,11 @@
-import { promises as fs } from "node:fs";
+import { realpath } from "node:fs";
 import path from "node:path";
+import { promisify } from "node:util";
 import { CavelonError, ExitCode } from "./errors.js";
+
+// Bun 1.4.2's promise API drops the separator from Windows drive roots.
+// The native API preserves absolute paths, as Node's promise API does.
+const nativeRealPath = promisify(realpath.native);
 
 /** Resolve missing children through their nearest existing ancestor too. */
 export async function realPath(file: string): Promise<string> {
@@ -8,7 +13,7 @@ export async function realPath(file: string): Promise<string> {
   let current = path.resolve(file);
   for (;;) {
     try {
-      return path.join(await fs.realpath(current), ...rest.reverse());
+      return path.join(await nativeRealPath(current), ...rest.reverse());
     } catch (error) {
       const parent = path.dirname(current);
       if ((error as NodeJS.ErrnoException).code !== "ENOENT" || parent === current) throw error;

@@ -7,6 +7,11 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserve Windows drive roots during manifest discovery in the standalone
+  executable, avoiding an incorrect `path_outside_solution` refusal. (#253)
+
 ## [0.2.1] - 2026-10-09
 
 This patch keeps solution-owned files within their solution and preserves the
