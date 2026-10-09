@@ -102,11 +102,18 @@ standalone executable and generated setup in a multi-solution root. It validates
 previews/imports an ordinary draft, runs/waits for a synthetic suite and reads
 its trace, then repeats after one bounded prompt improvement.
 
-Pins live in `cli/test/fixtures/coding-client-runtimes.json`. Provisioning needs
+Pins live in `cli/test/fixtures/coding-client-runtimes.json`; each npm client's
+complete dependency graph lives in `cli/test/fixtures/coding-client-locks/`.
+Provisioning uses `npm ci` so a later transitive release cannot change a
+qualified client. When updating a client pin, generate its lock with
+`npm install --package-lock-only --ignore-scripts --save-exact <package>@<version>`
+in an empty directory, copy `package-lock.json` to that client's lock fixture,
+then qualify it on all three platforms. Generate without `node_modules` so the
+lock retains every platform's optional native packages. Provisioning needs
 network access to fetch those public clients; the runtime uses only a fake
 loopback instance and scripted loopback provider responses. Goose archives are
 checked against pinned release SHA-256 digests; npm package integrity and the
-installed version are recorded. OMP uses Bun 1.3.14 after Cavelon's standalone
+installed version and dependency-lock SHA-256 are recorded. OMP uses Bun 1.3.14 after Cavelon's standalone
 build. Each fixture isolates personal profiles, bounds the client run at 90
 seconds and cleans up its own process tree. It never supplies a person answer,
 requests an instance confirmation or changes a real tenant.

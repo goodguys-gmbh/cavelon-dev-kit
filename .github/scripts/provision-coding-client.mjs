@@ -33,8 +33,21 @@ function execute(exe, args) {
   return result.stdout.trim();
 }
 
-let source, integrity;
+let source, integrity, dependencyLockSha256;
 if (pin.package) {
+  const lockBytes = await readFile(path.join(repo, 'cli/test/fixtures/coding-client-locks', `${client}.json`));
+  const lock = JSON.parse(lockBytes);
+  const dependencies = lock.packages?.['']?.dependencies;
+  const entry = lock.packages?.[`node_modules/${pin.package}`];
+  if (lock.lockfileVersion !== 3 || Object.keys(dependencies ?? {}).length !== 1
+      || dependencies[pin.package] !== pin.version || entry?.version !== pin.version) {
+    throw new Error('Client dependency lock differs from the pin; regenerate it before qualification.');
+  }
+  // Direct client pins still admit new transitive releases. Reuse the entire
+  // qualified graph, including native packages for the other CI platforms.
+  await writeFile(path.join(runtime, 'package.json'), JSON.stringify({ private: true, dependencies }, null, 2));
+  await writeFile(path.join(runtime, 'package-lock.json'), lockBytes);
+  dependencyLockSha256 = createHash('sha256').update(lockBytes).digest('hex');
   // Use Node to invoke npm's CLI on Windows too; spawning npm.cmd needs a shell.
   const candidates = [process.env.npm_execpath, path.join(path.dirname(process.execPath), process.platform === 'win32' ? 'node_modules/npm/bin/npm-cli.js' : '../lib/node_modules/npm/bin/npm-cli.js')];
   for (const folder of (process.env.PATH ?? '').split(path.delimiter)) {
@@ -43,11 +56,9 @@ if (pin.package) {
   }
   const npm = candidates.find(file => file && existsSync(file) && path.basename(file) === 'npm-cli.js');
   if (!npm) throw new Error('Cannot locate npm-cli.js; set npm_execpath explicitly.');
-  execute(process.execPath, [npm, 'install', '--prefix', runtime, '--save-exact', '--no-audit', '--no-fund', `${pin.package}@${pin.version}`]);
+  execute(process.execPath, [npm, 'ci', '--prefix', runtime, '--no-audit', '--no-fund']);
   const installed = JSON.parse(await readFile(path.join(runtime, 'node_modules', pin.package, 'package.json'), 'utf8'));
   if (installed.version !== pin.version) throw new Error('Installed client version differs from the pin.');
-  const lock = JSON.parse(await readFile(path.join(runtime, 'package-lock.json'), 'utf8'));
-  const entry = lock.packages[`node_modules/${pin.package}`];
   source = entry.resolved;
   integrity = entry.integrity;
 } else {
@@ -81,5 +92,5 @@ if (pin.package) {
   if (process.platform !== 'win32') await chmod(installed, 0o700);
   if (!execute(installed, ['--version']).includes(pin.version)) throw new Error('Goose binary version differs from the pin.');
 }
-await writeFile(path.join(evidence, `${client}-${process.platform}-${process.arch}-provision.json`), JSON.stringify({ client, version: pin.version, platform: `${process.platform}-${process.arch}`, source, integrity }, null, 2));
+await writeFile(path.join(evidence, `${client}-${process.platform}-${process.arch}-provision.json`), JSON.stringify({ client, version: pin.version, platform: `${process.platform}-${process.arch}`, source, integrity, dependencyLockSha256 }, null, 2));
 process.stdout.write(`Provisioned ${client} ${pin.version} for ${process.platform}/${process.arch}.\n`);
