@@ -60,6 +60,9 @@ const mcp: CommandSpec = {
   mcpTool: false,
   options: { env: { type: "string", value: "<name>", description: "Start with env/<name>.yaml's tenant, solution and runtime bindings; --yolo stays bound to this environment." } },
   async run(ctx) {
+    // An explicitly selected environment must exist before opening stdio;
+    // otherwise the launcher waits forever instead of reporting its typo.
+    if (ctx.globals.solutionEnv) await ctx.session();
     const { createMcpServer } = await import("../mcp.js");
     const { StdioServerTransport } = await import("@modelcontextprotocol/sdk/server/stdio.js");
     const server = createMcpServer(ctx.io, COMMANDS, {}, ctx.globals);
