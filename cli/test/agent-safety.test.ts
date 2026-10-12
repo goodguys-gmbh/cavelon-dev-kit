@@ -151,11 +151,9 @@ describe("skills", () => {
     // Both pages are in the snapshot's docs index, so the commands the skills name find them.
     const index = readFileSync(path.join(CONTRACTS, "docs", "llms.txt"), "utf8");
     for (const page of [CAPACITY_TUTORIAL_PAGE, CAPACITY_CONCEPT_PAGE]) expect(index).toContain(`/api/v1/docs/${page}.md)`);
-    // An agent proposes a limit and the person decides.
+    // The documented command stays discoverable. Runtime confirmation tests
+    // cover personal approval without pinning the skills' prose.
     expect(authoring).toMatch(/cavelon models set-limit\s+<model_id> <n\|none>/);
-    expect(authoring).toMatch(/\*\*Propose a limit; the person decides\.\*\*/);
-    expect(authoring).toMatch(/never raise or lower a limit without telling them/);
-    expect(longRunning).toMatch(/The person decides; only then run\s+`cavelon models set-limit/);
   });
 });
 

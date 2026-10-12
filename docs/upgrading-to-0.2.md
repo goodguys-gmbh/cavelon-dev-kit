@@ -37,11 +37,13 @@ release, and commands that name 0.2 find nothing.
 
 What stays the same:
 
-- **A person approves every guarded change, freshly.** The kit asks the person
-  before each guarded change, in the client's dialog where that is qualified,
+- **A person approves each critical change, freshly.** The kit asks the person
+  before each critical change, in the client's dialog where that is qualified,
   otherwise in their own terminal. The instance binds its confirmation to the
   token, tenant and exact request; it does not check the person's answer. An
-  earlier yes never covers another change.
+  earlier yes never covers another critical change. The current
+  [confirmation policy](confirmations.md) keeps routine work moving and
+  provides an explicit, scoped `--yolo` option.
 - **Your login.** Upgrading needs no new token and no new login. Tokens stay
   in your credential store; log in only from your own terminal, never from an
   agent's shell.

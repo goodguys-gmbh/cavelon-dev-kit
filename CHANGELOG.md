@@ -7,6 +7,19 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Added
+
+- Opt-in `--yolo` for a CLI invocation or MCP process automatically previews
+  and executes eligible routine changes within one target scope. Critical
+  changes still require a person's answer; permissions and request binding
+  remain unchanged. See [Confirmations and YOLO mode](docs/confirmations.md).
+
+### Changed
+
+- Routine draft work and known routine generic API changes no longer ask for
+  an extra chat approval. Default mode retains exact-preview confirmation;
+  a critical change uses one native dialog or the person's own terminal.
+
 ## [0.2.1] - 2026-10-09
 
 This patch keeps solution-owned files within their solution and preserves the

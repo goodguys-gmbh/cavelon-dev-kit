@@ -25,6 +25,8 @@ import { CONFIRM_TOKEN, confirmInTerminal, confirmThroughClient, confirmToken, c
 import { actingTarget, targetLine } from "../acting.js";
 import { accessFor, operationAccess, type CredentialAccess, type OperationAccess } from "../access.js";
 import { cavelonCommand, fill, personCommand } from "../printed.js";
+import { apiApproval } from "../api-approval-policy.js";
+import { yoloAllows } from "../automation-policy.js";
 
 /** Said once when `--json` carried the body: the alias goes away in a later release. */
 export const JSON_BODY_DEPRECATED =
@@ -267,9 +269,10 @@ export const api: CommandSpec = {
     "As an MCP tool, or run by a coding agent (" +
     AGENT_VARIABLES.filter((v) => v.variable !== "CAVELON_AGENT").map((v) => (v.value ? `${v.variable}=${v.value}` : v.variable)).join(", ") +
     "\nor CAVELON_AGENT=1 is set), an operation that changes something returns what it would send and a confirm token,\n" +
-    "and sends it only with that token and the person's yes: as an MCP tool, confirm: \"<token>\", after which the client\n" +
-    "asks the person; from an agent's shell, the person sends it from their own terminal. A changed request needs a new\n" +
-    "preview; confirm: true is refused.\n" +
+    "and sends it with that token. Known draft creation and cloning need no personal approval; explicit --yolo also\n" +
+    "skips their token round trip within its bound scope. Known import previews and database catalog reads send at once.\n" +
+    "Other changes still need the person's yes: the MCP client asks them, or they send it from their own terminal.\n" +
+    "A changed request needs a new preview; confirm: true is refused. Instance confirmation requirements always win.\n" +
     "Run by an agent, one the instance marks for a person only (x-cavelon-person-only) is refused, as is a body that\n" +
     "sets a field the instance marks as a secret value (x-cavelon-secret) and a file outside the solution folder. On an\n" +
     "instance that marks no operation, one that changes a secret, creates or revokes a credential or decides an\n" +
@@ -293,8 +296,8 @@ export const api: CommandSpec = {
       value: "<token>",
       mcpToken: true,
       description:
-        "Send an operation that changes something: run by a coding agent or as an MCP tool, the token its preview returned. " +
-        "Without it, nothing is sent. A person's terminal sends at once.",
+        "Send a previewed operation: run by a coding agent or as an MCP tool, the token its preview returned. " +
+        "Known routine changes need no person; other changes require personal approval. A person's terminal sends at once.",
     },
     limit: { type: "string", value: "<n>", description: "Show at most n items of a list response (default 50, 0 for all)." },
   },
@@ -348,7 +351,7 @@ export const api: CommandSpec = {
         ...(rawBody !== undefined ? ["--body", rawBody] : []),
         ...listOption(input, "file").flatMap((f) => ["--file", f]),
       ];
-      const preview = await previewUnlessConfirmed(ctx, input, doc, op, args, driven, personCommand(...words));
+      const preview = await previewUnlessConfirmed(ctx, input, doc, op, args, driven, words);
       if (preview) return preview;
     }
     // A person's own terminal sends what they typed: the instance's confirmation is asked for if the instance asks for it.
@@ -374,12 +377,10 @@ export const api: CommandSpec = {
 
 /**
  * What a changing operation would send, when an agent has not confirmed it
- * yet; undefined when it has. Over MCP and from an agent's shell alike, only
- * the token of this very request sends it, so the agent has to show the
- * preview before it can send, and cannot send another body than it showed.
- * `api` reaches every operation, the live and tenant-wide ones too, so the
- * token is not enough: the person approves in the MCP client's dialog, or
- * sends it from their own terminal (`command`).
+ * yet; undefined when allowed. Known routine effects use a request token
+ * without a personal dialog (or scoped YOLO for the first call). Unknown,
+ * shared and instance-guarded effects still require a person's approval.
+ * A supplied stale token is never ignored, including on read-only POSTs.
  */
 async function previewUnlessConfirmed(
   ctx: Context,
@@ -388,29 +389,38 @@ async function previewUnlessConfirmed(
   op: Operation,
   args: CallArguments,
   driven: DrivenBy,
-  command: string,
+  words: string[],
 ): Promise<CommandResult | undefined> {
   const given = input.options.confirm;
   if (given === true) throw confirmTokenRequired("api");
   const request = previewRequest(doc, op, args);
+  const policy = apiApproval(op, args);
+  const needsPerson = policy === "person";
+  const harness = op.path === "/api/v1/harnesses/{harness_id}/clone" ? { id: args.params?.harness_id?.at(-1) ?? "" } : undefined;
+  if ((given === undefined || given === false) &&
+      (policy === "read" || policy === "routine" && await yoloAllows(ctx, harness))) return undefined;
   const files = (args.files ?? []).map((f) => ({ field: f.field, file: path.relative(ctx.io.cwd, f.path) || f.path }));
   const session = await ctx.session();
   const token = confirmToken({ url: session.url, tenant: session.tenant }, "api", { request, files });
   const route = personRoute(ctx, driven);
+  const command = personCommand(...words);
   if (typeof given === "string" && given === token) {
-    await personApproves(ctx, driven, { tool: "api", what: `Send ${request.method} ${request.path} (${op.alias}).`, command });
+    if (needsPerson) await personApproves(ctx, driven, { tool: "api", what: `Send ${request.method} ${request.path} (${op.alias}).`, command });
     return undefined;
   }
   const stale = typeof given === "string" && given !== "";
   // `--confirm` alone, which splitConfirm passes on as an empty token: it shows the preview, as in every changing command.
   const bare = given === "" && driven.by === "agent";
-  const confirm = route === "client" ? confirmThroughClient("api", token) : confirmInTerminal(command);
+  const confirm = needsPerson
+    ? route === "client" ? confirmThroughClient("api", token) : confirmInTerminal(command)
+    : driven.by === "mcp" ? `Call api again with the same arguments and confirm: "${token}". No personal approval is needed for this routine operation.`
+      : personCommand(...words, "--confirm", token);
   // Where it would go: the person who approves sees the tenant an agent passed, or that none is chosen.
   const target = await actingTarget(ctx);
   const shown = { operation: op.alias, ...request, ...(files.length ? { files } : {}), target, sent: false };
   const lines = [`Would send ${request.method} ${request.path}. Nothing was sent.`, targetLine(target)];
   if (stale) lines.push("The confirm token is not this request's: the request changed since its preview, or the token is another one's.");
-  if (bare && driven.by === "agent") lines.push("A coding agent cannot send it: the person sends it from their own terminal.");
+  if (bare) lines.push(needsPerson ? "A coding agent cannot send it: the person sends it from their own terminal." : "Pass this request's confirm token; a bare --confirm sends nothing.");
   if (op.confirmation) {
     lines.push(
       `The instance requires a confirmation bound to this request (x-cavelon-confirmation)${op.confirmationWhen ? `: ${op.confirmationWhen}` : ""}`,
@@ -425,9 +435,9 @@ async function previewUnlessConfirmed(
   return {
     data: {
       ...shown,
-      ...(route === "client" ? { confirm_token: token } : {}),
+      ...(!needsPerson || route === "client" ? { confirm_token: token } : {}),
       confirm,
-      needs_person: route,
+      ...(needsPerson ? { needs_person: route } : {}),
       ...(op.confirmation ? { instance_confirmation: op.confirmationWhen ?? true } : {}),
       ...(stale ? { token_mismatch: true } : {}),
       ...(bare ? { token_required: true } : {}),

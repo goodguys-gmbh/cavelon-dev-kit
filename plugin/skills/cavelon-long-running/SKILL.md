@@ -66,12 +66,19 @@ cavelon wait <operation-id> --timeout 90s            # exit 0 done, 1 failed, 5 
 
 A loop started from `cavelon` runs **as the person whose token it is**, checked
 again on every iteration, and spends the tenant's budget. So `loop start`
-previews first and starts nothing without `--confirm`. For a trigger of a
+previews first and normally starts nothing without `--confirm`. For a trigger of a
 draft solution, run the confirm command it prints (from your shell it carries
 the preview's token; over MCP call `loop_start` again with `confirm` set to its
 `confirm_token`). Any other run needs the person's yes (`needs_person` in the
 preview): over MCP the client asks them when you confirm with the token; from
-your shell the preview names the command they run in their own terminal. If `loop start` exits 8 (a timeout, a cut
+your shell the preview names the command they run in their own terminal.
+Do not ask for a separate chat approval before the native dialog. Reading and
+confirming a routine draft preview within the requested work needs no extra
+question. Explicit `--yolo` can combine preview and start for a trigger of the
+selected draft solution within the process's original scope. It follows the
+cavelon-loop skill's critical-change rules and grants no extra budget or
+standing authority.
+If `loop start` exits 8 (a timeout, a cut
 connection), the run may have started: retry only with the
 `--idempotency-key <key>` its error names, never without it, or a second run
 starts and spends the budget again. `cavelon trace <operation-id>` reads the
@@ -130,8 +137,8 @@ Two reasons end work for capacity; each has its code in `cavelon explain`:
   `max_concurrent_requests` and no slot freed within
   `model_endpoint_slot_wait_seconds`. Retry later, or, if the endpoint can serve
   more, propose raising the Model Registry row's `max_concurrent_requests`
-  (`cavelon models list` shows it). The person decides; only then run
-  `cavelon models set-limit <model_id> <n>`: over MCP the client asks the person
+  (`cavelon models list` shows it). Preview `cavelon models set-limit
+  <model_id> <n>` for the person's decision: over MCP the client asks the person
   when you confirm with the token; from your shell the person runs the confirm
   command it prints in their own terminal.
 

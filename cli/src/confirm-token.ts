@@ -110,7 +110,7 @@ export async function confirmation(
   input: Input,
   tool: string,
   change: unknown,
-  options: PlatformTarget & { person?: PersonChange } = {},
+  options: PlatformTarget & { person?: PersonChange; automatic?: boolean } = {},
 ): Promise<Confirmation> {
   const gate = await gateOf(ctx, input, tool, change, options);
   if (gate.confirmed) return { ...gate, where: "" };
@@ -124,11 +124,16 @@ async function gateOf(
   input: Input,
   tool: string,
   change: unknown,
-  options: PlatformTarget & { person?: PersonChange },
+  options: PlatformTarget & { person?: PersonChange; automatic?: boolean },
 ): Promise<Omit<Confirmation, "where">> {
   const given = input.options.confirm;
   const driven = drivenByAgent(ctx);
   const tokenGiven = typeof given === "string" && given !== "";
+  // The caller established routine effects and checked the process scope. A
+  // supplied token/flag still follows the normal checks, including stale ones.
+  if (options.automatic && !options.person && given === undefined) {
+    return { confirmed: true, fields: {}, confirm: (command) => command };
+  }
   // In a person's own terminal, the confirm is the person's yes: the instance's confirmation may be asked for.
   const approve = () => {
     if (!driven) ctx.approved = { guarded: Boolean(options.person) };
@@ -173,7 +178,7 @@ async function gateOf(
       confirmed: false,
       fields: { confirm_token: token, token_required: true },
       confirm,
-      mismatch: `--confirm alone does not confirm when a coding agent runs cavelon. Nothing was changed: show the person this preview, and with their yes run the command below, which carries this change's token.`,
+      mismatch: `--confirm alone does not confirm when a coding agent runs cavelon. Nothing was changed: review this preview against the requested work, then run the command below, which carries this change's token.`,
       exitCode: ExitCode.needsAction,
     };
   }
@@ -243,7 +248,7 @@ export function needsPerson(command: string): CavelonError {
 
 /** A preview's `confirm` over MCP when the client asks the person. */
 export function confirmThroughClient(tool: string, token: string): string {
-  return `Show the person this, then call ${tool} again with the same arguments and confirm: "${token}": the client then asks the person to approve exactly this change, and nothing changes without their yes.`;
+  return `Call ${tool} again with the same arguments and confirm: "${token}": the client asks the person to approve exactly this change. Do not ask for an additional chat confirmation; nothing changes without the dialog's yes.`;
 }
 
 /** A preview's `confirm` when only the person's own terminal confirms the change. */
@@ -259,7 +264,7 @@ export function shellTokenRequired(command: string): CavelonError {
   return new CavelonError(ExitCode.needsAction, {
     code: "confirm_token_required",
     message: "--confirm alone does not confirm when a coding agent runs cavelon; nothing was changed.",
-    hint: `Run \`${command}\` without --confirm, show the person the preview, and with their yes run the command it prints, which carries the change's token.`,
+    hint: `Run \`${command}\` without --confirm and review the preview. Follow needs_person when present; otherwise confirm the requested work with the token it prints.`,
   });
 }
 
@@ -268,11 +273,11 @@ export function confirmTokenRequired(tool: string): CavelonError {
   return new CavelonError(ExitCode.usage, {
     code: "confirm_token_required",
     message: `${tool} confirms only with the confirm_token its preview returned, not with true; nothing was changed.`,
-    hint: `Call ${tool} without confirm, show the person what it would do, then call it again with the same arguments and confirm set to its confirm_token.`,
+    hint: `Call ${tool} without confirm and review the preview. Follow needs_person when present; otherwise call it again for the requested work with confirm set to its confirm_token.`,
   });
 }
 
 /** The instruction a preview gives over MCP, for its `confirm` field. */
 export function confirmWith(tool: string, token: string): string {
-  return `Show the person this, then call ${tool} again with the same arguments and confirm: "${token}" to make exactly this change.`;
+  return `Review this preview against the requested work, then call ${tool} again with the same arguments and confirm: "${token}" to make exactly this change. No additional person approval is required.`;
 }

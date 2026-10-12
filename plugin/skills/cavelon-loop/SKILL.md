@@ -86,7 +86,8 @@ use it when you parse the result.
   chose, which may be another one. The commands `cavelon` prints carry the
   `--tenant` (and `--env`) you gave, confirm lines included; run them as printed.
   Every preview names where it acts (`acts on:`, `target` in `--json`): the
-  instance, the tenant and the mode; show it to the person with the change.
+  instance, the tenant and the mode; check it against the requested work.
+  Include it whenever a change needs personal approval.
   Over MCP, `use_tenant` chooses the tenant for this session only and never
   changes the person's stored tenant. A tenant API key in `CAVELON_TOKEN` acts
   only in its own tenant: a command that names another is refused with
@@ -275,11 +276,12 @@ successful activation's `took_default_route` and corresponding from/name
 fields report the actual effect, which may differ. `status` shows the
 preview too.
 
-- **Ask the person** whether the new solution should become the default. It
-  changes live traffic; never decide it yourself.
-- With their yes: `cavelon activate --make-default` (or `cavelon harness
-  default <solution>`) shows the change, naming the current default; show it.
-  You cannot confirm it yourself: over MCP the client asks the person when you
+- Make the solution the default only when the user's request calls for it.
+  If the intended routing is unclear, ask; it changes live traffic.
+- `cavelon activate --make-default` (or `cavelon harness default <solution>`)
+  previews the change, naming the current default. For a requested route
+  change, proceed directly to its approval step without another chat yes.
+  You cannot approve it yourself: over MCP the client asks the person when you
   call the tool with the preview's token; from your shell the person runs the
   confirm command it printed in their own terminal. `harness default` refuses a draft
   (`solution_not_active`, exit 4): only an active solution can be the
@@ -299,14 +301,18 @@ preview too.
   route; the default route itself is refused until another solution is the
   default.
 
-## Show the person before confirming
+## Confirm routine work; ask once for critical changes
 
-Show every preview to the person. Confirm on your own only a preview that
-needs no person: `apply` to a draft solution in a test environment (no query
+A technical preview is not a request for a chat approval. Within the user's
+requested work, read and confirm a preview that needs no person without
+asking them again or showing every intermediate preview. For `apply`, check
+`show_to_person: false` and no `needs_person` requirement. This includes
+`apply` to a draft solution in a test environment (no query
 writes or other reason to show it to a person), `loop start` of a trigger
 of a draft solution, `loop cancel` and `sandbox seed` of a test run or Sandbox
-you started, and `kb upload --replace`. Stop, show the preview, and wait for
-the person when:
+you started, `kb upload --replace`, and known routine `api` operations.
+Summarize the outcome with the work. A preview needs the person's decision
+when:
 
 - the preview lists an active solution under "reaches active", or the target
   solution is active;
@@ -331,14 +337,15 @@ budget), `limits set`, `models set-limit`, `trigger identity` (standing
 authority for a trigger), `harness default`, `activate --make-default`,
 `activate` of a solution its preview says a channel or trigger reaches,
 whose activation takes the default route, or whose reach or route effect is unknown,
-`deactivate` (they move live traffic), and `api` for any operation that is
-not read-only, `cavelon` does not take your confirm as theirs. Their preview
+`deactivate` (they move live traffic), and `api` outside its known routine
+operations, `cavelon` does not take your confirm as theirs. Their preview
 says how in `needs_person`:
 
-- `"client"` (over MCP, where your client can ask the person): show the
-  preview, then call the tool again with the same arguments and `confirm` set
-  to its token (for `apply`, the preview id). The client then asks the person
-  to approve exactly that change, and nothing changes without their yes. A no,
+- `"client"` (over MCP, where your client can ask the person): call the tool
+  again with the same arguments and `confirm` set
+  to its token (for `apply`, the preview id). The client presents the preview
+  and asks the person to approve exactly that change. Do not first ask for a
+  separate chat yes. Nothing changes without their answer. A no,
   or no answer within 10 minutes, returns `confirm_declined` (exit code 5):
   ask the person what they want instead of trying again.
 - `"terminal"` (your shell, or a client that cannot ask): the preview's
@@ -352,9 +359,9 @@ or active trigger reaches it and readiness explicitly publishes
 null, the kit reads the matching list row; an unreadable list, missing row
 or missing count keeps reach unknown and needs the person.
 
-Asking the person is the kit's responsibility alone. Keep asking before every
-guarded change; never answer on their behalf or reuse a previous yes for a
-different change. This includes creating, changing or deleting a database
+Asking the person is the kit's responsibility alone. Use one personal approval
+for each critical change; never answer on their behalf or reuse a previous
+yes for a different change. This includes creating, changing or deleting a database
 query and imports that create or change one, even on a draft.
 
 Where the instance publishes `confirmations.enforced`, after the person's
@@ -369,6 +376,23 @@ or `confirmation_invalid` (exit code 5) means the instance changed nothing:
 show the person the preview again and let them confirm it (in the client's
 dialog or their own terminal), never retry on your own.
 
+**YOLO is explicitly enabled by the person.** A CLI invocation may start with
+`cavelon --yolo …`, or an MCP process with `cavelon mcp --yolo`. Eligible
+routine work then previews and executes internally; do not add a question
+of your own. It is not a tool argument or repository setting, and you must
+not enable it to work around a refusal. Its allowance is bound to the
+process's original instance, resolved tenant, credential, local solution
+folder, selected solution, environment and bindings. A different MCP target
+uses normal policy; returning to the original scope may use its allowance
+again. Eligible work includes ordinary draft imports, known routine API
+operations and starting a trigger of the selected draft solution. Existing
+tenant budgets still apply. Critical changes still ask once. Saved database queries, live or shared changes,
+production and deleting imports stay critical. YOLO does not automatically
+confirm Sandbox replacement, document replacement, run cancellation or
+connection deletion. Permissions, secret handling, person-only operations,
+server request binding and end-user database write consent remain unchanged.
+Your host's own shell/tool approvals are separate.
+
 **Over MCP, confirm with the preview's token.** `api`, `tenant_create`,
 `variables_set` where it replaces a value, `loop_start`, `limits_set`,
 `models_set_limit`, `loop_cancel`, `sandbox_seed`, `trigger_identity`,
@@ -376,12 +400,12 @@ dialog or their own terminal), never retry on your own.
 trigger reaches, whose activation takes the default route or whose reach or
 route effect is unknown, or with `make_default`, and
 `kb_upload` where it would deactivate documents return a `confirm_token` with
-their preview. Show
+their preview. Read
 the preview, then call the tool again with the same arguments and `confirm`
 set to that token; it makes exactly the change shown, after the person's yes
 where the preview says `needs_person`. `confirm: true` is
 refused (`confirm_token_required`), and a token of another change returns the
-new preview with `token_mismatch` (exit code 4): show that one instead. Tool
+new preview with `token_mismatch` (exit code 4): review that one instead. Tool
 arguments are spelled in snake_case (`make_default`, `keep_both`, `dry_run`);
 an argument a tool does not list is refused (`unknown_argument`) with the
 closest one named. Over MCP the next steps a tool returns (hints, `next`,
@@ -392,8 +416,9 @@ make the call as written, filling a value in angle brackets (a
 **From your shell, `--confirm` takes the same token, where you may confirm.**
 Run by a coding agent, `loop start` of a draft's trigger, `loop cancel`,
 `sandbox seed` and `kb upload --replace` print their preview with a confirm
-token and the command that confirms it (`… --confirm <token>`). Show the
-preview, then run exactly that command. The changes that need the person's yes
+token and the command that confirms it (`… --confirm <token>`). Read the
+preview, then run exactly that command within the authorized work. Changes
+that need the person's yes
 print no token and name the command the person runs in their own terminal. A
 bare `--confirm`, as the docs show it for a person's terminal, changes nothing
 from your shell and exits 5; a token of another change exits 4 with the new
@@ -404,11 +429,11 @@ preview. A line printed before its preview exists ends in
 **`cavelon api` from your shell has the guards of the MCP `api` tool**, since
 `cavelon` sees that a coding agent runs it:
 
-- For an operation that is not read-only, it prints the request and the
-  command the person runs in their own terminal to send it, and sends nothing.
-  Show both to the person; you cannot send it yourself, with or without a
-  token (`confirm_needs_person`). Over MCP the `api` tool sends it after the
-  person's yes in the client.
+- Known routine mutations print a preview and token you may confirm within
+  the requested work without a separate chat approval. Critical or unknown
+  mutations instead name the person's own-terminal command; you cannot send
+  those yourself with a token (`confirm_needs_person`). Over MCP they require
+  the person's answer in the native dialog.
 - It refuses an operation the instance keeps for a person
   (`operation_for_a_person`) and a body that sets a field the instance marks as
   a secret value (`secret_field_for_a_person`), with or without `--confirm`,
