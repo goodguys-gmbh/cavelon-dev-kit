@@ -7,6 +7,8 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-10-12
+
 ### Added
 
 - Opt-in `--yolo` for a CLI invocation or MCP process automatically previews
