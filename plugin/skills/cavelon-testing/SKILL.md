@@ -312,7 +312,9 @@ the body does the same, but needs the id and a confirm. `cavelon deactivate
 --harness <solution>` takes an active solution out of live traffic again; it
 previews first and is the person's decision: show the preview; over MCP the
 client asks them when you confirm with its token, and from your shell they run
-the confirm command in their own terminal. When every suite passes,
+the confirm command in their own terminal. Do not add a separate chat approval
+before that native dialog; an explicitly enabled YOLO mode still asks for this
+critical change. When every suite passes,
 `cavelon activate --harness <name or slug>` goes through the readiness gate; if the
 token may not activate, a person activates in the Admin. A solution that a
 channel or an active trigger reaches goes live for them at once, so its

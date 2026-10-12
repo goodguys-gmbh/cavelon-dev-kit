@@ -22,24 +22,29 @@ Codex with the Cavelon plugin; any agent `cavelon setup` or
 - runs `cavelon validate` and fixes what it reports;
 - previews the import with `cavelon apply --env test`, and confirms it on its
   own when the preview reaches no active solution, nothing tenant-wide, deletes
-  nothing and does not go to `env/prod` (a draft in a test environment);
+  nothing, writes no saved database queries and does not go to `env/prod`
+  (a draft in a test environment), without asking again in chat;
 - uploads the knowledge with `cavelon kb upload`;
 - runs the suites with `cavelon test run`, reads the results and traces with
   `cavelon trace`, changes the files and runs them again;
 - looks up the instance's own documentation with `cavelon docs search` and
   `cavelon docs get`, and error codes with `cavelon explain`.
 
-**Some steps wait for you.** The agent stops and asks you:
+With explicitly enabled [YOLO mode](confirmations.md), eligible previews and
+confirmations happen inside one call. Critical approvals stay the same.
 
-- before confirming a preview that reaches an active solution, goes to
-  production (`--env prod`), deletes anything (`--mode replace`), or needs
+**Some steps wait for you.** The client presents one native approval, or the
+agent gives you the command for your own terminal. It does not ask for a chat
+yes before a native dialog. These include:
+
+- imports that reach an active solution, go to production (`--env prod`),
+  delete anything (`--mode replace`), write saved database queries, or need
   secrets, grants or identities;
-- before activating a solution, and before making it the tenant's default
+- activation with live or unknown effects, and changes to the tenant's default
   route (the solution the tenant's chat and widget answer with);
-- before changing any limit or quota: it shows you the old and the new value
-  and its reason, and you decide;
-- before binding a trigger's execution identity, or seeding or cancelling
-  anything other than its own test runs and test Sandboxes.
+- limit or quota changes: you see the old and new value and the reason;
+- binding a trigger's execution identity, or seeding or cancelling anything
+  other than the agent's own test runs and test Sandboxes.
 
 **Some things the agent never does.** It never sees your token, never asks you
 for a secret's value or sets one, and never approves or rejects anything that
@@ -56,7 +61,7 @@ by the others:
 | Source | What it enforces |
 |---|---|
 | **The skills** (`cavelon-loop`, `cavelon-authoring`, `cavelon-testing`, `cavelon-long-running`) and the server's instructions when the agent connects | When to stop and show you a preview; propose a limit change and let you decide; never handle a token or secret; never approve. |
-| **The commands and their MCP tools** | `apply` imports only with the id of a preview; `tenant create`, `variables set` where it replaces a value, `loop start`, `limits set`, `models set-limit`, `loop cancel`, `sandbox seed`, `trigger identity`, `harness default`, `activate` where its preview needs your yes, `activate --make-default` and `deactivate` change nothing without `--confirm` (from the agent's shell, `--confirm <token>` from their preview), and neither does the `api` tool for an operation that is not read-only. Over MCP, `confirm` is the token the tool's preview returned, so it confirms exactly the change shown. A change that reaches live traffic, the whole tenant, or cannot be taken back (a new tenant, a replaced or deleted variable, a limit, a trigger's identity, the default route, an activation with known reach, a route effect or unknown reach or route effect, a deactivation, a loop of a solution that is not a draft, any changing `api` call, and an `apply` whose preview needs a person) also needs your yes, which the agent cannot give: your agent client asks you in its own dialog (MCP elicitation), or, where it cannot, and from the agent's shell, you run the command in your own terminal. The `api` tool refuses to change a secret, create or revoke a credential or decide an approval, or to send a body field the instance marks as a secret value, and the tools read and write files only inside the solution folder. `cavelon api` run from the agent's shell applies the same guards, and leaves a changing operation to your terminal ([Security](security.md#when-the-agent-runs-cavelon-in-its-shell)). [Security](security.md#every-changing-command-and-its-guard) lists every changing command and its guard. Each tool is annotated read-only or destructive (`readOnlyHint`, `destructiveHint`), so your agent client can ask you before it calls a destructive one. There is no tool for `login`, `secrets set` or deciding an approval, and no command takes a token or secret value as an argument. `activate` goes through the readiness gate and never forces. |
+| **The commands and their MCP tools** | The [confirmation policy](confirmations.md) keeps exact-preview checks for routine work without extra chat approvals. Explicit `--yolo` combines eligible routine steps within one target scope. Critical changes need one native dialog or the person's terminal; person-only operations and secret-value bodies remain refused. Tools stay inside the solution folder, and activation still requires readiness. Your client may separately ask for permission to call a tool. |
 | **Your token's permissions on the server** | The token acts as you, within your roles, and within the ceiling you chose when you created it. Without **May activate**, activation is refused, whatever the agent tries. A limit only a Tenant Owner or the operator may change is refused for anyone else. |
 
 The skills shape what a well-behaved agent does; the token decides what any

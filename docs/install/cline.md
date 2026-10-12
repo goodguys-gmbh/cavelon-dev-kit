@@ -82,7 +82,9 @@ advertise form elicitation, and ordinary tool approval can be automatic.
 Guarded Cavelon changes therefore return a preview and exact command for
 **your own terminal**. Review it and run it yourself only if you approve this
 change. An agent-supplied `confirm`, a tool permission prompt, auto-approval,
-headless mode or `yolo` cannot supply your answer.
+headless mode or Cline's `yolo` cannot supply your answer. Cavelon's own
+[scoped `--yolo`](../confirmations.md) combines only eligible routine steps;
+critical changes still use your terminal.
 
 The instance binds a confirmation to the token, tenant and exact request; it
 does not verify that a person answered. No extra Admin approval is added.

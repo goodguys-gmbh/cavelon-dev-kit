@@ -71,12 +71,14 @@ See [folder selection](../mcp.md#several-solutions-in-one-repository).
 Qwen has extensions and hooks. The inspected 0.25.0 MCP client does not
 advertise form elicitation, and its documented `elicitation_dialog` hook is
 not implemented. Cavelon therefore returns the preview and exact command for
-you to run in **your own terminal** for every guarded change. Read that preview
+you to run in **your own terminal** for every critical change. Read that preview
 and run the displayed command yourself only if you approve it.
 
 Qwen's tool permission prompt, `yolo`, automatic approval and an agent-supplied
-`confirm` do not answer Cavelon's confirmation. A headless run also cannot
-confirm. The instance binds its confirmation id to the token, tenant and exact
+`confirm` do not answer a critical Cavelon confirmation. A headless run
+cannot supply that answer either. Cavelon's own [scoped `--yolo`](../confirmations.md)
+combines only eligible routine steps and is separate from Qwen's mode. The
+instance binds its confirmation id to the token, tenant and exact
 change; it does not prove a person's answer. No extra Admin approval is added.
 The database password, write-privilege acknowledgement and **Allow write
 queries** remain person-only Admin settings.

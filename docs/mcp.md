@@ -256,8 +256,8 @@ repeat them:
   `timeout`, waits until the operations settle or the timeout passes, at most
   50 seconds (a longer timeout is cut there, with a warning). Its answer says
   `waited_ms`, and `timed_out` is true only when it waited the whole timeout.
-- **What needs `confirm`.** `apply` returns a preview and imports only with
-  `confirm` set to that preview's id. `tenant_create`, `variables_set` where
+- **What needs `confirm`.** By default, `apply` returns a preview and imports
+  only with `confirm` set to that preview's id. `tenant_create`, `variables_set` where
   it replaces another value, `loop_start`, `limits_set`, `models_set_limit`,
   `loop_cancel`, `sandbox_seed`, `trigger_identity`, `harness_default`, `db_connection_delete`,
   `activate` of a solution a channel or an active trigger reaches, whose
@@ -274,8 +274,12 @@ repeat them:
   refused (`confirm_token_required`). `kb_upload` with `replace` needs it only
   on an instance whose upload cannot replace a document itself: there it
   returns the documents it would deactivate after the upload, and uploads
-  nothing without its token. The agent shows you every preview first.
-- **What needs your yes.** The token proves only that a preview came first.
+  nothing without its token. The agent reads routine previews and may confirm
+  them within your requested work without an extra chat approval. Starting
+  `cavelon mcp --yolo` combines these steps for eligible routine operations in
+  one target scope; see [Confirmations and YOLO mode](confirmations.md).
+  It is a process-launch option, never an MCP tool argument.
+- **What needs your yes.** A preview token identifies a change, not your consent.
   A change that reaches live traffic, the whole tenant, or cannot be taken
   back also needs your own yes, which the agent cannot give: `tenant_create`,
   `variables_set` where it replaces a value (every solution of the tenant
@@ -285,7 +289,7 @@ repeat them:
   widget answer with), `activate` where it previews (a channel or trigger
   reaches the solution, activation takes the default route, reach or route
   effect is unknown, or `make_default`), `deactivate` (it takes a solution
-  out of live traffic), `api` for any operation that is not read-only, and
+  out of live traffic), `api` outside its known routine operations, and
   `apply` where its preview needs a person: it changes the tenant-wide
   sections, reaches an active solution, deletes (or `mode` `replace`), or goes
   to `env/prod`, or creates or changes a database query
@@ -295,7 +299,8 @@ repeat them:
   - `"client"`: your agent client can ask you (MCP elicitation). When the
     agent calls the tool again with the token (for `apply`, the preview id),
     the client shows you the change, where it goes, and one question, **Make
-    this change**. Yes makes exactly that change; no, or no answer within
+    this change**. The agent does not ask for another yes in chat first.
+    Yes makes exactly that change; no, or no answer within
     10 minutes, changes nothing (`confirm_declined`, exit code 5). For `apply`,
     the preview id goes to the instance only after your yes.
   - `"terminal"`: the client cannot ask you, so the preview's `confirm` is the
@@ -305,13 +310,14 @@ repeat them:
     with the command in `details.person_command`).
 
   Asking you is the kit's responsibility alone. Where the instance publishes
-  `confirmations.enforced`, after your yes, and only then, `cavelon` asks it for a
-  confirmation id for exactly the request it sends (an operation the
+  `confirmations.enforced`, a critical change waits for your yes before
+  `cavelon` asks it for a confirmation id for exactly the request it sends
+  (an operation the
   instance's OpenAPI marks `x-cavelon-confirmation`), and sends it with that
   request. The id is bound to the token, tenant, method, path and canonical
   body, usable once within 10 minutes, and audited. The same personal access
   token issues it and sends the change, so it does not prove you answered.
-  The agent must wait for your answer to each guarded change and never answer
+  The agent must wait for your answer to each critical change and never answer
   on your behalf. After your yes it makes the change directly; there is no
   extra Admin approval step. An `api` preview of such an operation says so in
   `instance_confirmation`. The instance refuses such a change without one
@@ -320,7 +326,7 @@ repeat them:
   changes, and a new preview and your yes get a new one.
 
   `apply` of a preview that needs no person (a draft outside `env/prod`, with
-  no query writes or other person requirement),
+  no query writes or other person requirement), known routine `api` changes,
   `loop_start` of a draft's trigger, `loop_cancel`, `sandbox_seed` and
   `kb_upload` with `replace` confirm with the token alone: the fast loop on a
   draft in a test environment. `apply` with

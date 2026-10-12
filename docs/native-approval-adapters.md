@@ -15,6 +15,11 @@ Their inspected built-in MCP clients lack the required form capability, but
 both native UI prototypes completed Cavelon's existing elicitation exchange.
 No upstream change is needed to establish this initial native path.
 
+[Confirmation policy](confirmations.md) decides whether a change needs a
+person. Routine changes do not open a form; YOLO never supplies a form answer.
+For a critical change, go directly to the native dialog without a preliminary
+chat approval.
+
 Keep one Cavelon MCP server and one guarded-change implementation. The adapter
 owns its connection and forwards the exact preview message. Only a fresh boolean
 `true` from the native person UI can accept that call's form. Generic permission

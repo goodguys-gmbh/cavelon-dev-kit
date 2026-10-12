@@ -383,6 +383,11 @@ its settings folder (`setup.json`), so a second run changes nothing and
 
 `setup` is for people; it is not an MCP tool.
 
+Setup keeps the default [confirmation policy](confirmations.md). To opt in to
+combining eligible routine previews and execution, explicitly launch
+`cavelon mcp --yolo` (or a single CLI command with `cavelon --yolo …`). This is
+separate from `setup --yes` and from your coding client's tool permissions.
+
 Each of these agents is recognised when it runs `cavelon` in its own shell,
 from what the agent sets itself, so `cavelon api`, the `--confirm` commands
 and `secrets set` hold it to the guards of the MCP tools without anything

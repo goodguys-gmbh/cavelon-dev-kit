@@ -40,6 +40,14 @@ finds the clients supported by your installed release and sets each up the way i
 recommends, then logs you in. The pages say what it does per client and how to
 do the same by hand.
 
+## Approval behavior
+
+All clients use the same [confirmation policy](../confirmations.md). Ordinary
+draft work needs no extra chat approval. A person can start the Cavelon MCP
+process with `--yolo` to combine eligible routine previews and confirmations;
+critical changes still use the client's native dialog or your own terminal.
+Your client's own automatic-approval setting is a separate permission.
+
 ## The packages
 
 Each release attaches the plugin packages, rendered from the one plugin source

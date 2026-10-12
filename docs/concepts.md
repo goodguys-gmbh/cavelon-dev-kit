@@ -487,7 +487,10 @@ files never hold a token or a secret value; a secret is set in each tenant with
 
 ## Preview and confirm
 
-Changing a solution always takes two steps:
+In default mode, changing a solution takes two technical steps. An agent may
+perform both for an ordinary draft inside your request without asking you
+again. [YOLO](confirmations.md) can combine them in one call; validation,
+preview checks and critical approvals still apply:
 
 1. **`cavelon apply`** validates the files and asks the instance for an import
    **preview**: what would be created, changed and deleted, which active
@@ -550,15 +553,16 @@ a bare `--confirm` only shows the preview again (exit 5). Over MCP, their tools
 return a `confirm_token` with the preview and act only when `confirm` is that
 token, which confirms exactly the change shown.
 
-The token only proves that a preview came first. A change that reaches live
+A preview token identifies the change; it does not prove human consent. A change that reaches live
 traffic, the whole tenant, or cannot be taken back (`limits set`, `models
 set-limit`, `variables delete`, `trigger identity`, `harness default`,
 `activate` where it previews, `deactivate`, `tenant create`, `variables set`
-replacing a value, `loop start` unless the solution is a draft, `api` for a
-changing operation, and an `apply` whose preview says to show it to a person)
+replacing a value, `loop start` unless the solution is a draft, `api` outside
+its known routine operations, and an `apply` whose preview needs a person)
 also needs the person's own yes, which an agent cannot give. Over
 MCP, the agent's client asks the person in its own dialog when the agent
-confirms with the token, and changes nothing without their yes. A client that
+confirms with the token, without a preliminary chat approval, and changes
+nothing without their yes. A client that
 cannot ask, and an agent's shell, leave the confirm to the person's own
 terminal: the preview's `needs_person` is `"terminal"`, and its `confirm` is
 the command they run there.

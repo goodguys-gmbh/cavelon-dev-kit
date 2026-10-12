@@ -50,7 +50,8 @@ for a public widget), **propose the change; the person decides.**
 - Run `cavelon limits set <key> <value>` without `--confirm` (MCP: `limits_set`
   without `confirm`). It changes nothing and shows the old and the new value,
   the operation it would send and the permissions it needs. Show that to the
-  person with your reason (what fails or waits now), and wait for their answer.
+  person with your reason (what fails or waits now). Over MCP, use the native
+  approval described next without asking for a separate chat yes.
 - The confirm is the person's. Over MCP, call `limits_set` again with the
   same arguments and `confirm` set to the preview's `confirm_token`: the
   client then asks the person, and nothing changes without their yes. From
@@ -121,9 +122,10 @@ endpoint.
   file). For one row's limit, prefer `cavelon models set-limit`.
 
 **Propose a limit; the person decides.** Say which value you would set and
-why (what the endpoint serves, which rows share it, what waits or fails now),
-then wait for the person's answer. Run the confirm command of `models set-limit` only after
-they agreed, and never raise or lower a limit without telling them. A limit
+why (what the endpoint serves, which rows share it, what waits or fails now).
+Over MCP, use one native approval without a preliminary chat yes. From your
+shell, give the person the printed `models set-limit` confirmation command to
+run in their own terminal; never run it on their behalf. A limit
 `cavelon limits` names as the operator's (the run caps, the slot waits, the
 licence) is not yours or the tenant's to change: tell the person who changes
 it and where, as the output says.

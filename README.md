@@ -274,6 +274,12 @@ cavelon trace <run>                             # why a case passed or failed
 cavelon activate                                # through the readiness gate, never by force
 ```
 
+An agent may preview and confirm an ordinary draft within your requested work
+without asking again in chat. `cavelon --yolo apply --env test` also combines
+those technical steps for an eligible draft; `cavelon mcp --yolo` enables the
+same policy for one MCP process. Critical changes still ask once. See
+[Confirmations and YOLO mode](docs/confirmations.md) for scope and limits.
+
 The [getting-started tutorial](docs/getting-started.md) walks through all of
 this with the ready-made example in [`examples/support-faq/`](examples/support-faq/).
 
