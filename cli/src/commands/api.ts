@@ -396,7 +396,7 @@ async function previewUnlessConfirmed(
   const request = previewRequest(doc, op, args);
   const policy = apiApproval(op, args);
   const needsPerson = policy === "person";
-  const harness = op.path === "/api/v1/harnesses/{harness_id}/clone" ? { id: args.params?.harness_id?.at(-1) } : undefined;
+  const harness = op.path === "/api/v1/harnesses/{harness_id}/clone" ? { id: args.params?.harness_id?.at(-1) ?? "" } : undefined;
   if ((given === undefined || given === false) &&
       (policy === "read" || policy === "routine" && await yoloAllows(ctx, harness))) return undefined;
   const files = (args.files ?? []).map((f) => ({ field: f.field, file: path.relative(ctx.io.cwd, f.path) || f.path }));

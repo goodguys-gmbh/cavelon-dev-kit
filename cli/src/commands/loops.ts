@@ -1,4 +1,5 @@
 import { noteLines, runCapacityNote, type CapacityNote } from "../capacity.js";
+import { yoloAllows } from "../automation-policy.js";
 import {
   boolOption,
   CURSOR_OPTION,
@@ -318,8 +319,8 @@ export const loopStart: CommandSpec = {
   summary: "Start a loop through its trigger, as you; previews first, --confirm starts it and returns the run and operation ids.",
   description:
     "Calls the trigger's run-now route. The run (and its loop) acts as the caller: with a personal access token, the person.\n" +
-    "It runs on its own and spends the tenant's model budget, so without --confirm nothing starts: the preview names the\n" +
-    "trigger, its solution and the payload. Show it to a person and confirm only with their yes. For a trigger of a draft\n" +
+    "It runs on its own and spends the tenant's model budget. The preview names the trigger, its solution and the payload.\n" +
+    "--yolo starts a draft's run at once only for the solution selected at startup; existing budget limits still apply. For a trigger of a draft\n" +
     "solution an agent confirms with the preview's token (--confirm <token>, or confirm over MCP); for any other,\n" +
     "a coding agent cannot confirm it: over MCP the client asks the person, and from an agent's shell the person runs the\n" +
     "confirm in their own terminal. Follow the run with `loop watch <run>`, or `wait <operation>`; `loop cancel <run>` stops it.",
@@ -332,7 +333,7 @@ export const loopStart: CommandSpec = {
     wait: WAIT_OPTION,
     timeout: TIMEOUT_OPTION,
     "idempotency-key": UUID_KEY_OPTION,
-    confirm: { type: "boolean", mcpToken: true, description: "Start the run (after a person saw the preview)." },
+    confirm: { type: "boolean", mcpToken: true, description: "Start the previewed run; a non-draft run also needs the person's approval." },
   },
   examples: [
     "cavelon loop start counter",
@@ -351,10 +352,11 @@ export const loopStart: CommandSpec = {
     const solution = await triggerSolution(ctx, trigger);
     const given = stringOption(input, "idempotency-key");
     const words = ["loop", "start", trigger.slug, ...(raw !== undefined ? ["--input", raw] : []), ...(given ? ["--idempotency-key", given] : [])];
+    const automatic = input.options.confirm === undefined && solution?.status === "draft" && await yoloAllows(ctx, solution);
     // A trigger of a draft solution is the fast loop an agent confirms on its own; any other run acts as the person on their budget.
     const gate = await confirmation(ctx, input, "loop_start", { trigger: trigger.id, payload }, {
       ...(solution?.status === "draft"
-        ? {}
+        ? { automatic }
         : { person: { what: `Start a run of the trigger ${trigger.slug}, which acts as the person and spends the tenant's model budget.`, words: [...words, "--confirm"] } }),
     });
     if (!gate.confirmed) {
@@ -379,7 +381,7 @@ export const loopStart: CommandSpec = {
               : `Solution: ${solution.id} (not readable).`,
           `Payload: ${payloadText}`,
           gate.where, ...(gate.mismatch ? [gate.mismatch] : []),
-          `Nothing was started. Show this to a person; with their yes: ${confirm}`,
+          solution?.status === "draft" ? `Nothing was started. Confirm the requested draft run with: ${confirm}` : `Nothing was started. The person approves this run with: ${confirm}`,
         ].join("\n"),
         ...(gate.exitCode ? { exitCode: gate.exitCode } : {}),
       };
@@ -394,7 +396,8 @@ export const loopStart: CommandSpec = {
       throw withRetryKey(error, key);
     });
     if (!trigger.is_active) ctx.warn(`Trigger "${trigger.slug}" is not active: its schedule and webhook start no runs, though this manual start did.`);
-    const started = { trigger: { id: trigger.id, slug: trigger.slug }, ...runSummary(run), idempotency_key: key };
+    const started = { trigger: { id: trigger.id, slug: trigger.slug }, ...runSummary(run), idempotency_key: key,
+      ...(automatic ? { approval: { source: "yolo", reason: "selected draft run" } } : {}) };
     if (boolOption(input, "wait") && ctx.mode === "cli" && run.operation_id) {
       const waited = await waitAndReport(ctx, [run.operation_id], timeoutMs(ctx, stringOption(input, "timeout")));
       const text = `Started run ${run.id} of ${trigger.slug}.\n${waited.text}`;

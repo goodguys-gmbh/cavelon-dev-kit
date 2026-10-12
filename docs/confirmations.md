@@ -33,6 +33,8 @@ starting an MCP process:
 ```bash
 cavelon --yolo apply --env test
 cavelon mcp --yolo
+# Bind MCP automation to the environment your tools will use:
+cavelon mcp --yolo --env test
 ```
 
 YOLO performs the technical preview and confirmation internally for eligible

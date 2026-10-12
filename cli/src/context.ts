@@ -11,6 +11,7 @@ import { promises as fs } from "node:fs";
 import { checkPrivatePaths, solutionPaths } from "./file-boundary.js";
 import { privateDirs as kitPrivateDirs } from "./paths.js";
 import path from "node:path";
+import { yoloScope } from "./automation-policy.js";
 
 export function createContext(io: Io, globals: GlobalOptions, mode: "cli" | "mcp" = "cli"): Context {
   const warnings: string[] = [];
@@ -77,6 +78,9 @@ export function createContext(io: Io, globals: GlobalOptions, mode: "cli" | "mcp
       return contractsPromise;
     },
   };
+  // Start before any command or tool can choose another tenant/folder. A failed
+  // lookup disables automation; it must never bind later to an agent's choice.
+  if (globals.yolo && !globals.yoloScope) globals.yoloScope = yoloScope(ctx).catch(() => undefined);
   return ctx;
 }
 

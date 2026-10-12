@@ -52,6 +52,10 @@ export interface SessionTenant {
 
 export interface GlobalOptions {
   json: boolean;
+  /** Explicit process option; never read from a solution file or MCP tool argument. */
+  yolo?: boolean;
+  /** Snapshot made at launch, shared by MCP calls; never serialized or exposed. */
+  yoloScope?: Promise<string | undefined>;
   instance?: string;
   tenant?: string;
   /** `--env <name>`: env/<name>.yaml names the tenant, between CAVELON_TENANT and cavelon.yaml. */

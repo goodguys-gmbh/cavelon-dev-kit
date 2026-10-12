@@ -249,7 +249,7 @@ describe("cavelon api and the api tool, run by an agent and by a person", () => 
         const token = shown.body.confirm_token as string;
         expect(shown.body).toMatchObject({ sent: false, needs_person: "client", confirm_token: expect.stringMatching(/^[0-9a-f]{12}$/) });
         expect(shown.body.confirm).toBe(
-          `Show the person this, then call api again with the same arguments and confirm: "${token}": the client then asks the person to approve exactly this change, and nothing changes without their yes.`,
+          `Call api again with the same arguments and confirm: "${token}": the client asks the person to approve exactly this change. Do not ask for an additional chat confirmation; nothing changes without the dialog's yes.`,
         );
         expect((await tool(client, { ...args, confirm: "000000000000" })).body).toMatchObject({ sent: false, token_mismatch: true, exit_code: 4 });
         expect(client.asked).toEqual([]);

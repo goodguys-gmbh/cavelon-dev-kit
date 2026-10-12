@@ -57,6 +57,7 @@ export async function run(argv: string[], io: Io, commands: CommandSpec[] = COMM
     }
     ctx = createContext(io, {
       json: parsed.options.json === true,
+      yolo: parsed.options.yolo === true,
       instance: typeof parsed.options.instance === "string" ? parsed.options.instance : undefined,
       tenant: typeof parsed.options.tenant === "string" ? parsed.options.tenant : undefined,
       solutionEnv: spec.options?.env && typeof parsed.options.env === "string" ? parsed.options.env : undefined,

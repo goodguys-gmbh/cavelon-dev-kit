@@ -58,10 +58,11 @@ const mcp: CommandSpec = {
   description: "Started by the agent's plugin (`cavelon mcp`); it does not return until the agent disconnects.",
   readOnly: false,
   mcpTool: false,
+  options: { env: { type: "string", value: "<name>", description: "Start with env/<name>.yaml's tenant, solution and runtime bindings; --yolo stays bound to this environment." } },
   async run(ctx) {
     const { createMcpServer } = await import("../mcp.js");
     const { StdioServerTransport } = await import("@modelcontextprotocol/sdk/server/stdio.js");
-    const server = createMcpServer(ctx.io, COMMANDS);
+    const server = createMcpServer(ctx.io, COMMANDS, {}, ctx.globals);
     const transport = new StdioServerTransport();
     // The agent ends the session by closing our stdin.
     const closed = new Promise<void>((resolve) => {

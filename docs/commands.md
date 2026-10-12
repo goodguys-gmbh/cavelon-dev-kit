@@ -18,6 +18,7 @@ Every command takes these:
 | Option | Description |
 |---|---|
 | `--json` | Print one JSON document instead of text. |
+| `--yolo` | Automatically apply eligible routine changes in this process's selected target; critical changes still need a person. |
 | `--instance <url>` | The instance URL (overrides CAVELON_URL and cavelon.yaml). |
 | `--tenant <tenant>` | Tenant slug, name or id (overrides CAVELON_TENANT and cavelon.yaml). |
 | `-h, --help` | Show help for the command. |
@@ -315,7 +316,7 @@ Preview the package files against the instance and print a preview id; --confirm
 cavelon apply [options]
 ```
 
-Without --confirm nothing is imported: the preview shows what changes, which active solutions it reaches, what the target still needs (secrets and variables with the command that sets each, grants, runtime bindings, trigger identities), loop budgets and ignored sections, and is stored in .cavelon/. A preview never creates the solution: one the env file names that is not on the instance yet gets the `cavelon harness new` command that creates it as a draft. A person sets the secrets (`cavelon secrets set <name>`, or in the Admin where the instance lets no token set one), never the agent. Where the instance says this credential cannot import (needs_a_person), it still previews but prints no confirm command: a person imports in the Admin or with their own personal access token. --confirm refuses before sending (exit 5). Show a preview that reaches an active solution or env/prod to a person before confirming. Such a preview (show_to_person: tenant-wide sections, an active solution, deletions, env/prod, or database query writes) a coding agent cannot confirm. Over MCP the client asks the person; from an agent's shell the person runs the confirm in their own terminal. A stale preview exits 4 and imports nothing: one whose target changed on the instance since, one whose package files changed since (what they hold, not their formatting; --allow-stale imports what the preview showed anyway), and one older than a day. So does an import its own check refuses when it applies, naming each blocker. --discard &lt;id\|all&gt; forgets stored previews; `cavelon status` lists them with when each expires. A solution's import leaves the package's tenant-wide sections (tenant_settings, model_registry, …) out; --include-tenant-wide imports them, for every solution of the tenant. An instance that does not publish include_tenant_wide imports them with every solution's package, and apply says so.
+Without --confirm, shows a preview. With --yolo, an eligible routine draft is previewed and imported in one call. The preview shows what changes, which active solutions it reaches, what the target still needs (secrets and variables with the command that sets each, grants, runtime bindings, trigger identities), loop budgets and ignored sections, and is stored in .cavelon/. A preview never creates the solution: one the env file names that is not on the instance yet gets the `cavelon harness new` command that creates it as a draft. A person sets the secrets (`cavelon secrets set <name>`, or in the Admin where the instance lets no token set one), never the agent. Where the instance says this credential cannot import (needs_a_person), it still previews but prints no confirm command: a person imports in the Admin or with their own personal access token. --confirm refuses before sending (exit 5). Show a preview that reaches an active solution or env/prod to a person before confirming. Such a preview (show_to_person: tenant-wide sections, an active solution, deletions, env/prod, or database query writes) a coding agent cannot confirm. Over MCP the client asks the person; from an agent's shell the person runs the confirm in their own terminal. A stale preview exits 4 and imports nothing: one whose target changed on the instance since, one whose package files changed since (what they hold, not their formatting; --allow-stale imports what the preview showed anyway), and one older than a day. So does an import its own check refuses when it applies, naming each blocker. --discard &lt;id\|all&gt; forgets stored previews; `cavelon status` lists them with when each expires. A solution's import leaves the package's tenant-wide sections (tenant_settings, model_registry, …) out; --include-tenant-wide imports them, for every solution of the tenant. An instance that does not publish include_tenant_wide imports them with every solution's package, and apply says so.
 
 | Option | Description | MCP |
 |---|---|---|
@@ -1150,7 +1151,7 @@ Start a loop through its trigger, as you; previews first, --confirm starts it an
 cavelon loop start <trigger> [options]
 ```
 
-Calls the trigger's run-now route. The run (and its loop) acts as the caller: with a personal access token, the person. It runs on its own and spends the tenant's model budget, so without --confirm nothing starts: the preview names the trigger, its solution and the payload. Show it to a person and confirm only with their yes. For a trigger of a draft solution an agent confirms with the preview's token (--confirm &lt;token&gt;, or confirm over MCP); for any other, a coding agent cannot confirm it: over MCP the client asks the person, and from an agent's shell the person runs the confirm in their own terminal. Follow the run with `loop watch <run>`, or `wait <operation>`; `loop cancel <run>` stops it.
+Calls the trigger's run-now route. The run (and its loop) acts as the caller: with a personal access token, the person. It runs on its own and spends the tenant's model budget. The preview names the trigger, its solution and the payload. --yolo starts a draft's run at once only for the solution selected at startup; existing budget limits still apply. For a trigger of a draft solution an agent confirms with the preview's token (--confirm &lt;token&gt;, or confirm over MCP); for any other, a coding agent cannot confirm it: over MCP the client asks the person, and from an agent's shell the person runs the confirm in their own terminal. Follow the run with `loop watch <run>`, or `wait <operation>`; `loop cancel <run>` stops it.
 
 | Argument | Description |
 |---|---|
@@ -1162,7 +1163,7 @@ Calls the trigger's run-now route. The run (and its loop) acts as the caller: wi
 | `--wait` | Wait for the run to finish (see `cavelon wait`). | CLI only |
 | `--timeout <duration>` | Stop waiting after this long (90s, 5m; default 90s). The work goes on; run wait again to resume. | yes |
 | `--idempotency-key <uuid>` | The Idempotency-Key to send (a UUID), so a retry of the same call does nothing twice. | yes |
-| `--confirm [<token>]` | Start the run (after a person saw the preview). In a person's terminal the flag alone confirms; run by a coding agent, `--confirm <token>` with the token its preview printed (the bare flag only shows the preview there, exit 5). | yes |
+| `--confirm [<token>]` | Start the previewed run; a non-draft run also needs the person's approval. In a person's terminal the flag alone confirms; run by a coding agent, `--confirm <token>` with the token its preview printed (the bare flag only shows the preview there, exit 5). | yes |
 
 Examples:
 
@@ -1683,7 +1684,7 @@ Call any operation the instance publishes in its OpenAPI.
 cavelon api <operation> [params...] [options]
 ```
 
-The operation is its operationId or the short name before FastAPI's path suffix (list_harnesses). Parameters: -p name=value or name=value (not --name). Body: --body '&lt;json&gt;', --body @file.json or --body - (stdin); --json &lt;body&gt; still works for now but is deprecated: --json alone prints JSON, as on every command. The body is checked against the operation's schema before it is sent. As an MCP tool, or run by a coding agent (CLAUDECODE, CODEX_THREAD_ID, CODEX_CI, CODEX_SANDBOX, CURSOR_AGENT, GEMINI_CLI, QWEN_CODE, COPILOT_CLI, COPILOT_AGENT, AGENT_CONTEXT_OUT, TERM_PROGRAM=kiro, OPENCODE, PI_SESSION_ID, AGENT_SESSION_ID, GROK_AGENT, AI_AGENT or CAVELON_AGENT=1 is set), an operation that changes something returns what it would send and a confirm token, and sends it only with that token and the person's yes: as an MCP tool, confirm: "&lt;token&gt;", after which the client asks the person; from an agent's shell, the person sends it from their own terminal. A changed request needs a new preview; confirm: true is refused. Run by an agent, one the instance marks for a person only (x-cavelon-person-only) is refused, as is a body that sets a field the instance marks as a secret value (x-cavelon-secret) and a file outside the solution folder. On an instance that marks no operation, one that changes a secret, creates or revokes a credential or decides an approval is refused. A person's own terminal sends at once. In a solution folder, the persona operations (get_bot_persona, upsert_bot_persona, …) get the folder's solution as harness_id when none is passed, since without it they reach the tenant's default route.
+The operation is its operationId or the short name before FastAPI's path suffix (list_harnesses). Parameters: -p name=value or name=value (not --name). Body: --body '&lt;json&gt;', --body @file.json or --body - (stdin); --json &lt;body&gt; still works for now but is deprecated: --json alone prints JSON, as on every command. The body is checked against the operation's schema before it is sent. As an MCP tool, or run by a coding agent (CLAUDECODE, CODEX_THREAD_ID, CODEX_CI, CODEX_SANDBOX, CURSOR_AGENT, GEMINI_CLI, QWEN_CODE, COPILOT_CLI, COPILOT_AGENT, AGENT_CONTEXT_OUT, TERM_PROGRAM=kiro, OPENCODE, PI_SESSION_ID, AGENT_SESSION_ID, GROK_AGENT, AI_AGENT or CAVELON_AGENT=1 is set), an operation that changes something returns what it would send and a confirm token, and sends it with that token. Known draft creation and cloning need no personal approval; explicit --yolo also skips their token round trip within its bound scope. Known import previews and database catalog reads send at once. Other changes still need the person's yes: the MCP client asks them, or they send it from their own terminal. A changed request needs a new preview; confirm: true is refused. Instance confirmation requirements always win. Run by an agent, one the instance marks for a person only (x-cavelon-person-only) is refused, as is a body that sets a field the instance marks as a secret value (x-cavelon-secret) and a file outside the solution folder. On an instance that marks no operation, one that changes a secret, creates or revokes a credential or decides an approval is refused. A person's own terminal sends at once. In a solution folder, the persona operations (get_bot_persona, upsert_bot_persona, …) get the folder's solution as harness_id when none is passed, since without it they reach the tenant's default route.
 
 | Argument | Description |
 |---|---|
@@ -1696,7 +1697,7 @@ The operation is its operationId or the short name before FastAPI's path suffix 
 | `--body <json|@file|->` | The request body: JSON, @file.json or - for stdin (--json &lt;body&gt; is a deprecated alias). | yes |
 | `--file <field=path>` | Attach a file to a multipart body. Repeatable. | yes |
 | `--output <file>` | Write the response body to a file instead of printing it. | CLI only |
-| `--confirm <token>` | Send an operation that changes something: run by a coding agent or as an MCP tool, the token its preview returned. Without it, nothing is sent. A person's terminal sends at once. | yes |
+| `--confirm <token>` | Send a previewed operation: run by a coding agent or as an MCP tool, the token its preview returned. Known routine changes need no person; other changes require personal approval. A person's terminal sends at once. | yes |
 | `--limit <n>` | Show at most n items of a list response (default 50, 0 for all). | yes |
 
 Examples:
@@ -1767,10 +1768,14 @@ Serve the commands as MCP tools on stdio (for coding agents).
 **changing** · MCP tool: none (run it in a terminal)
 
 ```text
-cavelon mcp
+cavelon mcp [options]
 ```
 
 Started by the agent's plugin (`cavelon mcp`); it does not return until the agent disconnects.
+
+| Option | Description |
+|---|---|
+| `--env <name>` | Start with env/&lt;name&gt;.yaml's tenant, solution and runtime bindings; --yolo stays bound to this environment. |
 
 ## Other commands
 
