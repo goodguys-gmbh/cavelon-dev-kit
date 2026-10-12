@@ -86,8 +86,30 @@ update with: curl -fsSL https://github.com/goodguys-gmbh/cavelon-dev-kit/release
 The first line is the version alone, for scripts that compare it; the others
 say how this `cavelon` was installed and how to update it.
 
-Running the line again updates `cavelon` to the latest release, and changes
-nothing else. On Windows, an installed executable whose SHA-256 matches the
+Running the same line again updates `cavelon` to the latest release. In your
+terminal it then asks two separate questions:
+
+1. **Update Cavelon plugins and skills?** Yes refreshes Claude Code, Codex and
+   Gemini CLI through their plugin commands, and updates the kit's own skills
+   and integrations in the other agents found. If you run it inside a solution,
+   its generated setup and copied skills are refreshed too. Custom files stay.
+   Gemini's older published extension is reinstalled through its own CLI at
+   this release, preserving enablement and backing up the previous files. Custom
+   or local extension sources are reported for manual update.
+2. **Enable YOLO for new agent sessions?** `y` enables it, `n` disables it,
+   and Enter keeps your current choice (standard mode on a new installation).
+   Routine changes can preview and execute in one step in the session's selected
+   target; critical changes still ask for approval. Restart your coding agent
+   afterwards. It launches Cavelon automatically; you do not edit its start command.
+
+Updates keep your existing login. First installation still uses `cavelon setup`
+for guided login. With no terminal, in CI or in an agent shell, the installer
+asks nothing and keeps plugins, skills and the saved mode unless selected by
+options. A plugin update can require internet access; the offline installer
+does not start it unless selected. A failed follow-up reports a nonzero exit
+and leaves the successfully installed CLI in place.
+
+On Windows, an installed executable whose SHA-256 matches the
 verified download stays in place, including while its MCP server is running.
 
 **Options.** On macOS and Linux, pass them after `sh -s --`; on Windows, set
@@ -98,6 +120,9 @@ the environment variable before the line:
 | `--version 0.1.3` | `$env:CAVELON_VERSION = '0.1.3'` | that release instead of the latest |
 | `--dir <folder>` | `$env:CAVELON_INSTALL_DIR = '<folder>'` | another folder |
 | `--no-modify-path` | `$env:CAVELON_NO_MODIFY_PATH = '1'` | change no startup file or `PATH`; it tells you what to add |
+| `--update-agents` / `--skip-agent-update` | `$env:CAVELON_UPDATE_AGENTS = '1'` / `'0'` | refresh or keep plugins and skills without asking |
+| `--yolo` / `--no-yolo` | `$env:CAVELON_MCP_MODE = 'yolo'` / `'standard'` | save the mode for new MCP sessions |
+| `--non-interactive` | `$env:CAVELON_NON_INTERACTIVE = '1'` | no questions; unspecified choices stay unchanged |
 | `CAVELON_DOWNLOAD_URL=<url>` | `$env:CAVELON_DOWNLOAD_URL = '<url>'` | download from a folder holding the release's files instead of GitHub: a mirror's URL, or a local folder such as the [offline bundle](offline-bundle.md)'s `bin` |
 
 ```bash
@@ -115,7 +140,8 @@ sh install.sh
 
 On Windows, `irm <url> -OutFile install.ps1`, read it, then
 `powershell -ExecutionPolicy Bypass -File install.ps1` (it takes `-Version`,
-`-InstallDir` and `-NoModifyPath`).
+`-InstallDir`, `-NoModifyPath`, `-UpdateAgents`, `-SkipAgentUpdate`,
+`-McpMode yolo|standard|keep` and `-NonInteractive`).
 
 **Check the executable yourself.** Every release lists the SHA-256 checksum of
 each of its files in `checksums.txt`, and carries a build provenance
@@ -604,7 +630,7 @@ from a clone, or with `CAVELON_NO_UPDATE_CHECK=1`.
 ### Updating each part
 
 Run the one-line install again: it replaces `cavelon` with the latest release
-(or the one `--version` names) and changes nothing else.
+(or the one `--version` names), then offers plugin/skill updates and YOLO.
 
 ```bash
 curl -fsSL https://github.com/goodguys-gmbh/cavelon-dev-kit/releases/latest/download/install.sh | sh
@@ -614,8 +640,33 @@ curl -fsSL https://github.com/goodguys-gmbh/cavelon-dev-kit/releases/latest/down
 irm https://github.com/goodguys-gmbh/cavelon-dev-kit/releases/latest/download/install.ps1 | iex
 ```
 
-Then run `cavelon setup` again: it replaces the skills it copied with the new
-release's and changes nothing else. The other ways in, and the plugin:
+Answer yes to the plugin/skill question, choose whether to use YOLO, then
+restart your agent. No separate plugin commands or MCP edits are needed.
+For an unattended update with both selected on macOS/Linux:
+
+```bash
+curl -fsSL https://github.com/goodguys-gmbh/cavelon-dev-kit/releases/latest/download/install.sh | sh -s -- --update-agents --yolo --non-interactive
+```
+
+On Windows:
+
+```powershell
+$env:CAVELON_UPDATE_AGENTS = '1'
+$env:CAVELON_MCP_MODE = 'yolo'
+$env:CAVELON_NON_INTERACTIVE = '1'
+irm https://github.com/goodguys-gmbh/cavelon-dev-kit/releases/latest/download/install.ps1 | iex
+Remove-Item Env:CAVELON_UPDATE_AGENTS, Env:CAVELON_MCP_MODE, Env:CAVELON_NON_INTERACTIVE
+```
+
+When updating through npm, Python or Homebrew, update the CLI with that package
+manager and run `cavelon setup --update` to refresh plugins, user skills and the
+current solution's owned setup. This keeps your login and offers the same YOLO
+choice in your terminal. On first installation, run `cavelon setup` for agent
+setup, login and the YOLO choice. Neither path requires the install script.
+`--yes`, `--json` and `--non-interactive` keep the mode unless explicitly set.
+To change only the mode:
+`cavelon setup --mcp-mode yolo --yes` or
+`cavelon setup --mcp-mode standard --yes`. Manual alternatives:
 
 ```bash
 npm i -g @cavelon/cli                                   # the CLI, if npm installed it

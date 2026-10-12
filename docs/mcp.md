@@ -278,7 +278,10 @@ repeat them:
   them within your requested work without an extra chat approval. Starting
   `cavelon mcp --yolo` combines these steps for eligible routine operations in
   one target scope; see [Confirmations and YOLO mode](confirmations.md).
-  It is a process-launch option, never an MCP tool argument.
+  The installer or `cavelon setup --mcp-mode yolo --yes` can save the same
+  startup choice for agent-managed launches; restart the agent to apply it.
+  `--no-yolo` overrides the preference for one process. It is never an MCP
+  tool argument, and a running session never rereads the preference.
 - **What needs your yes.** A preview token identifies a change, not your consent.
   A change that reaches live traffic, the whole tenant, or cannot be taken
   back also needs your own yes, which the agent cannot give: `tenant_create`,

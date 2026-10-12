@@ -14,6 +14,14 @@ const out = (value) => process.stdout.write(`${typeof value === "string" ? value
 const save = () => writeFileSync(stateFile, JSON.stringify(state));
 const without = (list, item) => list.filter((x) => x !== item);
 const call = args.join(" ");
+const enablement = path.join(process.env.GEMINI_CLI_HOME || home, ".gemini", "extensions", "extension-enablement.json");
+function changeGeminiEnablement(install) {
+  if (!process.env.FAKE_GEMINI_ENABLEMENT) return;
+  const config = JSON.parse(readFileSync(enablement, "utf8"));
+  if (install) config.cavelon = { overrides: ["*"] };
+  else delete config.cavelon;
+  writeFileSync(enablement, JSON.stringify(config));
+}
 
 appendFileSync(path.join(home, `.fake-${agent}.log`), `${call}\n`);
 if (process.env.FAKE_AGENT_FAIL && call.startsWith(process.env.FAKE_AGENT_FAIL)) {
@@ -36,10 +44,20 @@ if (agent === "cavelon" && call === "mcp") {
   writeFileSync(path.join(home, ".fake-gemini.cwd"), process.cwd());
   const extension = path.join(process.env.GEMINI_CLI_HOME || home, ".gemini", "extensions", "cavelon");
   mkdirSync(extension, { recursive: true });
-  writeFileSync(path.join(extension, "gemini-extension.json"), JSON.stringify({ name: "cavelon", version: "0.1.2" }));
+  writeFileSync(path.join(extension, "gemini-extension.json"), JSON.stringify({ name: "cavelon", version: args[4].slice(1) }));
+  writeFileSync(path.join(extension, ".gemini-extension-install.json"), JSON.stringify({ type: "github-release", source: args[2], ref: args[4] }));
+  changeGeminiEnablement(true);
   out('Extension "cavelon" installed successfully and enabled.');
 } else if (agent === "gemini" && call === "extensions uninstall cavelon") {
   rmSync(path.join(process.env.GEMINI_CLI_HOME || home, ".gemini", "extensions", "cavelon"), { recursive: true, force: true });
+  changeGeminiEnablement(false);
+} else if (agent === "gemini" && call === "extensions update cavelon") {
+  const extension = path.join(process.env.GEMINI_CLI_HOME || home, ".gemini", "extensions", "cavelon");
+  const metadata = JSON.parse(readFileSync(path.join(extension, ".gemini-extension-install.json"), "utf8"));
+  writeFileSync(path.join(extension, "gemini-extension.json"), JSON.stringify({ name: "cavelon", version: metadata.ref.slice(1) }));
+  out('Extension "cavelon" updated.');
+} else if (call === "plugin marketplace update cavelon-dev-kit" || call === "plugin marketplace upgrade cavelon-dev-kit" || call === "plugin update cavelon@cavelon-dev-kit --scope user") {
+  out("Updated Cavelon.");
 } else if (call === "plugin list --json") {
   if (agent === "claude") out(state.plugins.map((id) => ({ id, version: "0.1.2", scope: "user", enabled: true })));
   else out({ installed: state.plugins.map((id) => ({ pluginId: id, installed: true, enabled: true })) });
@@ -58,7 +76,7 @@ if (agent === "cavelon" && call === "mcp") {
     process.stderr.write("Marketplace cavelon-dev-kit not found\n");
     process.exit(1);
   }
-  state.plugins.push("cavelon@cavelon-dev-kit");
+  if (!state.plugins.includes("cavelon@cavelon-dev-kit")) state.plugins.push("cavelon@cavelon-dev-kit");
   save();
 } else if (call === "plugin uninstall cavelon@cavelon-dev-kit --scope user" || call === "plugin remove cavelon@cavelon-dev-kit") {
   state.plugins = without(state.plugins, "cavelon@cavelon-dev-kit");

@@ -21,6 +21,16 @@ in Windows PowerShell. With Python, `uvx cavelon` runs the same executable from
 PyPI, and `uv tool install cavelon` or `pipx install cavelon` installs it. Then
 `cavelon setup` sets up your coding agents and logs you in.
 
+Running the one-line installer again updates the CLI, then asks separately
+whether to refresh Cavelon plugins/skills and enable YOLO for new MCP sessions.
+Enter at the YOLO question keeps your choice. Restart your agent afterwards;
+it launches the tools with that personal mode automatically. Critical changes
+still require approval. Other package managers: update the CLI, then run
+`cavelon setup --update`. Change just the mode with
+`cavelon setup --mcp-mode yolo --yes` or `--mcp-mode standard --yes`.
+Interactive `setup` and `setup --update` offer the same YOLO choice, so
+Homebrew, npm, uv and pipx users do not need to run the installer script.
+
 Version 0.1.17 adds Cline, Kilo, Goose and OMP to the OpenCode, Pi and Qwen
 Code integrations. Each has native settings and four skills; guarded changes
 use the qualified client dialog or the person’s own terminal:

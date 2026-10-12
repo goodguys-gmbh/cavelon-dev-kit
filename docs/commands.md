@@ -19,6 +19,7 @@ Every command takes these:
 |---|---|
 | `--json` | Print one JSON document instead of text. |
 | `--yolo` | Automatically apply eligible routine changes in this process's selected target; critical changes still need a person. |
+| `--no-yolo` | Use standard mode for this process, overriding the personal MCP startup mode. |
 | `--instance <url>` | The instance URL (overrides CAVELON_URL and cavelon.yaml). |
 | `--tenant <tenant>` | Tenant slug, name or id (overrides CAVELON_TENANT and cavelon.yaml). |
 | `-h, --help` | Show help for the command. |
@@ -56,10 +57,15 @@ Set up your coding agents for Cavelon and log in, in one guided step.
 cavelon setup [options]
 ```
 
-Finds Claude Code, Codex, Cursor, VS Code with GitHub Copilot, Gemini CLI, Kiro, OpenCode, Pi, Qwen, Cline, Kilo, Goose and OMP, shows what it will change for each, asks once and does it: Claude Code and Codex get the Cavelon plugin through their own plugin command, Gemini CLI the extension of this release (or the files, when the release has none); the others get the `cavelon` MCP server in their user MCP configuration and the skills in their user skills folder. It touches nothing else in those files and records what it did, so --remove undoes exactly that. Then it logs in if needed, choosing the tenant by name as `login` does. The server starts as `cavelon mcp` when cavelon is installed, otherwise through npx. --check reports what is set up and working: each agent's entry, the MCP server starting, and the login. An agent found but never set up for Cavelon is reported and skipped (exit 0 when the rest works); --strict, or naming it with --agents, counts it. Without a terminal it changes nothing unless --yes.
+Finds Claude Code, Codex, Cursor, VS Code with GitHub Copilot, Gemini CLI, Kiro, OpenCode, Pi, Qwen, Cline, Kilo, Goose and OMP, shows what it will change for each, asks once and does it: Claude Code and Codex get the Cavelon plugin through their own plugin command, Gemini CLI the extension of this release (or the files, when the release has none); the others get the `cavelon` MCP server in their user MCP configuration and the skills in their user skills folder. It touches nothing else in those files and records what it did, so --remove undoes exactly that. Then it logs in if needed, choosing the tenant by name as `login` does. The server starts as `cavelon mcp` when cavelon is installed, otherwise through npx. --check reports what is set up and working: each agent's entry, the MCP server starting, and the login. An agent found but never set up for Cavelon is reported and skipped (exit 0 when the rest works); --strict, or naming it with --agents, counts it. --update refreshes plugins and owned skills, including the current solution's generated setup, and keeps your login. --mcp-mode saves a personal startup choice; restart your coding agent to apply it. Critical changes still need approval. Interactive setup and --update also offer the YOLO choice; Enter preserves it. --yes keeps it unless --mcp-mode is given. Without a terminal it changes nothing unless --yes, or explicit --installer update/mode choices are given.
 
 | Option | Description |
 |---|---|
+| `--update` | Refresh agent plugins, owned skills and the current solution's generated setup; keep your login. |
+| `--mcp-mode <standard|yolo>` | Save the personal mode for new MCP sessions, without editing agent launch commands. Critical changes still need approval. |
+| `--installer` | Installer follow-up: ask separately about agent updates and YOLO. Without a terminal, keep both unless explicitly selected. |
+| `--skip-update` | With --installer: skip the agent update question and leave plugins and skills unchanged. |
+| `--non-interactive` | Never ask questions. Installer choices must be passed explicitly; other changes still require --yes. |
 | `--agents <list>` | Only these agents: claude, codex, cursor, copilot, gemini, kiro, opencode, pi, qwen, cline, kilo, goose, omp, or all (comma-separated). Default: every agent found. Repeatable. |
 | `-y, --yes` | Make the changes without asking. |
 | `--check` | Report what is set up and working; change nothing. |
@@ -72,6 +78,8 @@ Examples:
 cavelon setup
 cavelon setup --agents claude,codex --instance https://cavelon.example.com --yes
 cavelon setup --check
+cavelon setup --update
+cavelon setup --mcp-mode yolo --yes
 cavelon setup --remove
 ```
 

@@ -7,6 +7,16 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Added
+
+- Installers now offer separate plugin/skill updates and a personal YOLO choice
+  for agent-managed MCP sessions. Updates preserve login and unspecified choices;
+  explicit flags support unattended installs. Restart the agent to apply them.
+- `cavelon setup --update` refreshes agent plugins, owned user skills and the
+  current solution's generated setup. `setup --mcp-mode yolo|standard --yes`
+  changes only the personal MCP startup preference; `--no-yolo` overrides it for
+  one process. Scope binding and critical-change approval remain unchanged.
+
 ## [0.2.2] - 2026-10-12
 
 ### Added
