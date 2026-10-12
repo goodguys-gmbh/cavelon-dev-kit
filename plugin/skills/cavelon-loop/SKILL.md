@@ -105,11 +105,17 @@ use it when you parse the result.
   URL if you do not know it.
 
 - **Connect a database, leaving the password with a person.** A database query tool
-  needs a connection of the name and dialect its package names, tested
+  can be edited and tested before apply with `db test-run <slug> --draft`;
+  validate, test the unsaved query, then preview apply and obtain the person's
+  approval. Draft tests need the Owner's PAT with `database_connectors.manage`.
+  SSH keys, Kerberos keytabs, CA changes and weaker TLS are Admin steps too.
+  The query needs a connection of the name and dialect its package names, tested
   successfully, in every tenant it is applied to. A personal access token
   holding `database_connectors.manage` (the tenant Owner, legacy Admin, or a
   superadmin in Tenant mode) may run `cavelon db connections create|update|delete`
-  and upload a public CA with `cavelon db connections ca <connection> <file>`.
+  using public settings. A person changes the CA or weakens TLS in the Admin;
+  `db connections ca` retains public-file uploads only on older instances
+  that do not publish the restriction.
   Create sends no password and prints the Admin step from `needs_a_person`;
   a person enters it in Settings › Security & access › Databases. Never take
   a password as an argument, environment value, stdin, file or tool input.

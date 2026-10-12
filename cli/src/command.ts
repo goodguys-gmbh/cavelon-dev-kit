@@ -155,6 +155,8 @@ export interface CommandSpec {
    * the MCP tool's description says so (access.ts).
    */
   operations?: readonly string[];
+  /** Alternative modes: the tool is unavailable only when every listed operation is known to be refused. */
+  operationsAreAlternatives?: boolean;
   /**
    * For a command without a tool: the command whose tool does its job over
    * MCP (`wait` for `watch`), so a line the kit prints for it there names that

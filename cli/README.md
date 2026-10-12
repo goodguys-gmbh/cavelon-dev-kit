@@ -177,7 +177,8 @@ Every command takes `--json` (one JSON document on stdout, errors included),
 | `db instance` | read-only | The dialects the instance runs and the addresses it connects to databases from, which a database's firewall lets in. |
 | `db connections` / `db queries [<query>] [--connection]` / `db runs <query>` | read-only | The tenant's database connections (with their CA certificates' expiry), saved queries (one in full with its SQL and parameters) and a query's runs (no values, no rows). |
 | `db test <connection>` | changing | The tenant Owner tests a connection step by step; exit 3 when a step fails. |
-| `db test-run <query> [--value name=value…]` | changing | The tenant Owner runs a saved query once, identity parameters included, and sees what the model would; exit 3 when it fails. |
+| `db test-run <query> [--draft] [--value name=value…]` | changing | Test a saved query or validate and test edited package SQL before apply. Writes dry-run and report rollback evidence; exit 3 when it fails. Drafts need the Owner's managing PAT. |
+| `db queries delete\|enable\|disable\|rename <query> [<new-slug>] [--confirm]` | changing | Preview a saved-query change, then obtain the person's approval. Delete reports removed assignments; pull follows the change. |
 | `loop start <trigger> [--input <json>] [--wait] [--confirm]` | changing | Start a loop through its trigger, as you; without `--confirm`, shows the trigger, its solution and the payload; with it, returns the run and operation ids. |
 | `loop cancel <run> [--confirm]` | changing (destructive) | Stop a trigger run and its loops; without `--confirm`, shows what would stop. |
 | `loop watch <run> [--loop] [--timeout 10m]` | read-only | One line per decided iteration and per state change, then the loop's outcome; returns when it ends or pauses. |

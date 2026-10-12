@@ -359,7 +359,7 @@ describe("api", () => {
     expect(secret.person_only).toMatchObject({ source: "instance" });
     expect(secret.secret_fields).toEqual(["value"]);
     const text = (await cli(sb, ["api", "describe", "update_model"])).stdout;
-    expect(text).toMatch(/^Secret values \(x-cavelon-secret\): api_key\. A person enters them; an agent leaves them out\.$/m);
+    expect(text).toMatch(/^Secret values \(x-cavelon-secret\): api_key\. Enter them in the Admin; cavelon api never sends them\.$/m);
     expect(text).toMatch(/"api_key": ".*secret value \(x-cavelon-secret\): a person enters it"/);
     expect((await cli(sb, ["api", "describe", "list_variables", "--json"])).json()).toMatchObject({ person_only: null, secret_fields: [] });
   });

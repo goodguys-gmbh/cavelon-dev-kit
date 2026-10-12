@@ -36,8 +36,8 @@ const GROUPS: Array<{ title: string; intro: string; names: string[] }> = [
   {
     title: "Database connections and queries",
     intro:
-      "Read what the instance offers for database connections, and the connections, saved queries and query runs behind a solution's database query tools; the tenant Owner also tests a connection and test-runs a query. A superadmin creates and changes them in the Admin.",
-    names: ["db instance", "db connections", "db queries", "db runs", "db test", "db test-run"],
+      "Read the instance's database offer, manage public connection settings and preview saved-query changes. Test package SQL before apply with --draft. Credentials and person-only connection changes stay in the Admin.",
+    names: ["db instance", "db connections", "db connections create", "db connections update", "db connections delete", "db connections ca", "db login-script", "db schema", "db queries", "db queries delete", "db queries enable", "db queries disable", "db queries rename", "db runs", "db test", "db test-run"],
   },
   {
     title: "Variables and secrets",

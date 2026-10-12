@@ -26,8 +26,19 @@
   "database_connector": {
     "setting": "DATABASE_CONNECTOR_ENABLED",
     "dialects": [],
+    "kerberos_dialects": [],
+    "ssh_tunnels": false,
     "may_write_queries": false,
-    "queries_written_by": "Whoever holds database_connectors.manage in the tenant: its Owner (or Admin) and a superadmin in Tenant mode, under Settings → Databases, by importing a package from the solution's Agents page (Import JSON), or with a personal access token whose role still holds it (cavelon apply). A connection's password is set by a person in the Admin only. An API key never creates or changes a database query; anyone else's import passes while the package's queries match the tenant's."
+    "queries_written_by": "Whoever holds database_connectors.manage in the tenant: its Owner (or Admin) and a superadmin in Tenant mode, under Settings → Databases, by importing a package from the solution's Agents page (Import JSON), or with a personal access token whose role still holds it (cavelon apply). A connection's password, and its SSH tunnel's private key, are set by a person in the Admin only. An API key never creates or changes a database query; anyone else's import passes while the package's queries match the tenant's.",
+    "private_targets": {
+      "managed_by": "A Platform Owner in Platform mode, signed in to the Admin (Platform > Tenants > the tenant > Database network). No tenant role, personal access token or API key adds, changes or removes one; DATABASE_CONNECTOR_PRIVATE_TARGETS adds read-only entries from the configuration.",
+      "operator_operations": [
+        "GET /api/v1/platform/tenants/{tenant_id}/database-private-targets",
+        "POST /api/v1/platform/tenants/{tenant_id}/database-private-targets",
+        "DELETE /api/v1/platform/tenants/{tenant_id}/database-private-targets/{target_id}"
+      ],
+      "tenant_reads": "network.private_targets of GET /api/v1/database-connectors/instance, for a caller holding database_connectors.manage (the tenant Owner)."
+    }
   },
   "confirmations": {
     "enforced": true,

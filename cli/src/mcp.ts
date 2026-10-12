@@ -165,6 +165,7 @@ export function inputSchema(spec: CommandSpec, commands: readonly CommandSpec[] 
  */
 export function notForThisCredential(spec: CommandSpec, access: CredentialAccess | undefined): string | undefined {
   if (!access) return undefined;
+  if (spec.operationsAreAlternatives && spec.operations?.some(operation => operationAccess(access, operation).allowed !== false)) return undefined;
   for (const operation of spec.operations ?? []) {
     const refused = operationAccess(access, operation);
     if (refused.allowed !== false) continue;

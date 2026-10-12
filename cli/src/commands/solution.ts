@@ -37,6 +37,7 @@ import {
   type StoredPreview,
 } from "../local-state.js";
 import { catalogEntry, checkPackage, KIT_CODES, packageVersionOf } from "../package-check.js";
+import { WRITE_PATH_HINT } from "../database-write-paths.js";
 import { applyQueryNotes, connectorOffer, importWritesQueries, NEEDS_SUPERADMIN_CODE, queryBlockedHint, queryChanges, queryTools, readQueryBaseline, rememberQueries, schemaKnowsWrites, type QueryConnection } from "../database-queries.js";
 import { yoloAllows } from "../automation-policy.js";
 import { cliFix, similarCodes } from "../code-hints.js";
@@ -467,7 +468,7 @@ async function inventoryFor(ctx: Context, project: ProjectConfig, disk: PackageO
   return { inventory, skipped };
 }
 
-async function validatePackage(
+export async function validatePackage(
   ctx: Context,
   project: ProjectConfig,
   offline: boolean,
@@ -1669,8 +1670,9 @@ export const explain: CommandSpec = {
     // The instance's fix may name an API route; the command that does the same is easier to follow.
     const fix = cliFix(entry);
     const cli = entry.kind === "cli" || !fix ? undefined : spoken(fix);
-    const hint = entry.hint ? spoken(entry.hint) : entry.hint;
-    const data = { ...entry, hint, ...(entry.area === KNOWLEDGE_OUTCOME_AREA ? { kind: "knowledge_outcome" } : {}), docs, ...(cli ? { cli_fix: cli } : {}), ...(kitHint ? { kit_hint: kitHint } : {}), ...(read.length ? { read } : {}) };
+    const writeAdvice = entry.code === "confirmation_unavailable" && catalog?.api_error_codes?.some(e => e.code === "write_needs_confirmation");
+    const hint = writeAdvice ? WRITE_PATH_HINT : entry.hint ? spoken(entry.hint) : entry.hint;
+    const data = { ...entry, hint, ...(writeAdvice ? { instance_hint: entry.hint } : {}), ...(entry.area === KNOWLEDGE_OUTCOME_AREA ? { kind: "knowledge_outcome" } : {}), docs, ...(cli ? { cli_fix: cli } : {}), ...(kitHint ? { kit_hint: kitHint } : {}), ...(read.length ? { read } : {}) };
     return {
       data,
       text: keyValues([

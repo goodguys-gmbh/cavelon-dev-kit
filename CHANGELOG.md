@@ -7,6 +7,27 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Added
+
+- Database connection commands accept public SSH bastion, Kerberos and listener
+  redirect settings. Instance, test and run output shows published private targets,
+  SSH/engine steps, run surface and redirect evidence, with older-instance fallbacks.
+- `db test-run <slug> --draft` validates and tests package SQL before apply, without
+  saving it. Write tests report dry-run/rollback evidence and never retry an ambiguous outcome.
+- Saved query delete, enable, disable and rename commands preview first and require
+  the person's approval. Delete prints removed assignments; pull follows a rename.
+- Validation warns about Citus administrative calls and visible unconfirmed write
+  paths. Database contract snapshots, errors, documentation and skills cover the
+  instance's current connector behavior, compatible engines and optional Db2 support.
+
+### Fixed
+
+- Generic API calls refuse published secret fields in personal terminals as well
+  as agent sessions. Connection CA changes and weaker TLS direct a token to the
+  Admin where the instance publishes the person-only restriction.
+- Confirmation guidance names approved workflow paths instead of suggesting that
+  turning query confirmation off alone permits an unattended write.
+
 ## [0.2.3] - 2026-10-12
 
 ### Added

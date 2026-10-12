@@ -177,6 +177,15 @@ describe("conditional identity restrictions", () => {
     expect(JSON.stringify(description)).toContain(runRestriction.reason);
   });
 
+  it("still marks query testing unavailable when the credential may use neither mode", () => {
+    const principal = { kind: "api_key", mode: "tenant", permissions: [], needs_a_person: [], api_key: null } as unknown as MetaPrincipal;
+    const spec = COMMANDS.find(c => c.mcpTool === "db_test_run")!;
+    expect(toolFor(spec, COMMANDS, accessOf(principal)).description).toMatch(/^Not for this credential/);
+    // Other workflows may need every listed operation, rather than choosing one mode.
+    const savedOnly = { ...principal, permissions: ["database_connectors.test"] } as unknown as MetaPrincipal;
+    expect(toolFor({ ...spec, operationsAreAlternatives: false }, COMMANDS, accessOf(savedOnly)).description).toMatch(/^Not for this credential/);
+  });
+
   it.each(["end_user.id", "end_user.external_subject", "end_user.email", "end_user.future_field"])("detects published %s parameter sources regardless of supplied values", async source => {
     query.parameters[1]!.source = source;
     const result = await cli(sb, ["db", "test-run", query.slug, "--json"]);

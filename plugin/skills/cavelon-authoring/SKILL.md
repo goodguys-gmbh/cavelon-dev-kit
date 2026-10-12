@@ -328,6 +328,22 @@ schema has them: `cavelon validate` reports an unknown section):
 
 ## Database query tools
 
+Before applying edited SQL, run `cavelon db test-run <slug> --draft --value
+<name>=<value>`: it validates package/ and tests the unsaved query without
+saving it. Draft tests need `database_connectors.manage` with the Owner's PAT
+or the Admin, never an API key. Saved query delete, enable, disable and rename
+use `cavelon db queries <action>`; preview first and obtain the person's yes,
+then pull so the package follows. YOLO does not approve those changes.
+
+Connection settings stay outside packages. The CLI accepts public SSH tunnel,
+Kerberos and listener-redirect settings, but passwords, SSH private keys,
+keytabs, any CA change and weaker TLS stay with a person in the Admin.
+`db instance` publishes runnable and Kerberos dialects, SSH support and the
+tenant's admitted private targets; never infer support from a dialect name.
+Db2 requires verified TLS and the instance's explicit offer. PostgreSQL
+compatible engines use `postgresql`, MySQL compatible engines use `mysql`;
+TiDB is refused. `validate` warns on Citus administrative function calls.
+
 A database query tool lets an agent answer from a customer's live database. A
 saved query of explicit `kind: read` or `kind: write` is one tool (`tool_type: database_query` in
 `package/tools.yaml`); the model only calls it and fills the parameters it is
@@ -552,8 +568,14 @@ graph_edges:
   in such a run.
 - **Write confirmation and budget.** Every direct Tool Call node refuses a
   write with `requires_confirmation: true` (`confirmation_unavailable`),
-  because it cannot wait for the person's click; `validate` warns. Turn it
-  off only for an intended unattended write. The shared workflow cap
+  because it cannot wait for the person's click; `validate` warns. Without
+  query confirmation, use a schedule, a webhook whose secret header is checked,
+  or Run now. On an outsider-started path, only a direct Tool Call after the
+  latest approved Approval decision with no later agent stage may write;
+  a later rejection revokes it. An agent cannot use that exception. Other
+  paths answer `write_needs_confirmation`; keep confirmation on for chat.
+  `validate` warns about statically visible unsafe paths; it cannot attest
+  an actual runtime decision. The shared workflow cap
   counts the query's saved `max_calls` across a workflow run's Tool Call
   nodes, Agent stages, `for_each` iterations and concurrent branches, and
   persists on resume. The next call is refused with `tool_call_limit_reached`

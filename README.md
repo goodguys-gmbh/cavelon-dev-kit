@@ -11,6 +11,10 @@ through the Admin.
 - **Database limits**: `cavelon db instance` and `cavelon limits` show the
   tenant's connection/query caps and counts where published. An operator can
   set a tenant override in Platform mode; see [Database limits](docs/limits.md#database-connections-and-queries).
+- **Database connector updates (unreleased)**: test edited SQL before apply with
+  `db test-run <slug> --draft`, manage saved queries with preview and personal
+  approval, and configure public SSH/Kerberos/redirect settings. See
+  [Connect a database](docs/connect-a-database.md) for supported instance contracts.
 - **The Cavelon plugin** adds four skills that teach the agent the development
   loop, and the `cavelon` MCP server. Claude Code and Codex install it from this
   repository, Gemini CLI as an extension, and each release carries it as a
@@ -319,7 +323,7 @@ how to review and test its work.
 | [Limits](docs/limits.md) | reading and changing limits, and who may change what |
 | [Troubleshooting](docs/troubleshooting.md) | exit codes and error codes, with what to do |
 | [Security](docs/security.md) | where the token lives, what the agent sees, what is sent where |
-| [Connect a database](docs/connect-a-database.md) | create a connection, set its password in the Admin, upload a public CA, test it, explore its schema, and write and test list parameters for `IN (:name)` |
+| [Connect a database](docs/connect-a-database.md) | public connection settings, SSH/Kerberos, Admin credentials and CA, saved and draft queries, tests and write approval paths |
 | [Offline bundle](docs/offline-bundle.md) | installing without internet access: the signed bundle each release carries, its format, verifying it with cosign |
 | [FAQ](docs/faq.md) | common questions |
 

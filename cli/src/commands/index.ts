@@ -17,6 +17,7 @@ import { harnessClone, harnessDefault, harnessList, harnessNew, tenantCreate, te
 import { kbUpload, testRun, trace } from "./work.js";
 import { dbConnections, dbInstance, dbQueries, dbRuns, dbTest, dbTestRun } from "./db.js";
 import { dbConnectionCa, dbConnectionCreate, dbConnectionDelete, dbConnectionUpdate, dbLoginScript, dbSchema } from "./db-connections.js";
+import { dbQueryDelete, dbQueryEnable, dbQueryDisable, dbQueryRename } from "./db-query-management.js";
 import { secretsDelete, secretsList, secretsSet, variablesDelete, variablesGet, variablesList, variablesSet } from "./values.js";
 import { loopCancel, loopIterations, loopPause, loopResume, loopStart, loopWatch, triggerIdentity } from "./loops.js";
 import {
@@ -133,6 +134,10 @@ export const COMMANDS: CommandSpec[] = [
   dbLoginScript,
   dbSchema,
   dbQueries,
+  dbQueryDelete,
+  dbQueryEnable,
+  dbQueryDisable,
+  dbQueryRename,
   dbRuns,
   dbTest,
   dbTestRun,

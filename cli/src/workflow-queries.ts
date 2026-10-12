@@ -161,7 +161,7 @@ export function checkWorkflowQueries(disk: PackageOnDisk, schema: PackageSchema,
     if (!query) continue;
     const confirmation = object(object(querySchema(schema)?.properties)?.requires_confirmation);
     if (schemaKnowsWrites(schema) && query.kind === "write" && confirmation && (query.requires_confirmation ?? confirmation.default) === true) {
-      findings.push({ code: "confirmation_unavailable", severity: "warning", ...locate(disk, at), message: `Tool Call node "${String(node.slug ?? index)}" calls write query "${slug}" with requires_confirmation: the node cannot wait for a person's click, so the instance refuses it with confirmation_unavailable.`, hint: "Call the query from an agent in a signed-in person's chat, or have the tenant's query manager turn confirmation off for an intended unattended write." });
+      findings.push({ code: "confirmation_unavailable", severity: "warning", ...locate(disk, at), message: `Tool Call node "${String(node.slug ?? index)}" calls write query "${slug}" with requires_confirmation: the node cannot wait for a person's click, so the instance refuses it with confirmation_unavailable.`, hint: "Keep confirmation on for an agent's chat use. For a direct Tool Call, put an Approval node immediately before it with no intervening agent stage, or start the run from a schedule, a webhook with a checked secret header, or Run now; only those intended paths may use a query without confirmation." });
     }
     const parameters = rows(query.parameters);
     const model = new Set(parameters.filter((parameter) => (parameter.source ?? source) === source).map((parameter) => parameter.name));

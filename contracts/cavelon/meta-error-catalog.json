@@ -2562,8 +2562,8 @@
     {
       "code": "auth_failed",
       "area": "database_connector",
-      "message": "The database refused the login, or the stored password could not be read.",
-      "hint": "Replace the connection's password (the tenant Owner may) and run the connection test.",
+      "message": "The database refused the login, the stored password could not be read, or the connection has no password yet (one a personal access token created).",
+      "hint": "Set or replace the connection's password in the Admin under Settings → Databases (the tenant Owner may; a token never sends one) and run the connection test.",
       "docs": "/docs/troubleshooting/database-connections#error-codes"
     },
     {
@@ -2604,15 +2604,15 @@
     {
       "code": "target_refused",
       "area": "database_connector",
-      "message": "The platform's egress policy refused the connection's host or port; nothing was sent to it.",
-      "hint": "Run the connection test: its policy step names the reason (host_syntax, port_range, non_public_address, mixed_answers).",
+      "message": "The platform's egress policy refused the connection's host or port, or a server's redirect to another address (an Oracle listener REDIRECT, SQL Server routing) that the connection does not follow or that leads outside the allowed targets; nothing was sent there.",
+      "hint": "Run the connection test: its policy step names the reason (host_syntax, port_range, non_public_address, mixed_answers); for a redirect its login step does. A RAC SCAN or availability group listener needs follows_redirects on the connection.",
       "docs": "/docs/troubleshooting/database-connections#error-codes"
     },
     {
       "code": "timeout",
       "area": "database_connector",
       "message": "The statement ran longer than the connection's statement timeout and was stopped.",
-      "hint": "Make the query cheaper (an index, a narrower WHERE, a LIMIT), or have a superadmin raise the connection's statement timeout within DATABASE_CONNECTOR_STATEMENT_TIMEOUT_MS_MAX.",
+      "hint": "Make the query cheaper (an index, a narrower WHERE, a LIMIT), or have the tenant Owner raise the connection's statement timeout within DATABASE_CONNECTOR_STATEMENT_TIMEOUT_MS_MAX.",
       "docs": "/docs/troubleshooting/database-connections#error-codes"
     },
     {
@@ -2625,8 +2625,8 @@
     {
       "code": "unavailable",
       "area": "database_connector",
-      "message": "The database connector, the connection or the query is switched off, the instance does not run this connection's dialect, or a SQL Server connection's last test found write privileges that no superadmin acknowledged.",
-      "hint": "Check DATABASE_CONNECTOR_ENABLED and database_connector.dialects in /meta/capabilities, and that the connection and the query are enabled under Settings → Databases. For SQL Server, give the connection a read-only login and test it again, or have a superadmin acknowledge its write privileges.",
+      "message": "The database connector, the connection or the query is switched off, the instance does not run this connection's dialect, or a SQL Server connection's last test found write privileges that nobody acknowledged.",
+      "hint": "Check DATABASE_CONNECTOR_ENABLED and database_connector.dialects in /meta/capabilities, and that the connection and the query are enabled under Settings → Databases. For SQL Server, give the connection a read-only login and test it again, or have the tenant Owner acknowledge its write privileges.",
       "docs": "/docs/troubleshooting/database-connections#error-codes"
     },
     {
@@ -2667,7 +2667,7 @@
     {
       "code": "forbidden_keyword",
       "area": "database_connector",
-      "message": "The SQL names a keyword that writes, creates or calls something (INSERT, INTO, DELETE, EXEC, …); on SQL Server also a statement keyword T-SQL would run as a second statement (COMMIT, DECLARE, SET, WAITFOR, …) or a function that reaches another server (OPENROWSET, OPENQUERY); on Oracle also a PL/SQL block or declaration (BEGIN, DECLARE, WITH FUNCTION), a DBMS_* or UTL_* package, HTTPURITYPE, or a database link (table@link).",
+      "message": "The SQL names a keyword that writes, creates or calls something (INSERT, INTO, DELETE, EXEC, …); on SQL Server also a statement keyword T-SQL would run as a second statement (COMMIT, DECLARE, SET, WAITFOR, …) or a function that reaches another server (OPENROWSET, OPENQUERY); on Oracle also a PL/SQL block or declaration (BEGIN, DECLARE, WITH FUNCTION), a DBMS_* or UTL_* package, HTTPURITYPE, or a database link (table@link); on Db2 also a compound statement, transaction control, an external table, a utility (EXPORT, IMPORT, LOAD), an ADMIN_* routine (SYSPROC.ADMIN_CMD), a DBMS_* or UTL_* module or an HTTP* function.",
       "hint": "Remove the keyword; a query only reads. A column or table of that name is written as a quoted identifier.",
       "docs": "/docs/concepts/database-connections#queries-and-parameters"
     },
@@ -2681,7 +2681,7 @@
     {
       "code": "locking_clause",
       "area": "database_connector",
-      "message": "The SQL locks rows (FOR UPDATE, FOR SHARE, LOCK IN SHARE MODE).",
+      "message": "The SQL locks rows (FOR UPDATE, FOR SHARE, LOCK IN SHARE MODE, Db2's USE AND KEEP … LOCKS).",
       "hint": "Remove the locking clause; a query reads without locking.",
       "docs": "/docs/concepts/database-connections#queries-and-parameters"
     },
@@ -2751,7 +2751,7 @@
     {
       "code": "write_privileges_block_procedure",
       "area": "database_connector",
-      "message": "A stored-procedure query (EXEC) runs only on a SQL Server login whose last test found no write privileges, and this connection's last test found some. Cavelon cannot see whether a procedure writes, so the read-only login is the boundary; a superadmin's acknowledgement of the write privileges does not count for procedures. Such a query cannot be saved or enabled, and does not run.",
+      "message": "A stored-procedure query (EXEC) runs only on a SQL Server login whose last test found no write privileges, and this connection's last test found some. Cavelon cannot see whether a procedure writes, so the read-only login is the boundary; an acknowledgement of the write privileges does not count for procedures. Such a query cannot be saved or enabled, and does not run.",
       "hint": "Give the connection a login without write privileges (db_datareader, and EXECUTE only on procedures that read: a procedure writes its owner's tables for any caller; Settings → Databases shows the script), run the connection test again, then save the query.",
       "docs": "/docs/concepts/database-connections#queries-and-parameters"
     },
@@ -2759,7 +2759,7 @@
       "code": "write_privileges_unacknowledged",
       "area": "database_connector",
       "message": "The connection's last test found that its login can write, and its dialect (SQL Server) has no read-only transaction, so its queries cannot be enabled and do not run.",
-      "hint": "Give the connection a login that may only read (Settings → Databases shows the script) and test it again. Or a superadmin acknowledges on the connection that this login can write; the rollback after every call stays. A stored-procedure query needs the read-only login: the acknowledgement does not count for it (write_privileges_block_procedure).",
+      "hint": "Give the connection a login that may only read (Settings → Databases shows the script) and test it again. Or the tenant Owner acknowledges on the connection that this login can write; the rollback after every call stays. A stored-procedure query needs the read-only login: the acknowledgement does not count for it (write_privileges_block_procedure).",
       "docs": "/docs/concepts/database-connections#queries-and-parameters"
     },
     {
@@ -2892,14 +2892,14 @@
       "code": "non_public_address",
       "area": "database_connector",
       "message": "The host resolves to a private, loopback, link-local or otherwise non-public address, which the platform does not connect to.",
-      "hint": "Use the database's public endpoint and allowlist the platform's outbound address. A database inside a private network is reached only through a VPN and a private target an operator sets for this tenant (DATABASE_CONNECTOR_PRIVATE_TARGETS).",
+      "hint": "Use the database's public endpoint and allowlist the platform's outbound address. A database inside a private network is reached only through a VPN and a private target a Platform Owner adds for this tenant (Platform > Tenants > the tenant > Database network); the tenant Owner sees the opened ranges in a connection's Network section.",
       "docs": "/docs/troubleshooting/database-connections#connection-test"
     },
     {
       "code": "port_range",
       "area": "database_connector",
-      "message": "The connection's port is outside 1024-65535.",
-      "hint": "Use the port the database listens on; every standard database port is within 1024-65535.",
+      "message": "The connection's port is outside 1024-65535, or a Kerberos KDC's port is outside that range and not 88, or an SSH bastion's port is outside that range and not 22.",
+      "hint": "Use the port the database listens on; every standard database port is within 1024-65535. A KDC listens on 88, an SSH bastion on 22.",
       "docs": "/docs/troubleshooting/database-connections#connection-test"
     },
     {
@@ -3892,7 +3892,7 @@
     {
       "code": "write_statement_refused",
       "area": "database_connector",
-      "message": "A write query is not the one statement it may be: exactly one INSERT, UPDATE or DELETE (on SQL Server also one EXEC of a stored procedure), an UPDATE or DELETE with a WHERE that uses at least one :parameter, and never DDL (CREATE, ALTER, DROP), TRUNCATE, GRANT or REVOKE, transaction control, MERGE, COPY, LOAD DATA, SELECT … INTO (OUTFILE), a second write inside it, or a function that reads or writes the server's files or reaches another server (pg_read_file, lo_export, dblink, LOAD_FILE, OPENROWSET); on Oracle also RETURNING, a DBMS_* or UTL_* package, PL/SQL or a database link.",
+      "message": "A write query is not the one statement it may be: exactly one INSERT, UPDATE or DELETE (on SQL Server also one EXEC of a stored procedure), an UPDATE or DELETE with a WHERE that uses at least one :parameter, and never DDL (CREATE, ALTER, DROP), TRUNCATE, GRANT or REVOKE, transaction control, MERGE, COPY, LOAD DATA, SELECT … INTO (OUTFILE), a second write inside it, or a function that reads or writes the server's files or reaches another server (pg_read_file, lo_export, dblink, LOAD_FILE, OPENROWSET); on Oracle also RETURNING, a DBMS_* or UTL_* package, PL/SQL or a database link; on Db2 also an external table, a utility, an ADMIN_* routine, a DBMS_* or UTL_* module or an HTTP* function.",
       "hint": "Write one INSERT, UPDATE or DELETE whose WHERE names the row by a :parameter, for example UPDATE orders SET status = 'cancelled' WHERE number = :order_no AND email = :email. Keep schema changes and bulk loads out of the assistant. A SELECT is a read query (kind read).",
       "docs": "/docs/concepts/database-connections#queries-and-parameters"
     },
@@ -3916,6 +3916,125 @@
       "message": "The tenant holds as many database queries as its limit allows (DATABASE_CONNECTOR_MAX_QUERIES_PER_TENANT, 200 by default, or the tenant's own limit a platform operator set), so a new one is refused, whether saved in the Admin, through a token or by a package import, whose preview names it as a blocker. Existing queries keep working.",
       "hint": "Delete a query that is no longer needed under Settings → Databases, or ask the platform operator to raise this tenant's limit (Settings › Limits, or max_database_queries on PATCH /api/v1/tenants/{id}/limits with limits.manage), then save or preview again.",
       "docs": "/docs/concepts/database-connections#limits-per-tenant"
+    },
+    {
+      "code": "confirmation_card_incomplete",
+      "area": "database_connector",
+      "message": "A write query that asks the person to confirm got a value its confirmation card cannot show in full (more than 500 characters, or a list item over 160), so the person could not see what they would approve. Nothing was asked and nothing was written.",
+      "hint": "Give the parameter a max_length of at most 500 (160 for a list's items), so the model's values fit the card, or switch the confirmation off for an unattended write.",
+      "docs": "/docs/troubleshooting/database-connections#error-codes"
+    },
+    {
+      "code": "engine_not_supported",
+      "area": "database_connector",
+      "message": "The server speaks the connection's dialect but is an engine the connector refuses, because it cannot guarantee a read-only transaction, the statement timeout or a rollback there. TiDB is one: its READ ONLY is a no-op that commits writes once tidb_enable_noop_functions is on. The connector tells the engine from the server's own version string at login, before any statement of a query; nothing ran.",
+      "hint": "Connect a supported engine instead, for example a MySQL or PostgreSQL replica the data is copied to. The connection test's login step names the engine and the reason; the compatibility table in the database connections guide lists what works.",
+      "docs": "/docs/troubleshooting/database-connections#error-codes"
+    },
+    {
+      "code": "kerberos_auth_failed",
+      "area": "database_connector",
+      "message": "A Kerberos login failed: the KDC refused the principal's password or keytab (wrong, expired or locked account, no AES key, clocks more than five minutes apart), or the database accepted the ticket but has no login for the account (SQL Server: CREATE LOGIN … FROM WINDOWS; PostgreSQL: a gss line in pg_hba.conf and a role of that name).",
+      "hint": "Run the connection test: its kerberos and login steps say which side refused. Set the account's current password or a fresh keytab in the Admin, enable AES for the account, and create the database login for the account.",
+      "docs": "/docs/troubleshooting/database-connections#error-codes"
+    },
+    {
+      "code": "kerberos_kdc_unreachable",
+      "area": "database_connector",
+      "message": "A Kerberos connection could not get a ticket because none of its KDCs answered within the connect timeout, or no KDC address resolved. A KDC the egress policy refuses (loopback, metadata, a private address without a private target) answers target_refused instead.",
+      "hint": "Run the connection test: its kerberos step names the KDCs tried. Check the KDC addresses (a domain controller's name or IP and port 88), that they accept TCP from the platform's outbound address, and for a KDC on a private network that the operator's private target lists port 88.",
+      "docs": "/docs/troubleshooting/database-connections#error-codes"
+    },
+    {
+      "code": "kerberos_spn_unknown",
+      "area": "database_connector",
+      "message": "A Kerberos login failed because the KDC knows no service principal for the database: MSSQLSvc/host:port for SQL Server, postgres/host for PostgreSQL, where host is the connection's host exactly as entered (no DNS lookup changes it).",
+      "hint": "Register the SPN on the database's service account (setspn -S MSSQLSvc/db.corp.example.com:1433 CORP\\svc_sql), or enter the host name the SPN was registered for, not an IP address or alias.",
+      "docs": "/docs/troubleshooting/database-connections#error-codes"
+    },
+    {
+      "code": "session_limits_not_applied",
+      "area": "database_connector",
+      "message": "After it set them, the connector read back the session's read-only default and statement timeout, and the server had not kept them, could not report them, or refused the startup options that set them. PgBouncer refuses those options in every pool mode (\"unsupported startup parameter\"), and with ignore_startup_parameters=options drops them; an engine may ignore them. Every new connection checks this once; nothing of the query ran.",
+      "hint": "Connect to the database server itself. Behind PgBouncer, use session mode with ignore_startup_parameters=options and give the connection's login the same limits as server-side defaults: ALTER ROLE <login> SET default_transaction_read_only = on and SET statement_timeout = the connection's statement timeout in milliseconds. The connection test's login step names this code.",
+      "docs": "/docs/troubleshooting/database-connections#error-codes"
+    },
+    {
+      "code": "ssh_auth_failed",
+      "area": "database_connector",
+      "message": "The bastion refused the SSH login: the user does not exist, the connection's public key is not in its authorized_keys, or the bastion wants another method too. Or the tunnel has no private key yet (a personal access token created it), or the stored key does not decrypt.",
+      "hint": "Add the public key the connection shows under Settings → Databases to the bastion user's authorized_keys (the shown line restricts it to the database), or set the private key again there (a person does; a token never sends one).",
+      "docs": "/docs/troubleshooting/database-connections#error-codes"
+    },
+    {
+      "code": "ssh_forwarding_refused",
+      "area": "database_connector",
+      "message": "The bastion accepted the login but refused to forward to the database's host and port (administratively prohibited): its permitopen, PermitOpen or AllowTcpForwarding does not allow it.",
+      "hint": "Allow exactly the database's host and port for this key on the bastion (permitopen=\"host:port\" in authorized_keys, or PermitOpen in a Match block); the host and port must be written as the connection names them.",
+      "docs": "/docs/troubleshooting/database-connections#error-codes"
+    },
+    {
+      "code": "ssh_host_key_mismatch",
+      "area": "database_connector",
+      "message": "The bastion presented a host key whose SHA256 fingerprint is not the one configured on the connection. The platform stopped before it authenticated, so no user name, key or database traffic was sent: this is what a machine in the middle looks like, and also what a bastion whose host key was replaced looks like.",
+      "hint": "Ask the bastion's administrator for the fingerprint over a channel you trust (on the bastion: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub) and enter it on the connection. Never copy it from an unverified first connection.",
+      "docs": "/docs/troubleshooting/database-connections#error-codes"
+    },
+    {
+      "code": "ssh_unreachable",
+      "area": "database_connector",
+      "message": "The connection's SSH bastion could not be reached: the TCP connection to it failed, it did not speak SSH, the SSH connection dropped, or it offers no key exchange, cipher or host key the platform accepts (curve25519 or ECDH or DH group 14/16 with SHA-2; AES-GCM or AES-CTR; Ed25519, ECDSA or RSA with SHA-2). No credential was sent.",
+      "hint": "Run the connection test: its ssh step says which. Check the bastion's host and port, that its firewall allowlists the platform's outbound address (DATABASE_CONNECTOR_EGRESS_IPS), and that it runs a current OpenSSH.",
+      "docs": "/docs/troubleshooting/database-connections#error-codes"
+    },
+    {
+      "code": "write_count_unknown",
+      "area": "database_connector",
+      "message": "A write query ran, but the database did not report how many rows it changed (Db2 sent no row count). The cap cannot be checked without it, so the transaction was rolled back and nothing was changed.",
+      "hint": "Check the statement on the database: an INSERT, UPDATE or DELETE reports its count. Report it to the platform team if it keeps happening; the server's reply was not what Db2 sends.",
+      "docs": "/docs/troubleshooting/database-connections#error-codes"
+    },
+    {
+      "code": "write_needs_confirmation",
+      "area": "database_connector",
+      "message": "A write query without 'Ask the person to confirm before writing' was called in a run that a chat started: the widget, an API chat, voice, the Playground, a test suite, a workflow whose start node is Chat Start, or a messaging-channel, email or calendar trigger, and the run's latest Approval decision before it was not an approval (a person of the tenant, or a key with approvals.decide), an agent stage ran after the approval, or an agent made the call: after an approval only a Tool Call node writes. Whoever starts such a run, an anonymous visitor included, could otherwise make the model or the workflow write. Nothing was written.",
+      "hint": "For a change in a chat, turn the confirmation on for that query: the signed-in person then confirms it on a card. In a workflow, put an Approval node right before the Tool Call node that writes, with no agent stage in between, so a person of the tenant approves each run. Or start the workflow or agent from a schedule, a webhook with its secret header or Run now.",
+      "docs": "/docs/troubleshooting/database-connections#error-codes"
+    },
+    {
+      "code": "write_not_rolled_back",
+      "area": "database_connector",
+      "message": "A MySQL or MariaDB write was rolled back (a dry run, a test run, a write over its cap, or one that failed), and the server answered that some changes could not be rolled back (warning 1196): a table it touched, often through a trigger, uses an engine without transactions. Part of the change may have been kept; the run evidence records committed as unknown, and the model is told not to retry.",
+      "hint": "Check the database for the change. Convert the tables the write and its triggers touch to InnoDB.",
+      "docs": "/docs/troubleshooting/database-connections#error-codes"
+    },
+    {
+      "code": "write_table_not_transactional",
+      "area": "database_connector",
+      "message": "A write query on MySQL or MariaDB names a table whose storage engine cannot roll back (MyISAM, Aria, MEMORY, CSV, ARCHIVE, MERGE), a view, or a table the server does not list; on Db2 the write names a view, nickname, temporary or materialized query table, or a table whose triggers (or the tables they and cascading foreign keys reach) call a routine, which may be an autonomous procedure that commits on its own. The connector rolls back every dry run, every test run and every write over its cap, which such a table would keep, so the write is refused before it runs, at save and enable too when the database can be reached. Nothing was changed.",
+      "hint": "MySQL and MariaDB: convert the table to InnoDB (ALTER TABLE … ENGINE=InnoDB) or write to an InnoDB table. Db2: write to the base table, and keep routine calls out of its triggers. Then save the query again. The connection test lists the tables that cannot roll back.",
+      "docs": "/docs/troubleshooting/database-connections#error-codes"
+    },
+    {
+      "code": "dialect_not_enabled",
+      "area": "database_connector",
+      "message": "The connection's database type is offered on request only, and this instance has not enabled it: IBM Db2 runs through Cavelon's own client, which the platform operator turns on per instance. Creating such a connection, changing one to it, or importing a package whose query needs one is refused; an existing one answers unavailable and is never dialled.",
+      "hint": "Ask the platform operator to set DATABASE_CONNECTOR_DB2_ENABLED=true for the instance; /meta/capabilities lists the database types it offers under database_connector.dialects.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
+      "code": "kerberos_keytab_invalid",
+      "area": "database_connector",
+      "message": "A Kerberos connection's keytab was refused when it was set: it is not a keytab file (format 0x0502, base64 in the API), it is larger than 64 KiB, it holds no key for the connection's kerberos_principal@kerberos_realm, or only RC4 or DES keys, which the connector refuses. Only a connection with auth_method kerberos takes one.",
+      "hint": "Export the keytab for the service account itself (ktpass /princ svc_cavelon@CORP.EXAMPLE.COM /crypto AES256-SHA1 /ptype KRB5_NT_PRINCIPAL /pass * /out svc_cavelon.keytab), with AES enabled on the account, and upload it under Settings → Databases. Or set the account's password instead.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
+      "code": "parameter_name_reserved_by_card",
+      "area": "database_connector",
+      "message": "A write query that asks the person first names a parameter content, content_base64, body_html, body_text or confirm_token. The confirmation card renders arguments of these names as mail or file content (a body as text or not at all, content as its size), not as the value written, so the person would approve something other than what runs.",
+      "hint": "Rename the parameter, for example to note_text, in the SQL and the parameter list.",
+      "docs": "/docs/concepts/database-connections#queries-and-parameters"
     }
   ]
 }

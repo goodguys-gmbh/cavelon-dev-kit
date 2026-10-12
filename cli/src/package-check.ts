@@ -8,6 +8,7 @@ import { locate, schemaSections, tenantWideSections, type Finding, type PackageO
 import { MANIFEST_SECTION, PERSONA_SECTION, sectionFields } from "./package-format.js";
 import { kitErrorEntry } from "./kit-codes.js";
 import { checkWorkflowQueries } from "./workflow-queries.js";
+import { checkWritePaths } from "./database-write-paths.js";
 import { cavelonCommand, fill, folderCommand } from "./printed.js";
 import {
   branches,
@@ -77,6 +78,12 @@ const DATABASE_DOCS = "/docs/administration/database-connectors";
  * lists the same code; these explain the rest without a round trip.
  */
 export const KIT_CODES: CatalogEntry[] = [
+  {
+    code: "private_target_refused", area: "database_connector",
+    message: "The instance refused a platform operator's private database target.",
+    hint: "Read detail.reason: invalid_range means an invalid CIDR; too_wide means a range above the allowed size; contains_local_interface means the range includes the instance's own interface; platform_network or platform_service means it reaches platform infrastructure; overlaps_another_tenant means another tenant owns an overlapping range. A Platform Owner reviews the range in the Admin in Platform mode. A tenant token never adds or removes these targets.",
+    docs: DATABASE_DOCS,
+  },
   {
     code: SCHEMA_CODE,
     area: "package",
@@ -438,6 +445,7 @@ export function checkPackage(disk: PackageOnDisk, options: CheckOptions): Findin
   findings.push(...checkTenantWide(disk, options.schema, options.solution));
   findings.push(...checkQueryTools(disk, options.schema, options.queryBaseline, options.queryConnections));
   findings.push(...checkWorkflowQueries(disk, options.schema, options.inventory, options.queryBaseline));
+  findings.push(...checkWritePaths(disk, options.schema, options.catalog, options.queryBaseline));
   noteTenantWide(findings, options.schema, options.solution);
 
   for (const finding of findings) {
