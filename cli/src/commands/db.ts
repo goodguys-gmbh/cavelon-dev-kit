@@ -768,6 +768,7 @@ export const dbTestRun: CommandSpec = {
   mcpEffect: "Tests a saved query or unsaved package definition once on the instance; writes are dry runs that roll back. The instance keeps audit evidence and changes no setting or saved query. Never retry an ambiguous write outcome.",
   mcpTool: "db_test_run",
   operations: ["POST /api/v1/database-connectors/queries/{query_id}/test-run", "POST /api/v1/database-connectors/queries/test-run"],
+  operationsAreAlternatives: true,
   positionals: [{ name: "query", description: "The query's tool slug or id.", required: true }],
   options: {
     draft: { type: "boolean", description: "Validate package/ and test its unsaved query definition before apply (database_connectors.manage)." },

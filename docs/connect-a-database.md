@@ -421,7 +421,9 @@ cavelon db queries delete unused_query
 Each command previews first. Repeat with `--confirm` from the person's own
 terminal, or approve the MCP client's dialog for that exact preview. An agent
 cannot supply the person's yes; YOLO does not skip it. A changed query version
-invalidates its preview. Delete returns the removed agent and skill assignments.
+invalidates its preview. The kit rechecks after the answer too, so SQL or version
+changes while the dialog is open require a fresh preview. Delete returns the
+removed agent and skill assignments.
 Run `cavelon pull` after a change, especially a rename, so `package/` follows.
 Package imports do not delete queries or carry their enabled state.
 

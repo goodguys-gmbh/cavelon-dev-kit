@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { ElicitRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parse, stringify } from "yaml";
 import { COMMANDS } from "../src/commands/index.js";
@@ -64,6 +65,24 @@ describe("saved query lifecycle", () => {
       const stale = await client.callTool({ name: "db_query_disable", arguments: { query: seeded.query.slug, confirm: body.confirm_token } });
       expect(JSON.parse((stale.content as Array<{ text: string }>)[0]!.text)).toMatchObject({ sent: false, token_mismatch: true });
       expect(client.asked).toEqual([]); expect(writes()).toEqual([]);
+    } finally { await client.close(); }
+  });
+
+  it.each(["version", "sql"])("refuses a query's changed %s while its approval dialog is open, before requesting an instance confirmation", async field => {
+    const client = await mcp("approves");
+    client.setRequestHandler(ElicitRequestSchema, async () => {
+      if (field === "version") seeded.query.version++;
+      else seeded.query.sql_text += " /* another editor */";
+      return { action: "accept", content: { approve: true } };
+    });
+    try {
+      const preview = await client.callTool({ name: "db_query_enable", arguments: { query: seeded.query.slug } });
+      const body = JSON.parse((preview.content as Array<{ text: string }>)[0]!.text) as { confirm_token: string };
+      const result = await client.callTool({ name: "db_query_enable", arguments: { query: seeded.query.slug, confirm: body.confirm_token } });
+      expect(result.isError).toBe(true);
+      expect(JSON.parse((result.content as Array<{ text: string }>)[0]!.text)).toMatchObject({ error: { code: "token_mismatch" } });
+      expect(writes()).toEqual([]);
+      expect(server.state.requests.filter(r => r.path === "/api/v1/confirmations")).toEqual([]);
     } finally { await client.close(); }
   });
 

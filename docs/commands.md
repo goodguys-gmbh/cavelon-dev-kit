@@ -972,7 +972,7 @@ Delete a saved database query; preview first, then the person confirms.
 cavelon db queries delete <query> [options]
 ```
 
-Needs database_connectors.manage. Each preview is bound to this query's version and the exact change. Deleting also removes its agent and skill assignments; the result lists what the instance removed. Run cavelon pull afterwards so the package follows the saved query. A coding agent cannot confirm it: over MCP the client asks the person, and from an agent's shell the person runs the confirm in their own terminal.
+Needs database_connectors.manage. Each preview is bound to this query's version and the exact change. Rechecks the query after approval; a changed query needs a fresh preview. Deleting also removes its agent and skill assignments; the result lists what the instance removed. Run cavelon pull afterwards so the package follows the saved query. A coding agent cannot confirm it: over MCP the client asks the person, and from an agent's shell the person runs the confirm in their own terminal.
 
 | Argument | Description |
 |---|---|
@@ -998,7 +998,7 @@ Enable a saved database query; preview first, then the person confirms.
 cavelon db queries enable <query> [options]
 ```
 
-Needs database_connectors.manage. Each preview is bound to this query's version and the exact change. Deleting also removes its agent and skill assignments; the result lists what the instance removed. Run cavelon pull afterwards so the package follows the saved query. A coding agent cannot confirm it: over MCP the client asks the person, and from an agent's shell the person runs the confirm in their own terminal.
+Needs database_connectors.manage. Each preview is bound to this query's version and the exact change. Rechecks the query after approval; a changed query needs a fresh preview. Deleting also removes its agent and skill assignments; the result lists what the instance removed. Run cavelon pull afterwards so the package follows the saved query. A coding agent cannot confirm it: over MCP the client asks the person, and from an agent's shell the person runs the confirm in their own terminal.
 
 | Argument | Description |
 |---|---|
@@ -1024,7 +1024,7 @@ Disable a saved database query; preview first, then the person confirms.
 cavelon db queries disable <query> [options]
 ```
 
-Needs database_connectors.manage. Each preview is bound to this query's version and the exact change. Deleting also removes its agent and skill assignments; the result lists what the instance removed. Run cavelon pull afterwards so the package follows the saved query. A coding agent cannot confirm it: over MCP the client asks the person, and from an agent's shell the person runs the confirm in their own terminal.
+Needs database_connectors.manage. Each preview is bound to this query's version and the exact change. Rechecks the query after approval; a changed query needs a fresh preview. Deleting also removes its agent and skill assignments; the result lists what the instance removed. Run cavelon pull afterwards so the package follows the saved query. A coding agent cannot confirm it: over MCP the client asks the person, and from an agent's shell the person runs the confirm in their own terminal.
 
 | Argument | Description |
 |---|---|
@@ -1050,7 +1050,7 @@ Rename a saved database query; preview first, then the person confirms.
 cavelon db queries rename <query> <new-slug> [options]
 ```
 
-Needs database_connectors.manage. Each preview is bound to this query's version and the exact change. Deleting also removes its agent and skill assignments; the result lists what the instance removed. Run cavelon pull afterwards so the package follows the saved query. A coding agent cannot confirm it: over MCP the client asks the person, and from an agent's shell the person runs the confirm in their own terminal.
+Needs database_connectors.manage. Each preview is bound to this query's version and the exact change. Rechecks the query after approval; a changed query needs a fresh preview. Deleting also removes its agent and skill assignments; the result lists what the instance removed. Run cavelon pull afterwards so the package follows the saved query. A coding agent cannot confirm it: over MCP the client asks the person, and from an agent's shell the person runs the confirm in their own terminal.
 
 | Argument | Description |
 |---|---|

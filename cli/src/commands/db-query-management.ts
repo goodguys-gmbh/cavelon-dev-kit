@@ -1,15 +1,18 @@
 import { confirmation, PERSON_CONFIRMS_HELP } from "../confirm-token.js";
 import { createHash } from "node:crypto";
 import { positional, type CommandSpec } from "../command.js";
-import { usageError } from "../errors.js";
+import { CavelonError, ExitCode, usageError } from "../errors.js";
 import { clip, keyValues } from "../format.js";
 import { callStable, previewRequest } from "../invoke.js";
 import { cavelonCommand } from "../printed.js";
-import { resolveQuery } from "./db.js";
+import { resolveQuery, type Query } from "./db.js";
 import { managementPreflight } from "./db-connections.js";
 
 const ROUTE = "/api/v1/database-connectors/queries/{query_id}";
 type Change = "delete" | "enable" | "disable" | "rename";
+
+const evidenceFor = (query: Query) => ({ id: query.id, slug: query.slug, version: query.version, kind: query.kind, is_enabled: query.is_enabled,
+  sql_sha256: createHash("sha256").update(query.sql_text).digest("hex") });
 
 function queryChange(change: Change): CommandSpec {
   const method = change === "delete" ? "DELETE" : "PATCH";
@@ -18,6 +21,7 @@ function queryChange(change: Change): CommandSpec {
     name: `db queries ${change}`,
     summary: `${change[0]!.toUpperCase()}${change.slice(1)} a saved database query; preview first, then the person confirms.`,
     description: "Needs database_connectors.manage. Each preview is bound to this query's version and the exact change.\n" +
+      "Rechecks the query after approval; a changed query needs a fresh preview.\n" +
       "Deleting also removes its agent and skill assignments; the result lists what the instance removed.\n" +
       "Run cavelon pull afterwards so the package follows the saved query.\n" + PERSON_CONFIRMS_HELP,
     readOnly: false, destructive: change === "delete", mcpTool: tool, operations: [`${method} ${ROUTE}`],
@@ -33,9 +37,8 @@ function queryChange(change: Change): CommandSpec {
       const body = change === "delete" ? undefined : change === "rename" ? { slug } : { is_enabled: change === "enable" };
       previewRequest(doc, op, { params: { query_id: [query.id] }, body });
       const words = ["db", "queries", change, query.id, ...(slug ? [slug] : []), "--confirm"];
-      const evidence = { id: query.id, slug: query.slug, version: query.version, kind: query.kind, is_enabled: query.is_enabled,
-        sql_sha256: createHash("sha256").update(query.sql_text).digest("hex") };
-      const gate = await confirmation(ctx, input, tool, { id: query.id, version: query.version, method, body }, {
+      const evidence = evidenceFor(query);
+      const gate = await confirmation(ctx, input, tool, { query: evidence, method, body }, {
         person: { what: `${change} saved ${query.kind ?? "unknown-kind"} database query ${query.slug} (version ${query.version}, SQL SHA-256 ${evidence.sql_sha256})${slug ? ` to ${slug}` : ""}${change === "delete" ? " and remove its agent and skill assignments" : ""}.`, words },
       });
       if (!gate.confirmed) return {
@@ -45,6 +48,14 @@ function queryChange(change: Change): CommandSpec {
         exitCode: gate.exitCode,
       };
       await managementPreflight(ctx, method, ROUTE);
+      // Another editor can change SQL while the person reads the approval dialog.
+      if (JSON.stringify(evidenceFor(await resolveQuery(ctx, query.id))) !== JSON.stringify(evidence)) {
+        ctx.approved = undefined;
+        throw new CavelonError(ExitCode.conflict, {
+          code: "token_mismatch", message: "The saved query changed while approval was pending. Nothing was changed by this command.",
+          hint: "Request a fresh preview and approve the query as it is now.", details: { sent: false },
+        });
+      }
       const result = await callStable<Record<string, unknown>>(ctx, method, ROUTE, "saved database query management", { params: { query_id: [query.id] }, body });
       const next = `Run ${cavelonCommand("pull")} so package/ follows this change.`;
       return { data: { sent: true, change, ...result, next_step: next },
