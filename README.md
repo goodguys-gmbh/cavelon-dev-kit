@@ -174,11 +174,16 @@ shows what is set up and working.
 > ```
 
 **Updating later.** Update `cavelon` the way you installed it
-(`cavelon --version` names the command), then run `cavelon setup` again: it
-brings the skills it copied into Cursor, VS Code and Kiro up to the new
-release. Claude Code, Codex and Gemini CLI update the plugin with their own
-command; [Updating](docs/installation.md#updating-each-part) lists each one, and
-your agent tells you when something is behind. A new minor version (0.1 to
+(`cavelon --version` names the command). The one-line installer also asks
+whether to update your agents' Cavelon plugins and skills, and whether to
+enable YOLO for new agent sessions. Answer yes to the first to update those
+too; at the YOLO question, Enter keeps your current choice. Restart your agent
+afterwards. No MCP start command needs editing. Other installation methods:
+run `cavelon setup --update` after updating the CLI; it also offers the YOLO
+choice in your terminal. On first installation, `cavelon setup` offers it after
+guided login. If run inside a solution,
+this also refreshes its generated setup and copied skills; other repositories
+need their own `cavelon init --update`. A new minor version (0.1 to
 0.2) also moves the pin in plugin, `setup` and `init --agents` entries:
 follow [Upgrading from 0.1 to 0.2](docs/upgrading-to-0.2.md).
 
@@ -276,8 +281,10 @@ cavelon activate                                # through the readiness gate, ne
 
 An agent may preview and confirm an ordinary draft within your requested work
 without asking again in chat. `cavelon --yolo apply --env test` also combines
-those technical steps for an eligible draft; `cavelon mcp --yolo` enables the
-same policy for one MCP process. Critical changes still ask once. See
+those technical steps for an eligible draft. For agent tools, select YOLO in
+the installer, or run `cavelon setup --mcp-mode yolo --yes`, then restart your
+agent. It starts the tools automatically with your personal startup mode.
+Critical changes still ask once. See
 [Confirmations and YOLO mode](docs/confirmations.md) for scope and limits.
 
 The [getting-started tutorial](docs/getting-started.md) walks through all of

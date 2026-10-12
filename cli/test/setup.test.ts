@@ -44,6 +44,44 @@ async function onPlatform<T>(platform: NodeJS.Platform, run: () => Promise<T>): 
 const read = (file: string) => readFileSync(file, "utf8");
 const readJson = (file: string) => JSON.parse(read(file)) as Record<string, any>;
 
+it.each(["claude", "codex"])("updates an existing %s plugin without acquiring removal ownership", async name => {
+  const env = pathEnv(fakeBin([name]));
+  writeFileSync(path.join(sb.home, `.fake-${name}.json`), JSON.stringify({ marketplaces: [MARKETPLACE], plugins: [PLUGIN_ID] }));
+  const result = await cli(sb, ["setup", "--update", "--yes", "--agents", name, "--json"], { env });
+  expect(result.code, result.stdout + result.stderr).toBe(0);
+  expect(log(name)).toContain(`plugin marketplace ${name === "claude" ? "update" : "upgrade"} ${MARKETPLACE}`);
+  expect(log(name)).toContain(name === "claude" ? `plugin update ${PLUGIN_ID} --scope user` : `plugin add ${PLUGIN_ID}`);
+  expect(result.json()).toMatchObject({ login: null });
+  const removed = await cli(sb, ["setup", "--remove", "--yes", "--agents", name], { env });
+  expect(removed.code).toBe(0);
+  expect(readJson(path.join(sb.home, `.fake-${name}.json`)).plugins).toEqual([PLUGIN_ID]);
+  expect(log(name).some(call => call.startsWith("plugin uninstall") || call.startsWith("plugin remove"))).toBe(false);
+});
+
+it("reports a plugin update failure while preserving the independently selected MCP mode", async () => {
+  const env = { ...pathEnv(fakeBin(["claude"])), FAKE_AGENT_FAIL: "plugin update" };
+  writeFileSync(path.join(sb.home, ".fake-claude.json"), JSON.stringify({ marketplaces: [MARKETPLACE], plugins: [PLUGIN_ID] }));
+  const result = await cli(sb, ["setup", "--installer", "--update", "--agents", "claude", "--mcp-mode", "yolo", "--non-interactive", "--json"], { env });
+  expect(result.code).toBe(1);
+  expect(result.json()).toMatchObject({ updated_agents: false, mcp_mode: "yolo", mode_changed: true });
+  expect(readJson(path.join(sb.env.CAVELON_CONFIG_DIR!, "automation.json"))).toMatchObject({ mcp_mode: "yolo" });
+});
+
+it.each([false, true])("Gemini refresh moves the release pin without reinstalling, and restores it on failure (%s)", async fails => {
+  const env = { ...pathEnv(fakeBin(["gemini"])), ...(fails ? { FAKE_AGENT_FAIL: "extensions update" } : {}) };
+  const extension = path.join(sb.home, ".gemini", "extensions", "cavelon");
+  mkdirSync(extension, { recursive: true });
+  writeFileSync(path.join(extension, "gemini-extension.json"), JSON.stringify({ name: "cavelon", version: "0.1.2" }));
+  const file = path.join(extension, ".gemini-extension-install.json");
+  const metadata = { type: "github-release", source: GEMINI_SOURCE, ref: "v0.1.2", releaseTag: "v0.1.2", autoUpdate: false };
+  writeFileSync(file, JSON.stringify(metadata));
+  const result = await cli(sb, ["setup", "--update", "--yes", "--agents", "gemini", "--json"], { env });
+  expect(result.code, result.stdout).toBe(fails ? 1 : 0);
+  expect(log("gemini")).toEqual(["extensions update cavelon"]);
+  expect(readJson(file)).toEqual(fails ? metadata : { ...metadata, ref: `v${KIT_VERSION}` });
+  if (!fails) expect(readJson(path.join(extension, "gemini-extension.json")).version).toBe(KIT_VERSION);
+});
+
 /** Every file under `dir` with its content, and every folder, to compare a home before and after. */
 function tree(dir: string): Record<string, string> {
   const out: Record<string, string> = {};
@@ -453,7 +491,7 @@ describe("asking a person", () => {
 
   it("Enter takes the default: yes to the changes; then an empty address leaves the login for later", async () => {
     const { env, layout } = agentHome("linux");
-    const result = await onPlatform("linux", () => cli(sb, ["setup", "--agents", "cursor"], { env, tty: true, stdin: "\n\n" }));
+    const result = await onPlatform("linux", () => cli(sb, ["setup", "--agents", "cursor"], { env, tty: true, stdin: "\n\n\n" }));
     expect(result.code, result.stderr + result.stdout).toBe(0);
     expect(readJson(layout.cursorMcp).mcpServers.cavelon).toEqual(NPX);
     expect(result.stderr).toMatch(/Cavelon address \(Enter to log in later\)/);
@@ -497,7 +535,7 @@ describe("login and --check", () => {
     const { env } = agentHome("linux");
     const address = server.url.replace(/^http:\/\//, "http://");
     const result = await onPlatform("linux", () =>
-      cli(sb, ["setup", "--agents", "cursor"], { env, tty: true, stdin: `\n${address}\n${token}\n` }),
+      cli(sb, ["setup", "--agents", "cursor"], { env, tty: true, stdin: `\n${address}\n${token}\n\n` }),
     );
     expect(result.code, result.stderr + result.stdout).toBe(0);
     expect(result.stderr).toMatch(/Personal access tokens/);
@@ -512,7 +550,7 @@ describe("login and --check", () => {
     const { env } = agentHome("linux");
     const operator = server.addToken({ kind: "pat", tenantIds: [], reachesAll: true, globalRole: "superadmin" });
     const result = await onPlatform("linux", () =>
-      cli(sb, ["setup", "--agents", "cursor"], { env: { ...env, NO_COLOR: "1" }, tty: true, stdin: `\n${server.url}\n${operator}\n\n` }),
+      cli(sb, ["setup", "--agents", "cursor"], { env: { ...env, NO_COLOR: "1" }, tty: true, stdin: `\n${server.url}\n${operator}\n\n\n` }),
     );
     expect(result.code, result.stderr + result.stdout).toBe(0);
     expect(result.stderr).toContain("Which tenant to start in? (type part of its name, or press Enter to choose later)");

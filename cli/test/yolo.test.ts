@@ -79,6 +79,53 @@ it.each([false, true])("the published MCP launch forwards --yolo and its environ
   } finally { await client.close(); }
 });
 
+it.each(["saved", "disabled", "invalid"])("a normal plugin MCP launch uses the personal startup mode (%s)", async mode => {
+  expect((await cli(sb, ["setup", "--mcp-mode", "yolo", "--yes"])).code).toBe(0);
+  if (mode === "invalid") writeFileSync(path.join(sb.env.CAVELON_CONFIG_DIR!, "automation.json"), '{"format":2,"mcp_mode":"yolo"}');
+  const client = askingClient();
+  const transport = new StdioClientTransport({ command: process.execPath,
+    args: [fileURLToPath(new URL("../dist/cli.js", import.meta.url)), "mcp", ...(mode === "disabled" ? ["--no-yolo"] : [])], cwd: dir, env: sb.env, stderr: "pipe" });
+  try {
+    await client.connect(transport);
+    // Editing the preference must not change an already-running MCP session.
+    if (mode !== "invalid") expect((await cli(sb, ["setup", "--mcp-mode", "standard", "--yes"])).code).toBe(0);
+    const result = await client.callTool({ name: "apply", arguments: {} });
+    const data = JSON.parse((result.content as Array<{ text: string }>)[0]!.text);
+    expect(data).toMatchObject(mode === "saved" ? { applied: true, approval: { source: "yolo" } } : { previewed: true });
+    expect(client.asked).toEqual([]);
+    if (mode === "saved") {
+      support().status = "active";
+      const previewResult = await client.callTool({ name: "apply", arguments: {} });
+      const preview = JSON.parse((previewResult.content as Array<{ text: string }>)[0]!.text);
+      expect(preview).toMatchObject({ show_to_person: true, needs_person: "client" });
+      const confirmed = await client.callTool({ name: "apply", arguments: { confirm: preview.preview_id } });
+      expect(JSON.parse((confirmed.content as Array<{ text: string }>)[0]!.text)).toMatchObject({ applied: true });
+      expect(client.asked).toHaveLength(1);
+    }
+  } finally { await client.close(); }
+});
+
+it("saving MCP YOLO does not enable it for ordinary CLI commands", async () => {
+  await cli(sb, ["setup", "--mcp-mode", "yolo", "--yes"]);
+  const result = await cli(sb, ["apply", "--json"], { cwd: dir, env: agent });
+  expect(result.json()).toMatchObject({ previewed: true });
+  expect(imports()).toHaveLength(0);
+});
+
+it("installer skill updates refresh this solution's owned copies and preserve custom files", async () => {
+  expect((await cli(sb, ["init", "--agents", "cursor"], { cwd: dir })).code).toBe(0);
+  const owned = path.join(dir, ".agents", "skills", "cavelon-loop", "SKILL.md");
+  writeFileSync(owned, readFileSync(owned, "utf8") + "\nOutdated loop\n");
+  const foreign = path.join(dir, ".agents", "skills", "cavelon-authoring", "SKILL.md");
+  writeFileSync(foreign, "Custom skill: keep my instructions.\n");
+  const updated = await cli(sb, ["setup", "--installer", "--update", "--non-interactive", "--json"], { cwd: dir });
+  expect(updated.code, updated.stdout + updated.stderr).toBe(0);
+  expect(readFileSync(owned, "utf8")).not.toContain("Outdated loop");
+  expect(readFileSync(foreign, "utf8")).toBe("Custom skill: keep my instructions.\n");
+  expect(updated.json()).toMatchObject({ update: { project: { solution: dir } } });
+  expect(server.state.requests.filter(r => r.method !== "GET")).toEqual([]);
+});
+
 it("standard MCP draft previews can be confirmed without a human dialog", async () => {
   const { client, call } = await mcp(false);
   try {

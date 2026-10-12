@@ -52,7 +52,7 @@ export interface SessionTenant {
 
 export interface GlobalOptions {
   json: boolean;
-  /** Explicit process option; never read from a solution file or MCP tool argument. */
+  /** Startup policy from the process option or personal settings; never a solution file or tool argument. */
   yolo?: boolean;
   /** Snapshot made at launch, shared by MCP calls; never serialized or exposed. */
   yoloScope?: Promise<string | undefined>;

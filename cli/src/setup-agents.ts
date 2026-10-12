@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { bundledSkills, generatedCopy, INSTALLED_MCP_COMMAND, mcpCommand, type Skill } from "./agents.js";
-import { readJsonFile, readTextFile, writeFileAtomic } from "./fsutil.js";
+import { readJsonFile, readTextFile, withoutBom, writeFileAtomic } from "./fsutil.js";
 import { findProgram } from "./git.js";
 import { isGenerated, removeBlock, removeJsonEntry, upsertBlock, upsertJsonEntry, type BlockResult } from "./markers.js";
 import { cacheDir, homeDir } from "./paths.js";
@@ -262,6 +262,8 @@ export interface Change {
   target: string;
   outcome: "planned" | "done" | "unchanged" | "skipped" | "failed" | "removed";
   reason?: string;
+  /** Exact reviewed plugin command; refreshes do not acquire removal ownership. */
+  refresh?: boolean;
 }
 
 export interface AgentPlan {
@@ -340,6 +342,8 @@ function pluginCommands(kind: PluginKind) {
     return {
       marketplaceAdd: [],
       marketplaceRemove: [],
+      marketplaceUpdate: [],
+      update: ["extensions", "update", GEMINI_EXTENSION],
       // This release's extension, so the skills match this cavelon; --consent is the person's yes to setup's plan.
       install: ["extensions", "install", GEMINI_SOURCE, "--ref", `v${KIT_VERSION}`, "--consent"],
       uninstall: ["extensions", "uninstall", GEMINI_EXTENSION],
@@ -348,9 +352,38 @@ function pluginCommands(kind: PluginKind) {
   return {
     marketplaceAdd: ["plugin", "marketplace", "add", MARKETPLACE_SOURCE],
     marketplaceRemove: ["plugin", "marketplace", "remove", MARKETPLACE],
+    marketplaceUpdate: ["plugin", "marketplace", kind === "claude" ? "update" : "upgrade", MARKETPLACE],
+    update: kind === "claude" ? ["plugin", "update", PLUGIN_ID, "--scope", "user"] : ["plugin", "add", PLUGIN_ID],
     install: kind === "claude" ? ["plugin", "install", PLUGIN_ID, "--scope", "user"] : ["plugin", "add", PLUGIN_ID],
     uninstall: kind === "claude" ? ["plugin", "uninstall", PLUGIN_ID, "--scope", "user"] : ["plugin", "remove", PLUGIN_ID],
   };
+}
+
+/** Gemini's update command otherwise follows the old --ref forever. Keep its
+ * own updater (which preserves enablement/settings), moving only our release pin. */
+async function updateGemini(program: string, args: string[], env: Env) {
+  const file = path.join(geminiHome(env), "extensions", GEMINI_EXTENSION, ".gemini-extension-install.json");
+  const stat = await fs.lstat(file);
+  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error(`Cannot update ${file}: expected regular extension install metadata.`);
+  const original = await fs.readFile(file, "utf8");
+  const metadata = JSON.parse(withoutBom(original)) as Record<string, unknown>;
+  if (!["git", "github-release"].includes(String(metadata.type)) || ![GEMINI_SOURCE, `${GEMINI_SOURCE}.git`].includes(String(metadata.source))) {
+    throw new Error("The Cavelon extension has a custom or local source; update it through that source, or install the published Cavelon extension first.");
+  }
+  const updated = JSON.stringify({ ...metadata, ref: `v${KIT_VERSION}` }, null, 2) + "\n";
+  await writeKeepingMode(file, updated);
+  let success = false;
+  try {
+    const result = await runProgram(program, args, { env, timeoutMs: RUN_TIMEOUT_MS, cwd: await geminiFolder("gemini", env) });
+    // Some Gemini versions log update failures but still exit zero.
+    const manifest = await readJsonFile<{ version?: unknown }>(path.join(path.dirname(file), "gemini-extension.json"));
+    success = result.code === 0 && manifest?.version === KIT_VERSION;
+    if (result.code === 0 && !success) return { ...result, code: 1, error: `Gemini did not install Cavelon ${KIT_VERSION}. Run gemini extensions update cavelon in your own terminal and review its output.` };
+    return result;
+  } finally {
+    // Do not replace metadata that the updater or another session changed.
+    if (!success && await readTextFile(file) === updated) await writeKeepingMode(file, original);
+  }
 }
 
 /**
@@ -358,7 +391,7 @@ function pluginCommands(kind: PluginKind) {
  * The plugin's MCP entry starts through `sh`, which native Windows does not
  * have, so there a plugin agent also gets the server in its MCP file.
  */
-export async function planAgent(agent: SetupAgent, found: Found, env: Env, command: ServerCommand, skills: Skill[], platform: NodeJS.Platform = process.platform, record?: AgentRecord): Promise<AgentPlan> {
+export async function planAgent(agent: SetupAgent, found: Found, env: Env, command: ServerCommand, skills: Skill[], platform: NodeJS.Platform = process.platform, record?: AgentRecord, update = false): Promise<AgentPlan> {
   const usePlugin = Boolean(agent.plugin && found.program);
   const state = usePlugin ? await pluginState(agent.plugin!, found.program!, env) : undefined;
   const plan: AgentPlan = { agent, found, method: usePlugin ? "plugin" : "files", changes: [] };
@@ -374,11 +407,15 @@ export async function planAgent(agent: SetupAgent, found: Found, env: Env, comma
     if (!state.marketplace && commands.marketplaceAdd.length) {
       plan.changes.push({ kind: "marketplace", summary: "add the Cavelon plugin marketplace", target: display(program, commands.marketplaceAdd), outcome: "planned" });
     }
+    if (update && state.marketplace && commands.marketplaceUpdate.length) plan.changes.push({ kind: "marketplace", summary: "refresh the Cavelon plugin marketplace", target: display(program, commands.marketplaceUpdate), outcome: "planned", refresh: true });
+    const refresh = update && state.installed && state.enabled;
     plan.changes.push({
       kind: "plugin",
-      summary: kind === "gemini" ? "install the Cavelon extension (skills and tools)" : "install the Cavelon plugin (skills and tools)",
-      target: display(program, commands.install),
-      outcome: state.installed ? "unchanged" : "planned",
+      summary: `${refresh ? "update" : "install"} the Cavelon ${kind === "gemini" ? "extension" : "plugin"} (skills and tools)`,
+      target: display(program, refresh ? commands.update : commands.install),
+      outcome: state.installed && !refresh ? "unchanged" : "planned",
+      ...(refresh ? { refresh: true } : {}),
+      ...(refresh && kind === "gemini" ? { reason: `move the published extension's release pin to v${KIT_VERSION}; keep its settings and enablement` } : {}),
       ...(state.installed && !state.enabled ? { reason: `it is installed but turned off; turn it on in ${agent.label}` } : {}),
     });
   }
@@ -504,10 +541,12 @@ export async function applyPlan(plan: AgentPlan, env: Env, command: ServerComman
       if (change.kind === "marketplace" || change.kind === "plugin") {
         const kind = plan.agent.plugin!;
         const commands = pluginCommands(kind);
-        const args = change.kind === "marketplace" ? commands.marketplaceAdd : commands.install;
-        const result = await runProgram(plan.found.program!, args, { env, timeoutMs: RUN_TIMEOUT_MS, cwd: await geminiFolder(kind, env) });
+        const args = change.kind === "marketplace" ? (change.refresh ? commands.marketplaceUpdate : commands.marketplaceAdd) : (change.refresh ? commands.update : commands.install);
+        const result = kind === "gemini" && change.refresh
+          ? await updateGemini(plan.found.program!, args, env)
+          : await runProgram(plan.found.program!, args, { env, timeoutMs: RUN_TIMEOUT_MS, cwd: await geminiFolder(kind, env) });
         if (result.code !== 0) {
-          if (kind === "gemini") {
+          if (kind === "gemini" && !change.refresh) {
             // Gemini CLI prints the consent it was given first and its error last.
             const reason = result.error ?? (lastLine(`${result.stdout}\n${result.stderr}`) || `exit ${result.code}`);
             // A release without the extension (one before it, or a build from a clone): the files work as well.
@@ -519,8 +558,10 @@ export async function applyPlan(plan: AgentPlan, env: Env, command: ServerComman
           done.push({ ...change, outcome: "failed", reason: result.error ?? (firstLine(result.stderr || result.stdout) || `exit ${result.code}`) });
           break;
         }
-        if (change.kind === "marketplace") record.marketplace_added = true;
-        else record.plugin_installed = true;
+        if (!change.refresh) {
+          if (change.kind === "marketplace") record.marketplace_added = true;
+          else record.plugin_installed = true;
+        }
         done.push({ ...change, outcome: "done" });
         // The extension replaces what an earlier setup wrote into Gemini CLI's files, whose skills would hide the extension's.
         if (kind === "gemini" && change.kind === "plugin") done.push(...(await removeFiles(plan.agent, record, skills, new Set())));

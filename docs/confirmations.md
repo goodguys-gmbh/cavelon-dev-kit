@@ -27,12 +27,32 @@ critical change. An operation reserved for the Admin remains there.
 
 ## Opt in to YOLO for routine work
 
-A person can additionally enable `--yolo` for one CLI invocation or when
-starting an MCP process:
+A person can enable YOLO in the one-line installer's second question. This
+also works on updates. Restart the coding agent afterwards: it starts Cavelon
+automatically and the new MCP process reads the personal choice. There is no
+need to start MCP by hand or edit the agent's configuration.
+
+To change just that choice later:
+
+```bash
+cavelon setup --mcp-mode yolo --yes       # enable for new agent MCP sessions
+cavelon setup --mcp-mode standard --yes   # disable for new agent MCP sessions
+```
+
+It is stored in `automation.json` in the personal Cavelon config directory,
+alongside the login settings, never in a solution or plugin cache. A running
+MCP session keeps its startup choice. Invalid settings start MCP in standard
+mode with a warning; setup refuses to overwrite them. This preference applies
+only to MCP, not ordinary CLI invocations. A custom MCP launcher using another
+account or `CAVELON_CONFIG_DIR` has its own preference; an older CLI cannot read
+it and must be updated first.
+
+For scripts or a custom launcher, explicit process options override it:
 
 ```bash
 cavelon --yolo apply --env test
 cavelon mcp --yolo
+cavelon mcp --no-yolo  # standard mode even if the personal preference is YOLO
 # Bind MCP automation to the environment your tools will use:
 cavelon mcp --yolo --env test
 ```
@@ -49,8 +69,10 @@ its bindings. Each eligible action checks that scope. A different MCP target
 uses normal confirmation policy; returning to the original scope may use its
 original allowance again. To enable YOLO for another scope, start a process
 with that target explicitly selected. YOLO is not an MCP tool argument or a
-`cavelon.yaml` option, and a repository cannot silently enable it. Start
-without `--yolo` to use the default behavior.
+`cavelon.yaml` option, and a repository cannot silently enable it. Select
+standard in setup or use `--no-yolo` to use standard behavior. Every new MCP
+process binds its allowance to its own original target; the personal preference
+does not grant standing permission for other targets.
 
 | Operation | Default | With YOLO in the same scope |
 |---|---|---|

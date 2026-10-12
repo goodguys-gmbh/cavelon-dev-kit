@@ -377,7 +377,11 @@ show the person the preview again and let them confirm it (in the client's
 dialog or their own terminal), never retry on your own.
 
 **YOLO is explicitly enabled by the person.** A CLI invocation may start with
-`cavelon --yolo …`, or an MCP process with `cavelon mcp --yolo`. Eligible
+`cavelon --yolo …`, or enable MCP YOLO through the installer or their personal
+`cavelon setup --mcp-mode yolo --yes` setting and restart the coding agent.
+An MCP launch may also use `cavelon mcp --yolo`; `--no-yolo` overrides a saved
+preference for that process. Never change this personal preference yourself.
+Eligible
 routine work then previews and executes internally; do not add a question
 of your own. It is not a tool argument or repository setting, and you must
 not enable it to work around a refusal. Its allowance is bound to the

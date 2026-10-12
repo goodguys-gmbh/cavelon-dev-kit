@@ -1,6 +1,10 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { boolOption, listOption, type CommandSpec, type Context, type Input } from "../command.js";
+import { boolOption, listOption, stringOption, type CommandResult, type CommandSpec, type Context, type Input } from "../command.js";
+import { agentVariable } from "../agent-env.js";
+import { readMcpMode, saveMcpMode, type McpMode } from "../automation-settings.js";
+import { findProject } from "../project.js";
+import { init } from "./init.js";
 import { createContext } from "../context.js";
 import { asCavelonError, CavelonError, ExitCode, usageError, type ExitCodeValue } from "../errors.js";
 import { readJsonFile, writeFileAtomic } from "../fsutil.js";
@@ -164,10 +168,10 @@ function normalizeAddress(raw: string): string | undefined {
 }
 
 /** Log in through `login` itself, so the tenant is chosen by name as `login` chooses it. */
-async function loginStep(ctx: Context): Promise<LoginReport> {
+async function loginStep(ctx: Context, nonInteractive = false): Promise<LoginReport> {
   const session = await ctx.session();
   if (session.url && session.token) return { status: "already", instance: session.url, text: `Already logged in to ${session.url}.` };
-  if (!canAsk(ctx)) {
+  if (!canAsk(ctx) || nonInteractive) {
     return {
       status: "not_logged_in",
       instance: session.url ?? null,
@@ -229,14 +233,14 @@ async function runSetup(ctx: Context, input: Input) {
   const command = await serverCommand(env);
   const state = await loadState(env);
   const plans: AgentPlan[] = [];
-  for (const { agent, found: where } of chosen) plans.push(await planAgent(agent, where, env, command, skills, process.platform, state.agents[agent.name]));
+  for (const { agent, found: where } of chosen) plans.push(await planAgent(agent, where, env, command, skills, process.platform, state.agents[agent.name], boolOption(input, "update")));
   const pending = plans.some((p) => p.changes.some((c) => c.outcome === "planned"));
 
   let results = plans.map((plan) => ({ plan, changes: plan.changes }));
   let declined = false;
   if (pending) {
     if (!boolOption(input, "yes")) {
-      if (!canAsk(ctx)) {
+      if (!canAsk(ctx) || boolOption(input, "non-interactive")) {
         if (!ctx.json) ctx.io.stderr.write(`cavelon setup would change this:\n${planText(plans, notFound)}\n`);
         throw confirmationRequired("setup changes your coding agents' settings only when you agree", { agents: plans.map((p) => planJson(p)), server: command });
       }
@@ -262,7 +266,7 @@ async function runSetup(ctx: Context, input: Input) {
     }
   }
   if (recovered) await saveState(env, state);
-  const loginReport = declined ? undefined : await loginStep(ctx);
+  const loginReport = declined || boolOption(input, "update") ? undefined : await loginStep(ctx, boolOption(input, "non-interactive"));
   const failed = results.some((r) => r.changes.some((c) => c.outcome === "failed"));
   const ready = results.filter((r) => r.changes.length && r.changes.every((c) => c.outcome === "done" || c.outcome === "unchanged"));
   const changed = results.filter((r) => r.changes.some((c) => c.outcome === "done"));
@@ -304,6 +308,81 @@ async function runSetup(ctx: Context, input: Input) {
     },
     text: lines.join("\n"),
     exitCode,
+  };
+}
+
+/** Updating uses the same ownership checks as init, only in the current solution. */
+async function runUpdate(ctx: Context, input: Input) {
+  const project = await findProject(ctx.io.cwd);
+  if (project && !boolOption(input, "yes")) {
+    if (!canAsk(ctx) || boolOption(input, "non-interactive")) throw confirmationRequired("updating also refreshes the current solution's generated setup", { solution: project.root });
+    if (!(await confirm(ctx, `Update Cavelon plugins, owned skills and generated setup in ${project.root}?`, true))) {
+      return { data: { agents: [], not_found: [], server: await serverCommand(ctx.io.env), declined: true, login: null, next: [] }, text: "Nothing was changed.", exitCode: ExitCode.ok };
+    }
+    input = { ...input, options: { ...input.options, yes: true } };
+  }
+  const result = await runSetup(ctx, input);
+  if (result.data.declined || !project) return result;
+  try {
+    const project = await init.run(ctx, { positionals: {}, options: { update: true } });
+    return { ...result, data: { ...result.data, project: project.data }, text: `${result.text}\n\nCurrent solution:\n${project.text}` };
+  } catch (error) {
+    const err = asCavelonError(error);
+    return { ...result, data: { ...result.data, project_error: err.toJSON() }, text: `${result.text}\n\nCurrent solution update failed: ${err.message}`, exitCode: err.exitCode };
+  }
+}
+
+function interactiveSetup(ctx: Context, input: Input): boolean {
+  return canAsk(ctx) && !boolOption(input, "non-interactive") && !agentVariable(ctx.io.env) && !/^(1|true|yes)$/i.test(ctx.io.env.CI ?? "");
+}
+
+async function chooseMcpMode(ctx: Context, current: McpMode): Promise<McpMode | undefined> {
+  ctx.io.stderr.write(`\nMCP YOLO is currently ${current === "yolo" ? "enabled" : "disabled"}. It combines preview and execution for eligible routine changes in the session's selected target. Critical changes still ask for approval.\n`);
+  for (;;) {
+    const answer = (await readLine(ctx.io, "YOLO for new agent sessions: [y] enable, [n] disable, [Enter] keep current: ")).toLowerCase();
+    if (!answer) return undefined;
+    if (["y", "yes", "j", "ja"].includes(answer)) return "yolo";
+    if (["n", "no", "nein"].includes(answer)) return "standard";
+    ctx.io.stderr.write("Please choose y, n, or Enter.\n");
+  }
+}
+
+/** The package-manager path offers the same choice after ordinary setup/update. */
+async function offerMcpMode(ctx: Context, input: Input, result: CommandResult): Promise<CommandResult> {
+  if (!interactiveSetup(ctx, input) || boolOption(input, "yes") || (result.data as { declined?: boolean }).declined) return result;
+  try {
+    const current = await readMcpMode(ctx.io.env);
+    const mode = await chooseMcpMode(ctx, current);
+    const changed = mode ? await saveMcpMode(ctx.io.env, mode) : false;
+    return { ...result, data: { ...result.data as object, mcp_mode: mode ?? current, mode_changed: changed }, text: `${result.text}\n\nMCP startup mode: ${mode ?? current}. Restart your coding agent to apply the installed CLI, skills and startup mode.` };
+  } catch (error) {
+    const err = asCavelonError(error);
+    return { ...result, data: { ...result.data as object, mode_error: err.toJSON() }, text: `${result.text}\n\nMCP mode selection incomplete: ${err.message}`, exitCode: err.exitCode };
+  }
+}
+
+async function runFollowUp(ctx: Context, input: Input) {
+  const installer = boolOption(input, "installer");
+  let update = boolOption(input, "update");
+  let mode = stringOption(input, "mcp-mode") as McpMode | undefined;
+  const current = await readMcpMode(ctx.io.env);
+  const interactive = interactiveSetup(ctx, input);
+  if (installer && interactive) {
+    if (!update && !boolOption(input, "skip-update")) update = await confirm(ctx, "Set up or update Cavelon plugins and skills in your coding agents (and this solution, if present)?", true);
+    if (!mode) mode = await chooseMcpMode(ctx, current);
+  }
+  if (!installer && mode && mode !== current && !boolOption(input, "yes")) {
+    if (!interactive) throw confirmationRequired("the personal MCP startup mode changes only when you agree", { mcp_mode: mode });
+    if (!(await confirm(ctx, `Set the MCP startup mode to ${mode}? Critical changes still ask for approval.`, false))) mode = undefined;
+  }
+  // Save this independent choice even if a plugin's network update subsequently fails.
+  const changed = mode ? await saveMcpMode(ctx.io.env, mode) : false;
+  const selected = mode ?? current;
+  const report = update ? await runUpdate(ctx, { ...input, options: { ...input.options, update: true, ...(installer ? { yes: true } : {}) } }) : undefined;
+  return {
+    data: { updated_agents: Boolean(report && !report.data.declined && report.exitCode === ExitCode.ok), mcp_mode: selected, mode_changed: changed, ...(report ? { update: report.data } : {}) },
+    text: [report?.text, `MCP startup mode: ${selected}.`, "Next: restart your coding agent or reconnect its Cavelon tools to use the installed CLI, skills and startup mode.", ...(!update ? ["Run cavelon setup --update to refresh plugins and skills later; cavelon setup also guides first-time login."] : [])].filter(Boolean).join("\n\n"),
+    exitCode: report?.exitCode ?? ExitCode.ok,
   };
 }
 
@@ -465,12 +544,20 @@ export const setup: CommandSpec = {
     "The server starts as `cavelon mcp` when cavelon is installed, otherwise through npx. --check reports what is set up and\n" +
     "working: each agent's entry, the MCP server starting, and the login. An agent found but never set up for Cavelon is\n" +
     "reported and skipped (exit 0 when the rest works); --strict, or naming it with --agents, counts it.\n" +
-    "Without a terminal it changes nothing unless --yes.",
+    "--update refreshes plugins and owned skills, including the current solution's generated setup, and keeps your login.\n" +
+    "--mcp-mode saves a personal startup choice; restart your coding agent to apply it. Critical changes still need approval.\n" +
+    "Interactive setup and --update also offer the YOLO choice; Enter preserves it. --yes keeps it unless --mcp-mode is given.\n" +
+    "Without a terminal it changes nothing unless --yes, or explicit --installer update/mode choices are given.",
   readOnly: false,
   destructive: true,
   idempotent: true,
   mcpTool: false,
   options: {
+    update: { type: "boolean", description: "Refresh agent plugins, owned skills and the current solution's generated setup; keep your login." },
+    "mcp-mode": { type: "string", value: "<standard|yolo>", description: "Save the personal mode for new MCP sessions, without editing agent launch commands. Critical changes still need approval." },
+    installer: { type: "boolean", description: "Installer follow-up: ask separately about agent updates and YOLO. Without a terminal, keep both unless explicitly selected." },
+    "skip-update": { type: "boolean", description: "With --installer: skip the agent update question and leave plugins and skills unchanged." },
+    "non-interactive": { type: "boolean", description: "Never ask questions. Installer choices must be passed explicitly; other changes still require --yes." },
     agents: {
       type: "string",
       value: "<list>",
@@ -486,13 +573,21 @@ export const setup: CommandSpec = {
     "cavelon setup",
     "cavelon setup --agents claude,codex --instance https://cavelon.example.com --yes",
     "cavelon setup --check",
+    "cavelon setup --update",
+    "cavelon setup --mcp-mode yolo --yes",
     "cavelon setup --remove",
   ],
   async run(ctx, input) {
     if (boolOption(input, "check") && boolOption(input, "remove")) throw usageError("--check and --remove do not go together.");
     if (boolOption(input, "strict") && !boolOption(input, "check")) throw usageError("--strict goes with --check.");
+    const followUp = boolOption(input, "installer") || stringOption(input, "mcp-mode") !== undefined;
+    if ((followUp || boolOption(input, "update")) && (boolOption(input, "check") || boolOption(input, "remove"))) throw usageError("Update and MCP mode options do not go with --check or --remove.");
+    if (boolOption(input, "skip-update") && (!boolOption(input, "installer") || boolOption(input, "update"))) throw usageError("--skip-update requires --installer and cannot be combined with --update.");
+    if (stringOption(input, "mcp-mode") !== undefined && !["standard", "yolo"].includes(stringOption(input, "mcp-mode")!)) throw usageError("--mcp-mode must be standard or yolo.");
     if (boolOption(input, "check")) return runCheck(ctx, input);
     if (boolOption(input, "remove")) return runRemove(ctx, input);
-    return runSetup(ctx, input);
+    if (followUp) return runFollowUp(ctx, input);
+    if (boolOption(input, "update")) return offerMcpMode(ctx, input, await runUpdate(ctx, input));
+    return offerMcpMode(ctx, input, await runSetup(ctx, input));
   },
 };

@@ -32,7 +32,7 @@ const INSTRUCTIONS =
   "and follow a loop with loop_iterations. Routine work within the user's request needs no additional chat approval. " +
   "In standard mode, review previews and confirm the exact token or apply preview id when no needs_person is present. " +
   "A token binds one change, not a person's answer; confirm: true is refused, and changed input needs a new preview. " +
-  "If this server was explicitly launched with --yolo, eligible routine draft imports, selected draft loop starts and known " +
+  "If YOLO was enabled at startup by --yolo or the person's Cavelon setup preference, eligible routine draft imports, selected draft loop starts and known " +
   "routine API operations can execute in one call within the original instance, tenant, credential and solution scope. " +
   "No tool argument or repository setting can enable this mode. A different target falls back to standard confirmation. " +
   "Critical, shared, live and unknown changes retain needs_person in either mode. With needs_person \"client\", " +

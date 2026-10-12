@@ -59,6 +59,25 @@ grep -q "up to date" <<<"$out"
 test "$(grep -c 'Added by the cavelon installer' "$rc")" = 1
 check "re-run changed nothing"
 
+echo "== explicit agent update and MCP mode, without questions or login"
+export CAVELON_CONFIG_DIR="$home/installer-config"
+export CAVELON_NON_INTERACTIVE=1
+export XDG_CONFIG_HOME="$home/.config"
+export XDG_CACHE_HOME="$home/.cache"
+# The update test must not discover an agent profile from the invoking account.
+unset CODEX_HOME CLAUDE_CONFIG_DIR GEMINI_CLI_HOME PI_CODING_AGENT_DIR QWEN_HOME
+mkdir -p "$home/.cursor"
+out="$(sh "$repo/install.sh" --update-agents --yolo)"
+printf '%s\n' "$out"
+grep -q 'MCP startup mode: yolo' <<<"$out"
+grep -q '"mcp_mode": "yolo"' "$CAVELON_CONFIG_DIR/automation.json"
+grep -q 'cavelon:generated' "$home/.cursor/skills/cavelon-loop/SKILL.md"
+out="$(sh "$repo/install.sh")"
+grep -q 'MCP startup mode: yolo' <<<"$out"
+out="$(sh "$repo/install.sh" --skip-agent-update --no-yolo)"
+grep -q 'MCP startup mode: standard' <<<"$out"
+check "updated owned skills, retained YOLO on re-run, then disabled it explicitly"
+
 echo "== a checksum that does not match"
 before="$(cksum <"$bin")"
 set +e

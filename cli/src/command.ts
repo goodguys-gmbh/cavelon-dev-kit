@@ -188,6 +188,7 @@ export function ownsTenant(spec: CommandSpec): boolean {
 export const GLOBAL_OPTIONS: Record<string, OptionSpec> = {
   json: { type: "boolean", description: "Print one JSON document instead of text." },
   yolo: { type: "boolean", cliOnly: true, description: "Automatically apply eligible routine changes in this process's selected target; critical changes still need a person." },
+  "no-yolo": { type: "boolean", cliOnly: true, description: "Use standard mode for this process, overriding the personal MCP startup mode." },
   instance: { type: "string", value: "<url>", description: "The instance URL (overrides CAVELON_URL and cavelon.yaml)." },
   tenant: { type: "string", value: "<tenant>", description: "Tenant slug, name or id (overrides CAVELON_TENANT and cavelon.yaml)." },
   help: { type: "boolean", short: "h", description: "Show help for the command." },
