@@ -24,7 +24,7 @@ import { harnessNotFoundError, lookupHarness } from "../harness-ref.js";
 import { CONFIRM_TOKEN, confirmInTerminal, confirmThroughClient, confirmToken, confirmTokenRequired, personApproves, personRoute } from "../confirm-token.js";
 import { actingTarget, targetLine } from "../acting.js";
 import { accessFor, operationAccess, type CredentialAccess, type OperationAccess } from "../access.js";
-import { cavelonCommand, fill, personCommand } from "../printed.js";
+import { cavelonCommand, personCommand } from "../printed.js";
 import { apiApproval } from "../api-approval-policy.js";
 import { yoloAllows } from "../automation-policy.js";
 
@@ -208,14 +208,14 @@ function secretsIn(doc: Parameters<typeof secretFields>[0], op: Operation, args:
   return [...found];
 }
 
-function secretRefusal(op: Operation, fields: string[], driven: DrivenBy): CavelonError {
+function secretRefusal(op: Operation, fields: string[]): CavelonError {
   const named = fields.map((f) => `"${f}"`).join(", ");
   return new CavelonError(ExitCode.needsAction, {
     code: "secret_field_for_a_person",
     message:
       `The request to ${op.alias} sets ${named}, which the instance marks as a secret value (x-cavelon-secret); ` +
-      `a person enters secret values, so ${notSentBy(driven)}`,
-    hint: `A person sets a secret value in their own terminal with \`${cavelonCommand("secrets", "set", fill("name"))}\`, or enters it in the Admin. Leave the field out to send the rest.`,
+      "cavelon api never sends secret fields, including from a person's terminal.",
+    hint: "Enter database passwords, private keys and keytabs in the Admin under Settings › Security & access › Databases. For other secrets, use the Admin or the dedicated secrets command where the instance allows it. Leave the field out to send the rest.",
     details: { fields },
   });
 }
@@ -274,7 +274,8 @@ export const api: CommandSpec = {
     "Other changes still need the person's yes: the MCP client asks them, or they send it from their own terminal.\n" +
     "A changed request needs a new preview; confirm: true is refused. Instance confirmation requirements always win.\n" +
     "Run by an agent, one the instance marks for a person only (x-cavelon-person-only) is refused, as is a body that\n" +
-    "sets a field the instance marks as a secret value (x-cavelon-secret) and a file outside the solution folder. On an\n" +
+    "sends a file outside the solution folder. Secret body fields (x-cavelon-secret) are refused in every mode, including\n" +
+    "a person's terminal; enter passwords, keys and keytabs in the Admin. On an\n" +
     "instance that marks no operation, one that changes a secret, creates or revokes a credential or decides an\n" +
     "approval is refused. A person's own terminal sends at once.\n" +
     "In a solution folder, the persona operations (get_bot_persona, upsert_bot_persona, …) get the folder's solution as\n" +
@@ -338,9 +339,9 @@ export const api: CommandSpec = {
           details: { source: kept.source, ...(kept.reason ? { reason: kept.reason } : {}) },
         });
       }
-      const secrets = secretsIn(doc, op, args);
-      if (secrets.length) throw secretRefusal(op, secrets, driven);
     }
+    const secrets = secretsIn(doc, op, args);
+    if (secrets.length) throw secretRefusal(op, secrets);
     if (driven && !op.readOnly) {
       // The same call as the person types it in their own terminal, where it sends at once.
       const words = [
@@ -594,7 +595,7 @@ export const apiDescribe: CommandSpec = {
           : `For a person: it ${kept.reason}, and this instance marks no operation, so an agent does not send it. ${kept.hint}`,
       );
     }
-    if (secrets.length) lines.push(`Secret values (x-cavelon-secret): ${secrets.join(", ")}. A person enters them; an agent leaves them out.`);
+    if (secrets.length) lines.push(`Secret values (x-cavelon-secret): ${secrets.join(", ")}. Enter them in the Admin; cavelon api never sends them.`);
     if (op.confirmation) {
       lines.push(
         `Bound confirmation required (x-cavelon-confirmation)${op.confirmationWhen ? `: ${op.confirmationWhen}` : "."} cavelon asks the instance for the ` +

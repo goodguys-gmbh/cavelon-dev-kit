@@ -16,21 +16,22 @@ const CONNECTION = `${CONNECTIONS}/{connection_id}`;
 const manageHint = "This needs database_connectors.manage in Tenant mode: the tenant Owner (legacy Admin) or a superadmin, using a personal access token or the dashboard. A tenant API key cannot manage connections.";
 
 /** Refuse a published restriction before offering a confirmation; unpublished permissions stay with the server. */
-async function managementPreflight(ctx: Context, method: string, route: string): Promise<void> {
+export async function managementPreflight(ctx: Context, method: string, route: string) {
   await connectorOn(ctx);
-  const { op } = await workflowOperation(ctx, method, route, "database connection management");
+  const { doc, op } = await workflowOperation(ctx, method, route, "database connection and query management");
   const access = operationAccess(await accessFor(await ctx.client()), `${method} ${route}`);
   if (op.personOnly?.marked || access.person) {
     const reason = op.personOnly?.marked ? op.personOnly.reason : access.person;
     throw new CavelonError(ExitCode.needsAction, {
       code: "operation_for_a_person", message: `This instance keeps ${method} ${route} for a person${reason ? ` (${reason})` : ""}.`,
-      hint: "A person manages the connection in the Admin under Settings › Security & access › Databases. This instance may be older than connection management with a personal access token.",
+      hint: "A person manages database connections and queries in the Admin under Settings › Security & access › Databases. This instance may be older than management with a personal access token.",
     });
   }
   if (access.allowed === false) throw new CavelonError(ExitCode.unauthorized, {
     code: "permission_missing", status: 403, message: `This credential lacks ${allOf(access.missing!)} for ${method} ${route}.`,
     hint: manageHint, details: { permissions: access.missing, sent: false },
   });
+  return { doc, op };
 }
 
 /** Recheck before sending; the server remains the final authority, including on older instances. */
@@ -41,7 +42,7 @@ async function manage<T>(ctx: Context, method: string, route: string, body?: unk
   } catch (error) {
     if (error instanceof CavelonError && error.code === "credential_required_for_target_change") {
       throw new CavelonError(error.exitCode, { code: error.code, status: error.status, message: error.message, details: error.details,
-        hint: "A person changes host, port or dialect of a password-bearing connection in the Admin under Settings › Security & access › Databases, with the new server's password. The kit never takes a password." });
+        hint: "A person changes a credential-bearing connection's target, SSH tunnel or Kerberos login in the Admin under Settings › Security & access › Databases, supplying its password, SSH key or keytab again. The kit never takes those credentials." });
     }
     throw withPermissionHint(error, manageHint);
   }
@@ -57,6 +58,17 @@ const connectionOptions: Record<string, OptionSpec> = {
   "tls-mode": textOption("TLS mode, checked against the published schema; omitted on create uses the instance's default.", "<mode>"),
   "statement-timeout-ms": textOption("Statement timeout in milliseconds, within the instance's bounds.", "<ms>"),
   enabled: textOption("Enable or disable the connection (true or false); omitted leaves the instance's default or current value.", "<true|false>"),
+  "follows-redirects": textOption("Follow checked listener redirects (Oracle or SQL Server); cannot combine with an SSH tunnel.", "<true|false>"),
+  "auth-method": textOption("Sign-in method from the published schema (password or kerberos); credentials stay in the Admin.", "<method>"),
+  "kerberos-realm": textOption("Kerberos realm, for example CORP.EXAMPLE.COM.", "<realm>"),
+  "kerberos-principal": textOption("Kerberos account name without the realm.", "<principal>"),
+  "kerberos-kdc": { type: "string", multiple: true, value: "<host>", description: "KDC host on port 88; repeat for multiple KDCs. Use --kerberos-kdcs for explicit ports." },
+  "kerberos-kdcs": textOption('Public KDC JSON array, for example [{"host":"kdc.example.com","port":88}]; null clears it.', "<json>"),
+  "ssh-host": textOption("SSH bastion host. Also give --ssh-username and --ssh-host-key-fingerprint.", "<host>"),
+  "ssh-port": textOption("Bastion port (default 22); the instance checks private target permissions.", "<port>"),
+  "ssh-username": textOption("SSH forwarding account; a person enters its private key in the Admin.", "<username>"),
+  "ssh-host-key-fingerprint": textOption("Required SHA256 bastion host-key fingerprint; no trust on first use.", "<SHA256:...>"),
+  "remove-ssh-tunnel": { type: "boolean", description: "Remove the SSH tunnel; a credential-bearing connection may require the Admin." },
 };
 
 function booleanText(input: Input, name: string): boolean | undefined {
@@ -70,7 +82,7 @@ function booleanText(input: Input, name: string): boolean | undefined {
 function connectionBody(input: Input, name?: string): Record<string, unknown> {
   const body: Record<string, unknown> = {};
   if (name !== undefined) body.name = name;
-  for (const [option, field] of Object.entries({ name: "name", dialect: "dialect", host: "host", "database-name": "database_name", username: "username", "tls-mode": "tls_mode" })) {
+  for (const [option, field] of Object.entries({ name: "name", dialect: "dialect", host: "host", "database-name": "database_name", username: "username", "tls-mode": "tls_mode", "auth-method": "auth_method", "kerberos-realm": "kerberos_realm", "kerberos-principal": "kerberos_principal" })) {
     const value = stringOption(input, option);
     if (value !== undefined) body[field] = value;
   }
@@ -80,18 +92,44 @@ function connectionBody(input: Input, name?: string): Record<string, unknown> {
   }
   const enabled = booleanText(input, "enabled");
   if (enabled !== undefined) body.is_enabled = enabled;
+  const redirects = booleanText(input, "follows-redirects");
+  if (redirects !== undefined) body.follows_redirects = redirects;
+  const kdcs = listOption(input, "kerberos-kdc");
+  const rawKdcs = stringOption(input, "kerberos-kdcs");
+  if (kdcs.length && rawKdcs !== undefined) throw usageError("Use --kerberos-kdc or --kerberos-kdcs, not both.");
+  if (kdcs.length) body.kerberos_kdcs = kdcs.map(host => ({ host, port: 88 }));
+  if (rawKdcs !== undefined) {
+    try { body.kerberos_kdcs = JSON.parse(rawKdcs); } catch { throw usageError("--kerberos-kdcs needs a JSON array of public host/port objects, or null."); }
+  }
+  const ssh = { host: stringOption(input, "ssh-host"), port: intOption(input, "ssh-port"), username: stringOption(input, "ssh-username"), host_key_fingerprint: stringOption(input, "ssh-host-key-fingerprint") };
+  const hasSsh = Object.values(ssh).some(v => v !== undefined);
+  if (input.options["remove-ssh-tunnel"] && hasSsh) throw usageError("Do not combine --remove-ssh-tunnel with SSH settings.");
+  if (hasSsh) {
+    if (!ssh.host || !ssh.username || !ssh.host_key_fingerprint) throw usageError("An SSH tunnel needs --ssh-host, --ssh-username and --ssh-host-key-fingerprint together.");
+    body.ssh_tunnel = { ...ssh, port: ssh.port ?? 22 };
+  }
+  if (input.options["remove-ssh-tunnel"]) body.ssh_tunnel = null;
+  if (body.ssh_tunnel && redirects === true) throw usageError("An SSH tunnel cannot follow listener redirects.");
   return body;
 }
 
 async function savedResult(ctx: Context, connection: Connection, verb: string) {
   const principal = await principalOf(await ctx.client());
-  const person = principal?.needs_a_person?.find(o => o.method === "PUT" && o.path === `${CONNECTION}/password`) ?? null;
-  const next = connection.password_set ? `Test the connection: ${cavelonCommand("db", "test", connection.name)}` :
+  const credential = connection.auth_method === "kerberos" ? "kerberos-keytab" : "password";
+  const person = principal?.needs_a_person?.find(o => o.method === "PUT" && o.path === `${CONNECTION}/${credential}`) ?? null;
+  const pending = [];
+  if (connection.auth_method === "kerberos" && !connection.kerberos_keytab_set && !connection.password_set) pending.push("a person sets the Kerberos keytab or password in the Admin under Settings › Security & access › Databases");
+  if (connection.auth_method !== "kerberos" && !connection.password_set) pending.push("a person sets the database password in the Admin under Settings › Security & access › Databases");
+  if (connection.ssh_tunnel && !connection.ssh_tunnel.private_key_set) pending.push("a person sets the SSH private key in the Admin under Settings › Security & access › Databases");
+  const next = pending.length ? `${pending.join("; ")}; then run ${cavelonCommand("db", "test", connection.name)}.` : connection.password_set || connection.kerberos_keytab_set ? `Test the connection: ${cavelonCommand("db", "test", connection.name)}` :
     `${person?.reason ? `${person.reason}: ` : ""}a person sets the password in the Admin under Settings › Security & access › Databases, then runs ${cavelonCommand("db", "test", connection.name)}. The password never goes through the kit.`;
   return { data: { connection: connectionView(connection), needs_a_person: person, next_step: next }, text: `${verb} connection ${connection.name} (${connection.id}).\n${keyValues([
     ["dialect", connection.dialect], ["target", `${connection.host}:${connection.port}/${connection.database_name}`], ["username", connection.username],
     ["tls_mode", connection.tls_mode], ["password_set", connection.password_set], ["allows_writes", connection.allows_writes],
     ["ca_certificates", connection.ca_certificates], ["ca_certificate_sha256", connection.ca_certificate_sha256],
+    ["auth_method", connection.auth_method], ["kerberos_realm", connection.kerberos_realm], ["kerberos_principal", connection.kerberos_principal],
+    ["kerberos_keytab_set", connection.kerberos_keytab_set], ["follows_redirects", connection.follows_redirects],
+    ["ssh_bastion", connection.ssh_tunnel?.host], ["authorized_keys_entry", connection.ssh_tunnel?.authorized_keys_entry],
   ])}\n${next}` };
 }
 
@@ -124,6 +162,11 @@ export const dbConnectionUpdate: CommandSpec = {
     const body = connectionBody(input);
     if (!Object.keys(body).length) throw usageError("Give at least one connection field to change.");
     const connection = await resolveConnection(ctx, positional(input, "connection")!);
+    const access = operationAccess(await accessFor(await ctx.client()), `PATCH ${CONNECTION}`);
+    const modes = ["disable", "require", "verify_ca", "verify_full"];
+    if (access.personWhen && typeof body.tls_mode === "string" && modes.includes(connection.tls_mode) && modes.includes(body.tls_mode) && modes.indexOf(body.tls_mode) < modes.indexOf(connection.tls_mode)) {
+      throw personConnectionChange("weaken TLS");
+    }
     return savedResult(ctx, await manage<Connection>(ctx, "PATCH", CONNECTION, body, connection.id), "Updated");
   },
 };
@@ -167,14 +210,18 @@ function publicCertificates(pem: string): string {
 }
 
 export const dbConnectionCa: CommandSpec = {
-  name: "db connections ca", summary: "Upload a public CA certificate bundle (database_connectors.manage); refuse private keys before sending.",
-  description: "The file must contain only valid PEM CERTIFICATE blocks. It is bounded by the instance's published CA limit.\n" +
+  name: "db connections ca", summary: "Show the person-only Admin CA step where published; older instances may accept a public certificate upload.",
+  description: "A current instance keeps every CA change for a person in the Admin; the kit refuses before reading the file.\n" +
+    "On an older instance without that published restriction, the file must contain only valid PEM CERTIFICATE blocks.\n" +
+    "It is bounded by the instance's published CA limit.\n" +
     "The output keeps certificate metadata and fingerprints, never the PEM. Test the connection again after uploading it.",
   readOnly: false, idempotent: true, mcpTool: "db_connection_ca", operations: [`PATCH ${CONNECTION}`],
   positionals: [{ name: "connection", required: true, description: "Connection name or id." }, { name: "file", required: true, description: "Public PEM certificate file, never a private key." }],
   examples: ["cavelon db connections ca shop-db ./public-ca.pem"],
   async run(ctx, input) {
     await connectorOn(ctx);
+    const access = operationAccess(await accessFor(await ctx.client()), `PATCH ${CONNECTION}`);
+    if (access.personWhen || access.person) throw personConnectionChange("change the CA certificate");
     const { doc, op } = await workflowOperation(ctx, "PATCH", CONNECTION, "public CA certificate upload");
     const body = doc ? deref(doc, op.requestBody?.content["application/json"]?.schema) as { properties?: Record<string, { maxLength?: number; anyOf?: Array<{ maxLength?: number }> }> } : undefined;
     const ca = body?.properties?.ca_certificate_pem;
@@ -198,6 +245,14 @@ export const dbConnectionCa: CommandSpec = {
     return savedResult(ctx, await manage<Connection>(ctx, "PATCH", CONNECTION, { ca_certificate_pem: pem }, connection.id), "Updated CA of");
   },
 };
+
+function personConnectionChange(change: string): CavelonError {
+  return new CavelonError(ExitCode.needsAction, {
+    code: "operation_for_a_person", message: `A token cannot ${change}. Nothing was sent.`,
+    hint: "A person uses the Admin under Settings › Security & access › Databases › the connection › CA certificate or TLS settings.",
+    details: { sent: false },
+  });
+}
 
 interface LoginScript { dialect: string; kind: string; script: string; [key: string]: unknown }
 export const dbLoginScript: CommandSpec = {

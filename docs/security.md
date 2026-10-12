@@ -176,11 +176,12 @@ Over MCP, `cavelon` limits it further:
   `"writeOnly": true`: provider keys, passwords, one-time codes), at any depth
   of the body, in nested objects and arrays too (`secret_field_for_a_person`).
   The error names the field, never its value, and points to
-  `cavelon secrets set` or the Admin; the agent can send the rest without the
+  the Admin or a dedicated secret command where allowed; the agent can send the rest without the
   field. A field set to `null`, which clears it, passes. On an instance whose
   OpenAPI marks no field, bodies are checked as before. A secret typed into a
   free-form map, such as a headers or settings object, carries no marker and
-  cannot be detected.
+  cannot be detected. The secret-field check also applies in a person's own
+  terminal, so `cavelon api --body` never sends a published secret value.
 - A tool reads and writes files only inside the solution folder (the folder
   of `cavelon.yaml`, or the one the server started in), following symlinks,
   and never in `cavelon`'s config or cache directory, which hold the stored
@@ -336,8 +337,12 @@ your requested work; critical previews are presented in the approval step.
 | `secrets delete` | none | removes a secret's value | a person only, and a preview |
 | `db connections create` | `db_connection_create` | creates a connection without a password | at once; database_connectors.manage; a person sets the password in the Admin |
 | `db connections update` | `db_connection_update` | changes given public connection fields | at once; database_connectors.manage; a password-bearing target move stays in the Admin |
-| `db connections ca` | `db_connection_ca` | uploads a public certificate bundle | at once; database_connectors.manage; private keys and invalid certificates refused before upload |
+| `db connections ca` | `db_connection_ca` | shows the Admin CA step where restricted; older instances may accept public certificates | refuses before reading the file when the instance publishes the person-only restriction; private keys always refused |
 | `db connections delete` | `db_connection_delete` | removes a connection no query uses | preview, always; database_connectors.manage; the instance refuses while queries use it |
+| `db queries delete` | `db_query_delete` | removes a saved query and its assignments | preview and your yes; database_connectors.manage; reports removed references |
+| `db queries enable` | `db_query_enable` | enables a saved query | preview and your yes; database_connectors.manage |
+| `db queries disable` | `db_query_disable` | disables a saved query | preview and your yes; database_connectors.manage |
+| `db queries rename` | `db_query_rename` | changes a query's tool slug | preview and your yes; database_connectors.manage; pull follows the change |
 | `loop start` | `loop_start` | starts a run that acts as you and spends budget | preview and your yes, except for a draft trigger, which an agent confirms with the token; YOLO combines the steps only for the originally selected draft solution |
 | `loop cancel` | `loop_cancel` | stops a run and its loops | preview, always |
 | `loop pause`, `loop resume` | `loop_pause`, `loop_resume` | asks a loop to pause at its next safe point, or resumes a paused one | at once |
@@ -352,7 +357,7 @@ your requested work; critical previews are presented in the approval step.
 | `chat` | `chat` | one turn of a conversation, which spends budget | at once |
 | `limits set` | `limits_set` | a limit of the tenant or the platform | preview, always, and your yes |
 | `models set-limit` | `models_set_limit` | a model endpoint's concurrency limit | preview, always, and your yes |
-| `db test`, `db test-run` | `db_test`, `db_test_run` | a tenant Owner's connection test (stored as the connection's last test), or one run of a saved query with the values given (the rows come back once; the instance keeps counts only) | at once; read-only on the database, and the instance refuses anyone but the tenant Owner |
+| `db test`, `db test-run` | `db_test`, `db_test_run` | a connection test or one saved/unsaved query test; rows return once | at once; writes dry-run and roll back; saved tests need database_connectors.test/manage, drafts need the Owner's managing PAT or the Admin |
 | `sandbox seed` | `sandbox_seed` | replaces a Sandbox's workspace | preview, always |
 | `sandbox validate`, `sandbox refresh` | `sandbox_validate`, `sandbox_refresh` | runs a Sandbox's readiness checks, or accepts a customer VM's workspace as it is now | at once |
 | `artifacts export` | `artifacts_export` | takes files out of an isolated container as a tar archive | at once; never writes over an existing file |

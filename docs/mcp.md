@@ -169,6 +169,10 @@ only reads it).
 | `db_runs` | `cavelon db runs` | read-only |
 | `db_test` | `cavelon db test` | changing |
 | `db_test_run` | `cavelon db test-run` | changing |
+| `db_query_delete` | `cavelon db queries delete` | destructive; personal approval |
+| `db_query_enable` | `cavelon db queries enable` | changing; personal approval |
+| `db_query_disable` | `cavelon db queries disable` | changing; personal approval |
+| `db_query_rename` | `cavelon db queries rename` | changing; personal approval |
 | `loop_start` | `cavelon loop start` | changing |
 | `loop_cancel` | `cavelon loop cancel` | destructive |
 | `loop_iterations` | `cavelon loop iterations` | read-only |
@@ -260,6 +264,7 @@ repeat them:
   only with `confirm` set to that preview's id. `tenant_create`, `variables_set` where
   it replaces another value, `loop_start`, `limits_set`, `models_set_limit`,
   `loop_cancel`, `sandbox_seed`, `trigger_identity`, `harness_default`, `db_connection_delete`,
+  `db_query_delete`, `db_query_enable`, `db_query_disable`, `db_query_rename`,
   `activate` of a solution a channel or an active trigger reaches, whose
   activation takes the default route or whose reach or route effect is
   unknown, or with `make_default`, `deactivate`, and `api`
@@ -372,9 +377,9 @@ repeat them:
   `replace`, or where the instance replaces itself), `test_run`,
   `loop_pause`, `loop_resume`, `sandbox_validate`,
   `sandbox_refresh`, `artifacts_export`, `db_connection_create`,
-  `db_connection_update`, `db_connection_ca` (public certificates only), and the tenant Owner's two database
+  `db_connection_update`, `db_connection_ca` (only older instances that allow token uploads), and the tenant Owner's two database
   checks, `db_test` (a connection test, stored as the connection's last test)
-  and `db_test_run` (one test of a saved query with the values given; writes
+  and `db_test_run` (one test of a saved query, or its validated unsaved package definition with `draft: true`; writes
   are dry runs that roll back, the rows come back once, and the instance
   keeps counts and write evidence only). Never retry an ambiguous write outcome.
   [Security](security.md#every-changing-command-and-its-guard) lists every
@@ -394,10 +399,11 @@ repeat them:
   body that sets a field the instance marks as holding a secret value
   (`"x-cavelon-secret": true`, with `"writeOnly": true`), in nested objects
   and arrays too (`secret_field_for_a_person`). The error names the field and
-  points to `cavelon secrets set` or the Admin; the agent can send the rest
+  points to the Admin or a dedicated secret command where allowed; the agent can send the rest
   without the field. A field set to `null` passes, and an instance whose
   OpenAPI marks no field is checked as before. A secret typed into a free-form
-  map, such as a headers or settings object, cannot be detected.
+  map, such as a headers or settings object, cannot be detected. Personal
+  terminal API calls receive the same secret-field refusal.
 - **The same guards in the agent's shell.** When a coding agent runs
   `cavelon api` in its shell, the rules of the `api` tool hold there too: it
   refuses what the tool refuses, keeps its files in the solution folder, and
@@ -420,8 +426,11 @@ repeat them:
   value and lets you decide; an operator's limit goes to the operator.
 - **Secrets stay with people**, as above. The agent never asks for, reads or
   passes a secret value, and never decides an approval.
-  Connection tools take only public fields and public CA files; a person
-  sets the database password in the Admin. `allows_writes` is output only;
+  Connection tools take only public settings, including SSH and Kerberos.
+  Passwords, SSH private keys, keytabs, CA changes and weaker TLS are Admin
+  actions. The CA tool refuses before reading its file when the instance
+  publishes that restriction; older token-upload behavior remains compatible.
+  `allows_writes` is output only;
   enabling writes stays in the dashboard. `db_schema` uses the instance's
   read-only catalog explorer under `database_connectors.manage`.
   See [Connect a database](connect-a-database.md).

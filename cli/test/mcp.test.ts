@@ -156,6 +156,10 @@ describe("cavelon mcp", () => {
         "db_schema",
         "db_instance",
         "db_queries",
+        "db_query_delete",
+        "db_query_disable",
+        "db_query_enable",
+        "db_query_rename",
         "db_runs",
         "db_test",
         "db_test_run",
@@ -222,6 +226,11 @@ describe("cavelon mcp", () => {
       expect(byName[name]!.annotations, name).toMatchObject({ readOnlyHint: false, destructiveHint: false });
       expect(byName[name]!.description, name).toMatch(/changes no setting/);
     }
+    for (const name of ["db_query_delete", "db_query_enable", "db_query_disable", "db_query_rename"]) {
+      expect(byName[name]!.annotations, name).toMatchObject({ readOnlyHint: false, destructiveHint: name === "db_query_delete" });
+      expect((byName[name]!.inputSchema as { properties: Record<string, unknown> }).properties).toHaveProperty("confirm");
+    }
+    expect((byName.db_test_run!.inputSchema as { properties: Record<string, unknown> }).properties.draft).toMatchObject({ type: "boolean" });
     expect(byName.explain!.annotations).toMatchObject({ readOnlyHint: true });
     expect(byName.apply!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true });
     expect(byName.activate!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false });

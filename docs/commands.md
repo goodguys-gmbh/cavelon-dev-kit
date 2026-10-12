@@ -34,14 +34,14 @@ the environment over the files. The exit codes are listed in [Troubleshooting](t
 - **Solution as code:** [`init`](#cavelon-init), [`pull`](#cavelon-pull), [`validate`](#cavelon-validate), [`fmt`](#cavelon-fmt), [`schema`](#cavelon-schema), [`apply`](#cavelon-apply), [`activate`](#cavelon-activate), [`explain`](#cavelon-explain)
 - **Tenants and solutions:** [`tenant create`](#cavelon-tenant-create), [`tenant list`](#cavelon-tenant-list), [`harness list`](#cavelon-harness-list), [`harness new`](#cavelon-harness-new), [`harness clone`](#cavelon-harness-clone), [`harness default`](#cavelon-harness-default)
 - **Knowledge, tests and traces:** [`kb upload`](#cavelon-kb-upload), [`test run`](#cavelon-test-run), [`wait`](#cavelon-wait), [`watch`](#cavelon-watch), [`trace`](#cavelon-trace)
-- **Database connections and queries:** [`db instance`](#cavelon-db-instance), [`db connections`](#cavelon-db-connections), [`db queries`](#cavelon-db-queries), [`db runs`](#cavelon-db-runs), [`db test`](#cavelon-db-test), [`db test-run`](#cavelon-db-test-run)
+- **Database connections and queries:** [`db instance`](#cavelon-db-instance), [`db connections`](#cavelon-db-connections), [`db connections create`](#cavelon-db-connections-create), [`db connections update`](#cavelon-db-connections-update), [`db connections delete`](#cavelon-db-connections-delete), [`db connections ca`](#cavelon-db-connections-ca), [`db login-script`](#cavelon-db-login-script), [`db schema`](#cavelon-db-schema), [`db queries`](#cavelon-db-queries), [`db queries delete`](#cavelon-db-queries-delete), [`db queries enable`](#cavelon-db-queries-enable), [`db queries disable`](#cavelon-db-queries-disable), [`db queries rename`](#cavelon-db-queries-rename), [`db runs`](#cavelon-db-runs), [`db test`](#cavelon-db-test), [`db test-run`](#cavelon-db-test-run)
 - **Variables and secrets:** [`variables list`](#cavelon-variables-list), [`variables get`](#cavelon-variables-get), [`variables set`](#cavelon-variables-set), [`variables delete`](#cavelon-variables-delete), [`secrets list`](#cavelon-secrets-list), [`secrets set`](#cavelon-secrets-set), [`secrets delete`](#cavelon-secrets-delete)
 - **Limits and capacity:** [`limits`](#cavelon-limits), [`limits set`](#cavelon-limits-set), [`models list`](#cavelon-models-list), [`models set-limit`](#cavelon-models-set-limit)
 - **Loops and triggers:** [`loop start`](#cavelon-loop-start), [`loop watch`](#cavelon-loop-watch), [`loop iterations`](#cavelon-loop-iterations), [`loop pause`](#cavelon-loop-pause), [`loop resume`](#cavelon-loop-resume), [`loop cancel`](#cavelon-loop-cancel), [`trigger identity`](#cavelon-trigger-identity)
 - **Sandboxes:** [`sandbox list`](#cavelon-sandbox-list), [`sandbox validate`](#cavelon-sandbox-validate), [`sandbox files`](#cavelon-sandbox-files), [`sandbox cat`](#cavelon-sandbox-cat), [`sandbox activity`](#cavelon-sandbox-activity), [`sandbox logs`](#cavelon-sandbox-logs), [`sandbox receipt`](#cavelon-sandbox-receipt), [`sandbox seed`](#cavelon-sandbox-seed), [`sandbox refresh`](#cavelon-sandbox-refresh), [`artifacts export`](#cavelon-artifacts-export)
 - **API and docs:** [`api list`](#cavelon-api-list), [`api describe`](#cavelon-api-describe), [`api`](#cavelon-api), [`docs search`](#cavelon-docs-search), [`docs get`](#cavelon-docs-get)
 - **For agents:** [`commands`](#cavelon-commands), [`mcp`](#cavelon-mcp)
-- **Other commands:** [`deactivate`](#cavelon-deactivate), [`chat`](#cavelon-chat), [`db connections create`](#cavelon-db-connections-create), [`db connections update`](#cavelon-db-connections-update), [`db connections delete`](#cavelon-db-connections-delete), [`db connections ca`](#cavelon-db-connections-ca), [`db login-script`](#cavelon-db-login-script), [`db schema`](#cavelon-db-schema)
+- **Other commands:** [`deactivate`](#cavelon-deactivate), [`chat`](#cavelon-chat)
 
 ## Session
 
@@ -683,7 +683,7 @@ cavelon trace <run> --trace <trace_id> --span <span_id>
 
 ## Database connections and queries
 
-Read what the instance offers for database connections, and the connections, saved queries and query runs behind a solution's database query tools; the tenant Owner also tests a connection and test-runs a query. A superadmin creates and changes them in the Admin.
+Read the instance's database offer, manage public connection settings and preview saved-query changes. Test package SQL before apply with --draft. Credentials and person-only connection changes stay in the Admin.
 
 ### cavelon db instance
 
@@ -728,6 +728,210 @@ cavelon db connections
 cavelon db connections --json
 ```
 
+### cavelon db connections create
+
+Create a connection without a password (database_connectors.manage); print the Admin password step.
+
+**changing** · MCP tool: `db_connection_create`
+
+```text
+cavelon db connections create <name> [options]
+```
+
+The tenant Owner (legacy Admin), or a superadmin in Tenant mode, creates it with a personal access token. Fields and defaults come from this instance's OpenAPI. No password argument, environment value, stdin or file is read. A person sets the password in Settings › Security & access › Databases before testing. Connections stay outside packages.
+
+| Argument | Description |
+|---|---|
+| `name` | Connection name, the same in every environment that uses the package. Required. |
+
+| Option | Description | MCP |
+|---|---|---|
+| `--dialect <dialect>` | Database type, checked against this instance's published create/update schema. | yes |
+| `--host <host>` | One DNS name or IP address, without port, path or user. | yes |
+| `--port <port>` | Database port; required on create (the instance validates its bounds). | yes |
+| `--database-name <name>` | Database name on this server. | yes |
+| `--username <name>` | Database login name; its password is set only in the Admin. | yes |
+| `--tls-mode <mode>` | TLS mode, checked against the published schema; omitted on create uses the instance's default. | yes |
+| `--statement-timeout-ms <ms>` | Statement timeout in milliseconds, within the instance's bounds. | yes |
+| `--enabled <true|false>` | Enable or disable the connection (true or false); omitted leaves the instance's default or current value. | yes |
+| `--follows-redirects <true|false>` | Follow checked listener redirects (Oracle or SQL Server); cannot combine with an SSH tunnel. | yes |
+| `--auth-method <method>` | Sign-in method from the published schema (password or kerberos); credentials stay in the Admin. | yes |
+| `--kerberos-realm <realm>` | Kerberos realm, for example CORP.EXAMPLE.COM. | yes |
+| `--kerberos-principal <principal>` | Kerberos account name without the realm. | yes |
+| `--kerberos-kdc <host>` | KDC host on port 88; repeat for multiple KDCs. Use --kerberos-kdcs for explicit ports. Repeatable. | yes |
+| `--kerberos-kdcs <json>` | Public KDC JSON array, for example [{"host":"kdc.example.com","port":88}]; null clears it. | yes |
+| `--ssh-host <host>` | SSH bastion host. Also give --ssh-username and --ssh-host-key-fingerprint. | yes |
+| `--ssh-port <port>` | Bastion port (default 22); the instance checks private target permissions. | yes |
+| `--ssh-username <username>` | SSH forwarding account; a person enters its private key in the Admin. | yes |
+| `--ssh-host-key-fingerprint <SHA256:...>` | Required SHA256 bastion host-key fingerprint; no trust on first use. | yes |
+| `--remove-ssh-tunnel` | Remove the SSH tunnel; a credential-bearing connection may require the Admin. | yes |
+
+Examples:
+
+```bash
+cavelon db connections create shop-db --dialect postgresql --host db.example.com --port 5432 --database-name shop --username cavelon_reader
+```
+
+### cavelon db connections update
+
+Change only given public connection fields (database_connectors.manage); never a password or allows_writes.
+
+**changing** · MCP tool: `db_connection_update`
+
+```text
+cavelon db connections update <connection> [options]
+```
+
+A person must move a password-bearing connection to another host, port or dialect in the Admin with its password. The instance refuses that change from the kit; an uncredentialed connection moves freely. Test again after changing it. Enabling writes and acknowledging write privileges remain dashboard actions and never enter a package.
+
+| Argument | Description |
+|---|---|
+| `connection` | Connection name or id. Required. |
+
+| Option | Description | MCP |
+|---|---|---|
+| `--name <name>` | New connection name. | yes |
+| `--dialect <dialect>` | Database type, checked against this instance's published create/update schema. | yes |
+| `--host <host>` | One DNS name or IP address, without port, path or user. | yes |
+| `--port <port>` | Database port; required on create (the instance validates its bounds). | yes |
+| `--database-name <name>` | Database name on this server. | yes |
+| `--username <name>` | Database login name; its password is set only in the Admin. | yes |
+| `--tls-mode <mode>` | TLS mode, checked against the published schema; omitted on create uses the instance's default. | yes |
+| `--statement-timeout-ms <ms>` | Statement timeout in milliseconds, within the instance's bounds. | yes |
+| `--enabled <true|false>` | Enable or disable the connection (true or false); omitted leaves the instance's default or current value. | yes |
+| `--follows-redirects <true|false>` | Follow checked listener redirects (Oracle or SQL Server); cannot combine with an SSH tunnel. | yes |
+| `--auth-method <method>` | Sign-in method from the published schema (password or kerberos); credentials stay in the Admin. | yes |
+| `--kerberos-realm <realm>` | Kerberos realm, for example CORP.EXAMPLE.COM. | yes |
+| `--kerberos-principal <principal>` | Kerberos account name without the realm. | yes |
+| `--kerberos-kdc <host>` | KDC host on port 88; repeat for multiple KDCs. Use --kerberos-kdcs for explicit ports. Repeatable. | yes |
+| `--kerberos-kdcs <json>` | Public KDC JSON array, for example [{"host":"kdc.example.com","port":88}]; null clears it. | yes |
+| `--ssh-host <host>` | SSH bastion host. Also give --ssh-username and --ssh-host-key-fingerprint. | yes |
+| `--ssh-port <port>` | Bastion port (default 22); the instance checks private target permissions. | yes |
+| `--ssh-username <username>` | SSH forwarding account; a person enters its private key in the Admin. | yes |
+| `--ssh-host-key-fingerprint <SHA256:...>` | Required SHA256 bastion host-key fingerprint; no trust on first use. | yes |
+| `--remove-ssh-tunnel` | Remove the SSH tunnel; a credential-bearing connection may require the Admin. | yes |
+
+Examples:
+
+```bash
+cavelon db connections update shop-db --statement-timeout-ms 3000
+cavelon db connections update shop-db --enabled false
+```
+
+### cavelon db connections delete
+
+Delete an unused connection (database_connectors.manage); previews first, --confirm deletes it.
+
+**changing (destructive)** · MCP tool: `db_connection_delete`
+
+```text
+cavelon db connections delete <connection> [options]
+```
+
+Without --confirm nothing is deleted. The instance refuses deletion while queries still use the connection.
+
+| Argument | Description |
+|---|---|
+| `connection` | Connection name or id. Required. |
+
+| Option | Description | MCP |
+|---|---|---|
+| `--confirm [<token>]` | Delete the previewed connection. In a person's terminal the flag alone confirms; run by a coding agent, `--confirm <token>` with the token its preview printed (the bare flag only shows the preview there, exit 5). | yes |
+
+Examples:
+
+```bash
+cavelon db connections delete unused-db
+cavelon db connections delete unused-db --confirm
+```
+
+### cavelon db connections ca
+
+Show the person-only Admin CA step where published; older instances may accept a public certificate upload.
+
+**changing** · MCP tool: `db_connection_ca`
+
+```text
+cavelon db connections ca <connection> <file>
+```
+
+A current instance keeps every CA change for a person in the Admin; the kit refuses before reading the file. On an older instance without that published restriction, the file must contain only valid PEM CERTIFICATE blocks. It is bounded by the instance's published CA limit. The output keeps certificate metadata and fingerprints, never the PEM. Test the connection again after uploading it.
+
+| Argument | Description |
+|---|---|
+| `connection` | Connection name or id. Required. |
+| `file` | Public PEM certificate file, never a private key. Required. |
+
+Examples:
+
+```bash
+cavelon db connections ca shop-db ./public-ca.pem
+```
+
+### cavelon db login-script
+
+Print the instance's published read-only login SQL for a dialect or saved connection; no database is contacted.
+
+**read-only** · MCP tool: `db_login_script`
+
+```text
+cavelon db login-script [dialect] [options]
+```
+
+Needs database_connectors.view. The DBA replaces the script's password placeholder locally, outside the kit. Only variants this instance publishes are offered; this build publishes read_only. Omitted inputs use its defaults. For SQL Server, connection_limit_enforced is false; --schema scopes SELECT instead of granting db_datareader. For Oracle, --schema names the one schema READ covers (omitted: the placeholder YOUR_SCHEMA); a profile sets the limit.
+
+| Argument | Description |
+|---|---|
+| `dialect` | Database dialect; omit only with --connection. |
+
+| Option | Description | MCP |
+|---|---|---|
+| `--dialect <dialect>` | Database dialect, as the dialect argument; give one of the two. | CLI only |
+| `--connection <connection>` | Use dialect, database, user and TLS from this saved connection (name or id). | yes |
+| `--database-name <name>` | Database the login may read (without --connection). | yes |
+| `--username <name>` | Database login name (without --connection). | yes |
+| `--schema <name>` | Schema the read grants cover. | yes |
+| `--egress-ip <ip>` | Outbound IP address; omitted uses the instance's configured addresses. Repeatable. | yes |
+| `--connection-limit <n>` | Connections to allow; omitted uses the instance's pool size times four. | yes |
+| `--require-tls <true|false>` | MySQL REQUIRE SSL (true or false, without --connection). | yes |
+
+Examples:
+
+```bash
+cavelon db login-script postgresql --database-name shop --username cavelon_reader
+cavelon db login-script --dialect oracle --database-name SHOPPDB --username cavelon_ro --schema SHOP
+cavelon db login-script --connection shop-db --schema public
+```
+
+### cavelon db schema
+
+Explore readable schemas or one schema's tables and columns (database_connectors.manage); read-only.
+
+**read-only** · MCP tool: `db_schema`
+
+```text
+cavelon db schema <connection> [schema] [options]
+```
+
+Reads only the database catalog, under the connection's timeout and read-only boundary. The instance records counts in its audit log. It caps schemas/tables at 500 and columns at 2,000; truncated flags say what was cut. Only the tenant Owner (legacy Admin) or a superadmin in Tenant mode may explore, using a session or personal access token.
+
+| Argument | Description |
+|---|---|
+| `connection` | Connection name or id. Required. |
+| `schema` | Schema to inspect; omitted lists schemas. |
+
+| Option | Description | MCP |
+|---|---|---|
+| `--limit <n>` | Return at most n schemas or tables (default 50, maximum 500). | yes |
+| `--cursor <cursor>` | Continue after the previous page (its next_cursor). | yes |
+
+Examples:
+
+```bash
+cavelon db schema shop-db
+cavelon db schema shop-db public --json
+```
+
 ### cavelon db queries
 
 The tenant's saved database queries by tool slug; with a query, its SQL, parameters and limits.
@@ -756,6 +960,111 @@ Examples:
 cavelon db queries
 cavelon db queries --connection shop-db
 cavelon db queries order_status --json
+```
+
+### cavelon db queries delete
+
+Delete a saved database query; preview first, then the person confirms.
+
+**changing (destructive)** · MCP tool: `db_query_delete`
+
+```text
+cavelon db queries delete <query> [options]
+```
+
+Needs database_connectors.manage. Each preview is bound to this query's version and the exact change. Deleting also removes its agent and skill assignments; the result lists what the instance removed. Run cavelon pull afterwards so the package follows the saved query. A coding agent cannot confirm it: over MCP the client asks the person, and from an agent's shell the person runs the confirm in their own terminal.
+
+| Argument | Description |
+|---|---|
+| `query` | Saved query's slug or id. Required. |
+
+| Option | Description | MCP |
+|---|---|---|
+| `--confirm [<token>]` | Send the exact previewed change after the person's approval. In a person's terminal the flag alone confirms; run by a coding agent, `--confirm <token>` with the token its preview printed (the bare flag only shows the preview there, exit 5). | yes |
+
+Examples:
+
+```bash
+cavelon db queries delete order_status
+```
+
+### cavelon db queries enable
+
+Enable a saved database query; preview first, then the person confirms.
+
+**changing** · MCP tool: `db_query_enable`
+
+```text
+cavelon db queries enable <query> [options]
+```
+
+Needs database_connectors.manage. Each preview is bound to this query's version and the exact change. Deleting also removes its agent and skill assignments; the result lists what the instance removed. Run cavelon pull afterwards so the package follows the saved query. A coding agent cannot confirm it: over MCP the client asks the person, and from an agent's shell the person runs the confirm in their own terminal.
+
+| Argument | Description |
+|---|---|
+| `query` | Saved query's slug or id. Required. |
+
+| Option | Description | MCP |
+|---|---|---|
+| `--confirm [<token>]` | Send the exact previewed change after the person's approval. In a person's terminal the flag alone confirms; run by a coding agent, `--confirm <token>` with the token its preview printed (the bare flag only shows the preview there, exit 5). | yes |
+
+Examples:
+
+```bash
+cavelon db queries enable order_status
+```
+
+### cavelon db queries disable
+
+Disable a saved database query; preview first, then the person confirms.
+
+**changing** · MCP tool: `db_query_disable`
+
+```text
+cavelon db queries disable <query> [options]
+```
+
+Needs database_connectors.manage. Each preview is bound to this query's version and the exact change. Deleting also removes its agent and skill assignments; the result lists what the instance removed. Run cavelon pull afterwards so the package follows the saved query. A coding agent cannot confirm it: over MCP the client asks the person, and from an agent's shell the person runs the confirm in their own terminal.
+
+| Argument | Description |
+|---|---|
+| `query` | Saved query's slug or id. Required. |
+
+| Option | Description | MCP |
+|---|---|---|
+| `--confirm [<token>]` | Send the exact previewed change after the person's approval. In a person's terminal the flag alone confirms; run by a coding agent, `--confirm <token>` with the token its preview printed (the bare flag only shows the preview there, exit 5). | yes |
+
+Examples:
+
+```bash
+cavelon db queries disable order_status
+```
+
+### cavelon db queries rename
+
+Rename a saved database query; preview first, then the person confirms.
+
+**changing** · MCP tool: `db_query_rename`
+
+```text
+cavelon db queries rename <query> <new-slug> [options]
+```
+
+Needs database_connectors.manage. Each preview is bound to this query's version and the exact change. Deleting also removes its agent and skill assignments; the result lists what the instance removed. Run cavelon pull afterwards so the package follows the saved query. A coding agent cannot confirm it: over MCP the client asks the person, and from an agent's shell the person runs the confirm in their own terminal.
+
+| Argument | Description |
+|---|---|
+| `query` | Saved query's slug or id. Required. |
+| `new-slug` | New tool slug, checked against the instance's schema. Required. |
+
+| Option | Description | MCP |
+|---|---|---|
+| `--confirm [<token>]` | Send the exact previewed change after the person's approval. In a person's terminal the flag alone confirms; run by a coding agent, `--confirm <token>` with the token its preview printed (the bare flag only shows the preview there, exit 5). | yes |
+
+Examples:
+
+```bash
+cavelon db queries rename order_status order_lookup
 ```
 
 ### cavelon db runs
@@ -811,7 +1120,7 @@ cavelon db test shop-db --json
 
 ### cavelon db test-run
 
-Run a saved query once with the values given, identity parameters included; show what the model would see and the rows.
+Test a saved query, or validate and test unsaved package SQL with --draft; show model output and rows.
 
 **changing** · MCP tool: `db_test_run`
 
@@ -819,7 +1128,7 @@ Run a saved query once with the values given, identity parameters included; show
 cavelon db test-run <query> [options]
 ```
 
-Needs the tenant Owner's permission (database_connectors.test); it reads the customer's own data. Give each parameter with --value name=value, those the platform fills from the signed-in visitor (end_user.*) too: that is how an identity-scoped query is checked for one customer. A list parameter takes a JSON array (--value 'skus=["X-1","X-2"]'), one to max_items items of its type; the instance checks each item and names a refused one by position, never its value. The instance records the run (counts only; a list by its item count) and audits it with your name. Where the instance publishes the matching needs_a_person_when restriction, the kit refuses an API key on an end_user.* query before sending (exit 5): a person tests it in the Admin or with their personal access token. Ordinary queries remain usable with an API key. On an older instance that omits the restriction, the server decides. The rows come back once and are never stored. A failed run names its code; `cavelon explain <code>` says more. A write query's test is a dry run that rolls back; it still needs the connection to allow writes. The result reports kind, dry_run, rolled_back, affected_rows and committed only where published; an omitted value stays unknown. Never retry an ambiguous write outcome. A read stored-procedure query (SQL Server) shows the procedure's first result set; the instance refuses its run (exit 4) while the connection's last test found write privileges or the procedure's definition writes or cannot be read, and a run whose procedure ended the connector's transaction comes back with a notice saying so and whether the query was switched off.
+With --draft, reads the tool slug from package/, validates first and tests without saving or applying. Needs database_connectors.manage with the Owner's personal access token or the Admin; an API key cannot run a draft. Needs the tenant Owner's permission (database_connectors.test); it reads the customer's own data. Give each parameter with --value name=value, those the platform fills from the signed-in visitor (end_user.*) too: that is how an identity-scoped query is checked for one customer. A list parameter takes a JSON array (--value 'skus=["X-1","X-2"]'), one to max_items items of its type; the instance checks each item and names a refused one by position, never its value. The instance records the run (counts only; a list by its item count) and audits it with your name. Where the instance publishes the matching needs_a_person_when restriction, the kit refuses an API key on an end_user.* query before sending (exit 5): a person tests it in the Admin or with their personal access token. Ordinary queries remain usable with an API key. On an older instance that omits the restriction, the server decides. The rows come back once and are never stored. A failed run names its code; `cavelon explain <code>` says more. A write query's test is a dry run that rolls back; it still needs the connection to allow writes. The result reports kind, dry_run, rolled_back, affected_rows and committed only where published; an omitted value stays unknown. Never retry an ambiguous write outcome. A read stored-procedure query (SQL Server) shows the procedure's first result set; the instance refuses its run (exit 4) while the connection's last test found write privileges or the procedure's definition writes or cannot be read, and a run whose procedure ended the connector's transaction comes back with a notice saying so and whether the query was switched off.
 
 | Argument | Description |
 |---|---|
@@ -827,12 +1136,14 @@ Needs the tenant Owner's permission (database_connectors.test); it reads the cus
 
 | Option | Description | MCP |
 |---|---|---|
+| `--draft` | Validate package/ and test its unsaved query definition before apply (database_connectors.manage). | yes |
 | `--value <name=value>` | One parameter's value, typed as the parameter's type; a list parameter's is a JSON array. Repeatable. | yes |
 | `--rows <n>` | Show at most n rows in the text (default 20); --json carries what the instance returned. | yes |
 
 Examples:
 
 ```bash
+cavelon db test-run order_status --draft --value order_no=A-10023 --value email=ada@example.com
 cavelon db test-run order_status --value order_no=A-10023 --value email=ada@example.com
 cavelon db test-run stock --value sku=4711 --json
 cavelon db test-run stock_of_skus --value 'skus=["X-1","X-2"]'
@@ -1692,7 +2003,7 @@ Call any operation the instance publishes in its OpenAPI.
 cavelon api <operation> [params...] [options]
 ```
 
-The operation is its operationId or the short name before FastAPI's path suffix (list_harnesses). Parameters: -p name=value or name=value (not --name). Body: --body '&lt;json&gt;', --body @file.json or --body - (stdin); --json &lt;body&gt; still works for now but is deprecated: --json alone prints JSON, as on every command. The body is checked against the operation's schema before it is sent. As an MCP tool, or run by a coding agent (CLAUDECODE, CODEX_THREAD_ID, CODEX_CI, CODEX_SANDBOX, CURSOR_AGENT, GEMINI_CLI, QWEN_CODE, COPILOT_CLI, COPILOT_AGENT, AGENT_CONTEXT_OUT, TERM_PROGRAM=kiro, OPENCODE, PI_SESSION_ID, AGENT_SESSION_ID, GROK_AGENT, AI_AGENT or CAVELON_AGENT=1 is set), an operation that changes something returns what it would send and a confirm token, and sends it with that token. Known draft creation and cloning need no personal approval; explicit --yolo also skips their token round trip within its bound scope. Known import previews and database catalog reads send at once. Other changes still need the person's yes: the MCP client asks them, or they send it from their own terminal. A changed request needs a new preview; confirm: true is refused. Instance confirmation requirements always win. Run by an agent, one the instance marks for a person only (x-cavelon-person-only) is refused, as is a body that sets a field the instance marks as a secret value (x-cavelon-secret) and a file outside the solution folder. On an instance that marks no operation, one that changes a secret, creates or revokes a credential or decides an approval is refused. A person's own terminal sends at once. In a solution folder, the persona operations (get_bot_persona, upsert_bot_persona, …) get the folder's solution as harness_id when none is passed, since without it they reach the tenant's default route.
+The operation is its operationId or the short name before FastAPI's path suffix (list_harnesses). Parameters: -p name=value or name=value (not --name). Body: --body '&lt;json&gt;', --body @file.json or --body - (stdin); --json &lt;body&gt; still works for now but is deprecated: --json alone prints JSON, as on every command. The body is checked against the operation's schema before it is sent. As an MCP tool, or run by a coding agent (CLAUDECODE, CODEX_THREAD_ID, CODEX_CI, CODEX_SANDBOX, CURSOR_AGENT, GEMINI_CLI, QWEN_CODE, COPILOT_CLI, COPILOT_AGENT, AGENT_CONTEXT_OUT, TERM_PROGRAM=kiro, OPENCODE, PI_SESSION_ID, AGENT_SESSION_ID, GROK_AGENT, AI_AGENT or CAVELON_AGENT=1 is set), an operation that changes something returns what it would send and a confirm token, and sends it with that token. Known draft creation and cloning need no personal approval; explicit --yolo also skips their token round trip within its bound scope. Known import previews and database catalog reads send at once. Other changes still need the person's yes: the MCP client asks them, or they send it from their own terminal. A changed request needs a new preview; confirm: true is refused. Instance confirmation requirements always win. Run by an agent, one the instance marks for a person only (x-cavelon-person-only) is refused, as is a body that sends a file outside the solution folder. Secret body fields (x-cavelon-secret) are refused in every mode, including a person's terminal; enter passwords, keys and keytabs in the Admin. On an instance that marks no operation, one that changes a secret, creates or revokes a credential or decides an approval is refused. A person's own terminal sends at once. In a solution folder, the persona operations (get_bot_persona, upsert_bot_persona, …) get the folder's solution as harness_id when none is passed, since without it they reach the tenant's default route.
 
 | Argument | Description |
 |---|---|
@@ -1843,186 +2154,4 @@ Examples:
 cavelon chat "When are you open?" --harness support-faq
 cavelon chat "And on Saturdays?" --session <session_id>
 cavelon chat "Hello" --json
-```
-
-### cavelon db connections create
-
-Create a connection without a password (database_connectors.manage); print the Admin password step.
-
-**changing** · MCP tool: `db_connection_create`
-
-```text
-cavelon db connections create <name> [options]
-```
-
-The tenant Owner (legacy Admin), or a superadmin in Tenant mode, creates it with a personal access token. Fields and defaults come from this instance's OpenAPI. No password argument, environment value, stdin or file is read. A person sets the password in Settings › Security & access › Databases before testing. Connections stay outside packages.
-
-| Argument | Description |
-|---|---|
-| `name` | Connection name, the same in every environment that uses the package. Required. |
-
-| Option | Description | MCP |
-|---|---|---|
-| `--dialect <dialect>` | Database type, checked against this instance's published create/update schema. | yes |
-| `--host <host>` | One DNS name or IP address, without port, path or user. | yes |
-| `--port <port>` | Database port; required on create (the instance validates its bounds). | yes |
-| `--database-name <name>` | Database name on this server. | yes |
-| `--username <name>` | Database login name; its password is set only in the Admin. | yes |
-| `--tls-mode <mode>` | TLS mode, checked against the published schema; omitted on create uses the instance's default. | yes |
-| `--statement-timeout-ms <ms>` | Statement timeout in milliseconds, within the instance's bounds. | yes |
-| `--enabled <true|false>` | Enable or disable the connection (true or false); omitted leaves the instance's default or current value. | yes |
-
-Examples:
-
-```bash
-cavelon db connections create shop-db --dialect postgresql --host db.example.com --port 5432 --database-name shop --username cavelon_reader
-```
-
-### cavelon db connections update
-
-Change only given public connection fields (database_connectors.manage); never a password or allows_writes.
-
-**changing** · MCP tool: `db_connection_update`
-
-```text
-cavelon db connections update <connection> [options]
-```
-
-A person must move a password-bearing connection to another host, port or dialect in the Admin with its password. The instance refuses that change from the kit; an uncredentialed connection moves freely. Test again after changing it. Enabling writes and acknowledging write privileges remain dashboard actions and never enter a package.
-
-| Argument | Description |
-|---|---|
-| `connection` | Connection name or id. Required. |
-
-| Option | Description | MCP |
-|---|---|---|
-| `--name <name>` | New connection name. | yes |
-| `--dialect <dialect>` | Database type, checked against this instance's published create/update schema. | yes |
-| `--host <host>` | One DNS name or IP address, without port, path or user. | yes |
-| `--port <port>` | Database port; required on create (the instance validates its bounds). | yes |
-| `--database-name <name>` | Database name on this server. | yes |
-| `--username <name>` | Database login name; its password is set only in the Admin. | yes |
-| `--tls-mode <mode>` | TLS mode, checked against the published schema; omitted on create uses the instance's default. | yes |
-| `--statement-timeout-ms <ms>` | Statement timeout in milliseconds, within the instance's bounds. | yes |
-| `--enabled <true|false>` | Enable or disable the connection (true or false); omitted leaves the instance's default or current value. | yes |
-
-Examples:
-
-```bash
-cavelon db connections update shop-db --statement-timeout-ms 3000
-cavelon db connections update shop-db --enabled false
-```
-
-### cavelon db connections delete
-
-Delete an unused connection (database_connectors.manage); previews first, --confirm deletes it.
-
-**changing (destructive)** · MCP tool: `db_connection_delete`
-
-```text
-cavelon db connections delete <connection> [options]
-```
-
-Without --confirm nothing is deleted. The instance refuses deletion while queries still use the connection.
-
-| Argument | Description |
-|---|---|
-| `connection` | Connection name or id. Required. |
-
-| Option | Description | MCP |
-|---|---|---|
-| `--confirm [<token>]` | Delete the previewed connection. In a person's terminal the flag alone confirms; run by a coding agent, `--confirm <token>` with the token its preview printed (the bare flag only shows the preview there, exit 5). | yes |
-
-Examples:
-
-```bash
-cavelon db connections delete unused-db
-cavelon db connections delete unused-db --confirm
-```
-
-### cavelon db connections ca
-
-Upload a public CA certificate bundle (database_connectors.manage); refuse private keys before sending.
-
-**changing** · MCP tool: `db_connection_ca`
-
-```text
-cavelon db connections ca <connection> <file>
-```
-
-The file must contain only valid PEM CERTIFICATE blocks. It is bounded by the instance's published CA limit. The output keeps certificate metadata and fingerprints, never the PEM. Test the connection again after uploading it.
-
-| Argument | Description |
-|---|---|
-| `connection` | Connection name or id. Required. |
-| `file` | Public PEM certificate file, never a private key. Required. |
-
-Examples:
-
-```bash
-cavelon db connections ca shop-db ./public-ca.pem
-```
-
-### cavelon db login-script
-
-Print the instance's published read-only login SQL for a dialect or saved connection; no database is contacted.
-
-**read-only** · MCP tool: `db_login_script`
-
-```text
-cavelon db login-script [dialect] [options]
-```
-
-Needs database_connectors.view. The DBA replaces the script's password placeholder locally, outside the kit. Only variants this instance publishes are offered; this build publishes read_only. Omitted inputs use its defaults. For SQL Server, connection_limit_enforced is false; --schema scopes SELECT instead of granting db_datareader. For Oracle, --schema names the one schema READ covers (omitted: the placeholder YOUR_SCHEMA); a profile sets the limit.
-
-| Argument | Description |
-|---|---|
-| `dialect` | Database dialect; omit only with --connection. |
-
-| Option | Description | MCP |
-|---|---|---|
-| `--dialect <dialect>` | Database dialect, as the dialect argument; give one of the two. | CLI only |
-| `--connection <connection>` | Use dialect, database, user and TLS from this saved connection (name or id). | yes |
-| `--database-name <name>` | Database the login may read (without --connection). | yes |
-| `--username <name>` | Database login name (without --connection). | yes |
-| `--schema <name>` | Schema the read grants cover. | yes |
-| `--egress-ip <ip>` | Outbound IP address; omitted uses the instance's configured addresses. Repeatable. | yes |
-| `--connection-limit <n>` | Connections to allow; omitted uses the instance's pool size times four. | yes |
-| `--require-tls <true|false>` | MySQL REQUIRE SSL (true or false, without --connection). | yes |
-
-Examples:
-
-```bash
-cavelon db login-script postgresql --database-name shop --username cavelon_reader
-cavelon db login-script --dialect oracle --database-name SHOPPDB --username cavelon_ro --schema SHOP
-cavelon db login-script --connection shop-db --schema public
-```
-
-### cavelon db schema
-
-Explore readable schemas or one schema's tables and columns (database_connectors.manage); read-only.
-
-**read-only** · MCP tool: `db_schema`
-
-```text
-cavelon db schema <connection> [schema] [options]
-```
-
-Reads only the database catalog, under the connection's timeout and read-only boundary. The instance records counts in its audit log. It caps schemas/tables at 500 and columns at 2,000; truncated flags say what was cut. Only the tenant Owner (legacy Admin) or a superadmin in Tenant mode may explore, using a session or personal access token.
-
-| Argument | Description |
-|---|---|
-| `connection` | Connection name or id. Required. |
-| `schema` | Schema to inspect; omitted lists schemas. |
-
-| Option | Description | MCP |
-|---|---|---|
-| `--limit <n>` | Return at most n schemas or tables (default 50, maximum 500). | yes |
-| `--cursor <cursor>` | Continue after the previous page (its next_cursor). | yes |
-
-Examples:
-
-```bash
-cavelon db schema shop-db
-cavelon db schema shop-db public --json
 ```

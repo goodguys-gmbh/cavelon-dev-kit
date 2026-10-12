@@ -885,6 +885,51 @@
           }
         }
       },
+      "delete": {
+        "tags": [
+          "database-connectors"
+        ],
+        "summary": "Delete Database Query",
+        "operationId": "delete_database_query_api_v1_database_connectors_queries__query_id__delete",
+        "parameters": [
+          {
+            "name": "query_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Query Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseQueryDeleteResponse"
+                }
+              }
+            }
+          },
+          "400": {},
+          "403": {},
+          "404": {},
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "428": {}
+        },
+        "x-cavelon-confirmation": "required",
+        "x-cavelon-confirmation-when": "Always: the query's tool and its agent and skill assignments are removed."
+      },
       "patch": {
         "tags": [
           "database-connectors"
@@ -932,51 +977,6 @@
         },
         "x-cavelon-confirmation": "required",
         "x-cavelon-confirmation-when": "Always: every agent the query is assigned to reads with its new SQL, parameters or limits."
-      },
-      "delete": {
-        "tags": [
-          "database-connectors"
-        ],
-        "summary": "Delete Database Query",
-        "operationId": "delete_database_query_api_v1_database_connectors_queries__query_id__delete",
-        "parameters": [
-          {
-            "name": "query_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "title": "Query Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DatabaseQueryDeleteResponse"
-                }
-              }
-            }
-          },
-          "400": {},
-          "403": {},
-          "404": {},
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          },
-          "428": {}
-        },
-        "x-cavelon-confirmation": "required",
-        "x-cavelon-confirmation-when": "Always: the query's tool and its agent and skill assignments are removed."
       }
     },
     "/api/v1/database-connectors/queries/{query_id}/runs": {
@@ -5797,7 +5797,8 @@
                 "postgresql",
                 "mysql",
                 "mssql",
-                "oracle"
+                "oracle",
+                "db2"
               ],
               "type": "string",
               "title": "Dialect"
@@ -5907,6 +5908,41 @@
           "400": {},
           "403": {},
           "404": {},
+          "422": {}
+        }
+      }
+    },
+    "/api/v1/database-connectors/queries/test-run": {
+      "post": {
+        "tags": [
+          "database-connectors"
+        ],
+        "summary": "Test Run Database Query Draft",
+        "operationId": "test_run_database_query_draft_api_v1_database_connectors_queries_test_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DatabaseQueryDraftTestRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseQueryTestRunResponse"
+                }
+              }
+            }
+          },
+          "400": {},
+          "403": {},
+          "404": {},
+          "409": {},
           "422": {}
         }
       }
@@ -10204,6 +10240,57 @@
             "format": "date-time",
             "title": "Password Changed At"
           },
+          "auth_method": {
+            "type": "string",
+            "title": "Auth Method",
+            "default": "password"
+          },
+          "kerberos_realm": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kerberos Realm"
+          },
+          "kerberos_principal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kerberos Principal"
+          },
+          "kerberos_kdcs": {
+            "items": {
+              "$ref": "#/components/schemas/KerberosKdc"
+            },
+            "type": "array",
+            "title": "Kerberos Kdcs"
+          },
+          "kerberos_keytab_set": {
+            "type": "boolean",
+            "title": "Kerberos Keytab Set",
+            "default": false
+          },
+          "kerberos_keytab_changed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kerberos Keytab Changed At"
+          },
           "tls_mode": {
             "type": "string",
             "title": "Tls Mode"
@@ -10285,6 +10372,45 @@
             "title": "Write Privileges Acknowledged",
             "default": false
           },
+          "allows_writes": {
+            "type": "boolean",
+            "title": "Allows Writes",
+            "default": false
+          },
+          "allows_writes_changed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allows Writes Changed At"
+          },
+          "allows_writes_changed_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allows Writes Changed By User Id"
+          },
+          "follows_redirects": {
+            "type": "boolean",
+            "title": "Follows Redirects",
+            "default": false
+          },
+          "write_query_count": {
+            "type": "integer",
+            "title": "Write Query Count",
+            "default": 0
+          },
           "query_enable_refusal": {
             "anyOf": [
               {
@@ -10317,6 +10443,16 @@
             "type": "integer",
             "title": "Query Count",
             "default": 0
+          },
+          "ssh_tunnel": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SshTunnelResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "created_by_user_id": {
             "anyOf": [
@@ -10351,40 +10487,6 @@
             "type": "string",
             "format": "date-time",
             "title": "Updated At"
-          },
-          "allows_writes": {
-            "type": "boolean",
-            "title": "Allows Writes",
-            "default": false
-          },
-          "allows_writes_changed_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Allows Writes Changed At"
-          },
-          "allows_writes_changed_by_user_id": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "uuid"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Allows Writes Changed By User Id"
-          },
-          "write_query_count": {
-            "type": "integer",
-            "title": "Write Query Count",
-            "default": 0
           }
         },
         "type": "object",
@@ -10529,8 +10631,20 @@
             "type": "array",
             "title": "Runnable Dialects"
           },
+          "ssh_tunnels": {
+            "type": "boolean",
+            "title": "Ssh Tunnels",
+            "default": false
+          },
           "network": {
             "$ref": "#/components/schemas/DatabaseConnectorNetwork"
+          },
+          "kerberos_dialects": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Kerberos Dialects"
           },
           "write_queries": {
             "type": "boolean",
@@ -10572,6 +10686,20 @@
           "connections_per_process": {
             "type": "integer",
             "title": "Connections Per Process"
+          },
+          "private_targets": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/DatabaseConnectorPrivateRange"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Private Targets"
           }
         },
         "type": "object",
@@ -10601,6 +10729,9 @@
           "queries_written_by": {
             "type": "string",
             "title": "Queries Written By"
+          },
+          "private_targets": {
+            "$ref": "#/components/schemas/PrivateTargetsOffer"
           }
         },
         "type": "object",
@@ -10608,7 +10739,8 @@
           "setting",
           "dialects",
           "may_write_queries",
-          "queries_written_by"
+          "queries_written_by",
+          "private_targets"
         ],
         "title": "DatabaseConnectorOffer"
       },
@@ -10668,11 +10800,6 @@
             "title": "Allows Anonymous",
             "default": false
           },
-          "is_enabled": {
-            "type": "boolean",
-            "title": "Is Enabled",
-            "default": true
-          },
           "kind": {
             "type": "string",
             "enum": [
@@ -10706,6 +10833,11 @@
               }
             ],
             "title": "Max Calls"
+          },
+          "is_enabled": {
+            "type": "boolean",
+            "title": "Is Enabled",
+            "default": true
           }
         },
         "additionalProperties": false,
@@ -10823,6 +10955,30 @@
             "type": "boolean",
             "title": "Allows Anonymous"
           },
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "default": "read"
+          },
+          "max_affected_rows": {
+            "type": "integer",
+            "maximum": 100,
+            "minimum": 1,
+            "title": "Max Affected Rows",
+            "default": 1
+          },
+          "requires_confirmation": {
+            "type": "boolean",
+            "title": "Requires Confirmation",
+            "default": true
+          },
+          "max_calls": {
+            "type": "integer",
+            "maximum": 1000,
+            "minimum": 1,
+            "title": "Max Calls",
+            "default": 5
+          },
           "is_enabled": {
             "type": "boolean",
             "title": "Is Enabled"
@@ -10864,30 +11020,6 @@
             "type": "string",
             "format": "date-time",
             "title": "Updated At"
-          },
-          "kind": {
-            "type": "string",
-            "title": "Kind",
-            "default": "read"
-          },
-          "max_affected_rows": {
-            "type": "integer",
-            "maximum": 100,
-            "minimum": 1,
-            "title": "Max Affected Rows",
-            "default": 1
-          },
-          "requires_confirmation": {
-            "type": "boolean",
-            "title": "Requires Confirmation",
-            "default": true
-          },
-          "max_calls": {
-            "type": "integer",
-            "maximum": 1000,
-            "minimum": 1,
-            "title": "Max Calls",
-            "default": 5
           }
         },
         "type": "object",
@@ -11062,11 +11194,6 @@
             ],
             "title": "Result Chars"
           },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          },
           "kind": {
             "type": "string",
             "title": "Kind",
@@ -11098,6 +11225,44 @@
             "type": "boolean",
             "title": "Dry Run",
             "default": false
+          },
+          "surface": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Surface"
+          },
+          "redirect_hops": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Redirect Hops"
+          },
+          "redirect_target_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Redirect Target Class"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
           }
         },
         "type": "object",
@@ -11394,17 +11559,6 @@
             ],
             "title": "Allows Anonymous"
           },
-          "is_enabled": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Is Enabled"
-          },
           "kind": {
             "anyOf": [
               {
@@ -11456,6 +11610,17 @@
               }
             ],
             "title": "Max Calls"
+          },
+          "is_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Enabled"
           }
         },
         "additionalProperties": false,
@@ -22170,7 +22335,8 @@
               "postgresql",
               "mysql",
               "mssql",
-              "oracle"
+              "oracle",
+              "db2"
             ],
             "title": "Dialect"
           },
@@ -22247,6 +22413,106 @@
             "type": "boolean",
             "title": "Is Enabled",
             "default": true
+          },
+          "follows_redirects": {
+            "type": "boolean",
+            "title": "Follows Redirects",
+            "default": false
+          },
+          "auth_method": {
+            "type": "string",
+            "enum": [
+              "password",
+              "kerberos"
+            ],
+            "title": "Auth Method",
+            "default": "password"
+          },
+          "kerberos_realm": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kerberos Realm"
+          },
+          "kerberos_principal": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 233,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kerberos Principal"
+          },
+          "kerberos_kdcs": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/KerberosKdc"
+                },
+                "type": "array",
+                "maxItems": 3,
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kerberos Kdcs"
+          },
+          "kerberos_keytab": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 90000,
+                "minLength": 4
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kerberos Keytab",
+            "writeOnly": true,
+            "x-cavelon-person-only": true,
+            "x-cavelon-person-only-reason": "Sets a database connection's Kerberos keytab",
+            "x-cavelon-secret": true
+          },
+          "ssh_tunnel": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SshTunnelSettings"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ssh_private_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 16384,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ssh Private Key",
+            "writeOnly": true,
+            "x-cavelon-person-only": true,
+            "x-cavelon-person-only-reason": "Sets a database connection's SSH private key",
+            "x-cavelon-secret": true
           }
         },
         "additionalProperties": false,
@@ -22284,7 +22550,8 @@
                   "postgresql",
                   "mysql",
                   "mssql",
-                  "oracle"
+                  "oracle",
+                  "db2"
                 ]
               },
               {
@@ -22413,6 +22680,17 @@
             ],
             "title": "Is Enabled"
           },
+          "follows_redirects": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Follows Redirects"
+          },
           "write_privileges_acknowledged": {
             "anyOf": [
               {
@@ -22422,7 +22700,110 @@
                 "type": "null"
               }
             ],
-            "title": "Write Privileges Acknowledged"
+            "title": "Write Privileges Acknowledged",
+            "x-cavelon-person-only": true,
+            "x-cavelon-person-only-reason": "Lets queries run on a database login that can write; a personal access token may still send false"
+          },
+          "auth_method": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "password",
+                  "kerberos"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auth Method"
+          },
+          "kerberos_realm": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kerberos Realm"
+          },
+          "kerberos_principal": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 233,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kerberos Principal"
+          },
+          "kerberos_kdcs": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/KerberosKdc"
+                },
+                "type": "array",
+                "maxItems": 3,
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kerberos Kdcs"
+          },
+          "kerberos_keytab": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 90000,
+                "minLength": 4
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kerberos Keytab",
+            "writeOnly": true,
+            "x-cavelon-person-only": true,
+            "x-cavelon-person-only-reason": "Sets a database connection's Kerberos keytab",
+            "x-cavelon-secret": true
+          },
+          "ssh_tunnel": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SshTunnelSettings"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ssh_private_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 16384,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ssh Private Key",
+            "writeOnly": true,
+            "x-cavelon-person-only": true,
+            "x-cavelon-person-only-reason": "Sets a database connection's SSH private key",
+            "x-cavelon-secret": true
           }
         },
         "additionalProperties": false,
@@ -22437,7 +22818,8 @@
               "postgresql",
               "mysql",
               "mssql",
-              "oracle"
+              "oracle",
+              "db2"
             ],
             "title": "Dialect"
           },
@@ -22689,6 +23071,261 @@
           "queries"
         ],
         "title": "DatabaseConnectorTenantLimits"
+      },
+      "DatabaseConnectorPrivateRange": {
+        "properties": {
+          "cidr": {
+            "type": "string",
+            "title": "Cidr"
+          },
+          "ports": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Ports"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "configuration"
+            ],
+            "title": "Source"
+          },
+          "usable": {
+            "type": "boolean",
+            "title": "Usable"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cidr",
+          "ports",
+          "source",
+          "usable"
+        ],
+        "title": "DatabaseConnectorPrivateRange"
+      },
+      "DatabaseQueryDraftTestRunRequest": {
+        "properties": {
+          "connection_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Connection Id"
+          },
+          "slug": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9_-]+$",
+            "title": "Slug",
+            "default": "draft"
+          },
+          "sql_text": {
+            "type": "string",
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Sql Text"
+          },
+          "parameters": {
+            "items": {
+              "$ref": "#/components/schemas/QueryParameter"
+            },
+            "type": "array",
+            "title": "Parameters"
+          },
+          "max_rows": {
+            "type": "integer",
+            "minimum": 1,
+            "title": "Max Rows",
+            "default": 50
+          },
+          "max_result_chars": {
+            "type": "integer",
+            "minimum": 500,
+            "title": "Max Result Chars",
+            "default": 8000
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "read",
+              "write"
+            ],
+            "title": "Kind",
+            "default": "read"
+          },
+          "max_affected_rows": {
+            "type": "integer",
+            "maximum": 100,
+            "minimum": 1,
+            "title": "Max Affected Rows",
+            "default": 1
+          },
+          "values": {
+            "additionalProperties": true,
+            "type": "object",
+            "maxProperties": 64,
+            "title": "Values"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "connection_id",
+          "sql_text"
+        ],
+        "title": "DatabaseQueryDraftTestRunRequest"
+      },
+      "KerberosKdc": {
+        "properties": {
+          "host": {
+            "type": "string",
+            "maxLength": 253,
+            "minLength": 1,
+            "title": "Host"
+          },
+          "port": {
+            "type": "integer",
+            "title": "Port",
+            "default": 88
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "host"
+        ],
+        "title": "KerberosKdc"
+      },
+      "PrivateTargetsOffer": {
+        "properties": {
+          "managed_by": {
+            "type": "string",
+            "title": "Managed By"
+          },
+          "operator_operations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Operator Operations"
+          },
+          "tenant_reads": {
+            "type": "string",
+            "title": "Tenant Reads"
+          }
+        },
+        "type": "object",
+        "required": [
+          "managed_by",
+          "operator_operations",
+          "tenant_reads"
+        ],
+        "title": "PrivateTargetsOffer"
+      },
+      "SshTunnelResponse": {
+        "properties": {
+          "host": {
+            "type": "string",
+            "title": "Host"
+          },
+          "port": {
+            "type": "integer",
+            "title": "Port"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "host_key_fingerprint": {
+            "type": "string",
+            "title": "Host Key Fingerprint"
+          },
+          "private_key_set": {
+            "type": "boolean",
+            "title": "Private Key Set"
+          },
+          "private_key_changed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Private Key Changed At"
+          },
+          "public_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Key"
+          },
+          "authorized_keys_entry": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorized Keys Entry"
+          }
+        },
+        "type": "object",
+        "required": [
+          "host",
+          "port",
+          "username",
+          "host_key_fingerprint",
+          "private_key_set"
+        ],
+        "title": "SshTunnelResponse"
+      },
+      "SshTunnelSettings": {
+        "properties": {
+          "host": {
+            "type": "string",
+            "maxLength": 253,
+            "minLength": 1,
+            "title": "Host"
+          },
+          "port": {
+            "type": "integer",
+            "title": "Port",
+            "default": 22
+          },
+          "username": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Username"
+          },
+          "host_key_fingerprint": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Host Key Fingerprint"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "host",
+          "username",
+          "host_key_fingerprint"
+        ],
+        "title": "SshTunnelSettings"
       }
     }
   }

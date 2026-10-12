@@ -22,7 +22,7 @@ export interface FakeConnection {
   fields?: Record<string, unknown>;
   schemaResult?: Record<string, unknown>;
   /** The steps a test reports; a passing run of every step by default. */
-  testSteps?: Array<{ name: string; status: string; code: string | null }>;
+  testSteps?: Array<{ name: string; status: string; code: string | null; detail?: Record<string, unknown> }>;
   /** The uploaded CA's certificates. */
   caCertificates?: FakeCaCertificate[];
   /** False plays an instance that publishes only the certificates' fingerprints. */
@@ -94,8 +94,9 @@ export interface DatabaseState {
   procedureFields: boolean;
   /** False plays an older response without write-query fields. Fixtures supply write evidence explicitly. */
   writeFields: boolean;
+  draftResult?: Record<string, unknown>;
   /** What GET /instance answers: the dialects this host runs and its network side. */
-  instance: { runnable_dialects: string[]; network: { egress_ips: string[]; connections_per_process: number }; write_queries?: boolean; max_affected_rows_limit?: number; limits?: import("../src/database-limits.js").DatabaseTenantLimits };
+  instance: { runnable_dialects: string[]; network: { egress_ips: string[]; connections_per_process: number; private_targets?: Array<{ cidr: string; ports: number[]; source: string; usable: boolean }> }; kerberos_dialects?: string[]; ssh_tunnels?: boolean; write_queries?: boolean; max_affected_rows_limit?: number; limits?: import("../src/database-limits.js").DatabaseTenantLimits };
 }
 
 export function databaseState(): DatabaseState {
@@ -320,7 +321,7 @@ export function handleDatabase(state: DatabaseState, rc: DatabaseRoute): boolean
         rc.send(403, { detail: "Permission denied: database_connectors.test" });
         return true;
       }
-      const steps = (connection.testSteps ?? STEPS.map((name) => ({ name, status: "ok", code: null }))).map((s) => ({ ...s, detail: {}, driver_message: null }));
+      const steps = (connection.testSteps ?? STEPS.map((name) => ({ name, status: "ok", code: null }))).map((s) => ({ detail: {}, ...s, driver_message: null }));
       const failed = steps.find((s) => s.status !== "ok" && s.status !== "skipped");
       connection.last_test_outcome = failed?.code ?? "ok";
       rc.send(200, {
@@ -358,6 +359,15 @@ export function handleDatabase(state: DatabaseState, rc: DatabaseRoute): boolean
     };
     state.queries.push(query);
     rc.send(201, queryView(state, query));
+    return true;
+  }
+  if (rc.path === "/api/v1/database-connectors/queries/test-run" && rc.method === "POST") {
+    if (rc.mayManage === false) { rc.send(403, { detail: "Missing permission: database_connectors.manage" }); return true; }
+    rc.send(200, state.draftResult ?? { outcome: "ok", error_code: null, sqlstate: null,
+      model_text: '{"columns":["status"],"rows":[["shipped"]]}', columns: ["status"], rows: [["shipped"]],
+      row_count: 1, returned_rows: 1, truncated: false, duration_ms: 15, run_id: null,
+      ...(connectionBody.kind === "write" ? { kind: "write", affected_rows: 1, dry_run: true, rolled_back: true, committed: false } : {}),
+    });
     return true;
   }
   m = /^\/api\/v1\/database-connectors\/queries\/([^/]+)(\/runs|\/test-run)?$/.exec(rc.path);

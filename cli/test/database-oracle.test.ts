@@ -55,7 +55,7 @@ describe("the published contract", () => {
       doc.components.schemas.DatabaseConnectionUpdate.properties.dialect.anyOf[0].enum,
       doc.components.schemas.DatabaseLoginScriptResponse.properties.dialect.enum,
     ];
-    for (const values of enums) expect(values).toEqual(["postgresql", "mysql", "mssql", "oracle"]);
+    for (const values of enums) expect(values).toEqual(["postgresql", "mysql", "mssql", "oracle", "db2"]);
     const query = (schema.$defs as Json).PackageDatabaseQuery.properties;
     expect((schema.$defs as Json).PackageDatabaseConnectionRef.properties.dialect.description).toMatch(/mssql or oracle/);
     expect(query.sql_text.description).toMatch(/On an oracle connection also no PL\/SQL.*On oracle a write has no RETURNING\./s);

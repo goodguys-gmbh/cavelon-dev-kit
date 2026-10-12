@@ -1,6 +1,7 @@
-import { CURSOR_OPTION, intOption, LIMIT_OPTION, listOption, pageOf, positional, stringOption, type CommandSpec, type Context } from "../command.js";
-import { CavelonError, ExitCode, usageError } from "../errors.js";
-import { connectorOffer, isProcedureCall } from "../database-queries.js";
+import { boolOption, CURSOR_OPTION, intOption, LIMIT_OPTION, listOption, pageOf, positional, stringOption, type CommandSpec, type Context } from "../command.js";
+import { CavelonError, ExitCode, usageError, validationError } from "../errors.js";
+import { connectorOffer, isProcedureCall, queryTools } from "../database-queries.js";
+import { requireSolution, validatePackage } from "./solution.js";
 import { requireFeature } from "../features.js";
 import { clip, keyValues, moreHint, table } from "../format.js";
 import { callStable } from "../invoke.js";
@@ -35,6 +36,12 @@ export interface Connection {
   ca_certificate_sha256?: string[];
   /** Per certificate of the uploaded CA bundle; an older instance publishes only the fingerprints. */
   ca_certificates?: CaCertificate[];
+  auth_method?: string;
+  kerberos_realm?: string | null;
+  kerberos_principal?: string | null;
+  kerberos_keytab_set?: boolean;
+  follows_redirects?: boolean;
+  ssh_tunnel?: { host: string; port: number; username: string; private_key_set?: boolean; authorized_keys_entry?: string | null } | null;
   statement_timeout_ms: number;
   is_enabled: boolean;
   /** Only where published; a person enables writes in the dashboard, never in a package. */
@@ -76,13 +83,15 @@ interface CaCertificate {
 
 interface InstanceOffer {
   runnable_dialects: string[];
-  network: { egress_ips: string[]; connections_per_process: number };
+  network: { egress_ips: string[]; connections_per_process: number; private_targets?: Array<{ cidr: string; ports: number[]; source: string; usable: boolean }> | null };
+  kerberos_dialects?: string[];
+  ssh_tunnels?: boolean;
   write_queries?: boolean;
   max_affected_rows_limit?: number;
   limits?: DatabaseTenantLimits | null;
 }
 
-interface QueryParameter {
+export interface QueryParameter {
   name: string;
   source?: string;
   type?: string;
@@ -94,7 +103,7 @@ interface QueryParameter {
   [key: string]: unknown;
 }
 
-interface Query {
+export interface Query {
   id: string;
   connection_id: string;
   connection_name: string;
@@ -138,7 +147,7 @@ function reported(value: unknown): string | number | undefined {
   return typeof value === "string" || typeof value === "number" ? value : undefined;
 }
 
-const WRITE_EVIDENCE = ["kind", "dry_run", "rolled_back", "affected_rows", "committed"] as const;
+const WRITE_EVIDENCE = ["kind", "dry_run", "rolled_back", "affected_rows", "committed", "surface", "redirect_hops", "redirect_target_class"] as const;
 const NO_WRITE_RETRY = "Do not retry an ambiguous write outcome. Check the database for the change before anyone repeats it.";
 
 interface TestStep {
@@ -206,7 +215,7 @@ export async function resolveConnection(ctx: Context, ref: string): Promise<Conn
 }
 
 /** A saved query by its tool's slug or the query's id. */
-async function resolveQuery(ctx: Context, ref: string): Promise<Query> {
+export async function resolveQuery(ctx: Context, ref: string): Promise<Query> {
   await connectorOn(ctx);
   if (isUuid(ref)) {
     try {
@@ -256,7 +265,7 @@ function expiryWarnings(connections: Connection[], now: Date): string[] {
           : `expires on ${day(cert.not_after)} (in ${days === 0 ? "less than a day" : `${days} day${days === 1 ? "" : "s"}`})`;
       warnings.push(
         `The CA certificate "${cert.subject}" of the database connection "${c.name}" ${when}: from then its TLS check fails, and with it the connection's queries. ` +
-          `The tenant Owner uploads the renewed public CA with db connections ca or in the Admin, then tests the connection again: ${cavelonCommand("db", "test", c.name)}`,
+          `A person replaces the CA certificate in the Admin under Settings › Security & access › Databases, then tests the connection again: ${cavelonCommand("db", "test", c.name)}`,
       );
     }
   }
@@ -366,10 +375,13 @@ export const dbInstance: CommandSpec = {
           ["connections_per_process", offer.network.connections_per_process],
           ["write_queries", reported(offer.write_queries)],
           ["max_affected_rows_limit", reported(offer.max_affected_rows_limit)],
+          ["kerberos_dialects", offer.kerberos_dialects?.join(", ")],
+          ["ssh_tunnels", reported(offer.ssh_tunnels)],
         ]),
         "",
         firewall,
         ...(counts.length ? ["", databaseLimitsText(counts)] : []),
+        ...(offer.network.private_targets ? ["", "Private targets (managed by a platform operator in the Admin):", table(offer.network.private_targets, ["cidr", "ports", "source", "usable"]) || "none"] : []),
         ...(offer.runnable_dialects.length ? [] : ["", "This instance runs no database dialect: a connection can be saved, but its test and queries answer unavailable."]),
       ].join("\n"),
     };
@@ -418,6 +430,7 @@ export const dbConnections: CommandSpec = {
       text:
         (table(rows, ["name", "dialect", "target", "tls", "enabled", ...(rows.some(c => "allows_writes" in c) ? ["allows_writes"] : []), "last_test", "queries", "id"]) ||
           `No database connections. The tenant Owner creates one with db connections create or in the Admin (\`${cavelonCommand("docs", "get", DOCS_PAGE)}\` says who does what).`) +
+        connections.filter(c => c.ssh_tunnel).map(c => `\n\n${c.name}: SSH bastion ${c.ssh_tunnel!.username}@${c.ssh_tunnel!.host}:${c.ssh_tunnel!.port}${c.ssh_tunnel!.authorized_keys_entry ? `\nInstall this exact authorized_keys entry on the bastion:\n${c.ssh_tunnel!.authorized_keys_entry}` : "\nA person sets its SSH key in the Admin."}`).join("") +
         caLines(connections).join("\n") +
         moreHint(page.next_cursor, cavelonCommand("db", "connections")) +
         (untested.length ? `\n\nNot tested successfully: ${untested.join(", ")}; its queries are not ready for agents. The Owner tests one with: ${cavelonCommand("db", "test", fill("connection"))}` : "") +
@@ -607,7 +620,10 @@ export const dbTest: CommandSpec = {
       throw ownerOnly(error, "A connection test");
     }
     const ok = result.outcome === "ok";
-    const steps = (result.steps ?? []).map((s) => ({ step: s.name, status: s.status, code: s.code ?? null, message: s.driver_message ? clip(s.driver_message, 160) : null }));
+    const steps = (result.steps ?? []).map((s) => ({ step: s.name, status: s.status, code: s.code ?? null,
+      engine: s.detail?.engine ?? null, private_target_id: s.detail?.private_target_id ?? null,
+      redirects: s.detail?.redirects === undefined ? null : clip(JSON.stringify(s.detail.redirects), 300),
+      message: s.driver_message ? clip(s.driver_message, 160) : null }));
     const findings = (Array.isArray(result.procedure_findings) ? result.procedure_findings : []).map((f) => ({
       query: f.slug ?? f.query_id ?? "?",
       code: f.code ?? null,
@@ -622,7 +638,7 @@ export const dbTest: CommandSpec = {
     }
     const text = [
       `Connection "${connection.name}" (${connection.dialect}): ${ok ? "test passed" : `test failed (${result.outcome})`}, ${result.duration_ms} ms.`,
-      table(steps, ["step", "status", "code", ...(steps.some((s) => s.message) ? ["message"] : [])], 80),
+      table(steps, ["step", "status", "code", ...["engine", "private_target_id", "redirects"].filter(k => steps.some(s => s[k as keyof typeof s] !== null)), ...(steps.some((s) => s.message) ? ["message"] : [])], 80),
       ...(result.server_version ? [`server: ${result.server_version}`] : []),
       ...(result.write_privileges ? [`write privileges: ${clip(JSON.stringify(result.write_privileges), 300)}`] : []),
       ...(findings.length
@@ -638,7 +654,7 @@ export const dbTest: CommandSpec = {
 };
 
 /** The instance's refusals of a run before it starts, with the step that lifts each. */
-const RUN_REFUSAL_STEPS: Record<string, (query: Query) => string> = {
+const RUN_REFUSAL_STEPS: Record<string, (query: Pick<Query, "connection_name">) => string> = {
   database_connection_untested: (q) => `The tenant Owner tests the connection first: ${cavelonCommand("db", "test", q.connection_name)}`,
   write_privileges_block_procedure: (q) =>
     `The connection's login needs to lose its write privileges (a database administrator's change), then the tenant Owner tests it again: ${cavelonCommand("db", "test", q.connection_name)}`,
@@ -647,7 +663,7 @@ const RUN_REFUSAL_STEPS: Record<string, (query: Query) => string> = {
 };
 
 /** A refused run (409) with the step that lifts the refusal and where its code is explained. */
-function refusedRun(error: unknown, query: Query): unknown {
+function refusedRun(error: unknown, query: Pick<Query, "connection_name">): unknown {
   if (!(error instanceof CavelonError) || error.status !== 409) return error;
   const step = RUN_REFUSAL_STEPS[error.code];
   return new CavelonError(error.exitCode, {
@@ -706,7 +722,7 @@ function listValue(parameter: QueryParameter, raw: string): unknown[] {
 }
 
 /** The test run's values: one `name=value` per parameter, context parameters included. */
-function runValues(query: Query, given: string[]): Record<string, unknown> {
+function runValues(query: Pick<Query, "slug" | "parameters">, given: string[]): Record<string, unknown> {
   const values: Record<string, unknown> = {};
   for (const pair of given) {
     const at = pair.indexOf("=");
@@ -728,8 +744,10 @@ const ROWS_SHOWN = 20;
 
 export const dbTestRun: CommandSpec = {
   name: "db test-run",
-  summary: "Run a saved query once with the values given, identity parameters included; show what the model would see and the rows.",
+  summary: "Test a saved query, or validate and test unsaved package SQL with --draft; show model output and rows.",
   description:
+    "With --draft, reads the tool slug from package/, validates first and tests without saving or applying. Needs\n" +
+    "database_connectors.manage with the Owner's personal access token or the Admin; an API key cannot run a draft.\n" +
     "Needs the tenant Owner's permission (database_connectors.test); it reads the customer's own data. Give each parameter\n" +
     "with --value name=value, those the platform fills from the signed-in visitor (end_user.*) too: that is how an\n" +
     "identity-scoped query is checked for one customer. A list parameter takes a JSON array (--value 'skus=[\"X-1\",\"X-2\"]'),\n" +
@@ -747,22 +765,27 @@ export const dbTestRun: CommandSpec = {
     "switched off.",
   readOnly: false,
   idempotent: true,
-  mcpEffect: "Tests the saved query once on the instance; writes are dry runs that roll back. Leaves a run record and audit entry, and changes no setting. Never retry an ambiguous write outcome.",
+  mcpEffect: "Tests a saved query or unsaved package definition once on the instance; writes are dry runs that roll back. The instance keeps audit evidence and changes no setting or saved query. Never retry an ambiguous write outcome.",
   mcpTool: "db_test_run",
-  operations: ["POST /api/v1/database-connectors/queries/{query_id}/test-run"],
+  operations: ["POST /api/v1/database-connectors/queries/{query_id}/test-run", "POST /api/v1/database-connectors/queries/test-run"],
   positionals: [{ name: "query", description: "The query's tool slug or id.", required: true }],
   options: {
+    draft: { type: "boolean", description: "Validate package/ and test its unsaved query definition before apply (database_connectors.manage)." },
     value: { type: "string", multiple: true, value: "<name=value>", description: "One parameter's value, typed as the parameter's type; a list parameter's is a JSON array." },
     rows: { type: "string", value: "<n>", description: `Show at most n rows in the text (default ${ROWS_SHOWN}); --json carries what the instance returned.` },
   },
   examples: [
+    "cavelon db test-run order_status --draft --value order_no=A-10023 --value email=ada@example.com",
     "cavelon db test-run order_status --value order_no=A-10023 --value email=ada@example.com",
     "cavelon db test-run stock --value sku=4711 --json",
     `cavelon db test-run stock_of_skus --value 'skus=["X-1","X-2"]'`,
   ],
   async run(ctx, input) {
-    const query = await resolveQuery(ctx, positional(input, "query")!);
-    if (query.parameters.some(p => p.source?.startsWith("end_user."))) {
+    const draft = boolOption(input, "draft");
+    const ref = positional(input, "query")!;
+    const local = draft ? await draftQuery(ctx, ref) : undefined;
+    const query = local?.query ?? await resolveQuery(ctx, ref);
+    if (!draft && query.parameters.some(p => p.source?.startsWith("end_user."))) {
       requirePersonForIdentityChoice(await accessFor(await ctx.client()), "POST /api/v1/database-connectors/queries/{query_id}/test-run", "test a query with end_user.* parameters");
     }
     const values = runValues(query, listOption(input, "value"));
@@ -786,18 +809,21 @@ export const dbTestRun: CommandSpec = {
       rolled_back?: boolean;
       affected_rows?: number | null;
       committed?: boolean | null;
+      surface?: string | null;
+      redirect_hops?: number | null;
+      redirect_target_class?: string | null;
     };
     try {
-      result = await callStable(ctx, "POST", "/api/v1/database-connectors/queries/{query_id}/test-run", "test runs of database queries", {
-        params: { query_id: [query.id] },
-        body: { values },
+      result = await callStable(ctx, "POST", draft ? "/api/v1/database-connectors/queries/test-run" : "/api/v1/database-connectors/queries/{query_id}/test-run", "test runs of database queries", {
+        params: draft ? undefined : { query_id: [query.id!] },
+        body: { ...local?.body, values },
         timeoutMs: 90_000,
       });
     } catch (error) {
       if (query.kind === "write" && error instanceof CavelonError && (error.code === "network_error" || error.code === "request_timeout")) {
         throw new CavelonError(error.exitCode, { code: error.code, status: error.status, message: error.message, hint: NO_WRITE_RETRY, docs: error.docs, details: error.details });
       }
-      throw refusedRun(ownerOnly(error, "A test run"), query);
+      throw refusedRun(draft ? withPermissionHint(error, "A draft query test needs database_connectors.manage with the tenant Owner's personal access token or the Admin; an API key cannot run it.") : ownerOnly(error, "A test run"), query);
     }
     const ok = result.outcome === "ok" && !result.error_code;
     const columns = result.columns ?? [];
@@ -805,7 +831,7 @@ export const dbTestRun: CommandSpec = {
     const more = (result.rows?.length ?? 0) - rows.length;
     const text = [
       keyValues([
-        ["query", `${query.slug} (version ${query.version})`],
+        ["query", `${query.slug} (${draft ? "unsaved draft" : `version ${query.version}`})`],
         ["outcome", result.error_code ? `${result.outcome} (${result.error_code}${result.sqlstate ? `, SQLSTATE ${result.sqlstate}` : ""})` : result.outcome],
         ["rows", ok ? `${result.returned_rows ?? rows.length} returned of ${result.row_count ?? "?"}${result.truncated ? ", truncated for the model" : ""}` : undefined],
         ["duration_ms", result.duration_ms],
@@ -819,9 +845,37 @@ export const dbTestRun: CommandSpec = {
       ...(more > 0 ? [`… ${more} more rows (--rows, or --json).`] : []),
     ].join("\n");
     return {
-      data: { query: { id: query.id, slug: query.slug, version: query.version }, ...result },
+      data: { query: { ...(draft ? { draft: true } : { id: query.id, version: query.version }), slug: query.slug }, ...result },
       text: text + explainLine([result.error_code]) + (result.error_code === "write_outcome_unknown" ? `\n\n${NO_WRITE_RETRY}` : ""),
       exitCode: ok ? ExitCode.ok : ExitCode.validation,
     };
   },
 };
+
+async function draftQuery(ctx: Context, ref: string): Promise<{
+  query: Pick<Query, "slug" | "parameters" | "kind" | "connection_name"> & Partial<Pick<Query, "id" | "version">>;
+  body: Record<string, unknown>;
+}> {
+  await connectorOn(ctx);
+  const access = await accessFor(await ctx.client());
+  if (access?.kind === "api_key") throw new CavelonError(ExitCode.needsAction, {
+    code: "key_needs_a_person", message: "An API key cannot test an unsaved database query. Nothing was sent.",
+    hint: "Use the tenant Owner's personal access token with database_connectors.manage, or test the draft in the Admin.",
+  });
+  const project = requireSolution(await ctx.session());
+  const { disk, findings } = await validatePackage(ctx, project, false);
+  const errors = findings.filter(f => f.severity === "error");
+  if (errors.length) throw validationError("The package has validation errors; the draft was not run.", { findings: errors }, "Run cavelon validate and fix the named fields first.");
+  for (const finding of findings.filter(f => f.severity === "warning")) ctx.warn(`${finding.code}: ${finding.message}`);
+  const tool = queryTools(disk.package).find(t => t.slug === ref);
+  if (!tool) throw usageError(`No database query tool "${ref}" in package/.`, "--draft takes the package tool's slug, not a saved query id.");
+  const definition = tool.tool.database_query as Record<string, unknown>;
+  const target = definition.connection as { name: string; dialect: string };
+  const connection = await resolveConnection(ctx, target.name);
+  if (connection.dialect !== target.dialect) throw validationError(`Connection "${target.name}" uses ${connection.dialect}, but the draft names ${target.dialect}.`);
+  const body: Record<string, unknown> = { connection_id: connection.id, slug: tool.slug };
+  for (const field of ["sql_text", "parameters", "max_rows", "max_result_chars", "kind", "max_affected_rows"]) {
+    if (definition[field] !== undefined) body[field] = definition[field];
+  }
+  return { query: { slug: tool.slug, connection_name: connection.name, parameters: (definition.parameters ?? []) as QueryParameter[], kind: definition.kind as string | undefined }, body };
+}

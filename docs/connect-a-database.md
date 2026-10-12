@@ -50,6 +50,16 @@ agents; omitted, the instance uses pool size times four, as the Admin does.
 | MySQL/MariaDB | `mysql` | 3306 | Account per outbound address, connection limit and REQUIRE SSL; grants cover the database |
 | SQL Server | `mssql` | 1433 | Login and database user; `--schema sales` grants SELECT on that schema, omitted grants `db_datareader`; no per-login connection limit |
 | Oracle Database | `oracle` | 2484 (TCPS); 1521 for plain TCP | Profile whose `SESSIONS_PER_USER` is the connection limit, a user with `CREATE SESSION`, and `READ` on one schema's tables and views; `--schema` names it, omitted the script names the placeholder `YOUR_SCHEMA` for the DBA to replace |
+| IBM Db2 LUW | `db2` | 50001 (TLS) | Available only where the instance enables it; `verify_full` is required. Use the instance's login script. |
+
+TimescaleDB, Citus (its coordinator), YugabyteDB and CockroachDB use
+`postgresql`; Percona Server and MariaDB Galera use `mysql`. TiDB is refused
+with `engine_not_supported`. The instance reads back its read-only default
+and statement timeout on every session; `session_limits_not_applied` means
+one was lost, for example through a pooler that drops startup options. Ask
+the DBA to follow the instance's remedy before testing again. `validate`
+warns about Citus administrative function calls, while ordinary read-only
+Citus functions remain allowed; the instance's save-time check decides.
 
 The dialects an instance accepts are the ones its OpenAPI publishes: on an
 instance older than its Oracle support that serves its OpenAPI,
@@ -75,11 +85,14 @@ credential's published `needs_a_person`, when available: a person opens
 **Set password**, and enters it there. Older instances without that field
 get the same dashboard step. No password travels through the kit.
 
-For a server whose certificate is not from a public CA, upload its public
-CA bundle (or its public self-signed server certificate):
+For a server whose certificate is not from a public CA, a person enters its
+public CA bundle in **Settings › Security & access › Databases › shop-db ›
+CA certificate**. Every CA change and any weakening of TLS are person-only.
+`db connections ca` prints that Admin step before reading its file when the
+instance publishes the conditional restriction. Older instances that still
+permit token uploads retain their public-certificate-only file checks.
 
 ```bash
-cavelon db connections ca shop-db ./public-ca.pem
 cavelon db connections
 cavelon db login-script --connection shop-db --schema public
 ```
@@ -98,9 +111,10 @@ password.
 cavelon db test shop-db
 ```
 
-Read the steps from the top: DNS, network policy, TCP, TLS, login, SELECT 1,
+Read the steps from the top: DNS, network policy, SSH (when present), TCP, TLS, login, SELECT 1,
 server version and write privileges. A connection without its dashboard
-password fails at login. A managing caller sees the driver's scrubbed
+password fails at login. Where published, the output includes the detected
+engine, policy step's `private_target_id` and login redirects. A managing caller sees the driver's scrubbed
 message. `cavelon explain <code>` explains a failed step. Query tools are
 ready only while their connection is enabled and its last test passed.
 
@@ -114,9 +128,46 @@ enabling writes stays in the dashboard. It never enters a package.
 
 On Oracle the database name is the service name (a pluggable database, not
 the CDB root), and reads run in a read-only transaction. A listener that
-redirects the session to another host or port (a RAC SCAN listener,
-shared-server dispatchers elsewhere) is refused by design: name a listener
-that serves the session directly.
+redirects the session to another host or port is refused by default. For
+Oracle RAC or SQL Server read-only routing, enable the checked redirects:
+`cavelon db connections update erp-db --follows-redirects true`. Every hop
+must pass the tenant's target policy and TLS checks, with at most two hops.
+SQL Server redirects and writes cannot both be on (`redirects_conflict_with_writes`).
+
+## Private networks, SSH and Kerberos
+
+`db instance` shows admitted `network.private_targets` to a managing caller,
+including CIDR, ports, source and usability. A Platform Owner manages them
+in the Admin in Platform mode; tenant tokens never add or remove them.
+`cavelon explain private_target_refused` explains `invalid_range`, `too_wide`,
+`contains_local_interface`, `platform_network`, `platform_service` and
+`overlaps_another_tenant`. A private bastion needs its SSH port admitted;
+KDCs need their ports admitted too. No broader network access is inferred.
+
+For an SSH bastion, add public settings when creating or updating a connection:
+
+```bash
+cavelon db connections update shop-db --ssh-host bastion.example.com --ssh-port 22 --ssh-username forwarder --ssh-host-key-fingerprint SHA256:YOUR_VERIFIED_FINGERPRINT
+```
+
+Give all three host, username and fingerprint options together. Verify the
+fingerprint independently; there is no trust on first use. A person sets
+the private key in the Admin. `db connections` prints the instance's exact
+`authorized_keys_entry` to install on the bastion; keep its restrictions.
+Use `--remove-ssh-tunnel` to request removal. SSH tunnels and listener
+redirects cannot be combined. Explain failures with `ssh_unreachable`,
+`ssh_host_key_mismatch`, `ssh_auth_failed` or `ssh_forwarding_refused`.
+
+Where `db instance` publishes the dialect in `kerberos_dialects`, use
+`--auth-method kerberos --kerberos-realm CORP.EXAMPLE.COM
+--kerberos-principal svc_reader --kerberos-kdc kdc.example.com`. Repeat
+`--kerberos-kdc` for port-88 hosts, or use `--kerberos-kdcs` with a public JSON
+array of host/port objects. A person sets the keytab or password in the Admin;
+the kit never takes either. Explain `kerberos_kdc_unreachable`,
+`kerberos_auth_failed`, `kerberos_spn_unknown` and `kerberos_keytab_invalid`.
+Changing a credential-bearing target, tunnel or Kerberos login may require
+the person to supply its credential again in the same Admin save
+(`credential_required_for_target_change`).
 
 ## Step 3: Explore the schema
 
@@ -151,6 +202,21 @@ cavelon db queries
 cavelon db test-run order_status --value order_number=A-10023 --value email=buyer@example.com
 cavelon pull
 ```
+
+After pulling, edit the query in `package/`, test the unsaved definition,
+then apply only after reviewing its preview:
+
+```bash
+cavelon validate
+cavelon db test-run order_status --draft --value order_number=A-10023 --value email=buyer@example.com
+cavelon apply
+```
+
+`--draft` runs the same local package validation first, resolves the named
+connection in this tenant and sends the edited SQL without saving or applying
+it. It needs `database_connectors.manage` with the Owner's personal access
+token or the Admin; an API key cannot run it. The MCP `db_test_run` tool
+takes `draft: true`. List values and output use the same shapes as saved tests.
 
 Check **What the model sees**, then repeat with a different visitor's email
 and confirm it returns no rows. A test run returns rows once; run evidence
@@ -299,12 +365,19 @@ person's import/API approval, separately from the chat confirmation before
 executing a write.
 
 `db test-run` tests a write as a dry run that rolls back, including saved
-queries and the Admin's unsaved drafts. It still needs writes allowed on
+queries and package drafts with `--draft`. It still needs writes allowed on
 the connection. The kit prints the returned `kind`, `dry_run`,
 `rolled_back`, `affected_rows` and `committed`; omitted fields stay omitted
 and null counts or commit evidence stay unknown. `db runs` reports the
 published `kind`, `affected_rows`, `committed` and `dry_run`, never values
-or rows. If the affected-row cap is exceeded, `too_many_rows_affected`
+or rows. Where published it also shows `surface`, `redirect_hops` and
+`redirect_target_class`. Operator test surfaces (Playground including voice,
+test suites, debug runs and dashboard/PAT chat) never commit write queries.
+Identity test overrides still need `database_connectors.test` and cannot
+broaden a reader's access. MySQL/MariaDB non-transactional tables are refused
+with `write_table_not_transactional`; `write_not_rolled_back`,
+`confirmation_card_incomplete` and `write_count_unknown` also require checking
+the evidence before proceeding. If the affected-row cap is exceeded, `too_many_rows_affected`
 means the transaction rolled back. `write_outcome_unknown` means COMMIT
 was sent and the connection was lost: do not retry; check the database
 before anyone repeats it. The kit never retries an ambiguous write.
@@ -312,7 +385,14 @@ before anyone repeats it. The kit never retries an ambiguous write.
 A workflow Tool Call node cannot wait for a person's click: a write with
 `requires_confirmation: true` answers `confirmation_unavailable` in every
 node run. `validate` warns, including when the published schema defaults
-confirmation on. Turn it off only for an intended unattended write.
+confirmation on. Without query confirmation, writes run only from a schedule,
+a webhook whose secret header was checked, or Run now. In an outsider-started
+run, only a direct Tool Call can use the Approval exception: the latest
+decision must be approved and no agent stage may have started since it.
+A later rejection takes approval back; an agent never uses this exception.
+Other paths answer `write_needs_confirmation` and write nothing. `validate`
+warns about visible unsafe paths without blocking; the actual start and
+decision remain instance checks. Keep query confirmation on for chat use.
 Identity parameters and trigger identity requirements still apply; a
 trigger execution identity is not a Chat User.
 
@@ -327,6 +407,23 @@ Ordinary chat per-turn limits are unchanged. An assignment override does
 not raise the query's saved run cap. Verify mixed calls, refusal before
 mutation, reset and resume against the instance; kit fixtures prove response
 handling rather than runtime enforcement.
+
+## Change or remove a saved query
+
+```bash
+cavelon db queries disable order_status
+cavelon db queries disable order_status --confirm
+cavelon db queries enable order_status
+cavelon db queries rename order_status order_lookup
+cavelon db queries delete unused_query
+```
+
+Each command previews first. Repeat with `--confirm` from the person's own
+terminal, or approve the MCP client's dialog for that exact preview. An agent
+cannot supply the person's yes; YOLO does not skip it. A changed query version
+invalidates its preview. Delete returns the removed agent and skill assignments.
+Run `cavelon pull` after a change, especially a rename, so `package/` follows.
+Package imports do not delete queries or carry their enabled state.
 
 ## Change or remove a connection
 
