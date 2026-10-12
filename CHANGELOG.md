@@ -7,6 +7,8 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-10-12
+
 ### Added
 
 - Installers now offer separate plugin/skill updates and a personal YOLO choice
