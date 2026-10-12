@@ -93,8 +93,9 @@ terminal it then asks two separate questions:
    Gemini CLI through their plugin commands, and updates the kit's own skills
    and integrations in the other agents found. If you run it inside a solution,
    its generated setup and copied skills are refreshed too. Custom files stay.
-   Gemini's published extension pin moves to this CLI release before its own
-   updater runs; custom or local extension sources are reported for manual update.
+   Gemini's older published extension is reinstalled through its own CLI at
+   this release, preserving enablement and backing up the previous files. Custom
+   or local extension sources are reported for manual update.
 2. **Enable YOLO for new agent sessions?** `y` enables it, `n` disables it,
    and Enter keeps your current choice (standard mode on a new installation).
    Routine changes can preview and execute in one step in the session's selected

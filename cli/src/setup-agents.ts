@@ -359,30 +359,60 @@ function pluginCommands(kind: PluginKind) {
   };
 }
 
-/** Gemini's update command otherwise follows the old --ref forever. Keep its
- * own updater (which preserves enablement/settings), moving only our release pin. */
-async function updateGemini(program: string, args: string[], env: Env) {
-  const file = path.join(geminiHome(env), "extensions", GEMINI_EXTENSION, ".gemini-extension-install.json");
+/** A pinned Gemini extension cannot move releases through `extensions update`.
+ * Reinstall through its CLI; never edit signed install metadata. */
+async function updateGemini(program: string, env: Env) {
+  const directory = path.join(geminiHome(env), "extensions", GEMINI_EXTENSION);
+  const file = path.join(directory, ".gemini-extension-install.json");
   const stat = await fs.lstat(file);
   if (!stat.isFile() || stat.isSymbolicLink()) throw new Error(`Cannot update ${file}: expected regular extension install metadata.`);
-  const original = await fs.readFile(file, "utf8");
-  const metadata = JSON.parse(withoutBom(original)) as Record<string, unknown>;
+  const metadata = JSON.parse(withoutBom(await fs.readFile(file, "utf8"))) as Record<string, unknown>;
   if (!["git", "github-release"].includes(String(metadata.type)) || ![GEMINI_SOURCE, `${GEMINI_SOURCE}.git`].includes(String(metadata.source))) {
     throw new Error("The Cavelon extension has a custom or local source; update it through that source, or install the published Cavelon extension first.");
   }
-  const updated = JSON.stringify({ ...metadata, ref: `v${KIT_VERSION}` }, null, 2) + "\n";
-  await writeKeepingMode(file, updated);
+  const manifest = await readJsonFile<{ version?: unknown; settings?: unknown }>(path.join(directory, "gemini-extension.json"));
+  if (manifest?.version === KIT_VERSION) return { code: 0, stdout: "Already at this release.", stderr: "" };
+  if (manifest?.settings !== undefined) throw new Error("This extension declares custom settings; update it in Gemini before using the published Cavelon extension.");
+  const enablement = path.join(path.dirname(directory), "extension-enablement.json");
+  const readEnablement = async () => {
+    const text = await readTextFile(enablement);
+    if (text === undefined) return { text, value: {} as Record<string, unknown> };
+    const stat = await fs.lstat(enablement);
+    if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("Expected a regular Gemini enablement file.");
+    const value: unknown = JSON.parse(withoutBom(text));
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Unrecognized Gemini enablement settings.");
+    return { text, value: value as Record<string, unknown> };
+  };
+  const original = await readEnablement();
+  const cwd = await geminiFolder("gemini", env);
+  const backup = await fs.mkdtemp(path.join(cwd!, "cavelon-update-"));
+  await fs.chmod(backup, 0o700).catch(() => undefined);
+  await fs.cp(directory, path.join(backup, "extension"), { recursive: true });
+  const commands = pluginCommands("gemini");
+  let removed = false;
   let success = false;
   try {
-    const result = await runProgram(program, args, { env, timeoutMs: RUN_TIMEOUT_MS, cwd: await geminiFolder("gemini", env) });
-    // Some Gemini versions log update failures but still exit zero.
-    const manifest = await readJsonFile<{ version?: unknown }>(path.join(path.dirname(file), "gemini-extension.json"));
-    success = result.code === 0 && manifest?.version === KIT_VERSION;
-    if (result.code === 0 && !success) return { ...result, code: 1, error: `Gemini did not install Cavelon ${KIT_VERSION}. Run gemini extensions update cavelon in your own terminal and review its output.` };
+    const uninstall = await runProgram(program, commands.uninstall, { env, timeoutMs: RUN_TIMEOUT_MS, cwd });
+    if (uninstall.code !== 0) return { ...uninstall, error: `Gemini could not replace the old extension. Backup: ${backup}` };
+    removed = true;
+    const result = await runProgram(program, commands.install, { env, timeoutMs: RUN_TIMEOUT_MS, cwd });
+    const installed = await readJsonFile<{ version?: unknown }>(path.join(directory, "gemini-extension.json"));
+    success = result.code === 0 && installed?.version === KIT_VERSION;
+    if (!success) return { ...result, code: result.code || 1, error: `Gemini did not install Cavelon ${KIT_VERSION}. Previous files are backed up at ${backup}; retry cavelon setup --update --agents gemini in your terminal.` };
     return result;
   } finally {
-    // Do not replace metadata that the updater or another session changed.
-    if (!success && await readTextFile(file) === updated) await writeKeepingMode(file, original);
+    if (removed && !success) {
+      await fs.rm(directory, { recursive: true, force: true });
+      await fs.cp(path.join(backup, "extension"), directory, { recursive: true });
+    }
+    // Reinstall enables an extension globally. Restore only Cavelon's overrides,
+    // merging with the current file so other extensions keep their settings.
+    const current = await readEnablement();
+    if (Object.hasOwn(original.value, GEMINI_EXTENSION)) current.value[GEMINI_EXTENSION] = original.value[GEMINI_EXTENSION];
+    else delete current.value[GEMINI_EXTENSION];
+    if (original.text === undefined && !Object.keys(current.value).length) await fs.rm(enablement, { force: true });
+    else await writeKeepingMode(enablement, JSON.stringify(current.value, null, 2) + "\n");
+    if (success) await fs.rm(backup, { recursive: true, force: true });
   }
 }
 
@@ -412,10 +442,10 @@ export async function planAgent(agent: SetupAgent, found: Found, env: Env, comma
     plan.changes.push({
       kind: "plugin",
       summary: `${refresh ? "update" : "install"} the Cavelon ${kind === "gemini" ? "extension" : "plugin"} (skills and tools)`,
-      target: display(program, refresh ? commands.update : commands.install),
+      target: refresh && kind === "gemini" ? `${display(program, commands.uninstall)}; ${display(program, commands.install)}` : display(program, refresh ? commands.update : commands.install),
       outcome: state.installed && !refresh ? "unchanged" : "planned",
       ...(refresh ? { refresh: true } : {}),
-      ...(refresh && kind === "gemini" ? { reason: `move the published extension's release pin to v${KIT_VERSION}; keep its settings and enablement` } : {}),
+      ...(refresh && kind === "gemini" ? { reason: `replace the published extension at v${KIT_VERSION} through Gemini; preserve enablement and back up the previous files` } : {}),
       ...(state.installed && !state.enabled ? { reason: `it is installed but turned off; turn it on in ${agent.label}` } : {}),
     });
   }
@@ -543,7 +573,7 @@ export async function applyPlan(plan: AgentPlan, env: Env, command: ServerComman
         const commands = pluginCommands(kind);
         const args = change.kind === "marketplace" ? (change.refresh ? commands.marketplaceUpdate : commands.marketplaceAdd) : (change.refresh ? commands.update : commands.install);
         const result = kind === "gemini" && change.refresh
-          ? await updateGemini(plan.found.program!, args, env)
+          ? await updateGemini(plan.found.program!, env)
           : await runProgram(plan.found.program!, args, { env, timeoutMs: RUN_TIMEOUT_MS, cwd: await geminiFolder(kind, env) });
         if (result.code !== 0) {
           if (kind === "gemini" && !change.refresh) {

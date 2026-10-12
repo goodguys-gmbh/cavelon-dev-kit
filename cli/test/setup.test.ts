@@ -67,19 +67,23 @@ it("reports a plugin update failure while preserving the independently selected 
   expect(readJson(path.join(sb.env.CAVELON_CONFIG_DIR!, "automation.json"))).toMatchObject({ mcp_mode: "yolo" });
 });
 
-it.each([false, true])("Gemini refresh moves the release pin without reinstalling, and restores it on failure (%s)", async fails => {
-  const env = { ...pathEnv(fakeBin(["gemini"])), ...(fails ? { FAKE_AGENT_FAIL: "extensions update" } : {}) };
+it.each([false, true])("Gemini replaces an older pinned release through its CLI and preserves previous files on failure (%s)", async fails => {
+  const env = { ...pathEnv(fakeBin(["gemini"])), FAKE_GEMINI_ENABLEMENT: "1", ...(fails ? { FAKE_AGENT_FAIL: "extensions install" } : {}) };
   const extension = path.join(sb.home, ".gemini", "extensions", "cavelon");
   mkdirSync(extension, { recursive: true });
+  const enablement = path.join(path.dirname(extension), "extension-enablement.json");
+  const overrides = { cavelon: { overrides: ["!*"] }, other: { overrides: ["*"] } };
+  writeFileSync(enablement, JSON.stringify(overrides));
   writeFileSync(path.join(extension, "gemini-extension.json"), JSON.stringify({ name: "cavelon", version: "0.1.2" }));
   const file = path.join(extension, ".gemini-extension-install.json");
   const metadata = { type: "github-release", source: GEMINI_SOURCE, ref: "v0.1.2", releaseTag: "v0.1.2", autoUpdate: false };
   writeFileSync(file, JSON.stringify(metadata));
   const result = await cli(sb, ["setup", "--update", "--yes", "--agents", "gemini", "--json"], { env });
   expect(result.code, result.stdout).toBe(fails ? 1 : 0);
-  expect(log("gemini")).toEqual(["extensions update cavelon"]);
-  expect(readJson(file)).toEqual(fails ? metadata : { ...metadata, ref: `v${KIT_VERSION}` });
+  expect(log("gemini")).toEqual(["extensions uninstall cavelon", `extensions install ${GEMINI_SOURCE} --ref v${KIT_VERSION} --consent`]);
+  expect(readJson(file)).toMatchObject(fails ? metadata : { type: "github-release", source: GEMINI_SOURCE, ref: `v${KIT_VERSION}` });
   if (!fails) expect(readJson(path.join(extension, "gemini-extension.json")).version).toBe(KIT_VERSION);
+  expect(readJson(enablement)).toEqual(overrides);
 });
 
 /** Every file under `dir` with its content, and every folder, to compare a home before and after. */
