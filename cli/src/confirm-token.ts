@@ -236,7 +236,7 @@ export async function personApproves(
   }
   throw new CavelonError(ExitCode.needsAction, {
     code: "confirm_declined",
-    message: "The person did not approve the change; nothing was changed.",
+    message: "The MCP client returned an explicit decline; nothing was changed.",
     hint: `Ask the person whether they want it. With their yes, call ${change.tool} again with the same confirm token, or they run ${change.command} in their own terminal.`,
     details: { answer, person_command: change.command },
   });

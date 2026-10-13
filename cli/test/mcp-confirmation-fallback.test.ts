@@ -51,6 +51,7 @@ it.each(["error", "cancel", "missing answer", "decline", "false"] as const)("han
     const result = await call({ confirm: preview.confirm_token });
     if (answer === "decline" || answer === "false") {
       expect(result.error).toMatchObject({ code: "confirm_declined", details: { answer: "declined" } });
+      expect(result.error.message).toContain("MCP client returned an explicit decline");
     } else {
       expect(result.error).toMatchObject({ code: "confirm_needs_person", details: {
         needs_person: "terminal", person_command: "cavelon deactivate --harness support --confirm",
