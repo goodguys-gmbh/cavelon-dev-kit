@@ -125,8 +125,8 @@ export interface Context {
   approved?: { guarded: boolean };
 }
 
-/** A person's answer to a change the client showed them; `unanswered` when no answer came in time or the client failed. */
-export type PersonAnswer = "approved" | "declined" | "unanswered";
+/** A person's answer, or the absence of one; `unavailable` means the client's form request failed. */
+export type PersonAnswer = "approved" | "declined" | "unanswered" | "unavailable";
 
 export interface CommandSpec {
   /** Words, e.g. "tenant create". */

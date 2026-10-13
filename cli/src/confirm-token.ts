@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { PERSON_WAIT_MS } from "./approval-policy.js";
 import { actingTarget, targetLine, type ActingTarget, type PlatformTarget } from "./acting.js";
 import { drivenByAgent, type DrivenBy } from "./agent-env.js";
 import type { Context, Input } from "./command.js";
@@ -225,12 +224,19 @@ export async function personApproves(
     ctx.approved = { guarded: change.guarded ?? true };
     return;
   }
+  if (answer === "unavailable" || answer === "unanswered") {
+    throw new CavelonError(ExitCode.needsAction, {
+      code: "confirm_needs_person",
+      message: answer === "unavailable"
+        ? "The MCP client could not obtain a usable approval answer; nothing was changed. The person confirms in their own terminal."
+        : "The dialog was cancelled or returned no approval answer; nothing was changed. The person can confirm in their own terminal.",
+      hint: `Show the person the preview and this command to run themselves: ${change.command}`,
+      details: { answer, needs_person: "terminal", person_command: change.command },
+    });
+  }
   throw new CavelonError(ExitCode.needsAction, {
     code: "confirm_declined",
-    message:
-      answer === "declined"
-        ? "The person did not approve the change; nothing was changed."
-        : `The person did not answer within ${PERSON_WAIT_MS / 60_000} minutes, or the client could not ask; nothing was changed.`,
+    message: "The MCP client returned an explicit decline; nothing was changed.",
     hint: `Ask the person whether they want it. With their yes, call ${change.tool} again with the same confirm token, or they run ${change.command} in their own terminal.`,
     details: { answer, person_command: change.command },
   });
@@ -242,7 +248,7 @@ export function needsPerson(command: string): CavelonError {
     code: "confirm_needs_person",
     message: `A coding agent cannot confirm this change; nothing was changed. The person confirms it in their own terminal: ${command}`,
     hint: "Show the person the preview and the command; they run it themselves, outside the agent.",
-    details: { person_command: command },
+    details: { needs_person: "terminal", person_command: command },
   });
 }
 

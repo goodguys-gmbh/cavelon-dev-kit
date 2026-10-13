@@ -25,6 +25,14 @@ A refusal or unanswered dialog changes nothing. The agent must not retry to
 obtain a different answer or treat an earlier approval as consent to another
 critical change. An operation reserved for the Admin remains there.
 
+If the client advertises approval dialogs but its form request fails, the kit
+returns `confirm_needs_person`, with `details.needs_person: "terminal"` and
+the exact command in `details.person_command`. A cancelled or unanswered form
+also offers that terminal command. This is not reported as a person's refusal.
+After a failed form request, later previews on that MCP connection use the
+terminal route; restarting the connection lets the client offer dialogs again.
+An explicit No remains `confirm_declined` and is never retried automatically.
+
 ## Opt in to YOLO for routine work
 
 A person can enable YOLO in the one-line installer's second question. This
