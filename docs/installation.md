@@ -109,15 +109,16 @@ options. A plugin update can require internet access; the offline installer
 does not start it unless selected. A failed follow-up reports a nonzero exit
 and leaves the successfully installed CLI in place.
 
-**macOS setup questions hang in 0.2.3/0.2.4.** If typing an answer has no
-effect, press Ctrl+C. The CLI is already installed; run its setup directly:
+**macOS setup questions (fixed in 0.2.5).** In 0.2.3/0.2.4, if typing an
+answer has no effect, press Ctrl+C. The CLI is already installed; run its
+setup directly:
 
 ```bash
 "$HOME/.local/bin/cavelon" setup --installer
 ```
 
 Use your chosen install folder if you changed it. Do not redirect this command
-from `/dev/tty`: those executables cannot read that macOS alias. The updated
+from `/dev/tty`: those executables cannot read that macOS alias. The 0.2.5
 installer uses the real terminal device; if it cannot find one, it keeps
 unspecified choices and prints the direct setup command.
 

@@ -30,10 +30,9 @@ Solution-owned files and directory links must stay inside the solution, separate
 from the kit's login and cache; see [local file safety](docs/security.md#files-on-your-machine).
 
 > [!NOTE]
-> **Current release: 0.2.4.** Test edited database SQL before applying it,
-> manage saved queries with personal approval, and configure public SSH,
-> Kerberos and listener-redirect settings where the instance supports them.
-> See [Connect a database](docs/connect-a-database.md).
+> **Current release: 0.2.5.** Fixes setup questions hanging in the macOS
+> one-line installer. It includes the database workflow updates from 0.2.4;
+> see [Connect a database](docs/connect-a-database.md).
 >
 > **Updating an existing install?** Run the installer below again and answer
 > **yes** to updating Cavelon plugins and skills. At the YOLO question, Enter
