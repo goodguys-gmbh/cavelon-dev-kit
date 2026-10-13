@@ -34,7 +34,9 @@ export function sandbox(): Sandbox {
       CAVELON_CREDENTIAL_STORE: "file",
       CAVELON_POLL_INTERVAL_MS: "20",
     },
-    cleanup: () => rmSync(home, { recursive: true, force: true }),
+    // Windows may briefly retain a native client's directory handles after exit.
+    // Retry removal within a bound; a persistent lock still fails the test.
+    cleanup: () => rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }),
   };
 }
 

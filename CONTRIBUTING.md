@@ -121,6 +121,10 @@ build. Each fixture isolates personal profiles, bounds the client run at 90
 seconds and cleans up its own process tree. It never supplies a person answer,
 requests an instance confirmation or changes a real tenant.
 
+Sandbox removal uses Node's bounded filesystem retries for brief Windows
+handle-release races after native client exit. A persistent lock still fails
+cleanup; this does not change client process timeouts or workflow assertions.
+
 For a local Linux x64 run, first build the standalone executable as above, then:
 
 ```bash
