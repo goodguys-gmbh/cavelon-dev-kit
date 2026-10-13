@@ -285,9 +285,11 @@ function clientAsks(server: Server): boolean {
 async function askThroughClient(server: Server, message: string, relatedRequestId: RequestId): Promise<PersonAnswer> {
   try {
     const result = await server.elicitInput({ mode: "form", message, requestedSchema: APPROVAL_SCHEMA }, { timeout: PERSON_WAIT_MS, relatedRequestId });
-    return result.action === "accept" && result.content?.approve === true ? "approved" : "declined";
+    if (result.action === "accept" && result.content?.approve === true) return "approved";
+    if (result.action === "decline" || result.action === "accept" && result.content?.approve === false) return "declined";
+    return result.action === "cancel" ? "unanswered" : "unavailable";
   } catch {
-    return "unanswered";
+    return "unavailable";
   }
 }
 
@@ -303,6 +305,9 @@ export function createMcpServer(io: Io, commands: CommandSpec[], updates: Sessio
   const notice = startSessionUpdateCheck(io, updates);
   // The tenants use_tenant chose: this server's alone, never the person's stored choice.
   const sessionTenants = new Map<string, SessionTenant>();
+  // Advertised form support can fail at runtime. Later previews in this
+  // connection must offer the working terminal route instead of a broken UI.
+  let clientUiUnavailable = false;
   const launch = createContext(mcpIo(io), { ...startup, json: true }, "mcp").globals;
 
   /**
@@ -359,7 +364,11 @@ export function createMcpServer(io: Io, commands: CommandSpec[], updates: Sessio
       return fail(error);
     }
     const ctx = createContext(mcpIo(folder.io), { ...launch, json: true, tenant: tenant ?? launch.tenant, solutionEnv: solutionEnv ?? launch.solutionEnv, sessionTenants }, "mcp");
-    if (clientAsks(server)) ctx.askPerson = (message) => askThroughClient(server, message, requestId);
+    if (!clientUiUnavailable && clientAsks(server)) ctx.askPerson = async (message) => {
+      const answer = await askThroughClient(server, message, requestId);
+      if (answer === "unavailable") clientUiUnavailable = true;
+      return answer;
+    };
     for (const message of renamed) ctx.warn(message);
     try {
       // A command a person runs in a terminal knows nothing of this session's tenant, so the lines printed for one name it.
