@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { COMMANDS } from "../src/commands/index.js";
 import { createMcpServer } from "../src/mcp.js";
@@ -43,7 +43,18 @@ async function connection(interactive = true, waitMs = 2000) {
   await server.connect(serverTransport);
   const bridge = await new NativeApprovalClient({ transport: clientTransport, interactive, waitMs, version: "test" }).connect();
   const close = async () => { await bridge.close(); await server.close(); };
-  return { bridge, close };
+  const delayNextResponse = (ms: number) => {
+    const send = serverTransport.send.bind(serverTransport);
+    let delayed = false;
+    serverTransport.send = async message => {
+      if (!delayed && 'result' in message) {
+        delayed = true;
+        await new Promise(resolve => setTimeout(resolve, ms));
+      }
+      return send(message);
+    };
+  };
+  return { bridge, close, delayNextResponse };
 }
 function body(result: any) { return JSON.parse(result.content[0].text); }
 
@@ -145,14 +156,26 @@ it('cancellation dismisses the UI and a late yes cannot enter the next call', as
 });
 
 it('a bounded timeout without an answer refuses and disconnects', async () => {
-  const c = await connection(true, 100);
+  const c = await connection();
+  c.delayNextResponse(150);
   try {
     const preview = body(await c.bridge.call('deactivate', { harness: 'support' }));
-    await expect(c.bridge.call('deactivate', { harness: 'support', confirm: preview.confirm_token }, { ask: () => new Promise(() => {}) })).rejects.toThrow();
+    // The call deadline covers preview I/O too. Test an unanswered UI only
+    // after the preview exists and the dialog is actually shown.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    let shown!: () => void;
+    const visible = new Promise<void>(resolve => shown = resolve);
+    const pending = c.bridge.call('deactivate', { harness: 'support', confirm: preview.confirm_token }, {
+      ask: () => { shown(); return new Promise(() => {}); },
+    });
+    const rejected = expect(pending).rejects.toThrow();
+    await visible;
+    await vi.advanceTimersByTimeAsync(2001);
+    await rejected;
     expect(c.bridge.closed).toBe(true);
     expect(confirmations()).toEqual([]);
     expect(changes()).toEqual([]);
-  } finally { await c.close(); }
+  } finally { vi.useRealTimers(); await c.close(); }
 });
 
 it('concurrent requests cannot share a dialog or remember approval', async () => {
