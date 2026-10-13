@@ -11,7 +11,7 @@ through the Admin.
 - **Database limits**: `cavelon db instance` and `cavelon limits` show the
   tenant's connection/query caps and counts where published. An operator can
   set a tenant override in Platform mode; see [Database limits](docs/limits.md#database-connections-and-queries).
-- **Database connector updates (unreleased)**: test edited SQL before apply with
+- **Database connector updates (0.2.4)**: test edited SQL before apply with
   `db test-run <slug> --draft`, manage saved queries with preview and personal
   approval, and configure public SSH/Kerberos/redirect settings. See
   [Connect a database](docs/connect-a-database.md) for supported instance contracts.
