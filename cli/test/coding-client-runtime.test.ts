@@ -154,6 +154,7 @@ it.skipIf(!name || !candidate)('runs two native released-client workflows using 
     await new Promise<void>(r => model.listen(0, '127.0.0.1', r));
     const url = `http://127.0.0.1:${(model.address() as any).port}/v1`;
     const evidence = path.join(output, name + '-' + process.platform + '-' + process.arch);
+    let phase = 'setup';
     try {
         const tenant = instance.addTenant('workflow', 'Synthetic workflow');
         await login(sb, instance.url, instance.addToken({
@@ -278,6 +279,7 @@ it.skipIf(!name || !candidate)('runs two native released-client workflows using 
             args = [path.join(runtime, 'node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js'), '--print', '--mode', 'json', '--provider', 'fixture', '--model', 'synthetic-fixture', '--no-session', '--no-title', '--no-lsp', '--no-pty', '--approval-mode', 'yolo', 'Synthetic scripted local workflow'];
         }
         const versionArgs = name === 'omp' ? [args[0]!, '--version'] : [...preargs, '--version'];
+        phase = 'client-version';
         const versionResult = await run(exe, versionArgs, env, root);
         expect(versionResult.code, versionResult.out + versionResult.err).toBe(0);
         expect(versionResult.out).toContain(pin.version);
@@ -288,7 +290,9 @@ it.skipIf(!name || !candidate)('runs two native released-client workflows using 
         }
         env.CAVELON_AGENT = '1';
         instance.state.requests.length = 0;
+        phase = 'workflow';
         const result = await run(exe, [...preargs, ...args], env, root);
+        phase = 'verification';
         await fs.writeFile(evidence + '-client.json', JSON.stringify(result));
         await fs.writeFile(evidence + '-requests.json', JSON.stringify(requests, null, 2));
         expect(providerFailure).toBe('');
@@ -322,6 +326,24 @@ it.skipIf(!name || !candidate)('runs two native released-client workflows using 
         await fs.writeFile(evidence + '-evidence.json', JSON.stringify({
             client: name, version: pin.version, candidate, platform: process.platform + '-' + process.arch, standalone_consumer: true, generated_setup: true, multi_solution: true, validate: 2, previews: 2, ordinary_draft_imports: 2, suite_runs: 2, status: 2, traces: 2, bounded_improvement: true, guarded_changes: 0, confirmations: 0, actual_person_ui: false, scripted_loopback_requests: requests.length, real_model_calls: 0, production_actions: 0, completed_at: new Date().toISOString()
         }, null, 2));
+    }
+    catch (error) {
+        // A startup timeout previously left only provisioning evidence. Keep
+        // bounded progress before cleanup without recording headers or tokens.
+        try {
+            await fs.writeFile(evidence + '-failure.json', JSON.stringify({
+                client: name, version: pin.version, platform: process.platform + '-' + process.arch,
+                phase, workflow_step: step, provider_requests: requests.length,
+                provider_failure: providerFailure.slice(-2000),
+                instance_calls: instance.state.requests.slice(-100).map(({ method, path }) => ({ method, path })),
+                error: (error instanceof Error ? error.message : String(error)).slice(-20000),
+                actual_person_ui: false, real_model_calls: 0, production_actions: 0,
+            }, null, 2));
+        }
+        catch (evidenceError) {
+            throw new AggregateError([error, evidenceError], 'Client runtime failed and failure evidence could not be saved', { cause: evidenceError });
+        }
+        throw error;
     }
     finally {
         await new Promise<void>(r => model.close(() => r()));
