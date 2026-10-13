@@ -162,6 +162,9 @@ jobs:
       - name: install.sh
         if: runner.os != 'Windows'
         run: bash .github/scripts/test-install-sh.sh http://127.0.0.1:8931 "$VERSION"
+      - name: Piped installer reads both terminal answers
+        if: runner.os != 'Windows'
+        run: python3 .github/scripts/test-install-sh-tty.py http://127.0.0.1:8931
       - name: install.ps1 in Windows PowerShell 5.1
         if: runner.os == 'Windows'
         shell: powershell

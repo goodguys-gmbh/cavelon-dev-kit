@@ -5,6 +5,14 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 project uses [semantic versioning](https://semver.org/): one version for the
 CLI, the skills and the plugin.
 
+## [Unreleased]
+
+### Fixed
+
+- The macOS piped installer reads setup answers from the terminal's actual
+  device, avoiding Bun's `/dev/tty` input hang. If the device cannot be found,
+  installation keeps unspecified choices and explains how to finish setup.
+
 ## [0.2.4] - 2026-10-13
 
 ### Added

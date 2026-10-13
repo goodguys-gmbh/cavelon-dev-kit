@@ -270,7 +270,23 @@ if "$target" setup --help 2>/dev/null | grep -q -- '--installer'; then
   # curl | sh uses stdin for the script. Questions must read the controlling
   # terminal; CI and unattended installs never consume or wait on that pipe.
   if [ "$non_interactive" = 0 ] && [ -t 2 ] && ( : </dev/tty ) 2>/dev/null; then
-    "$target" "$@" </dev/tty || fail "CLI installed successfully, but agent setup was incomplete. Retry with $target setup --installer."
+    terminal=/dev/tty
+    if [ "$os" = darwin ]; then
+      # Bun cannot poll macOS's /dev/tty alias. The real device works; `tty`
+      # on the alias just returns /dev/tty again, so ask ps for this shell's.
+      terminal=""
+      terminal_name="$(ps -o tty= -p "$$" 2>/dev/null | tr -d '[:space:]')"
+      case "$terminal_name" in
+        "" | *[!a-zA-Z0-9/_-]*) ;;
+        *) [ ! -c "/dev/$terminal_name" ] || terminal="/dev/$terminal_name" ;;
+      esac
+    fi
+    if [ -n "$terminal" ] && ( : <"$terminal" ) 2>/dev/null; then
+      "$target" "$@" <"$terminal" || fail "CLI installed successfully, but agent setup was incomplete. Retry with $target setup --installer."
+    else
+      say "Could not find a usable terminal device. Keeping unspecified setup choices; run $target setup --installer in your terminal to choose them."
+      "$target" "$@" --non-interactive || fail "CLI installed successfully, but agent setup was incomplete. Retry with $target setup --installer."
+    fi
   else
     "$target" "$@" --non-interactive || fail "CLI installed successfully, but agent setup was incomplete. Retry with $target setup --installer."
   fi
