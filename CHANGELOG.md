@@ -13,6 +13,10 @@ CLI, the skills and the plugin.
   own-terminal confirmation command instead of reporting a person's refusal.
   A failed form request routes later previews on that connection to the terminal;
   explicit declines still change nothing and are never retried automatically.
+- API discovery and execution recognize pure POST searches when the instance
+  explicitly publishes `x-cavelon-read-only: true`. Knowledge-base searches on
+  those instances no longer ask for a personal confirmation. Unknown POSTs and
+  explicit person-only or confirmation requirements keep their existing guards.
 
 ## [0.2.5] - 2026-10-13
 

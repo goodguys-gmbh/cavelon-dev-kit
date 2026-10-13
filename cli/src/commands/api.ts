@@ -342,7 +342,7 @@ export const api: CommandSpec = {
     }
     const secrets = secretsIn(doc, op, args);
     if (secrets.length) throw secretRefusal(op, secrets);
-    if (driven && !op.readOnly) {
+    if (driven && (!op.readOnly || op.method === "POST")) {
       // The same call as the person types it in their own terminal, where it sends at once.
       const words = [
         "api",

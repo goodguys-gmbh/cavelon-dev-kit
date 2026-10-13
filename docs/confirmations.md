@@ -13,6 +13,13 @@ is no `needs_person` requirement. It reads the preview and reports the outcome;
 it does not need an extra chat approval. Known routine `api` operations use the
 same approach with their preview's `confirm_token`.
 
+Pure POST searches need no confirmation when the instance marks the operation
+`x-cavelon-read-only: true` in its OpenAPI. `api list`, `api describe` and actual
+CLI/MCP calls use that same classification. Person-only and explicit instance
+confirmation requirements take precedence. Older instances without the marker
+keep the conservative POST confirmation behavior; a POST verb or a description
+that mentions reading alone does not establish the operation's effects.
+
 When a change needs you, the preview says `needs_person`:
 
 - `client`: the agent confirms the exact preview and the client presents one
