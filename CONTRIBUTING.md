@@ -82,6 +82,9 @@ through the system's credential store against the fake server, `init --agents`
 with the embedded skills, and an MCP handshake), and tests `install.sh` and
 `install.ps1` (Windows PowerShell 5.1 and PowerShell 7) and the Homebrew
 formula against them, served from a local folder: nothing is published.
+The POSIX installer also runs through a pipe in an actual pseudo-terminal on
+Linux and macOS, answering both setup questions in a fresh synthetic profile.
+This checks Bun's terminal input, which in-process prompt mocks cannot cover.
 
 The standalone credential-store comparison uses a synthetic person-login
 environment without coding-agent markers. Agent login refusal is checked
