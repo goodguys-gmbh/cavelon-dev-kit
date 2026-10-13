@@ -326,6 +326,8 @@ it.skipIf(!name || !candidate)('runs two native released-client workflows using 
     finally {
         await new Promise<void>(r => model.close(() => r()));
         await instance.close();
-        sb.cleanup();
+        // Node 22's synchronous directory removal does not retry an initial
+        // EBUSY. Await bounded retries while Windows releases native handles.
+        await fs.rm(sb.home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
 }, 120000);
