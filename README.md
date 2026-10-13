@@ -30,24 +30,23 @@ Solution-owned files and directory links must stay inside the solution, separate
 from the kit's login and cache; see [local file safety](docs/security.md#files-on-your-machine).
 
 > [!NOTE]
-> **0.2.0** moves the release-line pin from `@cavelon/cli@0.1` to
-> `@cavelon/cli@0.2`; `setup` and `init --update` move the entries 0.1 wrote.
-> It also accepts the `oracle` database dialect where the instance publishes it.
-> [Upgrading from 0.1 to 0.2](docs/upgrading-to-0.2.md) says how to check that
-> the release is published, and how to move the CLI, the plugin, solution
-> repositories, CI and offline machines, or go back. Person approval on native
-> Windows, WSL and macOS, and each customer's model, network, offline and
-> database pilot, are still open; the [customer pilot](docs/customer-pilot.md)
-> checklist records a pilot.
+> **Current release: 0.2.4.** Test edited database SQL before applying it,
+> manage saved queries with personal approval, and configure public SSH,
+> Kerberos and listener-redirect settings where the instance supports them.
+> See [Connect a database](docs/connect-a-database.md).
 >
-> **New in 0.1.18:** Saved database queries support [list parameters](docs/connect-a-database.md)
-> for `IN` and `NOT IN` filters, JSON-array test values and workflow arguments,
-> where the instance publishes them. Repository tooling adds a
-> [portable person-approval supervisor](docs/person-approval-qualification.md);
-> actual additional-host and customer qualification remain separate.
+> **Updating an existing install?** Run the installer below again and answer
+> **yes** to updating Cavelon plugins and skills. At the YOLO question, Enter
+> keeps your current choice. Then restart your coding agent. If you update
+> through Homebrew, npm or PyPI, run `cavelon setup --update` afterwards.
+> Run it inside a solution to refresh that folder too; other solution folders
+> need their own `cavelon init --update`.
 >
-> **Seven-client support since 0.1.17:** [Cline](docs/install/cline.md), [Kilo](docs/install/kilo.md),
-> [Goose](docs/install/goose.md) and [OMP](docs/install/omp.md) join
+> Still on 0.1? Use [Upgrading from 0.1 to 0.2](docs/upgrading-to-0.2.md).
+> Earlier feature announcements are in the [changelog](CHANGELOG.md).
+>
+> **Coding-agent support:** [Cline](docs/install/cline.md), [Kilo](docs/install/kilo.md),
+> [Goose](docs/install/goose.md), [OMP](docs/install/omp.md),
 > [OpenCode](docs/install/opencode.md), [Pi](docs/install/pi.md) and
 > [Qwen Code CLI](docs/install/qwen-code.md). Each gets native setup and all
 > four skills. Guarded changes use a fresh client dialog where qualified,
@@ -190,6 +189,10 @@ this also refreshes its generated setup and copied skills; other repositories
 need their own `cavelon init --update`. A new minor version (0.1 to
 0.2) also moves the pin in plugin, `setup` and `init --agents` entries:
 follow [Upgrading from 0.1 to 0.2](docs/upgrading-to-0.2.md).
+
+Unattended installer updates need `--update-agents` (PowerShell: `-UpdateAgents`,
+or `CAVELON_UPDATE_AGENTS=1` when piping to `iex`) to refresh agent files;
+non-interactive runs keep choices you did not specify.
 
 ### Step 3 · Build your first solution
 
