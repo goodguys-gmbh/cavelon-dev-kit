@@ -1,7 +1,8 @@
 param(
     [Parameter(Mandatory = $true)][string]$ManifestDir,
     [Parameter(Mandatory = $true)][string]$Version,
-    [Parameter(Mandatory = $true)][string]$Sha256
+    [Parameter(Mandatory = $true)][string]$Sha256,
+    [switch]$PublicSource
 )
 
 $ErrorActionPreference = 'Stop'
@@ -73,9 +74,16 @@ $installed = $false
 $policyEnabled = $false
 try {
     Invoke-WinGet -Arguments @('validate', '--manifest', $ManifestDir, '--disable-interactivity')
-    Invoke-WinGet -Arguments @('settings', '--enable', 'LocalManifestFiles')
-    $policyEnabled = $true
-    Invoke-WinGet -Arguments @('install', '--manifest', $ManifestDir, '--scope', 'machine', '--accept-package-agreements', '--accept-source-agreements', '--disable-interactivity')
+    if ($PublicSource) {
+        Invoke-WinGet -Arguments @('source', 'update', '--name', 'winget', '--disable-interactivity')
+        $installArguments = @('install', '--id', 'goodguys.Cavelon', '--exact', '--version', $Version, '--source', 'winget', '--scope', 'machine', '--accept-package-agreements', '--disable-interactivity')
+    } else {
+        Invoke-WinGet -Arguments @('settings', '--enable', 'LocalManifestFiles')
+        $policyEnabled = $true
+        $installArguments = @('install', '--manifest', $ManifestDir, '--scope', 'machine', '--accept-package-agreements', '--accept-source-agreements', '--disable-interactivity')
+    }
+    Write-Host "Qualification command: winget $($installArguments -join ' ')"
+    Invoke-WinGet -Arguments $installArguments
     $installed = $true
     if (!(Test-Path $alias)) { throw 'WinGet did not create the cavelon command alias.' }
     if ((Get-FileHash $alias -Algorithm SHA256).Hash -ne $Sha256) { throw 'The installed command does not match the verified executable.' }
@@ -100,6 +108,7 @@ try {
     }
 }
 @{ version = $Version; winget_version = $wingetVersion; sha256 = $Sha256.ToLowerInvariant(); install_scope = 'machine';
+   public_source_qualified = $PublicSource.IsPresent; install_command = "winget $($installArguments -join ' ')";
    manifest_valid = $true; installed_command_hash_matches = $true; install_method_recognized = $true;
    uninstalled = $true; actual_person_ui_qualification = $false } |
     ConvertTo-Json | Set-Content (Join-Path $scratch 'evidence.json') -Encoding UTF8

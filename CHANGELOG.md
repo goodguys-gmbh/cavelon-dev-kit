@@ -13,6 +13,8 @@ CLI, the skills and the plugin.
   and releases validate, install, verify the command hash/version and uninstall
   the portable package; missing WinGet no longer silently skips qualification.
   Public winget availability still depends on Microsoft's repository acceptance.
+  A manual CI run can verify installation from the public community source and
+  records the exact command and installed version before availability is announced.
 
 ## [0.2.7] - 2026-10-14
 

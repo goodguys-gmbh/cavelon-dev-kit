@@ -208,8 +208,9 @@ The release workflow updates the formula in
 [goodguys-gmbh/homebrew-cavelon](https://github.com/goodguys-gmbh/homebrew-cavelon)
 on every release.
 
-A winget package for Windows follows once the Windows executable is signed;
-until then, use the one-line install above.
+The [WinGet package submission](https://github.com/microsoft/winget-pkgs/pull/452585)
+for Windows is awaiting Microsoft's acceptance and publication. Use the
+one-line install above until installation from the public source is verified.
 
 ### With Python: uvx, uv, pipx or pip
 
