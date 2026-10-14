@@ -251,7 +251,9 @@ validates, installs and uninstalls it on native Windows before keeping it as
 the run's `winget-manifest` artifact. The smoke test checks the installed
 command's exact hash, version and recognized install method. CI runs this
 against its candidate executable served over loopback; release checks use the
-published HTTPS asset. The package identifier is
+published HTTPS asset. A separate CI job also qualifies the latest published
+release over HTTPS, retaining its exact manifests for upstream submission.
+The package identifier is
 `goodguys.Cavelon`; change `WINGET_ID` in `packaging/render.mjs` before the
 first submission if you want another.
 
