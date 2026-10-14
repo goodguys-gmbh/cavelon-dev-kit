@@ -265,6 +265,22 @@ its own security and installation checks and controls acceptance. Keep winget
 marked pending in user documentation until the upstream manifest is accepted
 and `winget install --id goodguys.Cavelon --exact` works from the public source.
 
+After Microsoft's manifest PR is merged and published, run the public-source
+consumer check from GitHub Actions with **CI → Run workflow**, leaving
+`public_source` enabled, or with GitHub CLI:
+
+```bash
+gh workflow run ci.yml --repo goodguys-gmbh/cavelon-dev-kit --ref main -f public_source=true
+```
+
+Manual dispatch runs only the published WinGet check. It updates the community
+source and installs by package ID and exact released version, without enabling
+local manifests, then verifies the command's hash, version and install method
+and uninstalls it. The `winget-published-qualification` artifact records the
+actual install command and `public_source_qualified: true` only after every
+check passes. Record this run and its installed version before closing the
+distribution issue or advertising WinGet availability.
+
 1. Check it on Windows: `winget validate --manifest <folder>`, and
    `winget install --manifest <folder>` after
    `winget settings --enable LocalManifestFiles`.

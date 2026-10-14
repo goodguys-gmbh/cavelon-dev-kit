@@ -4,12 +4,19 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      public_source:
+        description: Install the published release from the public WinGet community source
+        type: boolean
+        default: true
 
 permissions:
   contents: read
 
 jobs:
   cli:
+    if: github.event_name != 'workflow_dispatch'
     name: cli (Node ${{ matrix.node }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
@@ -60,6 +67,7 @@ jobs:
   # The standalone executable (scripts/build-executable.mjs), built on each
   # platform it is released for, and run there against the fake server.
   executable:
+    if: github.event_name != 'workflow_dispatch'
     name: executable (${{ matrix.asset }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
@@ -106,6 +114,7 @@ jobs:
   # then validated, installed and listed by Gemini CLI in a throwaway home.
   # The manifests' schema checks run with the tests (plugin-packages.test.ts).
   plugin-packages:
+    if: github.event_name != 'workflow_dispatch'
     name: plugin packages
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -119,6 +128,7 @@ jobs:
   # install.sh, install.ps1 and the Homebrew formula against a release folder
   # served on 127.0.0.1 from the executables above; nothing is published.
   install:
+    if: github.event_name != 'workflow_dispatch'
     name: install scripts (${{ matrix.os }})
     needs: executable
     runs-on: ${{ matrix.os }}
@@ -280,6 +290,7 @@ jobs:
         shell: powershell
         env:
           GH_TOKEN: ${{ github.token }}
+          QUALIFY_PUBLIC_SOURCE: ${{ github.event_name == 'workflow_dispatch' && inputs.public_source || false }}
         run: |
           $tag = (& gh release view --repo goodguys-gmbh/cavelon-dev-kit --json tagName --jq .tagName).Trim()
           if ($LASTEXITCODE -ne 0 -or $tag -notmatch '^v(\d+\.\d+\.\d+)$') { throw 'Expected a published stable release.' }
@@ -297,7 +308,9 @@ jobs:
             if (!$checksum -or $sha -ne ($checksum -split '\s+')[0]) { throw 'Published executable checksum mismatch.' }
             node (Join-Path $root 'packaging/render.mjs') winget
             if ($LASTEXITCODE -ne 0) { throw 'Published manifest render failed.' }
-            & (Join-Path $root '.github/scripts/test-winget.ps1') -ManifestDir "packaging-out/winget/manifests/g/goodguys/Cavelon/$version" -Version $version -Sha256 $sha
+            $qualification = @{ ManifestDir = "packaging-out/winget/manifests/g/goodguys/Cavelon/$version"; Version = $version; Sha256 = $sha }
+            if ($env:QUALIFY_PUBLIC_SOURCE -eq 'true') { $qualification.PublicSource = $true }
+            & (Join-Path $root '.github/scripts/test-winget.ps1') @qualification
           } finally { Pop-Location }
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
