@@ -87,7 +87,7 @@ try {
     try {
         if ($installed -or (Test-Path $alias)) {
             # Before repository acceptance, a local package has no public-source ID to correlate.
-            Invoke-WinGet -Arguments @('uninstall', '--manifest', $ManifestDir, '--scope', 'machine', '--source', 'winget', '--disable-interactivity')
+            Invoke-WinGet -Arguments @('uninstall', '--manifest', $ManifestDir, '--scope', 'machine', '--accept-source-agreements', '--disable-interactivity')
             if (Test-Path $alias) { throw 'WinGet uninstall left the command alias behind.' }
         }
     } finally {
