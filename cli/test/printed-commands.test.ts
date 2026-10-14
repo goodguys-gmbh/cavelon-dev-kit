@@ -305,21 +305,21 @@ describe("over MCP, no hint names a CLI command", () => {
     ...(catalog.api_error_codes ?? []).map((e) => e.code),
   ];
 
-  it("explain: every code the kit or the instance's catalog knows, with its hint, fix and kit hint", async () => {
-    const mcp = mcpClient();
-    const found: string[] = [];
-    try {
-      for (const code of new Set(codes)) {
-        const { body } = await mcp.call("explain", { code, tenant: "acme" });
-        for (const field of ["hint", "cli_fix", "kit_hint"]) {
-          const text = body[field] ?? body.error?.[field];
-          if (typeof text === "string") for (const named of cliCommandsIn(text)) found.push(`${code}.${field}: ${named}`);
-        }
+  describe("explain: every code the kit or the instance's catalog knows", () => {
+    let mcp: ReturnType<typeof mcpClient>;
+    beforeAll(() => { mcp = mcpClient(); });
+    afterAll(async () => { await mcp.close(); });
+
+    // Each code keeps the ordinary deadline as the published catalog grows.
+    it.each([...new Set(codes)])("%s: its hint, fix and kit hint name MCP tools", async (code) => {
+      const { body } = await mcp.call("explain", { code, tenant: "acme" });
+      const found: string[] = [];
+      for (const field of ["hint", "cli_fix", "kit_hint"]) {
+        const text = body[field] ?? body.error?.[field];
+        if (typeof text === "string") for (const named of cliCommandsIn(text)) found.push(`${code}.${field}: ${named}`);
       }
-    } finally {
-      await mcp.close();
-    }
-    expect(found).toEqual([]);
+      expect(found).toEqual([]);
+    });
   });
 
   it("the fixed texts a tool result or the server's instructions carry", () => {
