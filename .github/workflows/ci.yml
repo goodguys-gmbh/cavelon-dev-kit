@@ -248,16 +248,19 @@ jobs:
           grep -q "^update with: pip install --upgrade cavelon" version.txt
           "$RUNNER_TEMP/venv/$bin/python" -I -m pip uninstall --yes --quiet cavelon
           test ! -e "$RUNNER_TEMP/venv/$bin/$exe"
-      - name: The winget manifest
+      - name: WinGet validates, installs and uninstalls the portable package
         if: runner.os == 'Windows'
-        shell: pwsh
+        shell: powershell
         run: |
-          node packaging/render.mjs winget
-          $manifest = Get-ChildItem -Recurse -Directory packaging-out/winget/manifests | Where-Object { Get-ChildItem $_.FullName -Filter *.yaml } | Select-Object -First 1
-          Get-ChildItem $manifest.FullName | ForEach-Object { Write-Host "--- $($_.Name)"; Get-Content $_.FullName | Write-Host }
-          if (Get-Command winget -ErrorAction SilentlyContinue) {
-            winget validate --manifest $manifest.FullName
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          } else {
-            Write-Host "winget is not on this runner; the manifest was not validated."
-          }
+          node packaging/render.mjs winget --base-url http://127.0.0.1:8931
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $manifest = "packaging-out/winget/manifests/g/goodguys/Cavelon/$env:VERSION"
+          $sha = (Get-FileHash release/cavelon-windows-x64.exe -Algorithm SHA256).Hash
+          .github/scripts/test-winget.ps1 -ManifestDir $manifest -Version $env:VERSION -Sha256 $sha
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: runner.os == 'Windows' && always()
+        with:
+          name: winget-native-evidence
+          path: ${{ runner.temp }}/cavelon-winget-*/evidence.json
+          if-no-files-found: warn
+          retention-days: 14

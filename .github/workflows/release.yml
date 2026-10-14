@@ -529,8 +529,8 @@ jobs:
   winget:
     name: winget manifest
     needs: github-release
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    runs-on: windows-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
@@ -542,11 +542,22 @@ jobs:
           name: release
           path: release
       - name: Write the manifest
-        env:
-          TAG: ${{ github.ref_name }}
+        shell: powershell
         run: |
           node packaging/render.mjs winget
-          echo "::notice::The winget manifest is in this run's artifact winget-manifest; RELEASING.md says how to submit it."
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $version = (Get-Content cli/package.json | ConvertFrom-Json).version
+          $manifest = "packaging-out/winget/manifests/g/goodguys/Cavelon/$version"
+          $sha = (Get-FileHash release/cavelon-windows-x64.exe -Algorithm SHA256).Hash
+          .github/scripts/test-winget.ps1 -ManifestDir $manifest -Version $version -Sha256 $sha
+          Write-Host '::notice::The validated winget manifest is in artifact winget-manifest; RELEASING.md says how to submit it.'
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: winget-native-evidence
+          path: ${{ runner.temp }}/cavelon-winget-*/evidence.json
+          if-no-files-found: warn
+          retention-days: 14
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: winget-manifest

@@ -7,6 +7,13 @@ CLI, the skills and the plugin.
 
 ## Unreleased
 
+### Changed
+
+- WinGet manifests use Microsoft's recommended 1.12 schema. Native Windows CI
+  and releases validate, install, verify the command hash/version and uninstall
+  the portable package; missing WinGet no longer silently skips qualification.
+  Public winget availability still depends on Microsoft's repository acceptance.
+
 ## [0.2.7] - 2026-10-14
 
 ### Fixed

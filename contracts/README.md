@@ -324,6 +324,12 @@ that a reader of the current `format` cannot follow raises `format`.
 
 ## `clients/`
 
+`winget-1.12.0/` holds Microsoft's WinGet version, installer and default-locale
+schemas, retrieved from their official `aka.ms` schema URLs on 2026-10-14,
+with the upstream MIT license. The community repository's PR template recommends
+this schema version. `cli/test/winget-packaging.test.ts` validates all generated
+manifests against them; native WinGet install and uninstall run separately in CI.
+
 The schemas the coding agents publish for their plugin formats, which
 `cli/test/plugin-packages.test.ts` checks the release's packages against:
 
