@@ -135,7 +135,7 @@ client process timeouts and workflow assertions remain unchanged.
 A failed run keeps `<client>-<platform>-failure.json` with its phase, workflow
 step, provider requests, instance calls, confirmation and import counts,
 registry requests and bounded tails of the client's own `*.log` files, with the
-synthetic token, placeholder key and sandbox path masked. To check that
+synthetic token and placeholder key masked; log file names are relative to the sandbox. To check that
 evidence, `CAVELON_QUALIFY_FAULT=registry-stall` makes the registry stand-in
 hold OpenCode's request: the run must still fail at the 90-second bound.
 
