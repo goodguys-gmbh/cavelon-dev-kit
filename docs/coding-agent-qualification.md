@@ -27,8 +27,10 @@ Cavelon executable. It completes two ordinary draft workflows against scripted
 loopback fixtures: child validation, preview/import, synthetic suite, wait and
 trace, with one bounded prompt improvement between runs. These checks send no
 guarded confirmation and open no person dialog. Qwen uses its actual deferred
-`tool_search`/`tool_call` dispatch; no host registry is replaced. This automated
-evidence does not qualify human UI, editor, desktop, ACP/RPC or WSL surfaces.
+`tool_search`/`tool_call` dispatch; no host registry is replaced. OpenCode's
+own startup install of `@opencode-ai/plugin` goes to a loopback registry
+stand-in that refuses it; the bundled adapters still load and complete both
+workflows. This automated evidence does not qualify human UI, editor, desktop, ACP/RPC or WSL surfaces.
 See [running the runtime checks](../CONTRIBUTING.md#released-coding-client-runtimes).
 
 Client checks use a fake local instance and synthetic data, with no real model

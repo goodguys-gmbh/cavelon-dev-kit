@@ -58,6 +58,38 @@ async function run(exe: string, args: string[], env: NodeJS.ProcessEnv, cwd: str
         });
     });
 }
+// A client's own startup log lives in the sandbox and would leave with it.
+// Keep only bounded tails of the most recent ones, without known secrets.
+async function clientLogs(home: string, secrets: string[]) {
+    const found: { file: string; mtime: number }[] = [];
+    const walk = async (dir: string, depth: number) => {
+        if (depth > 6 || found.length >= 200)
+            return;
+        for (const item of await fs.readdir(dir, { withFileTypes: true }).catch(() => [])) {
+            const file = path.join(dir, item.name);
+            if (item.isDirectory() && item.name !== 'node_modules')
+                await walk(file, depth + 1);
+            else if (item.isFile() && item.name.endsWith('.log'))
+                found.push({ file, mtime: (await fs.stat(file)).mtimeMs });
+        }
+    };
+    await walk(home, 0);
+    return Promise.all(found.sort((a, b) => b.mtime - a.mtime).slice(0, 4).map(async ({ file }) => {
+        const handle = await fs.open(file, 'r');
+        try {
+            const { size } = await handle.stat();
+            const length = Math.min(size, 8000);
+            const { buffer } = await handle.read(Buffer.alloc(length), 0, length, size - length);
+            let tail = buffer.toString('utf8').split(home).join('<sandbox>');
+            for (const secret of secrets)
+                tail = tail.split(secret).join('[redacted]');
+            return { file: path.relative(home, file).split(path.sep).join('/'), size, tail };
+        }
+        finally {
+            await handle.close();
+        }
+    }));
+}
 // Opt-in: the ordinary unit suite neither installs a coding client nor calls a provider.
 it.skipIf(!name || !candidate)('runs two native released-client workflows using only scripted loopback fixtures', async () => {
     await fs.mkdir(output, { recursive: true });
@@ -153,13 +185,30 @@ it.skipIf(!name || !candidate)('runs two native released-client workflows using 
     });
     await new Promise<void>(r => model.listen(0, '127.0.0.1', r));
     const url = `http://127.0.0.1:${(model.address() as any).port}/v1`;
+    // With any plugin configured, OpenCode installs @opencode-ai/plugin into its
+    // config directory from the npm registry and blocks bootstrap until that
+    // install ends. Setup's adapters are bundled, so a loopback registry refuses
+    // at once and the public registry stays out of the bounded run. The opt-in
+    // stall holds requests to check the failure evidence.
+    const stallRegistry = process.env.CAVELON_QUALIFY_FAULT === 'registry-stall';
+    const registryRequests: string[] = [];
+    const registry = http.createServer((req, res) => {
+        registryRequests.push(`${req.method} ${req.url}`.slice(0, 200));
+        if (stallRegistry)
+            return;
+        res.statusCode = 404;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: 'Not found' }));
+    });
+    await new Promise<void>(r => registry.listen(0, '127.0.0.1', r));
     const evidence = path.join(output, name + '-' + process.platform + '-' + process.arch);
-    let phase = 'setup';
+    let phase = 'setup', token = '';
     try {
         const tenant = instance.addTenant('workflow', 'Synthetic workflow');
-        await login(sb, instance.url, instance.addToken({
+        token = instance.addToken({
             kind: 'pat', tenantIds: [tenant], defaultTenant: tenant
-        }));
+        });
+        await login(sb, instance.url, token);
         root = path.join(sb.home, 'multi solution root');
         await fs.mkdir(root);
         await fs.writeFile(path.join(root, 'cavelon.yaml'), `instance: ${instance.url}\ntenant: ${tenant}\n`);
@@ -240,6 +289,10 @@ it.skipIf(!name || !candidate)('runs two native released-client workflows using 
             config.small_model = config.model;
             config.permission = { '*': 'allow' };
             await fs.writeFile(file, JSON.stringify(config));
+            for (const key of Object.keys(env))
+                if (key.toLowerCase().startsWith('npm_config_'))
+                    delete env[key];
+            env.npm_config_registry = `http://127.0.0.1:${(registry.address() as any).port}/`;
             exe = path.join(runtime, 'node_modules/opencode-ai/bin/opencode.exe');
             args = ['run', '--format', 'json', '--model', config.model, 'Synthetic scripted local workflow'];
         }
@@ -324,18 +377,24 @@ it.skipIf(!name || !candidate)('runs two native released-client workflows using 
         expect(values.filter(v => v.kind === 'test' && v.results?.items?.length)).toHaveLength(2);
         expect(JSON.stringify(imports[1]?.body)).toContain('One bounded prompt improvement');
         await fs.writeFile(evidence + '-evidence.json', JSON.stringify({
-            client: name, version: pin.version, candidate, platform: process.platform + '-' + process.arch, standalone_consumer: true, generated_setup: true, multi_solution: true, validate: 2, previews: 2, ordinary_draft_imports: 2, suite_runs: 2, status: 2, traces: 2, bounded_improvement: true, guarded_changes: 0, confirmations: 0, actual_person_ui: false, scripted_loopback_requests: requests.length, real_model_calls: 0, production_actions: 0, completed_at: new Date().toISOString()
+            client: name, version: pin.version, candidate, platform: process.platform + '-' + process.arch, standalone_consumer: true, generated_setup: true, multi_solution: true, validate: 2, previews: 2, ordinary_draft_imports: 2, suite_runs: 2, status: 2, traces: 2, bounded_improvement: true, guarded_changes: 0, confirmations: 0, actual_person_ui: false, scripted_loopback_requests: requests.length, loopback_registry_requests: registryRequests.slice(-20), real_model_calls: 0, production_actions: 0, completed_at: new Date().toISOString()
         }, null, 2));
     }
     catch (error) {
         // A startup timeout previously left only provisioning evidence. Keep
         // bounded progress before cleanup without recording headers or tokens.
         try {
+            const secrets = [token, 'synthetic-fixture-placeholder'].filter(Boolean);
+            const logs = await clientLogs(sb.home, secrets).catch(e => [{ error: String(e).slice(0, 500) }]);
             await fs.writeFile(evidence + '-failure.json', JSON.stringify({
                 client: name, version: pin.version, platform: process.platform + '-' + process.arch,
                 phase, workflow_step: step, provider_requests: requests.length,
                 provider_failure: providerFailure.slice(-2000),
                 instance_calls: instance.state.requests.slice(-100).map(({ method, path }) => ({ method, path })),
+                confirmation_requests: instance.state.requests.filter(r => r.path === '/api/v1/confirmations').length,
+                draft_imports: instance.state.requests.filter(r => r.method === 'POST' && r.path === '/api/v1/agent-graph/import').length,
+                registry_requests: registryRequests.slice(-20),
+                client_logs: logs,
                 error: (error instanceof Error ? error.message : String(error)).slice(-20000),
                 actual_person_ui: false, real_model_calls: 0, production_actions: 0,
             }, null, 2));
@@ -347,6 +406,8 @@ it.skipIf(!name || !candidate)('runs two native released-client workflows using 
     }
     finally {
         await new Promise<void>(r => model.close(() => r()));
+        registry.closeAllConnections();
+        await new Promise<void>(r => registry.close(() => r()));
         await instance.close();
         // Node 22's synchronous directory removal does not retry an initial
         // EBUSY. Await bounded retries while Windows releases native handles.

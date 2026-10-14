@@ -12,6 +12,13 @@ CLI, the skills and the plugin.
 - The Windows installer retries short-lived file-sharing and lock violations
   for up to two seconds per move, including replacement and rollback. Persistent
   locks and other errors still fail; verified identical executables stay in place.
+- The scripted OpenCode runtime check no longer waits on the public npm
+  registry. With the kit's plugin configured, OpenCode 1.18.35 installs
+  `@opencode-ai/plugin` before its first session. A stalled registry reproduces
+  the intermittent Windows startup timeout's signature: no client output,
+  provider or instance calls. A loopback stand-in now refuses that install, and
+  failures keep bounded client log tails and registry requests. Whether this
+  caused the Windows stalls is not yet confirmed.
 
 ## [0.2.6] - 2026-10-14
 
