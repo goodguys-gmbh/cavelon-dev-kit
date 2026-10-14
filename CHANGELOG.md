@@ -7,6 +7,12 @@ CLI, the skills and the plugin.
 
 ## Unreleased
 
+### Fixed
+
+- The Windows installer retries short-lived file-sharing and lock violations
+  for up to two seconds per move, including replacement and rollback. Persistent
+  locks and other errors still fail; verified identical executables stay in place.
+
 ## [0.2.6] - 2026-10-14
 
 ### Fixed
