@@ -19,9 +19,9 @@ Since 0.1.16, setup installs dependency-bundled native adapters for
 exact-change dialog through their client UI. It also writes Qwen Code's native settings and skills.
 Its inspected MCP client does not advertise form elicitation: guarded previews
 return the command for the person's own terminal. See [Qwen Code](install/qwen-code.md#approval).
-Unreleased [Cline](install/cline.md) support uses that same terminal route,
+[Cline](install/cline.md) support uses that same terminal route,
 with native user settings and skills. Cline project init writes skills only;
-run user setup for its MCP server. Unreleased [Kilo](install/kilo.md) setup
+run user setup for its MCP server. [Kilo](install/kilo.md) setup
 installs native server/TUI plugins with a fresh CLI dialog. Its editor and
 headless modes use the person’s own terminal; its effective merged Cavelon
 entry is checked before tool dispatch.
@@ -466,7 +466,7 @@ shows the warning and what it names.
 
 ## Goose interactive forms
 
-Unreleased [Goose](install/goose.md) setup uses native YAML and skills. Goose
+[Goose](install/goose.md) setup uses native YAML and skills. Goose
 CLI 1.53.0 advertises form elicitation and requires a person's fresh answer in
 an interactive session. Plain `goose run` cancels elicitation even when launched
 from a terminal; use an interactive session or the person's own terminal route.
@@ -475,7 +475,7 @@ and ACP host qualification are separate from CLI and file checks.
 
 ### OMP
 
-The unreleased OMP integration uses a separate bundled native extension and
+The OMP integration uses a separate bundled native extension and
 profile. It registers Cavelon tools as essential native tools, and its TUI asks
 the person afresh for each guarded change. Built-in MCP, print and RPC approval
 do not substitute for that dialog. Missing UI returns a command for the person's

@@ -7,6 +7,8 @@ CLI, the skills and the plugin.
 
 ## Unreleased
 
+## [0.2.6] - 2026-10-14
+
 ### Fixed
 
 - MCP approval failures, cancelled forms and missing answers offer the exact
@@ -17,6 +19,12 @@ CLI, the skills and the plugin.
   explicitly publishes `x-cavelon-read-only: true`. Knowledge-base searches on
   those instances no longer ask for a personal confirmation. Unknown POSTs and
   explicit person-only or confirmation requirements keep their existing guards.
+
+### Changed
+
+- Scripted coding-client qualification retains bounded failure diagnostics before
+  sandbox cleanup, including startup timeouts without client output. The
+  intermittent Windows OpenCode startup stall remains under investigation.
 
 ## [0.2.5] - 2026-10-13
 
