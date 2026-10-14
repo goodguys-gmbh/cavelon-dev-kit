@@ -135,6 +135,14 @@ The case's own reason (which knowledge base, which value) is in the output of
 
 ## Database query tools
 
+Test edited package SQL before apply with `cavelon db test-run <slug> --draft
+--value <name>=<value>` (MCP `db_test_run` with `draft: true`). It runs local
+validation, resolves the connection in this tenant and saves no query.
+It needs the Owner's PAT with `database_connectors.manage` or the Admin;
+an API key is refused. Use `db instance` and the connection test's published
+SSH, engine, private-target and redirect evidence to check the actual setup.
+Passwords, keytabs, SSH keys and CA/TLS decisions stay in the Admin.
+
 Test a solution with database query tools against a test database, never the
 customer's live one: the test tenant (`--env test`) has a connection of the
 same name pointing at a test database with known rows, set up by a person in
@@ -202,9 +210,16 @@ the Admin. Then:
   checks the database before any repetition. Query-definition approval and
   `requires_confirmation` before executing a chat write are separate.
 - A direct workflow Tool Call write with confirmation enabled answers
-  `confirmation_unavailable`. For an intended unattended write only, turn
-  that query setting off and retain model-only arguments and trigger
-  identity checks. The shared `max_calls` budget counts across direct nodes,
+  `confirmation_unavailable`. Keep confirmation on for chat. A query without
+  it writes only from a schedule, a webhook with a checked secret header, or
+  Run now, or from a direct Tool Call after the latest approved Approval
+  decision with no later agent stage. A later rejection revokes approval;
+  an agent never uses that exception. Test rejected, bypass and intervening-agent
+  paths for `write_needs_confirmation` and zero writes. Operator test surfaces
+  (Playground/voice, suites, debug runs and dashboard/PAT chat) always dry-run
+  writes; check `surface`, rollback and commit evidence, never infer it from
+  missing fields. Retain model-only arguments and trigger identity checks.
+  The shared `max_calls` budget counts across direct nodes,
   Agent stages, `for_each`, concurrent branches and resume; expect
   `tool_call_limit_reached` on the next call and `refused` run evidence.
   A direct node fails with that code; an Agent receives the tool's refusal.
@@ -312,7 +327,9 @@ the body does the same, but needs the id and a confirm. `cavelon deactivate
 --harness <solution>` takes an active solution out of live traffic again; it
 previews first and is the person's decision: show the preview; over MCP the
 client asks them when you confirm with its token, and from your shell they run
-the confirm command in their own terminal. When every suite passes,
+the confirm command in their own terminal. Do not add a separate chat approval
+before that native dialog; an explicitly enabled YOLO mode still asks for this
+critical change. When every suite passes,
 `cavelon activate --harness <name or slug>` goes through the readiness gate; if the
 token may not activate, a person activates in the Admin. A solution that a
 channel or an active trigger reaches goes live for them at once, so its

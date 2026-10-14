@@ -99,9 +99,13 @@ provider may process what the agent reads, under your agreement with it.
 
 **What the agent may do** is limited by the token. Use a token without **May
 activate** for day-to-day work, so the agent can build and test but a person
-activates. Over MCP, `cavelon` limits it further:
+activates. [Confirmation policy](confirmations.md) separates technical previews
+from personal approval. Routine work inside your request needs no extra chat
+yes; eligible operations can combine preview and execution with an explicitly
+started `--yolo` process. Critical changes keep their personal approval.
+Over MCP, `cavelon` limits it further:
 
-- `apply` imports only with the id of a preview, and `tenant_create`,
+- By default, `apply` imports only with the id of a preview, and `tenant_create`,
   `variables_set` where it replaces another value, `loop_start`,
   `limits_set`, `models_set_limit`, `loop_cancel`, `sandbox_seed`,
   `trigger_identity`, `harness_default`, `activate` of a solution a channel
@@ -110,30 +114,34 @@ activates. Over MCP, `cavelon` limits it further:
   `kb_upload` where it would deactivate documents, and `api` (for any
   operation that is not read-only) change nothing without the
   `confirm_token` their preview returned. The token is a hash of the change the preview showed, the tool,
-  the tenant and the instance, so the agent cannot skip the preview or
-  confirm another change than the one it showed; `confirm: true` is refused.
+  the tenant and the instance, so it binds the confirmation to that request;
+  it is not proof of human consent. `confirm: true` is refused.
   The other changing tools act at once; the
   [table below](#every-changing-command-and-its-guard) lists every changing
   command and its guard.
-- The token only proves that a preview came first: the agent holds it, and
-  could work it out. So a change that reaches live traffic, the whole tenant,
+- A preview token binds the exact change; the agent holds it and could
+  compute it, so it does not prove human consent. A change that reaches live traffic, the whole tenant,
   or cannot be taken back also needs **your own yes**, through a channel the
   agent cannot answer. These are `tenant_create`, `variables_set` where it
   replaces a value, `loop_start` (except for a trigger of a draft solution),
   `limits_set`, `models_set_limit`, `trigger_identity`, `harness_default`,
-  `activate` where it previews, `deactivate`, `api` for any operation that is
-  not read-only, and `apply` where its preview needs a person (it changes the
-  tenant-wide sections, reaches an active solution, deletes, or goes to
-  `env/prod`). When the agent confirms one with its token, `cavelon` asks you
-  in your agent client's own dialog (MCP elicitation: **Make this change**,
-  yes or no) and changes nothing without your yes; no answer within
-  10 minutes is a no (`confirm_declined`). For `apply`, the preview id goes to
+  `activate` where it previews, `deactivate`, `api` outside its known routine
+  operations, and `apply` where its preview needs a person (it changes the
+  tenant-wide sections, reaches an active solution, deletes, goes to
+  `env/prod`, or writes saved database queries). When the agent confirms one
+  with its token, `cavelon` asks you in your agent client's own dialog (MCP elicitation: **Make this change**,
+  yes or no), without first asking for a separate chat yes, and changes
+  nothing without your answer; no answer within 10 minutes is a no (`confirm_declined`). For `apply`, the preview id goes to
   the instance only after your yes. A client that cannot ask you gets a
   preview with `needs_person: "terminal"` and the command you run in your own
   terminal; its token is refused there (`confirm_needs_person`). A draft in a
   test environment stays the agent's fast loop: `apply` of a preview that
   needs no person, `loop_start` of a draft's trigger, `loop_cancel`,
   `sandbox_seed` and `kb_upload` with `replace` confirm with the token alone.
+  Known routine `api` operations also need no personal approval. The agent
+  reads their previews and continues within your requested work; it need not
+  show every routine preview or ask you to confirm it in chat. Token-only
+  operations are not all eligible for YOLO; see its [scope](confirmations.md).
 - Asking you is the kit's responsibility alone. On an instance that publishes
   `confirmations.enforced` in `/api/v1/meta/capabilities`, a personal access
   token's change to an operation its OpenAPI marks `x-cavelon-confirmation`
@@ -144,14 +152,14 @@ activates. Over MCP, `cavelon` limits it further:
   changing or deleting a database query, and imports that create or change
   one) needs a confirmation id bound to exactly that change: its method, path
   and canonical body, for this token and tenant, once, within 10 minutes,
-  audited by the instance. `cavelon` asks the
+  audited by the instance. For a critical change, `cavelon` asks the
   instance for one only after your yes, in your own terminal with `--confirm`
   or in your agent client's dialog, and sends it with exactly that request;
   the same personal access token can issue the id and send the change, so the
-  instance cannot tell whether you answered. The kit keeps asking before
-  every guarded change; the agent must never answer on your behalf or use a
-  previous yes for another change. After your yes the agent performs the
-  change directly, with no extra approval step in the Admin. A change the
+  instance cannot tell whether you answered. The kit asks once for each
+  critical change; the agent must never answer on your behalf or use a
+  previous yes for another critical change. After your yes the agent
+  performs the change directly, with no extra approval step in the Admin. A change the
   instance refuses for lack of it changes nothing: `confirmation_required` or
   `confirmation_invalid` (exit 5, `details.reason` says why, such as
   `expired`). On an instance that does not publish `confirmations` nothing is
@@ -168,11 +176,12 @@ activates. Over MCP, `cavelon` limits it further:
   `"writeOnly": true`: provider keys, passwords, one-time codes), at any depth
   of the body, in nested objects and arrays too (`secret_field_for_a_person`).
   The error names the field, never its value, and points to
-  `cavelon secrets set` or the Admin; the agent can send the rest without the
+  the Admin or a dedicated secret command where allowed; the agent can send the rest without the
   field. A field set to `null`, which clears it, passes. On an instance whose
   OpenAPI marks no field, bodies are checked as before. A secret typed into a
   free-form map, such as a headers or settings object, carries no marker and
-  cannot be detected.
+  cannot be detected. The secret-field check also applies in a person's own
+  terminal, so `cavelon api --body` never sends a published secret value.
 - A tool reads and writes files only inside the solution folder (the folder
   of `cavelon.yaml`, or the one the server started in), following symlinks,
   and never in `cavelon`'s config or cache directory, which hold the stored
@@ -196,14 +205,14 @@ guards as the `api` tool:
   code 5 ("needs a person"); the error says how a person runs it
   (`operation_for_a_person`, `secret_field_for_a_person`).
   `cavelon api describe` shows both marks before anything is tried;
-- an operation that is not read-only prints the request it would send
-  (method, path, query, headers, body, files) and the command you run in your
-  own terminal to send it (`needs_person: "terminal"`), and sends nothing
-  (`sent: false`). The agent cannot send it: `--confirm` without a token exits
-  5, a token of another request exits 4, and even the token the MCP `api`
-  tool returns for this request is refused (`confirm_needs_person`, exit 5).
-  Over MCP, the `api` tool sends it with the preview's token after your yes in
-  the client;
+- a known routine mutation previews the exact request and can be confirmed
+  by the agent with its token, without a chat approval. Eligible mutations
+  combine these technical steps under scoped `--yolo`;
+- a critical or unknown mutation prints the request it would send and the
+  command you run in your own terminal (`needs_person: "terminal"`). The
+  agent cannot send it with a token (`confirm_needs_person`, exit 5). Over
+  MCP, the same request needs your answer in the client's native dialog.
+  A changed request needs a new preview in either mode;
 - the body `@file`, `--file` attachments and `--output` stay inside the
   solution folder, never in `cavelon`'s config or cache directory
   (`path_outside_solution`, `path_in_kit_directory`).
@@ -309,12 +318,15 @@ token's role and ceiling on every request.
 ### Every changing command and its guard
 
 Every command that changes something, on the instance or on your machine, and
-what holds it back. **Preview** means: without `--confirm` the command shows
+what holds it back in default mode. [YOLO](confirmations.md) combines the
+technical steps only for eligible routine operations. **Preview** means:
+without `--confirm` the command shows
 what it would do and changes nothing; with `--confirm` it does it. Under a
 coding agent and over MCP, only the `confirm_token` of that very preview
 confirms (see above). **Your yes** means: over MCP the client asks you before
 the change is made, and from an agent's shell you run the command in your own
-terminal. The agent shows you every preview first.
+terminal. Routine previews can be read and confirmed by the agent within
+your requested work; critical previews are presented in the approval step.
 
 | Command | MCP tool | What it changes | Guard |
 |---|---|---|---|
@@ -325,9 +337,13 @@ terminal. The agent shows you every preview first.
 | `secrets delete` | none | removes a secret's value | a person only, and a preview |
 | `db connections create` | `db_connection_create` | creates a connection without a password | at once; database_connectors.manage; a person sets the password in the Admin |
 | `db connections update` | `db_connection_update` | changes given public connection fields | at once; database_connectors.manage; a password-bearing target move stays in the Admin |
-| `db connections ca` | `db_connection_ca` | uploads a public certificate bundle | at once; database_connectors.manage; private keys and invalid certificates refused before upload |
+| `db connections ca` | `db_connection_ca` | shows the Admin CA step where restricted; older instances may accept public certificates | refuses before reading the file when the instance publishes the person-only restriction; private keys always refused |
 | `db connections delete` | `db_connection_delete` | removes a connection no query uses | preview, always; database_connectors.manage; the instance refuses while queries use it |
-| `loop start` | `loop_start` | starts a run that acts as you and spends budget | preview, always, and your yes, except for a trigger of a draft solution, which an agent confirms with the token |
+| `db queries delete` | `db_query_delete` | removes a saved query and its assignments | preview and your yes; database_connectors.manage; reports removed references |
+| `db queries enable` | `db_query_enable` | enables a saved query | preview and your yes; database_connectors.manage |
+| `db queries disable` | `db_query_disable` | disables a saved query | preview and your yes; database_connectors.manage |
+| `db queries rename` | `db_query_rename` | changes a query's tool slug | preview and your yes; database_connectors.manage; pull follows the change |
+| `loop start` | `loop_start` | starts a run that acts as you and spends budget | preview and your yes, except for a draft trigger, which an agent confirms with the token; YOLO combines the steps only for the originally selected draft solution |
 | `loop cancel` | `loop_cancel` | stops a run and its loops | preview, always |
 | `loop pause`, `loop resume` | `loop_pause`, `loop_resume` | asks a loop to pause at its next safe point, or resumes a paused one | at once |
 | `trigger identity` | `trigger_identity` | the API key a trigger's runs act as | preview, always, and your yes |
@@ -335,17 +351,17 @@ terminal. The agent shows you every preview first.
 | `deactivate` | `deactivate` | takes a solution out of live traffic | preview, always, and your yes; the default route is refused |
 | `harness default` | `harness_default` | which solution the tenant's chat and widget answer with | preview, always, and your yes |
 | `harness new`, `harness clone` | `harness_new`, `harness_clone` | a new draft solution | at once (a draft answers no live traffic) |
-| `apply` | `apply` | imports the package into a solution | preview, always; confirmed with the preview's id, and your yes when the preview changes the tenant-wide sections, reaches an active solution, deletes or goes to `env/prod` |
+| `apply` | `apply` | imports the package into a solution | preview; confirmed with the preview's id, and your yes when the preview changes tenant-wide sections, reaches an active solution, deletes, goes to `env/prod` or writes saved database queries; eligible routine imports combine the steps under YOLO |
 | `kb upload` | `kb_upload` | adds documents to a knowledge base | at once; with `--replace` on an instance that cannot replace a document itself, a preview of what it would deactivate |
 | `test run` | `test_run` | runs test suites, which spends budget | at once |
 | `chat` | `chat` | one turn of a conversation, which spends budget | at once |
 | `limits set` | `limits_set` | a limit of the tenant or the platform | preview, always, and your yes |
 | `models set-limit` | `models_set_limit` | a model endpoint's concurrency limit | preview, always, and your yes |
-| `db test`, `db test-run` | `db_test`, `db_test_run` | a tenant Owner's connection test (stored as the connection's last test), or one run of a saved query with the values given (the rows come back once; the instance keeps counts only) | at once; read-only on the database, and the instance refuses anyone but the tenant Owner |
+| `db test`, `db test-run` | `db_test`, `db_test_run` | a connection test or one saved/unsaved query test; rows return once | at once; writes dry-run and roll back; saved tests need database_connectors.test/manage, drafts need the Owner's managing PAT or the Admin |
 | `sandbox seed` | `sandbox_seed` | replaces a Sandbox's workspace | preview, always |
 | `sandbox validate`, `sandbox refresh` | `sandbox_validate`, `sandbox_refresh` | runs a Sandbox's readiness checks, or accepts a customer VM's workspace as it is now | at once |
 | `artifacts export` | `artifacts_export` | takes files out of an isolated container as a tar archive | at once; never writes over an existing file |
-| `api` | `api` | any operation of the instance | preview and your yes for every operation that is not read-only under a coding agent and over MCP; operations kept for a person are refused |
+| `api` | `api` | any operation of the instance | preview and agent confirmation for known routine mutations; your yes for critical or unknown mutations; eligible routine operations combine the steps under YOLO; operations kept for a person are refused |
 | `use` | `use_tenant` | the tenant your commands act in (over MCP: for the session only) | at once, on your machine |
 | `init`, `pull`, `fmt` | `init`, `pull`, `fmt` | files in the solution folder; `init` may create a draft solution from a shell | at once; `pull` refuses to replace a file that changed and is not committed, unless `--force` |
 | `login`, `logout` | none | the stored token | a person only: the token is read from a terminal or stdin |

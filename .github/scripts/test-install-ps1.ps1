@@ -39,6 +39,8 @@ function Count-InUserPath([string]$Folder) {
 $pathBefore = UserPath
 $env:CAVELON_DOWNLOAD_URL = $Base
 $env:CAVELON_INSTALL_DIR = $dir
+$env:CAVELON_CONFIG_DIR = Join-Path $dir 'test-config'
+$env:CAVELON_NON_INTERACTIVE = '1'
 try {
   Write-Host "== irm | iex, in $shell $($PSVersionTable.PSVersion)"
   $out = Install-Piped
@@ -48,6 +50,21 @@ try {
   Assert ($out -match 'Next: ') 'printed the next step'
   Assert ((Count-InUserPath $dir) -eq 1) 'added the folder to the user PATH once'
   Assert ((Get-Command cavelon).Source -eq $exe) 'this session finds cavelon'
+
+  Write-Host '== explicit MCP mode through piped installer environment and file parameters'
+  $env:CAVELON_UPDATE_AGENTS = '0'
+  $env:CAVELON_MCP_MODE = 'yolo'
+  $out = Install-Piped
+  Assert ($out -match 'MCP startup mode: yolo') 'enabled personal MCP YOLO'
+  $settings = Join-Path $env:CAVELON_CONFIG_DIR 'automation.json'
+  Assert ((Get-Content -Raw $settings | ConvertFrom-Json).mcp_mode -eq 'yolo') 'saved personal mode'
+  Remove-Item Env:CAVELON_MCP_MODE
+  $out = Install-Piped
+  Assert ($out -match 'MCP startup mode: yolo') 'unspecified mode survives update'
+  $code = Install-File @('-SkipAgentUpdate', '-McpMode', 'standard', '-NonInteractive')
+  Assert ($code -eq 0) 'file parameters succeeded'
+  Assert ((Get-Content -Raw $settings | ConvertFrom-Json).mcp_mode -eq 'standard') 'disabled personal mode'
+  Remove-Item Env:CAVELON_UPDATE_AGENTS
 
   Write-Host '== run again while cavelon runs: an update, nothing added twice'
   # In a console of its own, `cavelon mcp` waits for input and keeps its file open.
@@ -91,5 +108,5 @@ try {
   Write-Host "install.ps1 in ${shell}: all checks passed"
 } finally {
   [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true).SetValue('Path', $pathBefore, 'ExpandString')
-  Remove-Item Env:CAVELON_DOWNLOAD_URL, Env:CAVELON_INSTALL_DIR -ErrorAction SilentlyContinue
+  Remove-Item Env:CAVELON_DOWNLOAD_URL, Env:CAVELON_INSTALL_DIR, Env:CAVELON_CONFIG_DIR, Env:CAVELON_NON_INTERACTIVE, Env:CAVELON_UPDATE_AGENTS, Env:CAVELON_MCP_MODE -ErrorAction SilentlyContinue
 }

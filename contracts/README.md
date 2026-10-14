@@ -6,6 +6,19 @@ and the fake server in `cli/test/` serves them.
 
 ## `cavelon/`
 
+On 2026-10-12 the database connector contracts were selectively refreshed
+from an immutable merged instance build, without running an instance.
+Only database operations and their referenced schemas, the connector offer,
+database catalog entries, query package definitions and the two database
+administration pages are taken in. The new draft test-run operation is
+listed in `kit-operations.json`. This covers private targets, SSH, Kerberos,
+listener redirects, compatible engines, optional Db2 and run-surface evidence.
+Connector and credential defaults stay off; older response fields remain
+optional in the kit. Snapshots prove interfaces, not database execution or
+runtime approval enforcement. The instance's confirmation-unavailable hint
+is retained verbatim; where it publishes `write_needs_confirmation`, the
+kit adds current path guidance and preserves the source as `instance_hint`.
+
 On 2026-10-08 the database limits were selectively refreshed from the
 instance's checked-in OpenAPI and published catalog definitions without
 running a live instance: the optional `DatabaseConnectorInstanceResponse.limits`

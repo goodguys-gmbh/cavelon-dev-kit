@@ -7,12 +7,15 @@
 # release, checks it against the release's checksums.txt, and puts it into
 # ~/.local/bin (no root, no Node.js). If that folder is not on your PATH, it
 # adds it once to your shell's startup file and says which. Running it again
-# updates cavelon. It sends nothing anywhere but the downloads.
+# updates cavelon, then offers plugin/skill updates and a personal MCP YOLO mode.
 #
 # Options (after `sh -s --` when piped):
 #   --version X.Y.Z    a given release instead of the latest   (CAVELON_VERSION)
 #   --dir DIR          install into DIR instead of ~/.local/bin (CAVELON_INSTALL_DIR)
 #   --no-modify-path   never change a shell startup file       (CAVELON_NO_MODIFY_PATH=1)
+#   --update-agents / --skip-agent-update  refresh or keep plugins and skills (CAVELON_UPDATE_AGENTS=1/0)
+#   --yolo / --no-yolo  enable or disable YOLO for new MCP sessions (CAVELON_MCP_MODE=yolo/standard)
+#   --non-interactive  skip questions, keep unspecified choices (CAVELON_NON_INTERACTIVE=1)
 # CAVELON_DOWNLOAD_URL names a folder that holds the release's files instead of
 # the GitHub release: a mirror's URL, or a local folder such as the bin folder
 # of the offline bundle.
@@ -29,6 +32,9 @@ fail() {
 version="${CAVELON_VERSION:-}"
 dir="${CAVELON_INSTALL_DIR:-}"
 modify_path=1
+update_agents="${CAVELON_UPDATE_AGENTS:-}"
+mcp_mode="${CAVELON_MCP_MODE:-}"
+non_interactive="${CAVELON_NON_INTERACTIVE:-0}"
 case "${CAVELON_NO_MODIFY_PATH:-}" in
   1 | true | yes) modify_path=0 ;;
   *) ;;
@@ -49,13 +55,21 @@ while [ $# -gt 0 ]; do
       ;;
     --dir=*) dir="${1#--dir=}"; shift ;;
     --no-modify-path) modify_path=0; shift ;;
+    --update-agents) update_agents=1; shift ;;
+    --skip-agent-update) update_agents=0; shift ;;
+    --yolo) mcp_mode=yolo; shift ;;
+    --no-yolo) mcp_mode=standard; shift ;;
+    --non-interactive) non_interactive=1; shift ;;
     -h | --help)
-      sed -n '2,18p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//' || true
+      sed -n '2,21p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//' || true
       exit 0
       ;;
-    *) fail "unknown option $1 (try --version, --dir or --no-modify-path)." ;;
+    *) fail "unknown option $1 (run install.sh --help)." ;;
   esac
 done
+case "$update_agents" in "" | 0 | 1) ;; *) fail "CAVELON_UPDATE_AGENTS must be 1 or 0." ;; esac
+case "$mcp_mode" in "" | standard | yolo) ;; *) fail "CAVELON_MCP_MODE must be standard or yolo." ;; esac
+case "$non_interactive" in 0 | 1) ;; *) fail "CAVELON_NON_INTERACTIVE must be 1 or 0." ;; esac
 
 [ -n "${HOME:-}" ] || fail "HOME is not set."
 [ -n "$dir" ] || dir="$HOME/.local/bin"
@@ -249,7 +263,36 @@ fi
 # --- next ---------------------------------------------------------------------
 
 say ""
-if "$target" commands --json 2>/dev/null | grep -q '"command":"setup"'; then
+if "$target" setup --help 2>/dev/null | grep -q -- '--installer'; then
+  set -- setup --installer
+  case "$update_agents" in 1) set -- "$@" --update ;; 0) set -- "$@" --skip-update ;; esac
+  [ -z "$mcp_mode" ] || set -- "$@" --mcp-mode "$mcp_mode"
+  # curl | sh uses stdin for the script. Questions must read the controlling
+  # terminal; CI and unattended installs never consume or wait on that pipe.
+  if [ "$non_interactive" = 0 ] && [ -t 2 ] && ( : </dev/tty ) 2>/dev/null; then
+    terminal=/dev/tty
+    if [ "$os" = darwin ]; then
+      # Bun cannot poll macOS's /dev/tty alias. The real device works; `tty`
+      # on the alias just returns /dev/tty again, so ask ps for this shell's.
+      terminal=""
+      terminal_name="$(ps -o tty= -p "$$" 2>/dev/null | tr -d '[:space:]')"
+      case "$terminal_name" in
+        "" | *[!a-zA-Z0-9/_-]*) ;;
+        *) [ ! -c "/dev/$terminal_name" ] || terminal="/dev/$terminal_name" ;;
+      esac
+    fi
+    if [ -n "$terminal" ] && ( : <"$terminal" ) 2>/dev/null; then
+      "$target" "$@" <"$terminal" || fail "CLI installed successfully, but agent setup was incomplete. Retry with $target setup --installer."
+    else
+      say "Could not find a usable terminal device. Keeping unspecified setup choices; run $target setup --installer in your terminal to choose them."
+      "$target" "$@" --non-interactive || fail "CLI installed successfully, but agent setup was incomplete. Retry with $target setup --installer."
+    fi
+  else
+    "$target" "$@" --non-interactive || fail "CLI installed successfully, but agent setup was incomplete. Retry with $target setup --installer."
+  fi
+elif [ -n "$update_agents$mcp_mode" ]; then
+  fail "CLI installed successfully, but this older release does not support installer agent updates or the saved MCP mode. Run cavelon setup manually."
+elif "$target" commands --json 2>/dev/null | grep -q '"command":"setup"'; then
   say "Next: cavelon setup"
 else
   say "Next: log in to your Cavelon instance, with its address:"

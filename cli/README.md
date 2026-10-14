@@ -21,6 +21,16 @@ in Windows PowerShell. With Python, `uvx cavelon` runs the same executable from
 PyPI, and `uv tool install cavelon` or `pipx install cavelon` installs it. Then
 `cavelon setup` sets up your coding agents and logs you in.
 
+Running the one-line installer again updates the CLI, then asks separately
+whether to refresh Cavelon plugins/skills and enable YOLO for new MCP sessions.
+Enter at the YOLO question keeps your choice. Restart your agent afterwards;
+it launches the tools with that personal mode automatically. Critical changes
+still require approval. Other package managers: update the CLI, then run
+`cavelon setup --update`. Change just the mode with
+`cavelon setup --mcp-mode yolo --yes` or `--mcp-mode standard --yes`.
+Interactive `setup` and `setup --update` offer the same YOLO choice, so
+Homebrew, npm, uv and pipx users do not need to run the installer script.
+
 Version 0.1.17 adds Cline, Kilo, Goose and OMP to the OpenCode, Pi and Qwen
 Code integrations. Each has native settings and four skills; guarded changes
 use the qualified client dialog or the person’s own terminal:
@@ -167,7 +177,8 @@ Every command takes `--json` (one JSON document on stdout, errors included),
 | `db instance` | read-only | The dialects the instance runs and the addresses it connects to databases from, which a database's firewall lets in. |
 | `db connections` / `db queries [<query>] [--connection]` / `db runs <query>` | read-only | The tenant's database connections (with their CA certificates' expiry), saved queries (one in full with its SQL and parameters) and a query's runs (no values, no rows). |
 | `db test <connection>` | changing | The tenant Owner tests a connection step by step; exit 3 when a step fails. |
-| `db test-run <query> [--value name=value…]` | changing | The tenant Owner runs a saved query once, identity parameters included, and sees what the model would; exit 3 when it fails. |
+| `db test-run <query> [--draft] [--value name=value…]` | changing | Test a saved query or validate and test edited package SQL before apply. Writes dry-run and report rollback evidence; exit 3 when it fails. Drafts need the Owner's managing PAT. |
+| `db queries delete\|enable\|disable\|rename <query> [<new-slug>] [--confirm]` | changing | Preview a saved-query change, then obtain the person's approval. Delete reports removed assignments; pull follows the change. |
 | `loop start <trigger> [--input <json>] [--wait] [--confirm]` | changing | Start a loop through its trigger, as you; without `--confirm`, shows the trigger, its solution and the payload; with it, returns the run and operation ids. |
 | `loop cancel <run> [--confirm]` | changing (destructive) | Stop a trigger run and its loops; without `--confirm`, shows what would stop. |
 | `loop watch <run> [--loop] [--timeout 10m]` | read-only | One line per decided iteration and per state change, then the loop's outcome; returns when it ends or pauses. |

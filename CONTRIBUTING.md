@@ -82,6 +82,9 @@ through the system's credential store against the fake server, `init --agents`
 with the embedded skills, and an MCP handshake), and tests `install.sh` and
 `install.ps1` (Windows PowerShell 5.1 and PowerShell 7) and the Homebrew
 formula against them, served from a local folder: nothing is published.
+The POSIX installer also runs through a pipe in an actual pseudo-terminal on
+Linux and macOS, answering both setup questions in a fresh synthetic profile.
+This checks Bun's terminal input, which in-process prompt mocks cannot cover.
 
 The standalone credential-store comparison uses a synthetic person-login
 environment without coding-agent markers. Agent login refusal is checked
@@ -118,6 +121,11 @@ build. Each fixture isolates personal profiles, bounds the client run at 90
 seconds and cleans up its own process tree. It never supplies a person answer,
 requests an instance confirmation or changes a real tenant.
 
+The native runtime fixture awaits asynchronous sandbox removal with bounded
+retries for brief Windows handle-release races. Node 22's synchronous directory
+removal does not retry an initial `EBUSY`. A persistent lock still fails cleanup;
+client process timeouts and workflow assertions remain unchanged.
+
 For a local Linux x64 run, first build the standalone executable as above, then:
 
 ```bash
@@ -132,6 +140,10 @@ syntax to set the same environment variables. Provision OMP's pinned Bun
 runtime separately. Without `CAVELON_QUALIFY_CLIENT` and `CAVELON_EXECUTABLE`,
 the runtime fixture skips and the ordinary unit suite installs no client.
 Evidence is kept under `.wt/coding-client-runtime/` and uploaded by CI.
+Failures also retain a bounded `*-failure.json` with the failing phase,
+workflow progress, synthetic request counts and error before workspace cleanup.
+This includes startup timeouts with no client output. Request headers and tokens
+are excluded; timeouts, process cleanup and workflow assertions stay unchanged.
 Qwen reviews deferred Cavelon schemas with its native `tool_search` and invokes
 them through `tool_call`; the fixture preserves that released client behavior.
 Native human UI, editor/desktop/ACP/RPC, WSL and customer model/network

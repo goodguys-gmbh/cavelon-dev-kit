@@ -17,6 +17,7 @@ import { harnessClone, harnessDefault, harnessList, harnessNew, tenantCreate, te
 import { kbUpload, testRun, trace } from "./work.js";
 import { dbConnections, dbInstance, dbQueries, dbRuns, dbTest, dbTestRun } from "./db.js";
 import { dbConnectionCa, dbConnectionCreate, dbConnectionDelete, dbConnectionUpdate, dbLoginScript, dbSchema } from "./db-connections.js";
+import { dbQueryDelete, dbQueryEnable, dbQueryDisable, dbQueryRename } from "./db-query-management.js";
 import { secretsDelete, secretsList, secretsSet, variablesDelete, variablesGet, variablesList, variablesSet } from "./values.js";
 import { loopCancel, loopIterations, loopPause, loopResume, loopStart, loopWatch, triggerIdentity } from "./loops.js";
 import {
@@ -58,10 +59,14 @@ const mcp: CommandSpec = {
   description: "Started by the agent's plugin (`cavelon mcp`); it does not return until the agent disconnects.",
   readOnly: false,
   mcpTool: false,
+  options: { env: { type: "string", value: "<name>", description: "Start with env/<name>.yaml's tenant, solution and runtime bindings; --yolo stays bound to this environment." } },
   async run(ctx) {
+    // An explicitly selected environment must exist before opening stdio;
+    // otherwise the launcher waits forever instead of reporting its typo.
+    if (ctx.globals.solutionEnv) await ctx.session();
     const { createMcpServer } = await import("../mcp.js");
     const { StdioServerTransport } = await import("@modelcontextprotocol/sdk/server/stdio.js");
-    const server = createMcpServer(ctx.io, COMMANDS);
+    const server = createMcpServer(ctx.io, COMMANDS, {}, ctx.globals);
     const transport = new StdioServerTransport();
     // The agent ends the session by closing our stdin.
     const closed = new Promise<void>((resolve) => {
@@ -129,6 +134,10 @@ export const COMMANDS: CommandSpec[] = [
   dbLoginScript,
   dbSchema,
   dbQueries,
+  dbQueryDelete,
+  dbQueryEnable,
+  dbQueryDisable,
+  dbQueryRename,
   dbRuns,
   dbTest,
   dbTestRun,

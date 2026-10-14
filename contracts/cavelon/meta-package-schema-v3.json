@@ -606,7 +606,7 @@
       "type": "object"
     },
     "PackageDatabaseConnectionRef": {
-      "description": "The connection a query needs, by name and dialect: nothing that reaches it.\n\nThe target tenant must hold a connection of this name and dialect whose last\ntest passed. Host, database, user, password and CA never travel: a\nsuperadmin sets them up per tenant under Settings → Databases.",
+      "description": "The connection a query needs, by name and dialect: nothing that reaches it.\n\nThe target tenant must hold a connection of this name and dialect whose last\ntest passed. Host, database, user, password and CA never travel: the\ntenant Owner sets them up per tenant under Settings → Databases.",
       "properties": {
         "name": {
           "description": "The name of the target tenant's database connection, as shown under Settings → Databases.",
@@ -619,7 +619,7 @@
           "type": "string"
         },
         "dialect": {
-          "description": "The connection's dialect: postgresql, mysql, mssql or oracle. /meta/capabilities lists under database_connector.dialects the ones this instance runs.",
+          "description": "The connection's dialect: postgresql, mysql, mssql or oracle; db2 only on an instance whose operator enabled it (DATABASE_CONNECTOR_DB2_ENABLED). /meta/capabilities lists under database_connector.dialects the ones this instance runs.",
           "examples": [
             "postgresql"
           ],
@@ -644,7 +644,7 @@
           "description": "The connection the query runs on, by name and dialect."
         },
         "sql_text": {
-          "description": "One read-only statement starting with SELECT or WITH, at most 20,000 characters. Each value is a :name placeholder with a parameter of that name; a literal colon is written \\:. No INSERT, INTO, UPDATE, DELETE, EXEC, locking clause or second statement. Always bound the rows with LIMIT, TOP or FETCH FIRST. On an oracle connection also no PL/SQL (BEGIN, DECLARE, WITH FUNCTION), DBMS_* or UTL_* package or database link (table@link). On an mssql connection it may instead be one stored-procedure call, EXEC [schema].[procedure] @p1 = :p1, @p2 = :p2, every argument a placeholder; the model gets its first result set, and the target's connection needs a login whose last test found no write privileges. With kind write instead exactly one INSERT, UPDATE or DELETE (on mssql also one EXEC of a procedure that writes), an UPDATE or DELETE with a WHERE that uses a :parameter. A parameter with list true stands only as IN (:name) or NOT IN (:name). On oracle a write has no RETURNING.",
+          "description": "One read-only statement starting with SELECT or WITH, at most 20,000 characters. Each value is a :name placeholder with a parameter of that name; a literal colon is written \\:. No INSERT, INTO, UPDATE, DELETE, EXEC, locking clause or second statement. Always bound the rows with LIMIT, TOP or FETCH FIRST. On an oracle connection also no PL/SQL (BEGIN, DECLARE, WITH FUNCTION), DBMS_* or UTL_* package or database link (table@link). On a db2 connection also no compound statement, external table, utility, ADMIN_* routine, DBMS_* or UTL_* module or HTTP* function, and no LOB or XML column in the result (cast it to VARCHAR). On an mssql connection it may instead be one stored-procedure call, EXEC [schema].[procedure] @p1 = :p1, @p2 = :p2, every argument a placeholder; the model gets its first result set, and the target's connection needs a login whose last test found no write privileges. With kind write instead exactly one INSERT, UPDATE or DELETE (on mssql also one EXEC of a procedure that writes), an UPDATE or DELETE with a WHERE that uses a :parameter. A parameter with list true stands only as IN (:name) or NOT IN (:name). On oracle a write has no RETURNING.",
           "examples": [
             "SELECT number, status, shipped_at FROM orders WHERE number = :order_no AND email = :email LIMIT 5"
           ],
@@ -703,7 +703,7 @@
         },
         "requires_confirmation": {
           "default": true,
-          "description": "A write query asks the signed-in person to confirm in the chat before it runs; off only for a query an unattended run calls. Ignored for a read.",
+          "description": "A write query asks the signed-in person to confirm in the chat before it runs. Ignored for a read.",
           "title": "Requires Confirmation",
           "type": "boolean"
         },
@@ -7259,12 +7259,22 @@
               "enum": [
                 "auth_failed",
                 "busy",
+                "confirmation_card_incomplete",
                 "confirmation_unavailable",
+                "engine_not_supported",
                 "identity_required",
                 "invalid_arguments",
                 "invalid_parameter_value",
+                "kerberos_auth_failed",
+                "kerberos_kdc_unreachable",
+                "kerberos_spn_unknown",
                 "permission_denied",
                 "query_failed",
+                "session_limits_not_applied",
+                "ssh_auth_failed",
+                "ssh_forwarding_refused",
+                "ssh_host_key_mismatch",
+                "ssh_unreachable",
                 "target_refused",
                 "timeout",
                 "tls_failed",
@@ -7272,7 +7282,11 @@
                 "tool_call_limit_reached",
                 "unavailable",
                 "unreachable",
+                "write_count_unknown",
+                "write_needs_confirmation",
+                "write_not_rolled_back",
                 "write_outcome_unknown",
+                "write_table_not_transactional",
                 "writes_not_allowed"
               ]
             },

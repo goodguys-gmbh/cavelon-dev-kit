@@ -156,7 +156,7 @@ describe("tenant create", () => {
       expect(refused.body.error).toMatchObject({ code: "confirm_token_required", exit_code: 2 });
       const shown = await mcp.call("tenant_create", { slug: "mcp-co" });
       expect(shown.body).toMatchObject({ created: false, confirm_token: expect.stringMatching(TOKEN) });
-      expect(shown.body.confirm).toMatch(/^Show the person this, then call tenant_create again with the same arguments and confirm: "[0-9a-f]{12}": the client then asks the person/);
+      expect(shown.body.confirm).toMatch(/^Call tenant_create again with the same arguments and confirm: "[0-9a-f]{12}": the client asks the person/);
       expect(posts("/api/v1/tenants")).toHaveLength(0);
       const done = await mcp.call("tenant_create", { slug: "mcp-co", confirm: shown.body.confirm_token });
       expect(mcp.asked).toEqual([expect.stringMatching(/^Create the tenant mcp-co \(mcp-co\) on the platform\.\n/)]);

@@ -381,7 +381,7 @@ describe("db commands", () => {
     expect(explained.json<{ code: string; message: string; hint: string }>()).toMatchObject({
       code: "write_privileges_unacknowledged",
       message: expect.stringContaining("SQL Server"),
-      hint: expect.stringContaining("a superadmin acknowledges"),
+      hint: expect.stringContaining("tenant Owner acknowledges"),
     });
   });
 

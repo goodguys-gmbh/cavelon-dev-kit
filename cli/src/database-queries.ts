@@ -3,6 +3,7 @@ import { readJsonFile } from "./fsutil.js";
 import { statePath, writeState } from "./local-state.js";
 import { locate, type Finding, type PackageOnDisk } from "./package-files.js";
 import { canonical, settledForm } from "./package-format.js";
+import { CITUS_ADMIN_FUNCTIONS } from "./citus-functions.js";
 
 /**
  * Database query tools in a package: a tool whose `tool_type` is
@@ -589,6 +590,37 @@ export function oracleQueryProblem(sql: string, dialect: string | undefined, wri
   return undefined;
 }
 
+/** Match real PostgreSQL calls, leaving literals, aliases, CTE columns and customer schemas alone. */
+export function citusQueryProblem(sql: string, dialect: string | undefined, write: boolean): Problem | undefined {
+  if (dialect !== "postgresql") return undefined;
+  const tokens = sqlTokens(sql, dialect);
+  if (!tokens) return undefined;
+  const code = tokens.filter(t => t.kind !== "comment");
+  if (code.some((t, i) => t.kind === "semicolon" && i !== code.length - 1)) return undefined;
+  if (write ? !isWord(code[0], "INSERT", "UPDATE", "DELETE") : !isWord(code.find(t => !isSymbol(t, "(")), "SELECT", "WITH") || commonReadRefusal(code)) return undefined;
+  const nameOf = (t: Token | undefined) => t?.kind === "word" ? t.text.toLowerCase() : t?.kind === "identifier" && t.text.startsWith('"') ? t.text.slice(1, -1).replaceAll('""', '"').toLowerCase() : undefined;
+  for (let i = 0; i < code.length - 1; i++) {
+    const name = nameOf(code[i]);
+    if (!name || !isSymbol(code[i + 1], "(")) continue;
+    let before = i - 1;
+    let schema: string | undefined;
+    if (isSymbol(code[before], ".")) { schema = nameOf(code[before - 1]); before -= 2; }
+    if (schema !== undefined && schema !== "pg_catalog" && schema !== "citus_internal") continue;
+    if (isWord(code[before], "INTO", "AS")) continue;
+    let depth = 0;
+    let after = i + 1;
+    for (; after < code.length; after++) {
+      if (isSymbol(code[after], "(")) depth++;
+      if (isSymbol(code[after], ")") && --depth === 0) { after++; break; }
+    }
+    if (isWord(code[after], "AS") && (isSymbol(code[after + 1], "(") || isWord(code[after + 1], "MATERIALIZED", "NOT"))) continue;
+    if (schema === "citus_internal" || name.startsWith("run_command_on_") || name.startsWith("citus_internal_") || CITUS_ADMIN_FUNCTIONS.has(name)) {
+      return problem(write ? "write_statement_refused" : "forbidden_keyword", `The SQL may not call ${name}: Citus' administrative functions run commands on other nodes or change the cluster.`, "sql_text");
+    }
+  }
+  return undefined;
+}
+
 // ---------------------------------------------------------------------------
 // Where a list parameter may stand
 // ---------------------------------------------------------------------------
@@ -736,7 +768,7 @@ export function checkQueryTools(disk: PackageOnDisk, schema: PackageSchema, base
         message: `Query tool "${slug}": ${call.message}`,
       });
     }
-    const oracle = typeof query.sql_text === "string" ? oracleQueryProblem(query.sql_text, dialect, write) : undefined;
+    const oracle = typeof query.sql_text === "string" ? oracleQueryProblem(query.sql_text, dialect, write) ?? citusQueryProblem(query.sql_text, dialect, write) : undefined;
     if (oracle) {
       findings.push({
         code: oracle.code,

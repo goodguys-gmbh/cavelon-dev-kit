@@ -76,6 +76,12 @@ export function operations(doc: OpenApiDoc): Operation[] {
       const own = ((raw.parameters as Parameter[] | undefined) ?? []).map((p) => deref(doc, p) as Parameter);
       const byKey = new Map<string, Parameter>();
       for (const p of [...shared, ...own]) byKey.set(`${p.in}:${p.name}`, p);
+      const personOnly = personOnlyOf(raw);
+      const confirmation = confirmationOf(raw);
+      // POST also carries pure searches. Only the instance's explicit effect
+      // contract grants read access; personal/confirmation guards win over it.
+      const readPost = method === "post" && raw["x-cavelon-read-only"] === true &&
+        !personOnly?.marked && !confirmation.confirmation;
       out.push({
         operationId,
         alias: aliasOf(operationId, path, method),
@@ -88,9 +94,9 @@ export function operations(doc: OpenApiDoc): Operation[] {
         parameters: [...byKey.values()],
         requestBody: raw.requestBody ? (deref(doc, raw.requestBody) as Operation["requestBody"]) : undefined,
         responses: (raw.responses as Operation["responses"]) ?? {},
-        readOnly: method === "get" || method === "head" || method === "options",
-        personOnly: personOnlyOf(raw),
-        ...confirmationOf(raw),
+        readOnly: method === "get" || method === "head" || method === "options" || readPost,
+        personOnly,
+        ...confirmation,
       });
     }
   }

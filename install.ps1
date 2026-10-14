@@ -11,7 +11,7 @@ It downloads the standalone executable from the GitHub release, checks it
 against the release's checksums.txt, and puts it into
 %LOCALAPPDATA%\Programs\cavelon (no administrator, no Node.js). If that folder
 is not on your user PATH, it adds it once and says so. Running it again
-updates cavelon. It sends nothing anywhere but the downloads.
+updates cavelon, then offers plugin/skill updates and a personal MCP YOLO mode.
 
 Piped into iex it takes its options from environment variables:
 CAVELON_VERSION, CAVELON_INSTALL_DIR, CAVELON_NO_MODIFY_PATH=1, and
@@ -27,20 +27,38 @@ The folder to install into instead of %LOCALAPPDATA%\Programs\cavelon.
 
 .PARAMETER NoModifyPath
 Never change the user PATH.
+
+.PARAMETER UpdateAgents
+Refresh Cavelon plugins and skills. For irm | iex: CAVELON_UPDATE_AGENTS=1 (0 skips).
+
+.PARAMETER SkipAgentUpdate
+Keep plugins and skills without asking.
+
+.PARAMETER McpMode
+YOLO mode for new MCP sessions: yolo, standard, or keep. For irm | iex: CAVELON_MCP_MODE.
+
+.PARAMETER NonInteractive
+Skip questions and keep unspecified choices. For irm | iex: CAVELON_NON_INTERACTIVE=1.
 #>
 param(
   [string]$Version = $env:CAVELON_VERSION,
   [string]$InstallDir = $env:CAVELON_INSTALL_DIR,
-  [switch]$NoModifyPath = ($env:CAVELON_NO_MODIFY_PATH -in @('1', 'true', 'yes'))
+  [switch]$NoModifyPath = ($env:CAVELON_NO_MODIFY_PATH -in @('1', 'true', 'yes')),
+  [switch]$UpdateAgents = ($env:CAVELON_UPDATE_AGENTS -eq '1'),
+  [switch]$SkipAgentUpdate = ($env:CAVELON_UPDATE_AGENTS -eq '0'),
+  [ValidateSet('keep', 'standard', 'yolo')][string]$McpMode = $(if ($env:CAVELON_MCP_MODE) { $env:CAVELON_MCP_MODE } else { 'keep' }),
+  [switch]$NonInteractive = ($env:CAVELON_NON_INTERACTIVE -eq '1')
 )
 
 # Everything runs in a function, so `irm | iex` leaves no variables behind in
 # the session, and an error never closes the window (no `exit` there).
 function Install-Cavelon {
-  param([string]$Version, [string]$InstallDir, [bool]$NoModifyPath)
+  param([string]$Version, [string]$InstallDir, [bool]$NoModifyPath, [bool]$UpdateAgents, [bool]$SkipAgentUpdate, [string]$McpMode, [bool]$NonInteractive)
 
   $ErrorActionPreference = 'Stop'
   $repository = 'goodguys-gmbh/cavelon-dev-kit'
+  if ($UpdateAgents -and $SkipAgentUpdate) { throw 'Choose UpdateAgents or SkipAgentUpdate, not both.' }
+  if ($env:CAVELON_UPDATE_AGENTS -and $env:CAVELON_UPDATE_AGENTS -notin @('0', '1')) { throw 'CAVELON_UPDATE_AGENTS must be 1 or 0.' }
 
   # Windows PowerShell 5.1 turns a native program's stderr into errors, which
   # 'Stop' would make fatal; what matters is the exit code.
@@ -208,7 +226,21 @@ function Install-Cavelon {
   # --- next -------------------------------------------------------------------
 
   Write-Host ''
-  if ((Invoke-Cavelon $target @('commands', '--json')).Text -match '"command":"setup"') {
+  if ((Invoke-Cavelon $target @('setup', '--help')).Text -match '\-\-installer') {
+    $setupArgs = @('setup', '--installer')
+    if ($UpdateAgents) { $setupArgs += '--update' }
+    if ($SkipAgentUpdate) { $setupArgs += '--skip-update' }
+    if ($McpMode -ne 'keep') { $setupArgs += @('--mcp-mode', $McpMode) }
+    if ($NonInteractive) { $setupArgs += '--non-interactive' }
+    # Preserve the terminal for questions; Invoke-Cavelon captures its streams.
+    $ErrorActionPreference = 'Continue'
+    & $target @setupArgs
+    $setupExit = $LASTEXITCODE
+    $ErrorActionPreference = 'Stop'
+    if ($setupExit -ne 0) { throw "CLI installed successfully, but agent setup was incomplete. Retry with & '$target' setup --installer." }
+  } elseif ($UpdateAgents -or $SkipAgentUpdate -or $McpMode -ne 'keep') {
+    throw 'CLI installed successfully, but this older release does not support installer agent updates or the saved MCP mode. Run cavelon setup manually.'
+  } elseif ((Invoke-Cavelon $target @('commands', '--json')).Text -match '"command":"setup"') {
     Write-Host 'Next: cavelon setup'
   } else {
     Write-Host 'Next: log in to your Cavelon instance, with its address:'
@@ -217,7 +249,7 @@ function Install-Cavelon {
 }
 
 try {
-  Install-Cavelon -Version $Version -InstallDir $InstallDir -NoModifyPath $NoModifyPath.IsPresent
+  Install-Cavelon -Version $Version -InstallDir $InstallDir -NoModifyPath $NoModifyPath.IsPresent -UpdateAgents $UpdateAgents.IsPresent -SkipAgentUpdate $SkipAgentUpdate.IsPresent -McpMode $McpMode -NonInteractive $NonInteractive.IsPresent
 } catch {
   Write-Host "cavelon install: $($_.Exception.Message)" -ForegroundColor Red
   # Run as a file (powershell -File install.ps1), fail with an exit code; piped

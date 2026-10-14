@@ -13,20 +13,21 @@ The section appears only on instances where the connector is switched on.
 | Role | In Settings › Databases |
 |---|---|
 | Owner (and Admin) | Decides whether a connection's write queries may run (**Allow write queries**). Creates, changes and deletes connections and queries; sets and replaces a connection's password; tests connections and sees the database driver's own error message; test-runs saved queries and unsaved drafts; uses the schema explorer. See [Database Connector Setup](/docs/administration/database-connector-setup) |
-| Builder, Observer and the other roles that see tools | Read everything, SQL included, with all fields disabled. A Builder assigns the query tools to agents |
+| Builder and Observer | Read everything, SQL included, with all fields disabled. A Builder assigns the query tools to agents. Operators, Analysts and Members do not see connections and queries |
 | Platform Admin | Reads everything; neither changes nor tests |
-| Superadmin, in Tenant mode | The same as the Owner, except **Allow write queries**, which needs the Owner role in this workspace |
+| Superadmin (Platform Owner), in Tenant mode | The same as the Owner, except **Allow write queries**, which needs the Owner role in this workspace |
 | Tenant API key | With the `admin` scope and no workflow restriction: reads everything, tests connections and test-runs saved queries that bind no visitor identity, for example from CI. Never writes, explores the schema, allows write queries or sets a password, and never test-runs a query filled from the visitor's identity: a person tests those, in the Admin or with a personal access token |
 
-Where you may not change something, the page says **Database connections and queries are set up by the tenant Owner.** The target, the database user and the SQL decide which data leaves your database, so give the Owner role only to people who may decide that. Every change is recorded in the audit log: the Owner's under their own name, a superadmin's as an operator action. Deciding which assistant uses a query is open to Builders too. Your database administrator prepares the database side with the [Database Administrator Checklist](/docs/administration/database-connector-checklist).
+The permission behind each row and the gate of every API route are in the [Database Connector Reference](/docs/reference/database-connector-settings#who-may-do-what). Where you may not change something, the page says **Database connections and queries are set up by the tenant Owner.** The target, the database user and the SQL decide which data leaves your database, so give the Owner role only to people who may decide that. Every change is recorded in the audit log: the Owner's under their own name, a superadmin's as an operator action. Deciding which assistant uses a query is open to Builders too. Your database administrator prepares the database side with the [Database Administrator Checklist](/docs/administration/database-connector-checklist).
 
-The platform operator keeps only what concerns the whole instance: whether the connector is switched on, that connections go only to public addresses with a verified certificate, which private networks your tenant may reach, the outbound addresses your firewall allows, and the instance-wide maxima for statement timeout, rows, result size and pool size.
+The platform operator keeps only what concerns the whole instance: whether the connector is switched on, that connections go only to public addresses with a verified certificate, which private networks your tenant may reach, the outbound addresses your firewall allows, and the instance-wide maxima for statement timeout, rows, result size and pool size, and how many connections and queries your tenant may hold.
 
 ## What you can read
 
-- **Connections**: name, database type, host, port and database, TLS mode, whether it is enabled, and the last connection test. The password is never shown, only the date it was set.
+- **Connections**: name, database type, host, port and database, TLS mode, the sign-in (password or Kerberos with its realm, principal and domain controllers), the SSH bastion and its host key fingerprint, whether it follows listener redirects, whether it is enabled, and the last connection test. A password, keytab or SSH key is never shown, only the date it was set.
 - **Queries**: the tool name, the description the model reads, the SQL, every parameter and who fills it, the limits, and whether it runs without a signed-in person (anonymous visitors and triggers). The list shows the agents that use each query and its runs and errors of the last seven days.
 - **Runs** of each query; see [Read the run evidence](#read-the-run-evidence).
+- **Limits**: how many connections and queries your workspace holds of how many it may hold, such as "3 of 10 connections, 12 of 200 queries". At a limit **New connection** or **New query** is switched off and says why; delete one that is no longer needed, or ask your platform operator to raise the limit. See [Limits per tenant](/docs/concepts/database-connections#limits-per-tenant).
 
 A parameter **filled by the visitor's identity** (user id, external subject or verified email) is set by the platform from the signed-in visitor, never by the model. That is what keeps one visitor from reading another's rows. A visitor who is not signed in gets "please sign in" and no query runs, unless the query is marked **Runs without a signed-in person (anonymous visitors, triggers)** for public data such as stock or opening hours. The email is filled only when it is verified: through the widget's email code or SSO sign-in, which your widget needs turned on under **Audience → Sign-in**. A Chat User created by hand under **Audience** is not verified. [Writing Safe Database Queries](/docs/concepts/writing-safe-database-queries) explains what to look for when you review a query.
 
@@ -45,7 +46,7 @@ The next tool call signs in with the new password: the platform opens new connec
 **Without downtime.** How you avoid a gap depends on the database:
 
 - **MySQL 8.0.14 and later** keep two passwords at once. Set the new one with `ALTER USER 'cavelon_ro'@'…' IDENTIFIED BY '<new>' RETAIN CURRENT PASSWORD;`, replace it here and test, and after about ten minutes drop the old one with `ALTER USER 'cavelon_ro'@'…' DISCARD OLD PASSWORD;`.
-- **PostgreSQL, MariaDB, SQL Server and Oracle** keep one password per user. Change it in the database and replace it here right after. Calls that use an already open connection keep working; only a new connection opened in between fails with `auth_failed`, and the next call after your replacement succeeds.
+- **PostgreSQL, MariaDB, SQL Server and Oracle** keep one password per user, and so does Db2, whose password belongs to the operating-system or LDAP user. Change it there and replace it here right after. Calls that use an already open connection keep working; only a new connection opened in between fails with `auth_failed`, and the next call after your replacement succeeds.
 - **No gap at all** on any database: create a second read-only user with the new password, then change the connection's **User** to it and replace the password right after. Drop the old user about ten minutes later.
 
 **A new server needs the password again.** When you move a connection to another host, port or database type, the stored password is not sent to the new server: the change must carry the new server's password. A new database name or user on the same server keeps it.
@@ -64,17 +65,17 @@ While it is off, a write query's test run and every agent call answer `writes_no
 
 ## Test the connection
 
-**Test connection** runs DNS, network policy, TCP, TLS, login, `SELECT 1`, server version and write privileges, and shows each step's result with its code. A red write-privileges finding means the database user can write: ask your database administrator for a read-only user. The result becomes the connection's last test; a query tool is ready for agents only while its connection is enabled and its last test passed. For a failed step you also see the database driver's own message, with the password and user name removed. What every step and code means is in [Connection test](/docs/troubleshooting/database-connections#connection-test).
+**Test connection** runs DNS, network policy, TCP, TLS, login, `SELECT 1`, server version and write privileges, and shows each step's result with its code. A red write-privileges finding means the database user can write: ask your database administrator for a read-only user. The result becomes the connection's last test; a query tool shows as **ready** only while its connection is enabled and its last test passed. The badge is a setup signal, not a switch: on PostgreSQL, MySQL and Oracle a query that is already assigned still runs after a failed test and fails at the same step. To stop a connection's queries, switch the connection off. For a failed step you also see the database driver's own message, with the password and user name removed. What every step and code means is in [Connection test](/docs/troubleshooting/database-connections#connection-test).
 
 ## Test-run a saved query
 
 A write query's test run is a dry run: the change is rolled back and nothing is saved. The result shows how many rows it would change.
 
-The **Test run** panel of an open query runs it once against the database, read-only and under the same limits as an agent's call:
+The **Test run** panel of an open query runs it once against the database, read-only and under the same limits as an agent's call. A switched-off query runs too, so you can check it before you enable it:
 
 1. Open the query.
 2. Fill one input per parameter. For a parameter filled from the visitor's identity, type the value of the customer whose view you want to check, for example their verified email.
-3. Click **Run test**.
+3. Click **Run test**, or **Run dry run** on a write query.
 
 The panel shows:
 
@@ -94,6 +95,10 @@ The Owner can also write connections and queries from a script or the dev-kit (`
 - Setting or replacing a password (`PUT /api/v1/database-connectors/connections/{id}/password`) works only for a person signed in to the Admin.
 - A connection a token creates has no password. The connection shows **Not set.** and a **Set password** button, its connection test fails at the **Login** step with "No password is set: a person sets it in the Admin under Settings > Databases.", and its queries answer `auth_failed`.
 - A token cannot move a connection that has a password to another host, port or database type, because that change needs the new server's password (`credential_required_for_target_change`). Make that change in the Admin. A connection without a password moves freely.
+- A token cannot switch on **Queries may run although this login can write** (`write_privileges_acknowledged: true`): like allowing writes, that is a person's decision in the Admin, and a token's attempt answers `403` `person_only_operation`. A token may switch it off.
+- A token cannot weaken a connection's TLS: a weaker **TLS mode**, or a new or removed **CA certificate**, is refused with `403` `person_only_operation` and names the field. A stricter TLS mode is fine.
+- A Kerberos connection's keytab is a credential like the password: a token that sends `kerberos_keytab` is refused the same way, and `PUT /api/v1/database-connectors/connections/{id}/kerberos-keytab` works only for a person signed in to the Admin. A token may create a Kerberos connection with its realm, principal and KDCs, and a person then uploads the keytab or sets the password.
+- An SSH tunnel's private key is one too: a token that sends `ssh_private_key` is refused, and `PUT /api/v1/database-connectors/connections/{id}/ssh-key` works only for a person. A token may create a connection with its bastion's host, port, user and fingerprint; a person then sets the key under **Set key**, and the connection shows the line for the bastion's `authorized_keys`. Adding, removing or moving the bastion of a connection that has a password needs that password in the same save, so a token cannot do it.
 
 To finish a connection a token created:
 
@@ -106,9 +111,11 @@ To finish a connection a token created:
 Every run of a query, by an agent or a test run, leaves one evidence row. The query's **Runs** section shows them:
 
 - **Last 7 days**: per day (UTC) the number of runs, how many failed, and their error codes.
-- **Recent runs**: **When**, **Source** (**Agent** or **Test run**), **Outcome** (`ok`, `error`, `timeout`, `refused` or `busy`), **Duration**, **Rows** with a `truncated` mark, and the query's **Version** at the time.
+- **Recent runs**: **When**, **Source** (**Agent**, named with the Playground, a test suite or a Workbench debug run when it came from one, where a write is always a dry run; or **Test run**), **Outcome** (`ok`, `error`, `timeout`, `refused` or `busy`), **Duration**, **Rows** with a `truncated` mark, and the query's **Version** at the time.
 
-The evidence holds no parameter values, no rows and no SQL, so it can be kept and shown without exposing your data. Runs refused before the database was touched (`invalid_arguments`, `identity_required`) leave no row; you find them in the conversation's trace. The evidence is kept for 90 days unless the instance operator set another period, and it outlives a deleted query. An agent's result itself stays in the conversation's trace, like any tool result.
+The API's run list (`GET /api/v1/database-connectors/queries/{id}/runs`) names that surface in `surface`: `playground`, `test_suite` or `workbench_debug`. A write whose rollback kept changes (`write_not_rolled_back`) reads **may be partly kept**, never **dry run**.
+
+The evidence holds no parameter values, no rows and no SQL, so it can be kept and shown without exposing your data. Calls answered before the database was touched (`invalid_arguments`, `identity_required`, `confirmation_unavailable`, `confirmation_card_incomplete`, and a confirmation card that waits for the person) leave no row; you find them in the conversation's trace. A write refused with `write_needs_confirmation` or `tool_call_limit_reached` leaves a **refused** row. The evidence is kept for 90 days unless the instance operator set another period, and it outlives a deleted query. An agent's result itself stays in the conversation's trace, like any tool result.
 
 ## Assign the tools to your agents
 

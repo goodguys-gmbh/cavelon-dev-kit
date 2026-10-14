@@ -10,7 +10,7 @@ import { asCavelonError, CavelonError, ExitCode, usageError } from "./errors.js"
 import type { Io } from "./io.js";
 import { closest } from "./package-references.js";
 import { printingFor, spoken, spokenError, spokenHints } from "./printed.js";
-import type { SessionTenant } from "./session.js";
+import type { GlobalOptions, SessionTenant } from "./session.js";
 import { startSessionUpdateCheck, type SessionUpdateOptions } from "./update-check.js";
 import { KIT_VERSION } from "./version.js";
 
@@ -29,27 +29,19 @@ const INSTRUCTIONS =
   "(or CAVELON_TOKEN). You never see or pass the token. Tools that start work (kb_upload, test_run, " +
   "loop_start, sandbox_seed, artifacts_export) return operation ids at once; read them with operation_status, which returns " +
   `the state at once, or waits up to its timeout (at most ${MCP_MAX_WAIT_MS / 1000} s) when given one, and reports waited_ms, ` +
-  "and follow a loop with loop_iterations. What needs confirmation: apply imports only with confirm set to a preview's id; " +
-  "tenant_create, variables_set where it replaces another value, variables_delete, loop_start, limits_set, models_set_limit, loop_cancel, sandbox_seed, " +
-  "trigger_identity, harness_default, activate of a solution a channel or trigger reaches or with make_default, deactivate, " +
-  "and api for an operation that is not read-only, " +
-  "return what they would do and a confirm_token, and change nothing until called again with the same arguments and " +
-  "confirm set to that token: show the person the preview first. The token confirms exactly the change the preview showed; " +
-  "a different change needs a new preview, and confirm: true is refused. A change that reaches live traffic or the whole tenant, " +
-  "or that cannot be taken back, is the person's to confirm, and the token alone does not make it: its preview says " +
-  "needs_person. With needs_person \"client\", call again with the token and the client asks the person to approve exactly that " +
-  "change; their no, or no answer, changes nothing (confirm_declined). Only after their yes does cavelon ask the instance for " +
-  "confirmation bound to the token, tenant and exact request. The instance does not verify the person's answer: asking them " +
-  "is the kit's responsibility alone. Ask before every guarded change; never answer on the person's behalf or reuse an earlier yes for another change. " +
-  "confirmation_required or confirmation_invalid changed nothing: preview again, never retry " +
-  "on your own. With needs_person \"terminal\" this client cannot ask " +
-  "them: give the person the preview's confirm command, which they run in their own terminal, never in yours. These are " +
-  "harness_default and activate (the default route and a solution something reaches: live traffic), deactivate, tenant_create, " +
-  "variables_set replacing a value (every solution of the tenant reads it), variables_delete, limits_set, models_set_limit, trigger_identity, " +
-  "api for an operation that is not read-only, loop_start unless the trigger's solution is a draft (a run acts as the person " +
-  "and spends budget), and apply where its preview says show_to_person (tenant-wide sections, an active solution, deletions, " +
-  "env/prod, or database_queries.would_write). A draft's apply with no query writes or other person requirement, a draft's loop_start, loop_cancel, sandbox_seed and kb_upload's replace you confirm with the " +
-  "token once the person saw the preview. " +
+  "and follow a loop with loop_iterations. Routine work within the user's request needs no additional chat approval. " +
+  "In standard mode, review previews and confirm the exact token or apply preview id when no needs_person is present. " +
+  "A token binds one change, not a person's answer; confirm: true is refused, and changed input needs a new preview. " +
+  "If YOLO was enabled at startup by --yolo or the person's Cavelon setup preference, eligible routine draft imports, selected draft loop starts and known " +
+  "routine API operations can execute in one call within the original instance, tenant, credential and solution scope. " +
+  "No tool argument or repository setting can enable this mode. A different target falls back to standard confirmation. " +
+  "Critical, shared, live and unknown changes retain needs_person in either mode. With needs_person \"client\", " +
+  "call again with the preview token: the client asks the person once. Do not ask for a separate chat yes before that dialog. " +
+  "Declined or unanswered dialogs change nothing; never supply the person's answer or reuse an earlier yes for another critical change. " +
+  "With needs_person \"terminal\", give the person the exact command to run in their own terminal, never the agent's shell. " +
+  "Instance confirmation ids remain bound to the exact request and are requested only after person approval; routine automation " +
+  "does not manufacture that approval. confirmation_required or confirmation_invalid changed nothing: return to a preview " +
+  "and the required person approval. YOLO never overrides person-only access or customer database-write consent. " +
   "chat sends one message to a solution and returns its answer: the way to try one that is not the default route. " +
   "kb_upload names files that match an active document of the knowledge base; with replace it replaces them, and where the " +
   "instance's upload cannot, it returns what it would deactivate and uploads nothing without its confirm_token. " +
@@ -62,8 +54,7 @@ const INSTRUCTIONS =
   "A tool whose description starts with \"Not for this credential\" is one the instance says this token or key may not use " +
   "in this tenant (whoami lists its permissions, an API key's scopes and the operations a person runs): do not call it to " +
   "find out; tell the person who does it. api_list marks such operations (may_send false) and leaves them out with usable. " +
-  "Run from your shell, cavelon's api command applies the same guards, and sends a changing operation only with --confirm and the token " +
-  "its preview printed. Tools read and write files only " +
+  "Run from your shell, cavelon's api command applies the same policy. Tools read and write files only " +
   "inside the solution folder (the folder of cavelon.yaml, or the one the server started in), never in cavelon's own " +
   "directories. In a repository with several solutions, pass solution_dir to select a folder inside the server's startup workspace. " +
   "Use the same solution_dir for preview, confirmation and follow-up tools; harness selects an instance solution, not its local folder. Never infer a folder from a harness name. " +
@@ -87,7 +78,7 @@ const INSTRUCTIONS =
   "that stays with a person. Use docs_search before guessing, " +
   "and api_list/api_describe/api for anything without its own tool. " +
   "use_tenant chooses the tenant for this MCP session only and never changes the tenant stored for the person; every preview " +
-  "names the instance, the tenant and the mode it acts on (its target): show that to the person with the change. " +
+  "names the instance, tenant and mode it acts on (its target); check these against the requested work. " +
   "The first result of a session may carry a warning that cavelon, the Cavelon plugin or this folder's skills are behind " +
   "the latest release, with the commands that update them: pass it on to the person, who runs them; do not run them yourself.";
 
@@ -174,6 +165,7 @@ export function inputSchema(spec: CommandSpec, commands: readonly CommandSpec[] 
  */
 export function notForThisCredential(spec: CommandSpec, access: CredentialAccess | undefined): string | undefined {
   if (!access) return undefined;
+  if (spec.operationsAreAlternatives && spec.operations?.some(operation => operationAccess(access, operation).allowed !== false)) return undefined;
   for (const operation of spec.operations ?? []) {
     const refused = operationAccess(access, operation);
     if (refused.allowed !== false) continue;
@@ -293,9 +285,11 @@ function clientAsks(server: Server): boolean {
 async function askThroughClient(server: Server, message: string, relatedRequestId: RequestId): Promise<PersonAnswer> {
   try {
     const result = await server.elicitInput({ mode: "form", message, requestedSchema: APPROVAL_SCHEMA }, { timeout: PERSON_WAIT_MS, relatedRequestId });
-    return result.action === "accept" && result.content?.approve === true ? "approved" : "declined";
+    if (result.action === "accept" && result.content?.approve === true) return "approved";
+    if (result.action === "decline" || result.action === "accept" && result.content?.approve === false) return "declined";
+    return result.action === "cancel" ? "unanswered" : "unavailable";
   } catch {
-    return "unanswered";
+    return "unavailable";
   }
 }
 
@@ -304,13 +298,17 @@ function mcpIo(io: Io): Io {
   return { ...io, stdout: { write: () => true, isTTY: false } };
 }
 
-export function createMcpServer(io: Io, commands: CommandSpec[], updates: SessionUpdateOptions = {}): Server {
+export function createMcpServer(io: Io, commands: CommandSpec[], updates: SessionUpdateOptions = {}, startup: Partial<GlobalOptions> = {}): Server {
   const tools = commands.filter((c) => c.mcpTool);
   const byName = new Map(tools.map((c) => [toolName(c)!, c]));
   const server = new Server({ name: "cavelon", version: KIT_VERSION }, { capabilities: { tools: { listChanged: true } }, instructions: mcpInstructions(commands) });
   const notice = startSessionUpdateCheck(io, updates);
   // The tenants use_tenant chose: this server's alone, never the person's stored choice.
   const sessionTenants = new Map<string, SessionTenant>();
+  // Advertised form support can fail at runtime. Later previews in this
+  // connection must offer the working terminal route instead of a broken UI.
+  let clientUiUnavailable = false;
+  const launch = createContext(mcpIo(io), { ...startup, json: true }, "mcp").globals;
 
   /**
    * What the credential may do in this session's tenant, so the tool list
@@ -319,7 +317,7 @@ export function createMcpServer(io: Io, commands: CommandSpec[], updates: Sessio
    */
   async function credentialAccess(): Promise<CredentialAccess | undefined> {
     const read = (async () => {
-      const ctx = createContext(mcpIo(io), { json: true, sessionTenants }, "mcp");
+      const ctx = createContext(mcpIo(io), { ...launch, json: true, sessionTenants }, "mcp");
       const session = await ctx.session();
       if (!session.url || !session.token) return undefined;
       return accessFor(await ctx.client());
@@ -358,21 +356,25 @@ export function createMcpServer(io: Io, commands: CommandSpec[], updates: Sessio
       return fail(usageError(`Missing ${missing.join(", ")}.`));
     }
     const tenant = !ownsTenant(spec) && typeof args.tenant === "string" ? args.tenant : undefined;
-    const solutionEnv = spec.options?.env && typeof args.env === "string" ? args.env : undefined;
+    const solutionEnv = spec.options?.env && typeof args.env === "string" ? args.env : launch.solutionEnv;
     let folder: Awaited<ReturnType<typeof solutionDirectory>>;
     try {
       folder = await solutionDirectory(io, args.solution_dir);
     } catch (error) {
       return fail(error);
     }
-    const ctx = createContext(mcpIo(folder.io), { json: true, tenant, solutionEnv, sessionTenants }, "mcp");
-    if (clientAsks(server)) ctx.askPerson = (message) => askThroughClient(server, message, requestId);
+    const ctx = createContext(mcpIo(folder.io), { ...launch, json: true, tenant: tenant ?? launch.tenant, solutionEnv: solutionEnv ?? launch.solutionEnv, sessionTenants }, "mcp");
+    if (!clientUiUnavailable && clientAsks(server)) ctx.askPerson = async (message) => {
+      const answer = await askThroughClient(server, message, requestId);
+      if (answer === "unavailable") clientUiUnavailable = true;
+      return answer;
+    };
     for (const message of renamed) ctx.warn(message);
     try {
       // A command a person runs in a terminal knows nothing of this session's tenant, so the lines printed for one name it.
-      const chosen = tenant ?? (await ctx.session().then((s) => (s.tenantSource === "session" ? s.tenant : undefined), () => undefined));
+      const chosen = tenant ?? launch.tenant ?? (await ctx.session().then((s) => (s.tenantSource === "session" || s.tenantSource?.startsWith("env/") ? s.tenant : undefined), () => undefined));
       // The answer's hints, warnings and a refusal's hint name tool calls, as the commands it prints do.
-      const { result, warnings } = await printingFor({ mode: "mcp", commands, solutionDir: folder.selected, personCwd: folder.directory, ...(spec.storesTarget ? {} : { tenant: chosen, env: solutionEnv }) }, async () => {
+      const { result, warnings } = await printingFor({ mode: "mcp", commands, solutionDir: folder.selected, personCwd: folder.directory, ...(spec.storesTarget ? {} : { instance: launch.instance, tenant: chosen, env: solutionEnv }) }, async () => {
         try {
           const done = await spec.run(ctx, inputFrom(spec, args));
           return { result: { ...done, data: spokenHints(done.data) }, warnings: ctx.warnings.map(spoken) };

@@ -133,10 +133,10 @@ the installer is no longer running, then repeat setup.
 | `path_outside_solution` | 2 | A solution-owned file or directory resolves outside the solution, including a new file below a linked directory. This also guards CLI-generated files, environments and `.cavelon/` state. Move it inside the solution or use an internal link. MCP input/output paths remain confined to the selected solution. |
 | `path_in_kit_directory` | 2 | The path reaches or overlaps `cavelon`'s config or cache directory, which hold the login and contracts. Keep generated solution paths and links separate from those directories, including when the private directories are inside the workspace. |
 | `confirm_needs_person` | 5 | A coding agent confirmed, with its preview's token, a change only a person may confirm (it reaches live traffic or the whole tenant, or cannot be taken back), from its shell or over MCP from a client that cannot ask the person. Nothing was changed. The person runs the command in `details.person_command` in their own terminal (not with `!` in the agent). |
-| `confirmation_required` | 5 | The instance refused a personal access token's change it guards (`x-cavelon-confirmation`) without an id bound to the token, tenant and exact request. Nothing was changed. `cavelon` asks for the id only after the person approved: in their own terminal with `--confirm`, or in the MCP client's dialog. Asking the person is the kit's job; the instance does not verify their answer. The person confirms it there, or makes the change in the Admin. An older `cavelon` sends no id: update it. |
+| `confirmation_required` | 5 | The instance refused a personal access token's change it guards (`x-cavelon-confirmation`) without an id bound to the token, tenant and exact request. Nothing was changed. `cavelon` asks for the id after the applicable confirmation policy is satisfied; a critical request still needs the person's own-terminal confirmation or MCP dialog. Asking the person is the kit's job; the instance does not verify their answer. The person confirms it there, or makes the change in the Admin. An older `cavelon` sends no id: update it. |
 | `confirmation_invalid` | 5 | The confirmation id the change carried is unknown, expired (it lasts 10 minutes), already used, or names another change, token or tenant (`details.reason`). Nothing was changed. Run the command again: it previews the change, and after the person's yes `cavelon` asks for a new one. |
-| `confirm_declined` | 5 | Over MCP, the agent's client asked the person to approve the change, and they declined or did not answer within 10 minutes. Nothing was changed. Ask the person; with their yes, confirm again with the same token, or they run the command in their own terminal. |
-| `confirm_token_required` | 2 | Over MCP, a tool that confirms a change (`api`, `limits_set`, `harness_default`, …) was called with `confirm: true`. It confirms only with the `confirm_token` its preview returned: call it without `confirm`, show the preview, then call it again with the same arguments and that token. A token of another change returns the new preview with `token_mismatch` and exit code 4. |
+| `confirm_declined` | 5 | Over MCP, the client returned an explicit No. Nothing was changed. Do not retry automatically or ask for another yes in chat. Continue only when the person requests a new attempt, which still needs a fresh native answer or their own-terminal command. A failed, cancelled or unanswered form returns `confirm_needs_person` and the exact command in `details.person_command`, with `details.needs_person: "terminal"`. |
+| `confirm_token_required` | 2 | Over MCP, a tool that confirms a change (`api`, `limits_set`, `harness_default`, …) was called with `confirm: true`. It confirms only with the `confirm_token` its preview returned: call it without `confirm`, read the preview, then call it again with the same arguments and that token. Routine previews need no extra chat approval; critical ones open the native dialog. A token of another change returns the new preview with `token_mismatch` and exit code 4. |
 
 `CAVELON_TOKEN` is used only together with `CAVELON_URL`, and only for that
 instance. If you set `CAVELON_TOKEN` without `CAVELON_URL`, `cavelon` ignores it
@@ -354,6 +354,13 @@ flag only shows the preview. Run the confirm command the preview printed.
 Where the preview says `needs_person: "terminal"` (a change only a person may
 confirm), it prints no token: the person runs the command it names in their
 own terminal, and a token gets `confirm_needs_person`.
+
+**YOLO still returns a preview or needs a person.** Only known eligible routine
+changes combine preview and execution. A critical or unknown change still
+needs your answer; a different target in an MCP process uses normal policy.
+Returning to the original bound scope may use that scope's allowance again.
+`--yolo` belongs to the CLI invocation or MCP launch, not a tool argument or
+`cavelon.yaml`. See [Confirmations and YOLO mode](confirmations.md).
 
 ## Network
 

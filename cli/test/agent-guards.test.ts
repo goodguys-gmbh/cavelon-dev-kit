@@ -188,10 +188,12 @@ describe("cavelon api and the api tool, run by an agent and by a person", () => 
       expect(changes(before)).toEqual([]);
     });
 
-    it("is sent from a person's terminal", async () => {
+    it("is sent from a person's terminal when no secret body value is involved", async () => {
+      server.state.values.set(tenant, { variables: new Map(), secrets: new Map([["smtp_password", { value: "fixture", changed_at: "2026-01-01T00:00:00Z" }]]), declared: { variables: new Map(), secrets: new Map() } });
       const before = server.state.requests.length;
-      expect((await api(setSecret)).code).toBe(0);
-      expect(changes(before)).toEqual([expect.objectContaining({ method: "PUT", path: "/api/v1/secrets/smtp_password" })]);
+      const result = await api(["delete_secret", "name=smtp_password"]);
+      expect(result.code, result.stdout).toBe(0);
+      expect(changes(before)).toEqual([expect.objectContaining({ method: "DELETE", path: "/api/v1/secrets/smtp_password" })]);
     });
   });
 
@@ -249,7 +251,7 @@ describe("cavelon api and the api tool, run by an agent and by a person", () => 
         const token = shown.body.confirm_token as string;
         expect(shown.body).toMatchObject({ sent: false, needs_person: "client", confirm_token: expect.stringMatching(/^[0-9a-f]{12}$/) });
         expect(shown.body.confirm).toBe(
-          `Show the person this, then call api again with the same arguments and confirm: "${token}": the client then asks the person to approve exactly this change, and nothing changes without their yes.`,
+          `Call api again with the same arguments and confirm: "${token}": the client asks the person to approve exactly this change. Do not ask for an additional chat confirmation; nothing changes without the dialog's yes.`,
         );
         expect((await tool(client, { ...args, confirm: "000000000000" })).body).toMatchObject({ sent: false, token_mismatch: true, exit_code: 4 });
         expect(client.asked).toEqual([]);
@@ -336,8 +338,8 @@ describe("cavelon api and the api tool, run by an agent and by a person", () => 
         expect(refused.body.error).toMatchObject({
           code: "secret_field_for_a_person",
           exit_code: 5,
-          message: expect.stringMatching(/^The request to update_model sets "api_key", which the instance marks as a secret value \(x-cavelon-secret\); .*no tool sends it/),
-          hint: expect.stringMatching(/cavelon secrets set <name>.*Admin/),
+          message: expect.stringContaining("cavelon api never sends secret fields"),
+          hint: expect.stringContaining("Admin"),
           details: { fields: ["api_key"] },
         });
         expect(JSON.stringify(refused.body)).not.toContain("sk-agent");
@@ -352,20 +354,20 @@ describe("cavelon api and the api tool, run by an agent and by a person", () => 
       expect(changes(before)).toEqual([expect.objectContaining({ method: "PATCH", body: { display_name: "Llama" } })]);
     });
 
-    it("is refused from an agent's shell and sent from a person's terminal", async () => {
+    it("is refused from both an agent's shell and a person's terminal", async () => {
       mark();
       const before = server.state.requests.length;
       const refused = await api(updateModel({ api_key: "sk-agent" }), AGENT);
       expect(refused.code).toBe(5);
       expect(refused.json<{ error: Record<string, unknown> }>().error).toMatchObject({
         code: "secret_field_for_a_person",
-        message: expect.stringMatching(/cavelon api does not send it when a coding agent runs it, with or without --confirm\.$/),
-        hint: expect.stringMatching(/^A person sets a secret value in their own terminal with `cavelon secrets set <name>`/),
+        message: expect.stringContaining("cavelon api never sends secret fields"),
+        hint: expect.stringContaining("Admin"),
       });
       expect(refused.stdout + refused.stderr).not.toMatch(/CLAUDECODE/);
       expect(changes(before)).toEqual([]);
-      expect((await api(updateModel({ api_key: "sk-person" }))).code).toBe(0);
-      expect(changes(before)).toEqual([expect.objectContaining({ method: "PATCH", body: { api_key: "sk-person" } })]);
+      expect((await api(updateModel({ api_key: "sk-person" }))).code).toBe(5);
+      expect(changes(before)).toEqual([]);
     });
 
     it("is an ordinary field on an instance whose document marks none", async () => {

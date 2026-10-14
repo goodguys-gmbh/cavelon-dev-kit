@@ -125,8 +125,8 @@ export interface Context {
   approved?: { guarded: boolean };
 }
 
-/** A person's answer to a change the client showed them; `unanswered` when no answer came in time or the client failed. */
-export type PersonAnswer = "approved" | "declined" | "unanswered";
+/** A person's answer, or the absence of one; `unavailable` means the client's form request failed. */
+export type PersonAnswer = "approved" | "declined" | "unanswered" | "unavailable";
 
 export interface CommandSpec {
   /** Words, e.g. "tenant create". */
@@ -155,6 +155,8 @@ export interface CommandSpec {
    * the MCP tool's description says so (access.ts).
    */
   operations?: readonly string[];
+  /** Alternative modes: the tool is unavailable only when every listed operation is known to be refused. */
+  operationsAreAlternatives?: boolean;
   /**
    * For a command without a tool: the command whose tool does its job over
    * MCP (`wait` for `watch`), so a line the kit prints for it there names that
@@ -187,6 +189,8 @@ export function ownsTenant(spec: CommandSpec): boolean {
 
 export const GLOBAL_OPTIONS: Record<string, OptionSpec> = {
   json: { type: "boolean", description: "Print one JSON document instead of text." },
+  yolo: { type: "boolean", cliOnly: true, description: "Automatically apply eligible routine changes in this process's selected target; critical changes still need a person." },
+  "no-yolo": { type: "boolean", cliOnly: true, description: "Use standard mode for this process, overriding the personal MCP startup mode." },
   instance: { type: "string", value: "<url>", description: "The instance URL (overrides CAVELON_URL and cavelon.yaml)." },
   tenant: { type: "string", value: "<tenant>", description: "Tenant slug, name or id (overrides CAVELON_TENANT and cavelon.yaml)." },
   help: { type: "boolean", short: "h", description: "Show help for the command." },

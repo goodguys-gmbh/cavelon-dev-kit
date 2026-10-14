@@ -1,6 +1,7 @@
 import { parseArgs, type ParseArgsConfig } from "node:util";
 import { GLOBAL_OPTIONS, optionDescription, optionFlag, renameFormerOptions, type CommandResult, type CommandSpec, type Context, type Input, type OptionSpec } from "./command.js";
 import { agentVariable } from "./agent-env.js";
+import { readMcpMode } from "./automation-settings.js";
 import { createContext, withWarnings } from "./context.js";
 import { CONFIRM_TOKEN } from "./confirm-token.js";
 import { asCavelonError, CavelonError, ExitCode, usageError } from "./errors.js";
@@ -55,8 +56,15 @@ export async function run(argv: string[], io: Io, commands: CommandSpec[] = COMM
       io.stdout.write(commandHelp(spec));
       return ExitCode.ok;
     }
+    if (parsed.options.yolo && parsed.options["no-yolo"]) throw usageError("--yolo and --no-yolo do not go together.");
+    let yolo = parsed.options.yolo === true;
+    if (spec.name === "mcp" && !parsed.options.yolo && !parsed.options["no-yolo"]) {
+      try { yolo = await readMcpMode(io.env) === "yolo"; }
+      catch (error) { io.stderr.write(`warning: ${asCavelonError(error).message} Starting in standard mode.\n`); }
+    }
     ctx = createContext(io, {
       json: parsed.options.json === true,
+      yolo,
       instance: typeof parsed.options.instance === "string" ? parsed.options.instance : undefined,
       tenant: typeof parsed.options.tenant === "string" ? parsed.options.tenant : undefined,
       solutionEnv: spec.options?.env && typeof parsed.options.env === "string" ? parsed.options.env : undefined,

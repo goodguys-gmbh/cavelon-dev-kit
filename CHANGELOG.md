@@ -5,7 +5,84 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 project uses [semantic versioning](https://semver.org/): one version for the
 CLI, the skills and the plugin.
 
-## [Unreleased]
+## Unreleased
+
+## [0.2.6] - 2026-10-14
+
+### Fixed
+
+- MCP approval failures, cancelled forms and missing answers offer the exact
+  own-terminal confirmation command instead of reporting a person's refusal.
+  A failed form request routes later previews on that connection to the terminal;
+  explicit declines still change nothing and are never retried automatically.
+- API discovery and execution recognize pure POST searches when the instance
+  explicitly publishes `x-cavelon-read-only: true`. Knowledge-base searches on
+  those instances no longer ask for a personal confirmation. Unknown POSTs and
+  explicit person-only or confirmation requirements keep their existing guards.
+
+### Changed
+
+- Scripted coding-client qualification retains bounded failure diagnostics before
+  sandbox cleanup, including startup timeouts without client output. The
+  intermittent Windows OpenCode startup stall remains under investigation.
+
+## [0.2.5] - 2026-10-13
+
+### Fixed
+
+- The macOS piped installer reads setup answers from the terminal's actual
+  device, avoiding Bun's `/dev/tty` input hang. If the device cannot be found,
+  installation keeps unspecified choices and explains how to finish setup.
+
+## [0.2.4] - 2026-10-13
+
+### Added
+
+- Database connection commands accept public SSH bastion, Kerberos and listener
+  redirect settings. Instance, test and run output shows published private targets,
+  SSH/engine steps, run surface and redirect evidence, with older-instance fallbacks.
+- `db test-run <slug> --draft` validates and tests package SQL before apply, without
+  saving it. Write tests report dry-run/rollback evidence and never retry an ambiguous outcome.
+- Saved query delete, enable, disable and rename commands preview first and require
+  the person's approval. Delete prints removed assignments; pull follows a rename.
+- Validation warns about Citus administrative calls and visible unconfirmed write
+  paths. Database contract snapshots, errors, documentation and skills cover the
+  instance's current connector behavior, compatible engines and optional Db2 support.
+
+### Fixed
+
+- Generic API calls refuse published secret fields in personal terminals as well
+  as agent sessions. Connection CA changes and weaker TLS direct a token to the
+  Admin where the instance publishes the person-only restriction.
+- Confirmation guidance names approved workflow paths instead of suggesting that
+  turning query confirmation off alone permits an unattended write.
+
+## [0.2.3] - 2026-10-12
+
+### Added
+
+- Installers now offer separate plugin/skill updates and a personal YOLO choice
+  for agent-managed MCP sessions. Updates preserve login and unspecified choices;
+  explicit flags support unattended installs. Restart the agent to apply them.
+- `cavelon setup --update` refreshes agent plugins, owned user skills and the
+  current solution's generated setup. `setup --mcp-mode yolo|standard --yes`
+  changes only the personal MCP startup preference; `--no-yolo` overrides it for
+  one process. Scope binding and critical-change approval remain unchanged.
+
+## [0.2.2] - 2026-10-12
+
+### Added
+
+- Opt-in `--yolo` for a CLI invocation or MCP process automatically previews
+  and executes eligible routine changes within one target scope. Critical
+  changes still require a person's answer; permissions and request binding
+  remain unchanged. See [Confirmations and YOLO mode](docs/confirmations.md).
+
+### Changed
+
+- Routine draft work and known routine generic API changes no longer ask for
+  an extra chat approval. Default mode retains exact-preview confirmation;
+  a critical change uses one native dialog or the person's own terminal.
 
 ## [0.2.1] - 2026-10-09
 

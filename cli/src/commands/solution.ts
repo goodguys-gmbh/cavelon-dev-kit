@@ -37,7 +37,9 @@ import {
   type StoredPreview,
 } from "../local-state.js";
 import { catalogEntry, checkPackage, KIT_CODES, packageVersionOf } from "../package-check.js";
+import { WRITE_PATH_HINT } from "../database-write-paths.js";
 import { applyQueryNotes, connectorOffer, importWritesQueries, NEEDS_SUPERADMIN_CODE, queryBlockedHint, queryChanges, queryTools, readQueryBaseline, rememberQueries, schemaKnowsWrites, type QueryConnection } from "../database-queries.js";
+import { yoloAllows } from "../automation-policy.js";
 import { cliFix, similarCodes } from "../code-hints.js";
 import { KIT_ERROR_CODES } from "../kit-codes.js";
 import { confirmationPointer } from "../change-confirmation.js";
@@ -466,7 +468,7 @@ async function inventoryFor(ctx: Context, project: ProjectConfig, disk: PackageO
   return { inventory, skipped };
 }
 
-async function validatePackage(
+export async function validatePackage(
   ctx: Context,
   project: ProjectConfig,
   offline: boolean,
@@ -951,7 +953,7 @@ function importNeedsAPerson(access: CredentialAccess | undefined): CavelonError 
   });
 }
 
-async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: string, allowStale: boolean) {
+async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: string, allowStale: boolean, automatic = false) {
   const stored = await loadPreview(project.root, previewId);
   const session = await ctx.session();
   if (!stored) {
@@ -995,11 +997,6 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
   // The preview's query writes are guarded even on a draft; only the person's yes permits asking for the instance's nonce.
   const queries = importWritesQueries(stored.preview);
   const guarded = queries || stored.request[INCLUDE_TENANT_WIDE] === true || (stored.request.package.manifest as Record<string, unknown> | undefined)?.scope === "full_config";
-  if (driven && (queries || stored.person_reason !== null)) {
-    const into = stored.harness ? `solution ${stored.harness.slug}` : "the tenant";
-    const reason = stored.person_reason ?? (queries ? QUERY_IMPORT_REASON : "was stored by an older cavelon, which did not record whether it needs a person");
-    await personApproves(ctx, driven, { tool: "apply", what: `Import preview ${stored.preview_id} into ${into}: it ${reason}.`, command: personApplyCommand(stored), guarded });
-  } else if (!driven) ctx.approved = { guarded };
   const acting = await actingTarget(ctx);
   const disk = await readPackage(project.root, project.layout);
   const changed = await filesChangedSince(project, stored, disk);
@@ -1019,6 +1016,12 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
         `The files keep their changes, which the instance does not hold; run \`${cavelonCommand("apply")}\` to preview them.`,
     );
   }
+  // Do not interrupt the person for a preview already known to be stale.
+  if (driven && (queries || stored.person_reason !== null)) {
+    const into = stored.harness ? `solution ${stored.harness.slug}` : "the tenant";
+    const reason = stored.person_reason ?? (queries ? QUERY_IMPORT_REASON : "was stored by an older cavelon, which did not record whether it needs a person");
+    await personApproves(ctx, driven, { tool: "apply", what: `Import preview ${stored.preview_id} into ${into}: it ${reason}.`, command: personApplyCommand(stored), guarded });
+  } else if (!driven && !automatic) ctx.approved = { guarded };
   try {
     const result = await callStable<Record<string, unknown>>(ctx, "POST", "/api/v1/agent-graph/import", "importing packages", {
       body: { ...stored.request, preview_id: stored.preview_id },
@@ -1217,7 +1220,8 @@ export const apply: CommandSpec = {
   name: "apply",
   summary: "Preview the package files against the instance and print a preview id; --confirm <id> imports exactly that preview.",
   description:
-    "Without --confirm nothing is imported: the preview shows what changes, which active solutions it reaches, what the target\n" +
+    "Without --confirm, shows a preview. With --yolo, an eligible routine draft is previewed and imported in one call.\n" +
+    "The preview shows what changes, which active solutions it reaches, what the target\n" +
     "still needs (secrets and variables with the command that sets each, grants, runtime bindings, trigger identities), loop\n" +
     "budgets and ignored sections, and is stored in .cavelon/. A preview never creates the solution: one the env file names\n" +
     "that is not on the instance yet gets the `cavelon harness new` command that creates it as a draft. A person sets the\n" +
@@ -1455,6 +1459,20 @@ export const apply: CommandSpec = {
       const expired = (await listPreviews(project.root, ctx.io.now())).filter((old) => old.expired);
       await retirePreviews(project.root, expired.map((old) => ({ preview_id: old.preview_id, reason: "expired" as const, at })));
     }
+    // The preview must positively describe the scope. Older/partial previews
+    // remain a review step even when they have no known person-only reason.
+    const queryEffectsKnown = !queryTools(disk.package).length ||
+      Array.isArray((preview.database_queries as { would_write?: unknown } | undefined)?.would_write);
+    if (preview.preview_id && !reason && !refusal && harness?.status === "draft" &&
+        scope === "agent_graph" && queryEffectsKnown && preview.summary && Array.isArray(preview.impact?.active_harnesses) &&
+        await yoloAllows(ctx, harness)) {
+      const applied = await confirmPreview(ctx, project, preview.preview_id, false, true);
+      return {
+        ...applied,
+        data: { ...applied.data, approval: { source: "yolo", reason: "routine draft import" } },
+        text: `YOLO: validated and previewed the routine draft change.\n${applied.text}`,
+      };
+    }
     data.show_to_person = Boolean(reason || refusal);
     // An agent may not confirm what the person has to see: the client asks them, or they confirm in their own terminal.
     const driven = drivenByAgent(ctx);
@@ -1652,8 +1670,9 @@ export const explain: CommandSpec = {
     // The instance's fix may name an API route; the command that does the same is easier to follow.
     const fix = cliFix(entry);
     const cli = entry.kind === "cli" || !fix ? undefined : spoken(fix);
-    const hint = entry.hint ? spoken(entry.hint) : entry.hint;
-    const data = { ...entry, hint, ...(entry.area === KNOWLEDGE_OUTCOME_AREA ? { kind: "knowledge_outcome" } : {}), docs, ...(cli ? { cli_fix: cli } : {}), ...(kitHint ? { kit_hint: kitHint } : {}), ...(read.length ? { read } : {}) };
+    const writeAdvice = entry.code === "confirmation_unavailable" && catalog?.api_error_codes?.some(e => e.code === "write_needs_confirmation");
+    const hint = writeAdvice ? WRITE_PATH_HINT : entry.hint ? spoken(entry.hint) : entry.hint;
+    const data = { ...entry, hint, ...(writeAdvice ? { instance_hint: entry.hint } : {}), ...(entry.area === KNOWLEDGE_OUTCOME_AREA ? { kind: "knowledge_outcome" } : {}), docs, ...(cli ? { cli_fix: cli } : {}), ...(kitHint ? { kit_hint: kitHint } : {}), ...(read.length ? { read } : {}) };
     return {
       data,
       text: keyValues([

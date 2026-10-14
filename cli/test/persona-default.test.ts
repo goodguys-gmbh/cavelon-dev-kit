@@ -255,7 +255,7 @@ describe("the default route", () => {
 
       const shown = await call("harness_default", { solution: "support" });
       expect(shown.body).toMatchObject({ changed: false, default_route: { slug: "default" }, confirm_token: expect.stringMatching(/^[0-9a-f]{12}$/) });
-      expect(shown.body.confirm).toMatch(/^Show the person this, then call harness_default again with the same arguments and confirm: "[0-9a-f]{12}"/);
+      expect(shown.body.confirm).toMatch(/^Call harness_default again with the same arguments and confirm: "[0-9a-f]{12}"/);
       // harness_default's token is not activate's: the default route stays.
       const other = await call("activate", { make_default: true, confirm: shown.body.confirm_token });
       expect(other.body).toMatchObject({ already_active: true, default_route: { is_default: false, token_mismatch: true }, exit_code: 4 });

@@ -156,6 +156,10 @@ describe("cavelon mcp", () => {
         "db_schema",
         "db_instance",
         "db_queries",
+        "db_query_delete",
+        "db_query_disable",
+        "db_query_enable",
+        "db_query_rename",
         "db_runs",
         "db_test",
         "db_test_run",
@@ -222,6 +226,11 @@ describe("cavelon mcp", () => {
       expect(byName[name]!.annotations, name).toMatchObject({ readOnlyHint: false, destructiveHint: false });
       expect(byName[name]!.description, name).toMatch(/changes no setting/);
     }
+    for (const name of ["db_query_delete", "db_query_enable", "db_query_disable", "db_query_rename"]) {
+      expect(byName[name]!.annotations, name).toMatchObject({ readOnlyHint: false, destructiveHint: name === "db_query_delete" });
+      expect((byName[name]!.inputSchema as { properties: Record<string, unknown> }).properties).toHaveProperty("confirm");
+    }
+    expect((byName.db_test_run!.inputSchema as { properties: Record<string, unknown> }).properties.draft).toMatchObject({ type: "boolean" });
     expect(byName.explain!.annotations).toMatchObject({ readOnlyHint: true });
     expect(byName.apply!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true });
     expect(byName.activate!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false });
@@ -275,7 +284,7 @@ describe("cavelon mcp", () => {
     // A limit is the person's: the confirm asks them through the client, which the agent cannot answer.
     expect(shown.needs_person).toBe("client");
     expect(shown.confirm).toBe(
-      `Show the person this, then call limits_set again with the same arguments and confirm: "${shown.confirm_token}": the client then asks the person to approve exactly this change, and nothing changes without their yes.`,
+      `Call limits_set again with the same arguments and confirm: "${shown.confirm_token}": the client asks the person to approve exactly this change. Do not ask for an additional chat confirmation; nothing changes without the dialog's yes.`,
     );
     // true is refused, never taken as yes; a token of another change confirms nothing.
     const bare = await client.callTool({ name: "limits_set", arguments: { key: "agent_max_turns", value: 40, confirm: true } });
@@ -588,11 +597,11 @@ describe("cavelon mcp", () => {
     const api = tools.find((t) => t.name === "api")!;
     expect(Object.keys((api.inputSchema as { properties: object }).properties)).toContain("confirm");
     expect(client.getInstructions()).toMatch(
-      /api for an operation that is not read-only, return what they would do and a confirm_token, and change nothing until called again with the same arguments and confirm set to that token/,
+      /In standard mode, review previews and confirm the exact token or apply preview id when no needs_person is present/,
     );
-    expect(client.getInstructions()).toMatch(/a different change needs a new preview, and confirm: true is refused/);
-    expect(client.getInstructions()).toMatch(/With needs_person "client", call again with the token and the client asks the person to approve exactly that change/);
-    expect(client.getInstructions()).toMatch(/With needs_person "terminal" .*they run in their own terminal, never in yours/);
+    expect(client.getInstructions()).toMatch(/confirm: true is refused, and changed input needs a new preview/);
+    expect(client.getInstructions()).toMatch(/With needs_person "client", call again with the preview token: the client asks the person once/);
+    expect(client.getInstructions()).toMatch(/With needs_person "terminal", give the person the exact command to run in their own terminal, never the agent's shell/);
     expect(client.getInstructions()).toMatch(/api refuses, even with confirm, an operation the instance marks for a person \(x-cavelon-person-only; its reason is in the error\), or on an instance that marks none, one that changes a secret, creates or revokes a credential/);
     const changes = (before: number) => server.state.requests.slice(before).filter((r) => r.method !== "GET");
 

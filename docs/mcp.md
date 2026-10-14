@@ -19,9 +19,9 @@ Since 0.1.16, setup installs dependency-bundled native adapters for
 exact-change dialog through their client UI. It also writes Qwen Code's native settings and skills.
 Its inspected MCP client does not advertise form elicitation: guarded previews
 return the command for the person's own terminal. See [Qwen Code](install/qwen-code.md#approval).
-Unreleased [Cline](install/cline.md) support uses that same terminal route,
+[Cline](install/cline.md) support uses that same terminal route,
 with native user settings and skills. Cline project init writes skills only;
-run user setup for its MCP server. Unreleased [Kilo](install/kilo.md) setup
+run user setup for its MCP server. [Kilo](install/kilo.md) setup
 installs native server/TUI plugins with a fresh CLI dialog. Its editor and
 headless modes use the person’s own terminal; its effective merged Cavelon
 entry is checked before tool dispatch.
@@ -169,6 +169,10 @@ only reads it).
 | `db_runs` | `cavelon db runs` | read-only |
 | `db_test` | `cavelon db test` | changing |
 | `db_test_run` | `cavelon db test-run` | changing |
+| `db_query_delete` | `cavelon db queries delete` | destructive; personal approval |
+| `db_query_enable` | `cavelon db queries enable` | changing; personal approval |
+| `db_query_disable` | `cavelon db queries disable` | changing; personal approval |
+| `db_query_rename` | `cavelon db queries rename` | changing; personal approval |
 | `loop_start` | `cavelon loop start` | changing |
 | `loop_cancel` | `cavelon loop cancel` | destructive |
 | `loop_iterations` | `cavelon loop iterations` | read-only |
@@ -256,10 +260,11 @@ repeat them:
   `timeout`, waits until the operations settle or the timeout passes, at most
   50 seconds (a longer timeout is cut there, with a warning). Its answer says
   `waited_ms`, and `timed_out` is true only when it waited the whole timeout.
-- **What needs `confirm`.** `apply` returns a preview and imports only with
-  `confirm` set to that preview's id. `tenant_create`, `variables_set` where
+- **What needs `confirm`.** By default, `apply` returns a preview and imports
+  only with `confirm` set to that preview's id. `tenant_create`, `variables_set` where
   it replaces another value, `loop_start`, `limits_set`, `models_set_limit`,
   `loop_cancel`, `sandbox_seed`, `trigger_identity`, `harness_default`, `db_connection_delete`,
+  `db_query_delete`, `db_query_enable`, `db_query_disable`, `db_query_rename`,
   `activate` of a solution a channel or an active trigger reaches, whose
   activation takes the default route or whose reach or route effect is
   unknown, or with `make_default`, `deactivate`, and `api`
@@ -274,8 +279,15 @@ repeat them:
   refused (`confirm_token_required`). `kb_upload` with `replace` needs it only
   on an instance whose upload cannot replace a document itself: there it
   returns the documents it would deactivate after the upload, and uploads
-  nothing without its token. The agent shows you every preview first.
-- **What needs your yes.** The token proves only that a preview came first.
+  nothing without its token. The agent reads routine previews and may confirm
+  them within your requested work without an extra chat approval. Starting
+  `cavelon mcp --yolo` combines these steps for eligible routine operations in
+  one target scope; see [Confirmations and YOLO mode](confirmations.md).
+  The installer or `cavelon setup --mcp-mode yolo --yes` can save the same
+  startup choice for agent-managed launches; restart the agent to apply it.
+  `--no-yolo` overrides the preference for one process. It is never an MCP
+  tool argument, and a running session never rereads the preference.
+- **What needs your yes.** A preview token identifies a change, not your consent.
   A change that reaches live traffic, the whole tenant, or cannot be taken
   back also needs your own yes, which the agent cannot give: `tenant_create`,
   `variables_set` where it replaces a value (every solution of the tenant
@@ -285,7 +297,7 @@ repeat them:
   widget answer with), `activate` where it previews (a channel or trigger
   reaches the solution, activation takes the default route, reach or route
   effect is unknown, or `make_default`), `deactivate` (it takes a solution
-  out of live traffic), `api` for any operation that is not read-only, and
+  out of live traffic), `api` outside its known routine operations, and
   `apply` where its preview needs a person: it changes the tenant-wide
   sections, reaches an active solution, deletes (or `mode` `replace`), or goes
   to `env/prod`, or creates or changes a database query
@@ -295,7 +307,8 @@ repeat them:
   - `"client"`: your agent client can ask you (MCP elicitation). When the
     agent calls the tool again with the token (for `apply`, the preview id),
     the client shows you the change, where it goes, and one question, **Make
-    this change**. Yes makes exactly that change; no, or no answer within
+    this change**. The agent does not ask for another yes in chat first.
+    Yes makes exactly that change; no, or no answer within
     10 minutes, changes nothing (`confirm_declined`, exit code 5). For `apply`,
     the preview id goes to the instance only after your yes.
   - `"terminal"`: the client cannot ask you, so the preview's `confirm` is the
@@ -305,13 +318,14 @@ repeat them:
     with the command in `details.person_command`).
 
   Asking you is the kit's responsibility alone. Where the instance publishes
-  `confirmations.enforced`, after your yes, and only then, `cavelon` asks it for a
-  confirmation id for exactly the request it sends (an operation the
+  `confirmations.enforced`, a critical change waits for your yes before
+  `cavelon` asks it for a confirmation id for exactly the request it sends
+  (an operation the
   instance's OpenAPI marks `x-cavelon-confirmation`), and sends it with that
   request. The id is bound to the token, tenant, method, path and canonical
   body, usable once within 10 minutes, and audited. The same personal access
   token issues it and sends the change, so it does not prove you answered.
-  The agent must wait for your answer to each guarded change and never answer
+  The agent must wait for your answer to each critical change and never answer
   on your behalf. After your yes it makes the change directly; there is no
   extra Admin approval step. An `api` preview of such an operation says so in
   `instance_confirmation`. The instance refuses such a change without one
@@ -320,7 +334,7 @@ repeat them:
   changes, and a new preview and your yes get a new one.
 
   `apply` of a preview that needs no person (a draft outside `env/prod`, with
-  no query writes or other person requirement),
+  no query writes or other person requirement), known routine `api` changes,
   `loop_start` of a draft's trigger, `loop_cancel`, `sandbox_seed` and
   `kb_upload` with `replace` confirm with the token alone: the fast loop on a
   draft in a test environment. `apply` with
@@ -363,9 +377,9 @@ repeat them:
   `replace`, or where the instance replaces itself), `test_run`,
   `loop_pause`, `loop_resume`, `sandbox_validate`,
   `sandbox_refresh`, `artifacts_export`, `db_connection_create`,
-  `db_connection_update`, `db_connection_ca` (public certificates only), and the tenant Owner's two database
+  `db_connection_update`, `db_connection_ca` (only older instances that allow token uploads), and the tenant Owner's two database
   checks, `db_test` (a connection test, stored as the connection's last test)
-  and `db_test_run` (one test of a saved query with the values given; writes
+  and `db_test_run` (one test of a saved query, or its validated unsaved package definition with `draft: true`; writes
   are dry runs that roll back, the rows come back once, and the instance
   keeps counts and write evidence only). Never retry an ambiguous write outcome.
   [Security](security.md#every-changing-command-and-its-guard) lists every
@@ -385,10 +399,11 @@ repeat them:
   body that sets a field the instance marks as holding a secret value
   (`"x-cavelon-secret": true`, with `"writeOnly": true`), in nested objects
   and arrays too (`secret_field_for_a_person`). The error names the field and
-  points to `cavelon secrets set` or the Admin; the agent can send the rest
+  points to the Admin or a dedicated secret command where allowed; the agent can send the rest
   without the field. A field set to `null` passes, and an instance whose
   OpenAPI marks no field is checked as before. A secret typed into a free-form
-  map, such as a headers or settings object, cannot be detected.
+  map, such as a headers or settings object, cannot be detected. Personal
+  terminal API calls receive the same secret-field refusal.
 - **The same guards in the agent's shell.** When a coding agent runs
   `cavelon api` in its shell, the rules of the `api` tool hold there too: it
   refuses what the tool refuses, keeps its files in the solution folder, and
@@ -411,8 +426,11 @@ repeat them:
   value and lets you decide; an operator's limit goes to the operator.
 - **Secrets stay with people**, as above. The agent never asks for, reads or
   passes a secret value, and never decides an approval.
-  Connection tools take only public fields and public CA files; a person
-  sets the database password in the Admin. `allows_writes` is output only;
+  Connection tools take only public settings, including SSH and Kerberos.
+  Passwords, SSH private keys, keytabs, CA changes and weaker TLS are Admin
+  actions. The CA tool refuses before reading its file when the instance
+  publishes that restriction; older token-upload behavior remains compatible.
+  `allows_writes` is output only;
   enabling writes stays in the dashboard. `db_schema` uses the instance's
   read-only catalog explorer under `database_connectors.manage`.
   See [Connect a database](connect-a-database.md).
@@ -448,7 +466,7 @@ shows the warning and what it names.
 
 ## Goose interactive forms
 
-Unreleased [Goose](install/goose.md) setup uses native YAML and skills. Goose
+[Goose](install/goose.md) setup uses native YAML and skills. Goose
 CLI 1.53.0 advertises form elicitation and requires a person's fresh answer in
 an interactive session. Plain `goose run` cancels elicitation even when launched
 from a terminal; use an interactive session or the person's own terminal route.
@@ -457,7 +475,7 @@ and ACP host qualification are separate from CLI and file checks.
 
 ### OMP
 
-The unreleased OMP integration uses a separate bundled native extension and
+The OMP integration uses a separate bundled native extension and
 profile. It registers Cavelon tools as essential native tools, and its TUI asks
 the person afresh for each guarded change. Built-in MCP, print and RPC approval
 do not substitute for that dialog. Missing UI returns a command for the person's
