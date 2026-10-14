@@ -47,8 +47,15 @@ Setup and init prefer `cavelon` on PATH; otherwise they use the npm release
 line with platform-aware spawning. For offline use, provision the standalone
 Cavelon executable on PATH **before** setup/init. The native dependencies are
 bundled and require no runtime package fetch. The client and model runtime must
-also be provisioned beforehand. Coding-model and instance execution providers
-are separate settings; Cavelon setup does not install or select them.
+also be provisioned beforehand. OpenCode itself installs `@opencode-ai/plugin`
+into its configuration directory whenever a plugin is configured, and waits for
+that install before it starts a session. If its npm registry refuses at once,
+OpenCode logs the failure and continues; Cavelon's adapters need nothing from
+that install. A registry that accepts the connection without answering held
+OpenCode at startup for the whole 90-second runtime check. In restricted
+networks, point OpenCode's npm configuration at a reachable mirror.
+Coding-model and instance execution providers are separate settings; Cavelon
+setup does not install or select them.
 
 A recorded MCP entry looks like this with the installed executable:
 

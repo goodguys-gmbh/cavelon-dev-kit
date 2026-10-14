@@ -114,8 +114,14 @@ in an empty directory, copy `package-lock.json` to that client's lock fixture,
 then qualify it on all three platforms. Generate without `node_modules` so the
 lock retains every platform's optional native packages. Provisioning needs
 network access to fetch those public clients; the runtime uses only a fake
-loopback instance and scripted loopback provider responses. Goose archives are
-checked against pinned release SHA-256 digests; npm package integrity and the
+loopback instance and scripted loopback provider responses. With a plugin
+configured, OpenCode installs `@opencode-ai/plugin` into its configuration
+directory from the npm registry and waits for that install before it starts a
+session. The kit's adapters are bundled and loaded from their files, so the
+fixture points OpenCode's npm registry at a loopback stand-in that refuses at
+once; OpenCode logs the failed install and continues. This keeps the public
+registry out of the 90-second run; it is not an offline qualification. Goose
+archives are checked against pinned release SHA-256 digests; npm package integrity and the
 installed version and dependency-lock SHA-256 are recorded. OMP uses Bun 1.3.14 after Cavelon's standalone
 build. Each fixture isolates personal profiles, bounds the client run at 90
 seconds and cleans up its own process tree. It never supplies a person answer,
@@ -125,6 +131,13 @@ The native runtime fixture awaits asynchronous sandbox removal with bounded
 retries for brief Windows handle-release races. Node 22's synchronous directory
 removal does not retry an initial `EBUSY`. A persistent lock still fails cleanup;
 client process timeouts and workflow assertions remain unchanged.
+
+A failed run keeps `<client>-<platform>-failure.json` with its phase, workflow
+step, provider requests, instance calls, confirmation and import counts,
+registry requests and bounded tails of the client's own `*.log` files, with the
+synthetic token and placeholder key masked; log file names are relative to the sandbox. To check that
+evidence, `CAVELON_QUALIFY_FAULT=registry-stall` makes the registry stand-in
+hold OpenCode's request: the run must still fail at the 90-second bound.
 
 For a local Linux x64 run, first build the standalone executable as above, then:
 
