@@ -86,8 +86,13 @@ try {
 } finally {
     try {
         if ($installed -or (Test-Path $alias)) {
-            # Before repository acceptance, a local package has no public-source ID to correlate.
-            Invoke-WinGet -Arguments @('uninstall', '--manifest', $ManifestDir, '--scope', 'machine', '--accept-source-agreements', '--disable-interactivity')
+            # Local portable registrations include their source suffix, so their
+            # public package ID cannot be correlated before repository acceptance.
+            $target = @((Get-Item -LiteralPath $alias).Target)[0]
+            if (!$target) { throw 'The installed command alias has no package target.' }
+            $productCode = Split-Path -Leaf (Split-Path -Parent $target)
+            if ($productCode -notlike 'goodguys.Cavelon_*') { throw 'The command alias does not target the expected package.' }
+            Invoke-WinGet -Arguments @('uninstall', '--product-code', $productCode, '--scope', 'machine', '--source', 'winget', '--disable-interactivity')
             if (Test-Path $alias) { throw 'WinGet uninstall left the command alias behind.' }
         }
     } finally {
