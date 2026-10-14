@@ -12,31 +12,36 @@ $shell = if ($PSVersionTable.PSEdition -eq 'Core') { 'pwsh' } else { 'powershell
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 
 if ($Mode -eq 'installer') {
-  $script:holder = $null
-  $script:attempts = 0
-  $attemptFile = Join-Path $CaseDir 'attempts.txt'
-  $readyFile = Join-Path $CaseDir 'lock-ready.txt'
+  $global:CavelonSharingFixture = [pscustomobject]@{
+    Holder = $null
+    Attempts = 0
+    AttemptFile = Join-Path $CaseDir 'attempts.txt'
+    ReadyFile = Join-Path $CaseDir 'lock-ready.txt'
+    Helper = Join-Path $PSScriptRoot 'hold-installer-file.ps1'
+    Scenario = $Scenario
+    Shell = $shell
+  }
   # Intercept only the final move of a verified temporary download. The real
   # cmdlet still performs the move, so Windows supplies the sharing violation.
   function global:Move-Item {
     [CmdletBinding()]
     param([string]$LiteralPath, [string]$Destination, [switch]$Force)
+    $fixture = $global:CavelonSharingFixture
     if ([IO.Path]::GetFileName($LiteralPath) -eq 'cavelon-windows-x64.exe') {
-      $script:attempts++
-      [IO.File]::WriteAllText($attemptFile, [string]$script:attempts)
-      if ($Scenario -eq 'denied') {
+      $fixture.Attempts++
+      [IO.File]::WriteAllText($fixture.AttemptFile, [string]$fixture.Attempts)
+      if ($fixture.Scenario -eq 'denied') {
         throw [UnauthorizedAccessException]::new('Synthetic non-sharing move failure')
       }
-      if ($script:attempts -eq 1) {
-        $hold = if ($Scenario -eq 'transient') { 500 } else { 30000 }
-        $helper = Join-Path $PSScriptRoot 'hold-installer-file.ps1'
-        $script:holder = Start-Process -FilePath $shell -ArgumentList @(
-          '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$helper`"",
-          '-Path', "`"$LiteralPath`"", '-ReadyFile', "`"$readyFile`"", '-Milliseconds', $hold
+      if ($fixture.Attempts -eq 1) {
+        $hold = if ($fixture.Scenario -eq 'transient') { 500 } else { 30000 }
+        $fixture.Holder = Start-Process -FilePath $fixture.Shell -ArgumentList @(
+          '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$($fixture.Helper)`"",
+          '-Path', "`"$LiteralPath`"", '-ReadyFile', "`"$($fixture.ReadyFile)`"", '-Milliseconds', $hold
         ) -PassThru -WindowStyle Hidden
         $deadline = [DateTime]::UtcNow.AddSeconds(10)
-        while (-not (Test-Path -LiteralPath $readyFile)) {
-          if ($script:holder.HasExited -or [DateTime]::UtcNow -ge $deadline) {
+        while (-not (Test-Path -LiteralPath $fixture.ReadyFile)) {
+          if ($fixture.Holder.HasExited -or [DateTime]::UtcNow -ge $deadline) {
             throw 'The owned file-lock fixture did not become ready.'
           }
           Start-Sleep -Milliseconds 20
@@ -63,11 +68,13 @@ if ($Mode -eq 'installer') {
     & (Join-Path $repo 'install.ps1') -Version $Version -InstallDir (Join-Path $CaseDir 'bin') -NoModifyPath -SkipAgentUpdate -NonInteractive
     $installExit = $LASTEXITCODE
   } finally {
-    if ($script:holder -and -not $script:holder.HasExited) {
-      Stop-Process -Id $script:holder.Id -Force
-      $script:holder.WaitForExit()
+    $holder = $global:CavelonSharingFixture.Holder
+    if ($holder -and -not $holder.HasExited) {
+      Stop-Process -Id $holder.Id -Force
+      $holder.WaitForExit()
     }
     Remove-Item Function:\Move-Item -ErrorAction SilentlyContinue
+    Remove-Variable CavelonSharingFixture -Scope Global
   }
   exit $installExit
 }
