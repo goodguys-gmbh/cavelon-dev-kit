@@ -68,6 +68,26 @@ function Install-Cavelon {
     [pscustomobject]@{ Code = $LASTEXITCODE; Text = (@($output) -join "`n").Trim() }
   }
 
+  # A just-executed download can still have a short-lived Windows file handle.
+  # Retry only sharing/lock violations; permissions and persistent locks fail.
+  function Move-CavelonFile([string]$Source, [string]$Destination) {
+    for ($attempt = 0; $attempt -lt 9; $attempt++) {
+      try {
+        Move-Item -LiteralPath $Source -Destination $Destination -Force -ErrorAction Stop
+        return
+      } catch {
+        $sharing = $false
+        $exception = $_.Exception
+        while ($exception) {
+          if (($exception.HResult -band 0xffff) -in @(32, 33)) { $sharing = $true; break }
+          $exception = $exception.InnerException
+        }
+        if (-not $sharing -or $attempt -eq 8) { throw }
+        Start-Sleep -Milliseconds 250
+      }
+    }
+  }
+
   # --- the system -------------------------------------------------------------
 
   if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
@@ -161,14 +181,14 @@ function Install-Cavelon {
       $identical = (Get-FileHash -Algorithm SHA256 -LiteralPath $target).Hash -eq $actual
       if (-not $identical) {
         # Keep the previous executable for rollback if the new one cannot be written.
-        Move-Item -LiteralPath $target -Destination $old -Force
+        Move-CavelonFile $target $old
       }
     }
     if (-not $identical) {
       try {
-        Move-Item -LiteralPath $download -Destination $target -Force
+        Move-CavelonFile $download $target
       } catch {
-        if (Test-Path -LiteralPath $old) { Move-Item -LiteralPath $old -Destination $target -Force }
+        if (Test-Path -LiteralPath $old) { Move-CavelonFile $old $target }
         throw "Could not write $target`: $($_.Exception.Message)"
       }
       Remove-Item -LiteralPath $old -Force -ErrorAction SilentlyContinue
