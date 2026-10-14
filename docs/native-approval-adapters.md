@@ -5,7 +5,7 @@ part of [#192](https://github.com/goodguys-gmbh/cavelon-dev-kit/issues/192).
 Kit 0.1.16 installs bundled OpenCode/Pi native adapters. Their built-in MCP
 route still uses the person's separate terminal for guarded changes. See the
 [qualification matrix](coding-agent-qualification.md) for current packaged
-client evidence; the prototype record below is historical. Unreleased Kilo
+client evidence; the prototype record below is historical. Kilo
 support adds its own server/TUI entry points and configuration ownership.
 
 ## Decision
