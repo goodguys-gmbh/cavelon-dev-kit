@@ -248,16 +248,63 @@ jobs:
           grep -q "^update with: pip install --upgrade cavelon" version.txt
           "$RUNNER_TEMP/venv/$bin/python" -I -m pip uninstall --yes --quiet cavelon
           test ! -e "$RUNNER_TEMP/venv/$bin/$exe"
-      - name: The winget manifest
+      - name: WinGet validates, installs and uninstalls the portable package
         if: runner.os == 'Windows'
-        shell: pwsh
+        shell: powershell
         run: |
-          node packaging/render.mjs winget
-          $manifest = Get-ChildItem -Recurse -Directory packaging-out/winget/manifests | Where-Object { Get-ChildItem $_.FullName -Filter *.yaml } | Select-Object -First 1
-          Get-ChildItem $manifest.FullName | ForEach-Object { Write-Host "--- $($_.Name)"; Get-Content $_.FullName | Write-Host }
-          if (Get-Command winget -ErrorAction SilentlyContinue) {
-            winget validate --manifest $manifest.FullName
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          } else {
-            Write-Host "winget is not on this runner; the manifest was not validated."
-          }
+          node packaging/render.mjs winget --base-url http://127.0.0.1:8931
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $manifest = "packaging-out/winget/manifests/g/goodguys/Cavelon/$env:VERSION"
+          $sha = (Get-FileHash release/cavelon-windows-x64.exe -Algorithm SHA256).Hash
+          .github/scripts/test-winget.ps1 -ManifestDir $manifest -Version $env:VERSION -Sha256 $sha
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: runner.os == 'Windows' && always()
+        with:
+          name: winget-native-evidence
+          path: ${{ runner.temp }}/cavelon-winget-*/evidence.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  # Qualify the exact public manifest independently of the candidate build above.
+  # This also gives first submissions a native HTTPS install check before review.
+  winget-published:
+    name: published WinGet package
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Render and qualify the latest published release
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = (& gh release view --repo goodguys-gmbh/cavelon-dev-kit --json tagName --jq .tagName).Trim()
+          if ($LASTEXITCODE -ne 0 -or $tag -notmatch '^v(\d+\.\d+\.\d+)$') { throw 'Expected a published stable release.' }
+          $version = $Matches[1]
+          $root = $PWD.Path
+          $scratch = Join-Path $env:RUNNER_TEMP 'winget-published'
+          New-Item -ItemType Directory (Join-Path $scratch 'cli'), (Join-Path $scratch 'release') | Out-Null
+          @{ version = $version } | ConvertTo-Json | Set-Content (Join-Path $scratch 'cli/package.json') -Encoding ASCII
+          gh release download $tag --repo goodguys-gmbh/cavelon-dev-kit --pattern checksums.txt --pattern cavelon-windows-x64.exe --dir (Join-Path $scratch 'release')
+          if ($LASTEXITCODE -ne 0) { throw 'Published release download failed.' }
+          Push-Location $scratch
+          try {
+            $sha = (Get-FileHash release/cavelon-windows-x64.exe -Algorithm SHA256).Hash
+            $checksum = Get-Content release/checksums.txt | Where-Object { $_ -match '^([a-fA-F0-9]{64})\s+\*?cavelon-windows-x64\.exe$' }
+            if (!$checksum -or $sha -ne ($checksum -split '\s+')[0]) { throw 'Published executable checksum mismatch.' }
+            node (Join-Path $root 'packaging/render.mjs') winget
+            if ($LASTEXITCODE -ne 0) { throw 'Published manifest render failed.' }
+            & (Join-Path $root '.github/scripts/test-winget.ps1') -ManifestDir "packaging-out/winget/manifests/g/goodguys/Cavelon/$version" -Version $version -Sha256 $sha
+          } finally { Pop-Location }
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: winget-published-qualification
+          path: |
+            ${{ runner.temp }}/winget-published/packaging-out/winget/
+            ${{ runner.temp }}/cavelon-winget-*/evidence.json
+          if-no-files-found: warn
+          retention-days: 14

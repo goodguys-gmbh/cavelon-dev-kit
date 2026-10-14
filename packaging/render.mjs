@@ -25,7 +25,7 @@ const HOMEPAGE = `https://github.com/${REPOSITORY}`;
 const DESCRIPTION = "CLI and MCP server for building Cavelon solutions with a coding agent";
 // winget's identifier: Publisher.Package. Choose it for good before the first submission.
 const WINGET_ID = "goodguys.Cavelon";
-const WINGET_MANIFEST_VERSION = "1.9.0";
+const WINGET_MANIFEST_VERSION = "1.12.0";
 const OUT = path.resolve("packaging-out");
 
 const { values, positionals } = parseArgs({

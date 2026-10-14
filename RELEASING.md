@@ -247,9 +247,23 @@ distribution" rather than a package that cannot run.
 
 The release workflow writes the manifest for each version
 (`manifests/g/goodguys/Cavelon/<version>/`, `packaging/render.mjs winget`) and
-keeps it as the run's `winget-manifest` artifact. The package identifier is
+validates, installs and uninstalls it on native Windows before keeping it as
+the run's `winget-manifest` artifact. The smoke test checks the installed
+command's exact hash, version and recognized install method. CI runs this
+against its candidate executable served over loopback; release checks use the
+published HTTPS asset. A separate CI job also qualifies the latest published
+release over HTTPS, retaining its exact manifests for upstream submission.
+The package identifier is
 `goodguys.Cavelon`; change `WINGET_ID` in `packaging/render.mjs` before the
 first submission if you want another.
+
+The generator uses schema 1.12.0, recommended by the community repository's
+[PR template](https://github.com/microsoft/winget-pkgs/blob/master/.github/PULL_REQUEST_TEMPLATE.md).
+Portable EXEs do not have the mandatory MSIX signing requirement; signing is
+still useful, but does not have to block the first submission. Microsoft runs
+its own security and installation checks and controls acceptance. Keep winget
+marked pending in user documentation until the upstream manifest is accepted
+and `winget install --id goodguys.Cavelon --exact` works from the public source.
 
 1. Check it on Windows: `winget validate --manifest <folder>`, and
    `winget install --manifest <folder>` after
@@ -263,4 +277,4 @@ first submission if you want another.
 3. For later versions, `wingetcreate update goodguys.Cavelon --version X.Y.Z
    --urls <the release's cavelon-windows-x64.exe URL> --submit` does the same.
    An unsigned executable may be held up by the validation's SmartScreen
-   check; signing (above) avoids that.
+   check; a passing local test does not guarantee repository acceptance.
