@@ -98,6 +98,8 @@ try {
   Assert ((Get-FileHash $exe).Hash -eq $before) 'the installed cavelon is unchanged'
   $env:CAVELON_DOWNLOAD_URL = $Base
 
+  & (Join-Path $PSScriptRoot 'test-install-sharing.ps1') -Base $Base -Version $Version
+
   Write-Host '== NoModifyPath, run as a file with parameters'
   $other = Join-Path $env:RUNNER_TEMP "cavelon-$shell-other"
   $code = Install-File @('-InstallDir', $other, '-NoModifyPath')
