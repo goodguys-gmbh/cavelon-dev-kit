@@ -34,7 +34,15 @@ function Download-Verified([string]$Name, [string]$Digest) {
 }
 
 $winget = Find-WinGet
-if (!$winget) {
+$installedWinGetVersion = [Version]'0.0.0'
+if ($winget) {
+    $reported = (& $winget --version | Out-String).Trim()
+    if ($LASTEXITCODE -eq 0 -and $reported -match '^v?(\d+\.\d+\.\d+)') {
+        $installedWinGetVersion = [Version]$Matches[1]
+    }
+}
+# Hosted runners can carry an older client that rejects the current schema header.
+if ($installedWinGetVersion -lt [Version]'1.29.380') {
     # Official Microsoft release assets, pinned by the GitHub release's digests.
     $bundle = Download-Verified 'Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle' '65dea9c01ce08ee7b763366b27c0e651f97db857c11ca9b9c301826c10092f2e'
     $archive = Download-Verified 'DesktopAppInstaller_Dependencies.zip' 'ba875afe9d190f61218985ac0292a99d1db710bf93e13c68944ca9d89f0d82d1'
