@@ -13,7 +13,9 @@ if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_OS -ne 'Windows' -or !$env:RU
 if ($Sha256 -notmatch '^[a-fA-F0-9]{64}$') { throw 'Expected executable SHA-256 is required.' }
 $scratch = Join-Path $env:RUNNER_TEMP ('cavelon-winget-' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory $scratch | Out-Null
-$alias = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links\cavelon.exe'
+# Hosted Windows jobs run elevated. WinGet intentionally refuses elevated
+# uninstall of user-scope portable packages, so use the matching machine scope.
+$alias = Join-Path $env:ProgramFiles 'WinGet\Links\cavelon.exe'
 if (Test-Path $alias) { throw 'Refusing to replace an existing Cavelon command.' }
 
 function Find-WinGet {
@@ -73,7 +75,7 @@ try {
     Invoke-WinGet -Arguments @('validate', '--manifest', $ManifestDir, '--disable-interactivity')
     Invoke-WinGet -Arguments @('settings', '--enable', 'LocalManifestFiles')
     $policyEnabled = $true
-    Invoke-WinGet -Arguments @('install', '--manifest', $ManifestDir, '--scope', 'user', '--accept-package-agreements', '--accept-source-agreements', '--disable-interactivity')
+    Invoke-WinGet -Arguments @('install', '--manifest', $ManifestDir, '--scope', 'machine', '--accept-package-agreements', '--accept-source-agreements', '--disable-interactivity')
     $installed = $true
     if (!(Test-Path $alias)) { throw 'WinGet did not create the cavelon command alias.' }
     if ((Get-FileHash $alias -Algorithm SHA256).Hash -ne $Sha256) { throw 'The installed command does not match the verified executable.' }
@@ -85,14 +87,14 @@ try {
     try {
         if ($installed -or (Test-Path $alias)) {
             # Before repository acceptance, a local package has no public-source ID to correlate.
-            Invoke-WinGet -Arguments @('uninstall', '--manifest', $ManifestDir, '--scope', 'user', '--source', 'winget', '--disable-interactivity')
+            Invoke-WinGet -Arguments @('uninstall', '--manifest', $ManifestDir, '--scope', 'machine', '--source', 'winget', '--disable-interactivity')
             if (Test-Path $alias) { throw 'WinGet uninstall left the command alias behind.' }
         }
     } finally {
         if ($policyEnabled) { Invoke-WinGet -Arguments @('settings', '--disable', 'LocalManifestFiles') }
     }
 }
-@{ version = $Version; winget_version = $wingetVersion; sha256 = $Sha256.ToLowerInvariant();
+@{ version = $Version; winget_version = $wingetVersion; sha256 = $Sha256.ToLowerInvariant(); install_scope = 'machine';
    manifest_valid = $true; installed_command_hash_matches = $true; install_method_recognized = $true;
    uninstalled = $true; actual_person_ui_qualification = $false } |
     ConvertTo-Json | Set-Content (Join-Path $scratch 'evidence.json') -Encoding UTF8
