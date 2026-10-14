@@ -124,7 +124,7 @@ unspecified choices and prints the direct setup command.
 
 On Windows, an installed executable whose SHA-256 matches the
 verified download stays in place, including while its MCP server is running.
-The next release also retries brief Windows file-sharing and lock violations
+From 0.2.7, the installer also retries brief Windows file-sharing and lock violations
 for up to two seconds per move. Persistent locks still fail, and permission
 errors are returned immediately. A failed replacement restores the previous
 executable when its backup can be moved back.
