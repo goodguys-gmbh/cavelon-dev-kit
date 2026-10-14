@@ -84,7 +84,8 @@ try {
 } finally {
     try {
         if ($installed -or (Test-Path $alias)) {
-            Invoke-WinGet -Arguments @('uninstall', '--id', 'goodguys.Cavelon', '--exact', '--scope', 'user', '--accept-source-agreements', '--disable-interactivity')
+            # Before repository acceptance, a local package has no public-source ID to correlate.
+            Invoke-WinGet -Arguments @('uninstall', '--manifest', $ManifestDir, '--scope', 'user', '--disable-interactivity')
             if (Test-Path $alias) { throw 'WinGet uninstall left the command alias behind.' }
         }
     } finally {
