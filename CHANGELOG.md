@@ -7,6 +7,8 @@ CLI, the skills and the plugin.
 
 ## Unreleased
 
+## [0.2.7] - 2026-10-14
+
 ### Fixed
 
 - The Windows installer retries short-lived file-sharing and lock violations
@@ -19,6 +21,12 @@ CLI, the skills and the plugin.
   provider or instance calls. A loopback stand-in now refuses that install, and
   failures keep bounded client log tails and registry requests. Whether this
   caused the Windows stalls is not yet confirmed.
+
+### Changed
+
+- Updated the MCP SDK, native credential-store dependency and development tooling.
+- CI uses updated pinned GitHub Actions and checks each MCP error-catalog code
+  separately, keeping the same coverage with a bounded deadline per case.
 
 ## [0.2.6] - 2026-10-14
 

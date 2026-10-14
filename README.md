@@ -30,10 +30,11 @@ Solution-owned files and directory links must stay inside the solution, separate
 from the kit's login and cache; see [local file safety](docs/security.md#files-on-your-machine).
 
 > [!NOTE]
-> **Current release: 0.2.6.** Offers the exact terminal confirmation command
-> when an MCP approval form fails, and recognizes read-only POST searches where
-> the instance explicitly publishes that contract. Search recognition requires
-> the corresponding instance update. See [Confirmations and YOLO mode](docs/confirmations.md).
+> **Current release: 0.2.7.** The Windows installer now retries brief file-sharing
+> and lock violations during updates. Coding-client checks also avoid an
+> OpenCode startup dependency-fetch stall and retain bounded failure diagnostics.
+> The original Windows startup report remains under investigation.
+> See the [changelog](CHANGELOG.md) for all changes.
 >
 > **Updating an existing install?** Run the installer below again and answer
 > **yes** to updating Cavelon plugins and skills. At the YOLO question, Enter
