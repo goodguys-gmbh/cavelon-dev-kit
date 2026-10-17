@@ -285,7 +285,8 @@ export const api: CommandSpec = {
     "sends a file outside the solution folder. Secret body fields (x-cavelon-secret) are refused in every mode, including\n" +
     "a person's terminal; enter passwords, keys and keytabs in the Admin. On an\n" +
     "instance that marks no operation, one that changes a secret, creates or revokes a credential or decides an\n" +
-    "approval is refused. A person's own terminal sends at once.\n" +
+    "approval is refused. A person's own terminal sends ordinary requests at once. Releasing held documents needs\n" +
+    "a dashboard person; no kit credential sends either release operation, including with YOLO.\n" +
     "In a solution folder, the persona operations (get_bot_persona, upsert_bot_persona, …) get the folder's solution as\n" +
     "harness_id when none is passed, since without it they reach the tenant's default route.",
   readOnly: false,
