@@ -277,9 +277,9 @@ export interface FakeState {
   tokens: Map<string, TokenInfo>;
   tenants: Array<{ id: string; slug: string; name: string; plan: string; status: string; created_at: string }>;
   harnesses: Array<Record<string, unknown> & { id: string; tenant_id: string; slug: string; name: string }>;
-  kbs: Array<{ id: string; tenant_id: string; name: string }>;
+  kbs: Array<{ id: string; tenant_id: string; name: string; document_processing_config?: Record<string, unknown> | null }>;
   /** Uploaded documents; a replaced one is soft-deleted and no longer listed. */
-  documents: Array<{ id: string; tenant_id: string; kb_id: string; filename: string; size: number; is_active: boolean; deleted: boolean; created_at: string; sha256?: string }>;
+  documents: Array<{ id: string; tenant_id: string; kb_id: string; filename: string; size: number; is_active: boolean; deleted: boolean; created_at: string; sha256?: string; status?: string }>;
   /**
    * Whether an upload reuses an active document of the same content instead of
    * creating one, as the instance's content-hash dedup does; off by default.
@@ -343,6 +343,8 @@ export interface FakeState {
   serveSse: boolean;
   /** Steps a new upload or test-run operation goes through. */
   defaultSteps: OpStatus[];
+  /** State observed after a synthetic upload's conversion; absent emulates older ready documents. */
+  ingestedDocumentStatus?: string;
   /** Replaces top-level keys of the capabilities snapshot; `limits: undefined` makes an instance older than the limits. */
   capsPatch: Record<string, unknown>;
   /** API error codes added to the catalog snapshot, as a newer instance publishes them. */
@@ -1246,6 +1248,42 @@ export async function startFakeServer(): Promise<FakeServer> {
       const items = state.kbs.filter((k) => k.tenant_id === tid && (!search || k.name.toLowerCase().includes(search))).map(kbView);
       return send(res, 200, { items, page_size: 50, has_more: false, next_cursor: null });
     }
+    if (p === "/api/v1/knowledge-bases" && method === "POST") {
+      const request = body.json as { name: string; document_processing_config?: Record<string, unknown> };
+      const kb = { id: randomUUID(), tenant_id: tid, name: request.name, document_processing_config: request.document_processing_config };
+      state.kbs.push(kb);
+      return send(res, 201, kbView(kb));
+    }
+    m = /^\/api\/v1\/knowledge-bases\/([^/]+)$/.exec(p);
+    if (m && (method === "GET" || method === "PATCH")) {
+      const kb = state.kbs.find(k => k.id === m![1] && k.tenant_id === tid);
+      if (!kb) return send(res, 404, { detail: "Knowledge base not found" });
+      if (method === "PATCH") Object.assign(kb, body.json);
+      return send(res, 200, kbView(kb));
+    }
+    m = /^\/api\/v1\/knowledge-bases\/([^/]+)\/documents\/([^/]+)\/(files(?:\/([^/]+))?|download|release)$/.exec(p);
+    if (m) {
+      const document = state.documents.find(d => d.kb_id === m![1] && d.id === m![2] && d.tenant_id === tid && !d.deleted);
+      if (!document) return send(res, 404, { detail: "Document not found" });
+      if (m[3] === "release" && method === "POST") return send(res, 403, { code: "person_only_operation", detail: "A dashboard person must release held documents" });
+      if (method === "GET") {
+        const status = document.status ?? "ready";
+        const files = [
+          { kind: "redacted_pdf", filename: "redacted.pdf", content_type: "application/pdf", agent_readable: true, restricted: false },
+          { kind: "tables_xlsx", filename: "tables.xlsx", content_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", agent_readable: true, restricted: false },
+          { kind: "conversion_report", filename: "report.json", content_type: "application/json", agent_readable: false, restricted: true },
+          { kind: "privacy_vault", filename: "vault.json", content_type: "application/json", agent_readable: false, restricted: true },
+        ].map((f, i) => ({ ...f, id: `${document.id.slice(0, -1)}${i}`, size_bytes: i === 1 ? 6 : 13, created_at: document.created_at }));
+        if (m[3] === "files") return send(res, 200, { document_id: document.id, status, privacy: { document_mode: "pseudonymize", outputs_mode: "anonymize", clean: status !== "held", held: status === "held" }, files });
+        if (status === "held") return send(res, 404, { detail: "Document is held for privacy review" });
+        const file = files.find(f => f.id === m![4]);
+        if (m[3] !== "download" && !file) return send(res, 404, { detail: "File not found" });
+        if (file?.restricted) return send(res, 403, { detail: "Restricted files require a dashboard session" });
+        res.writeHead(200, { "content-type": file?.content_type ?? "application/pdf" });
+        return res.end(file?.kind === "tables_xlsx" ? Buffer.from([0x50, 0x4b, 3, 4, 0, 255]) : "%PDF-redacted");
+      }
+    }
+    if (/^\/api\/v1\/admin\/uploads\/[^/]+\/release$/.test(p) && method === "POST") return send(res, 403, { code: "person_only_operation", detail: "A dashboard person must release held uploads" });
     m = /^\/api\/v1\/knowledge-bases\/([^/]+)\/documents\/upload$/.exec(p);
     if (m && method === "POST") {
       const kb = state.kbs.find((k) => k.tenant_id === tid && k.id === m![1]);
@@ -1278,7 +1316,7 @@ export async function startFakeServer(): Promise<FakeServer> {
             ? before.filter((d) => d.filename === file.name && d.is_active).sort((a, b) => b.created_at.localeCompare(a.created_at))
             : [];
         for (const d of replaced) d.deleted = true;
-        state.documents.push({ id, tenant_id: tid, kb_id: kb.id, filename: file.name, size: file.size, is_active: true, deleted: false, created_at: now(), sha256: hashes[index] });
+        state.documents.push({ id, tenant_id: tid, kb_id: kb.id, filename: file.name, size: file.size, is_active: true, deleted: false, created_at: now(), sha256: hashes[index], status: state.ingestedDocumentStatus });
         const view = documentView(id, file.name, file.size, state.serveOperations ? op.id : null);
         const outcome = state.uploadOutcome ? { upload_outcome: replaced.length ? "replaced" : "created" } : {};
         return state.uploadReplace === "name" ? { ...view, replaced_document_ids: replaced.map((d) => d.id), ...outcome } : { ...view, ...outcome };
@@ -1295,7 +1333,7 @@ export async function startFakeServer(): Promise<FakeServer> {
         200,
         listed.map((d) => ({
           ...documentView(d.id, d.filename, d.size, null),
-          status: "ready",
+          status: d.status ?? "ready",
           is_active: d.is_active,
           created_at: d.created_at,
           ...(state.documentHashes ? { file_sha256: d.sha256 ?? null } : {}),
@@ -2345,7 +2383,7 @@ function makeHarness(tenantId: string, slug: string, name: string, description: 
   };
 }
 
-function kbView(kb: { id: string; name: string }) {
+function kbView(kb: { id: string; name: string; document_processing_config?: Record<string, unknown> | null }) {
   return {
     id: kb.id,
     name: kb.name,
@@ -2357,6 +2395,7 @@ function kbView(kb: { id: string; name: string }) {
     last_sync_at: null,
     created_at: now(),
     legacy_office_uploads: false,
+    ...(kb.document_processing_config !== undefined ? { document_processing_config: kb.document_processing_config } : {}),
   };
 }
 

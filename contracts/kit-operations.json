@@ -112,6 +112,15 @@
     "GET /api/v1/variables",
     "DELETE /api/v1/variables/{name}",
     "GET /api/v1/variables/{name}",
-    "PUT /api/v1/variables/{name}"
+    "PUT /api/v1/variables/{name}",
+    "POST /api/v1/admin/uploads/{file_id}/release",
+    "POST /api/v1/knowledge-bases",
+    "GET /api/v1/knowledge-bases/{kb_id}",
+    "PATCH /api/v1/knowledge-bases/{kb_id}",
+    "GET /api/v1/knowledge-bases/{kb_id}/documents/download-all",
+    "GET /api/v1/knowledge-bases/{kb_id}/documents/{doc_id}/download",
+    "GET /api/v1/knowledge-bases/{kb_id}/documents/{doc_id}/files",
+    "GET /api/v1/knowledge-bases/{kb_id}/documents/{doc_id}/files/{file_id}",
+    "POST /api/v1/knowledge-bases/{kb_id}/documents/{doc_id}/release"
   ]
 }

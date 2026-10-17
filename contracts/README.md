@@ -6,6 +6,19 @@ and the fake server in `cli/test/` serves them.
 
 ## `cavelon/`
 
+On 2026-10-17 the document-files contracts were selectively refreshed from an
+immutable merged instance build, without running an instance. The checked-in
+output of its OpenAPI generator supplies KB create/detail/update, document
+file list/download, normal document/ZIP download and both person-only release
+operations, with their referenced schemas. Existing operations and component
+shapes stay as recorded. Processing settings remain open dictionaries; the
+instance validates the five table/privacy keys and the names model's registry
+entry id. Document status remains a string and can be `held`. The package
+schema already preserves the configuration unchanged. Capabilities, error
+catalog, unrelated snapshots and defaults stay as recorded. Tests cover the
+file metadata against the response schema and an older instance without the
+file-list operation; these snapshots do not prove real document conversion.
+
 On 2026-10-12 the database connector contracts were selectively refreshed
 from an immutable merged instance build, without running an instance.
 Only database operations and their referenced schemas, the connector offer,

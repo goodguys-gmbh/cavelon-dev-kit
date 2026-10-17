@@ -328,6 +328,7 @@ how to review and test its work.
 | [Troubleshooting](docs/troubleshooting.md) | exit codes and error codes, with what to do |
 | [Security](docs/security.md) | where the token lives, what the agent sees, what is sent where |
 | [Connect a database](docs/connect-a-database.md) | public connection settings, SSH/Kerberos, Admin credentials and CA, saved and draft queries, tests and write approval paths |
+| [Document processing](docs/document-processing.md) | table workbooks, privacy and names-model settings, document files, held documents and human review |
 | [Offline bundle](docs/offline-bundle.md) | installing without internet access: the signed bundle each release carries, its format, verifying it with cosign |
 | [FAQ](docs/faq.md) | common questions |
 

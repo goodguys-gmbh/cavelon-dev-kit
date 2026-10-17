@@ -33,7 +33,7 @@ the environment over the files. The exit codes are listed in [Troubleshooting](t
 - **Session:** [`setup`](#cavelon-setup), [`login`](#cavelon-login), [`logout`](#cavelon-logout), [`whoami`](#cavelon-whoami), [`use`](#cavelon-use), [`status`](#cavelon-status)
 - **Solution as code:** [`init`](#cavelon-init), [`pull`](#cavelon-pull), [`validate`](#cavelon-validate), [`fmt`](#cavelon-fmt), [`schema`](#cavelon-schema), [`apply`](#cavelon-apply), [`activate`](#cavelon-activate), [`explain`](#cavelon-explain)
 - **Tenants and solutions:** [`tenant create`](#cavelon-tenant-create), [`tenant list`](#cavelon-tenant-list), [`harness list`](#cavelon-harness-list), [`harness new`](#cavelon-harness-new), [`harness clone`](#cavelon-harness-clone), [`harness default`](#cavelon-harness-default)
-- **Knowledge, tests and traces:** [`kb upload`](#cavelon-kb-upload), [`test run`](#cavelon-test-run), [`wait`](#cavelon-wait), [`watch`](#cavelon-watch), [`trace`](#cavelon-trace)
+- **Knowledge, tests and traces:** [`kb upload`](#cavelon-kb-upload), [`kb documents`](#cavelon-kb-documents), [`kb files`](#cavelon-kb-files), [`kb download`](#cavelon-kb-download), [`test run`](#cavelon-test-run), [`wait`](#cavelon-wait), [`watch`](#cavelon-watch), [`trace`](#cavelon-trace)
 - **Database connections and queries:** [`db instance`](#cavelon-db-instance), [`db connections`](#cavelon-db-connections), [`db connections create`](#cavelon-db-connections-create), [`db connections update`](#cavelon-db-connections-update), [`db connections delete`](#cavelon-db-connections-delete), [`db connections ca`](#cavelon-db-connections-ca), [`db login-script`](#cavelon-db-login-script), [`db schema`](#cavelon-db-schema), [`db queries`](#cavelon-db-queries), [`db queries delete`](#cavelon-db-queries-delete), [`db queries enable`](#cavelon-db-queries-enable), [`db queries disable`](#cavelon-db-queries-disable), [`db queries rename`](#cavelon-db-queries-rename), [`db runs`](#cavelon-db-runs), [`db test`](#cavelon-db-test), [`db test-run`](#cavelon-db-test-run)
 - **Variables and secrets:** [`variables list`](#cavelon-variables-list), [`variables get`](#cavelon-variables-get), [`variables set`](#cavelon-variables-set), [`variables delete`](#cavelon-variables-delete), [`secrets list`](#cavelon-secrets-list), [`secrets set`](#cavelon-secrets-set), [`secrets delete`](#cavelon-secrets-delete)
 - **Limits and capacity:** [`limits`](#cavelon-limits), [`limits set`](#cavelon-limits-set), [`models list`](#cavelon-models-list), [`models set-limit`](#cavelon-models-set-limit)
@@ -571,6 +571,82 @@ Examples:
 cavelon kb upload ./docs --kb FAQ
 cavelon kb upload ./docs/bergbahn-faq.md --kb FAQ --replace --dry-run
 cavelon kb upload ./manuals --kb FAQ -r --ext pdf --wait --timeout 5m
+```
+
+### cavelon kb documents
+
+List documents and their status, including those held for privacy review.
+
+**read-only** · MCP tool: `kb_documents`
+
+```text
+cavelon kb documents [options]
+```
+
+| Option | Description | MCP |
+|---|---|---|
+| `--kb <name-or-id>` | The knowledge base's name or id. | yes |
+| `--limit <n>` | Show at most n documents (default 50, at most 200). | yes |
+
+Examples:
+
+```bash
+cavelon kb documents --kb Records --json
+```
+
+### cavelon kb files
+
+List a document's conversion file ids, access flags and privacy summary.
+
+**read-only** · MCP tool: `kb_files`
+
+```text
+cavelon kb files <document> [options]
+```
+
+The list contains metadata only. Restricted reports and privacy vaults remain dashboard-only; a held document cannot be read or downloaded.
+
+| Argument | Description |
+|---|---|
+| `document` | Document id. Required. |
+
+| Option | Description | MCP |
+|---|---|---|
+| `--kb <name-or-id>` | The knowledge base's name or id. | yes |
+
+Examples:
+
+```bash
+cavelon kb files <document-id> --kb Records --json
+```
+
+### cavelon kb download
+
+Save a document or one of its readable conversion files without overwriting a local file.
+
+**read-only** · MCP tool: `kb_download`
+
+```text
+cavelon kb download <document> [options]
+```
+
+Without --file, the instance serves the redacted PDF where privacy_document is on. --file takes an id from kb files, never a filename or URL. Reports and vaults require a dashboard person. Output from an agent stays inside the solution folder.
+
+| Argument | Description |
+|---|---|
+| `document` | Document id. Required. |
+
+| Option | Description | MCP |
+|---|---|---|
+| `--kb <name-or-id>` | The knowledge base's name or id. | yes |
+| `--file <file-id>` | Id of an agent-readable conversion file from kb files. | yes |
+| `--output <path>` | New local file to write; required. | yes |
+
+Examples:
+
+```bash
+cavelon kb download <document-id> --kb Records --output record.pdf
+cavelon kb download <document-id> --kb Records --file <file-id> --output tables.xlsx
 ```
 
 ### cavelon test run
@@ -2003,7 +2079,7 @@ Call any operation the instance publishes in its OpenAPI.
 cavelon api <operation> [params...] [options]
 ```
 
-The operation is its operationId or the short name before FastAPI's path suffix (list_harnesses). Parameters: -p name=value or name=value (not --name). Body: --body '&lt;json&gt;', --body @file.json or --body - (stdin); --json &lt;body&gt; still works for now but is deprecated: --json alone prints JSON, as on every command. The body is checked against the operation's schema before it is sent. As an MCP tool, or run by a coding agent (CLAUDECODE, CODEX_THREAD_ID, CODEX_CI, CODEX_SANDBOX, CURSOR_AGENT, GEMINI_CLI, QWEN_CODE, COPILOT_CLI, COPILOT_AGENT, AGENT_CONTEXT_OUT, TERM_PROGRAM=kiro, OPENCODE, PI_SESSION_ID, AGENT_SESSION_ID, GROK_AGENT, AI_AGENT or CAVELON_AGENT=1 is set), an operation that changes something returns what it would send and a confirm token, and sends it with that token. Known draft creation and cloning need no personal approval; explicit --yolo also skips their token round trip within its bound scope. Known import previews and database catalog reads send at once. Other changes still need the person's yes: the MCP client asks them, or they send it from their own terminal. A changed request needs a new preview; confirm: true is refused. Instance confirmation requirements always win. Run by an agent, one the instance marks for a person only (x-cavelon-person-only) is refused, as is a body that sends a file outside the solution folder. Secret body fields (x-cavelon-secret) are refused in every mode, including a person's terminal; enter passwords, keys and keytabs in the Admin. On an instance that marks no operation, one that changes a secret, creates or revokes a credential or decides an approval is refused. A person's own terminal sends at once. In a solution folder, the persona operations (get_bot_persona, upsert_bot_persona, …) get the folder's solution as harness_id when none is passed, since without it they reach the tenant's default route.
+The operation is its operationId or the short name before FastAPI's path suffix (list_harnesses). Parameters: -p name=value or name=value (not --name). Body: --body '&lt;json&gt;', --body @file.json or --body - (stdin); --json &lt;body&gt; still works for now but is deprecated: --json alone prints JSON, as on every command. The body is checked against the operation's schema before it is sent. As an MCP tool, or run by a coding agent (CLAUDECODE, CODEX_THREAD_ID, CODEX_CI, CODEX_SANDBOX, CURSOR_AGENT, GEMINI_CLI, QWEN_CODE, COPILOT_CLI, COPILOT_AGENT, AGENT_CONTEXT_OUT, TERM_PROGRAM=kiro, OPENCODE, PI_SESSION_ID, AGENT_SESSION_ID, GROK_AGENT, AI_AGENT or CAVELON_AGENT=1 is set), an operation that changes something returns what it would send and a confirm token, and sends it with that token. Known draft creation and cloning need no personal approval; explicit --yolo also skips their token round trip within its bound scope. Known import previews and database catalog reads send at once. Other changes still need the person's yes: the MCP client asks them, or they send it from their own terminal. A changed request needs a new preview; confirm: true is refused. Instance confirmation requirements always win. Run by an agent, one the instance marks for a person only (x-cavelon-person-only) is refused, as is a body that sends a file outside the solution folder. Secret body fields (x-cavelon-secret) are refused in every mode, including a person's terminal; enter passwords, keys and keytabs in the Admin. On an instance that marks no operation, one that changes a secret, creates or revokes a credential or decides an approval is refused. A person's own terminal sends ordinary requests at once. Releasing held documents needs a dashboard person; no kit credential sends either release operation, including with YOLO. In a solution folder, the persona operations (get_bot_persona, upsert_bot_persona, …) get the folder's solution as harness_id when none is passed, since without it they reach the tenant's default route.
 
 | Argument | Description |
 |---|---|

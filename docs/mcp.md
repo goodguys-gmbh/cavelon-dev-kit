@@ -155,6 +155,9 @@ only reads it).
 | `docs_get` | `cavelon docs get` | read-only |
 | `operation_status` | `cavelon wait` | read-only |
 | `kb_upload` | `cavelon kb upload` | changing |
+| `kb_documents` | `cavelon kb documents` | read-only |
+| `kb_files` | `cavelon kb files` | read-only |
+| `kb_download` | `cavelon kb download` | read-only (saves a new local file) |
 | `test_run` | `cavelon test run` | changing |
 | `trace` | `cavelon trace` | read-only |
 | `db_instance` | `cavelon db instance` | read-only |

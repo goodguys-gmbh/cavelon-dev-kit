@@ -9,6 +9,8 @@ import { printMode } from "./printed.js";
  * same code. A test keeps this list in step with the codes in the source.
  */
 export const KIT_ERROR_CODES: CatalogEntry[] = [
+  { code: "held_for_privacy_review", area: "cli", message: "This document is held for privacy review; it is not indexed or readable.", hint: "A person with knowledge_bases.manage_documents reviews and releases it in the Admin. Tokens and API keys cannot release it; YOLO does not change this." },
+  { code: "document_file_for_a_person", area: "cli", message: "This document file is restricted or not agent-readable.", hint: "A person with knowledge_bases.manage_documents opens it in the Admin. The privacy vault and conversion report are never returned to agents." },
   // Login, instance and tenant.
   { code: "not_logged_in", area: "cli", message: "There is no token for the instance.", hint: "A person runs `cavelon login` (or sets CAVELON_URL and CAVELON_TOKEN); an agent never handles the token." },
   { code: "no_instance", area: "cli", message: "No Cavelon instance is selected.", hint: "Run `cavelon login --instance <url>`, set CAVELON_URL, or work inside a folder with cavelon.yaml." },

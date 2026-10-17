@@ -1706,6 +1706,37 @@
             }
           }
         }
+      },
+      "post": {
+        "tags": [
+          "knowledge_bases"
+        ],
+        "summary": "Create Knowledge Base",
+        "operationId": "create_knowledge_base_api_v1_knowledge_bases_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KBCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KBResponse"
+                }
+              }
+            }
+          },
+          "400": {},
+          "409": {},
+          "422": {}
+        }
       }
     },
     "/api/v1/knowledge-bases/{kb_id}/documents": {
@@ -5945,6 +5976,383 @@
           "409": {},
           "422": {}
         }
+      }
+    },
+    "/api/v1/admin/uploads/{file_id}/release": {
+      "post": {
+        "tags": [
+          "admin_uploads"
+        ],
+        "summary": "Release Held Upload",
+        "operationId": "release_held_upload_api_v1_admin_uploads__file_id__release_post",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "File Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-cavelon-person-only": true,
+        "x-cavelon-person-only-reason": "Releases a document held because its redaction is not clean"
+      }
+    },
+    "/api/v1/knowledge-bases/{kb_id}": {
+      "get": {
+        "tags": [
+          "knowledge_bases"
+        ],
+        "summary": "Get Knowledge Base",
+        "operationId": "get_knowledge_base_api_v1_knowledge_bases__kb_id__get",
+        "parameters": [
+          {
+            "name": "kb_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Kb Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KBResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "knowledge_bases"
+        ],
+        "summary": "Update Knowledge Base",
+        "operationId": "update_knowledge_base_api_v1_knowledge_bases__kb_id__patch",
+        "parameters": [
+          {
+            "name": "kb_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Kb Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KBUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KBResponse"
+                }
+              }
+            }
+          },
+          "400": {},
+          "404": {},
+          "409": {},
+          "422": {}
+        }
+      }
+    },
+    "/api/v1/knowledge-bases/{kb_id}/documents/download-all": {
+      "get": {
+        "tags": [
+          "knowledge_bases"
+        ],
+        "summary": "Download All Documents",
+        "operationId": "download_all_documents_api_v1_knowledge_bases__kb_id__documents_download_all_get",
+        "parameters": [
+          {
+            "name": "kb_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Kb Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {},
+          "403": {},
+          "404": {},
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "503": {}
+        }
+      }
+    },
+    "/api/v1/knowledge-bases/{kb_id}/documents/{doc_id}/download": {
+      "get": {
+        "tags": [
+          "knowledge_bases"
+        ],
+        "summary": "Download Document",
+        "operationId": "download_document_api_v1_knowledge_bases__kb_id__documents__doc_id__download_get",
+        "parameters": [
+          {
+            "name": "kb_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Kb Id"
+            }
+          },
+          {
+            "name": "doc_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Doc Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {},
+          "401": {},
+          "403": {},
+          "404": {},
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/knowledge-bases/{kb_id}/documents/{doc_id}/files": {
+      "get": {
+        "tags": [
+          "knowledge_bases"
+        ],
+        "summary": "List Document Files",
+        "operationId": "list_document_files_api_v1_knowledge_bases__kb_id__documents__doc_id__files_get",
+        "parameters": [
+          {
+            "name": "kb_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Kb Id"
+            }
+          },
+          {
+            "name": "doc_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Doc Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentFilesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/knowledge-bases/{kb_id}/documents/{doc_id}/files/{file_id}": {
+      "get": {
+        "tags": [
+          "knowledge_bases"
+        ],
+        "summary": "Download Document File",
+        "operationId": "download_document_file_api_v1_knowledge_bases__kb_id__documents__doc_id__files__file_id__get",
+        "parameters": [
+          {
+            "name": "kb_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Kb Id"
+            }
+          },
+          {
+            "name": "doc_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Doc Id"
+            }
+          },
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "File Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "404": {},
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/knowledge-bases/{kb_id}/documents/{doc_id}/release": {
+      "post": {
+        "tags": [
+          "knowledge_bases"
+        ],
+        "summary": "Release Held Document",
+        "operationId": "release_held_document_api_v1_knowledge_bases__kb_id__documents__doc_id__release_post",
+        "parameters": [
+          {
+            "name": "kb_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Kb Id"
+            }
+          },
+          {
+            "name": "doc_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Doc Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Release Held Document Api V1 Knowledge Bases  Kb Id  Documents  Doc Id  Release Post"
+                }
+              }
+            }
+          },
+          "409": {},
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-cavelon-person-only": true,
+        "x-cavelon-person-only-reason": "Releases a document held because its redaction is not clean"
       }
     }
   },
@@ -23326,6 +23734,431 @@
           "host_key_fingerprint"
         ],
         "title": "SshTunnelSettings"
+      },
+      "DocumentFileItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "agent_readable": {
+            "type": "boolean",
+            "title": "Agent Readable"
+          },
+          "restricted": {
+            "type": "boolean",
+            "title": "Restricted"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "filename",
+          "content_type",
+          "size_bytes",
+          "created_at",
+          "agent_readable",
+          "restricted"
+        ],
+        "title": "DocumentFileItem"
+      },
+      "DocumentFilesResponse": {
+        "properties": {
+          "document_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Document Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "privacy": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Privacy"
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentFileItem"
+            },
+            "type": "array",
+            "title": "Files"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id",
+          "status",
+          "privacy",
+          "files"
+        ],
+        "title": "DocumentFilesResponse"
+      },
+      "KBCreateRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "kb_type": {
+            "type": "string",
+            "pattern": "^(prose|structured)$",
+            "title": "Kb Type",
+            "default": "prose"
+          },
+          "content_language": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Language"
+          },
+          "chunking_config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunking Config"
+          },
+          "retrieval_config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retrieval Config"
+          },
+          "scraping_config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scraping Config"
+          },
+          "document_processing_config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Processing Config"
+          },
+          "acl_groups": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Acl Groups"
+          },
+          "default_acl_groups": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Default Acl Groups"
+          },
+          "accepts_email_attachments": {
+            "type": "boolean",
+            "title": "Accepts Email Attachments",
+            "default": false
+          },
+          "filing_access": {
+            "type": "string",
+            "enum": [
+              "default_groups",
+              "kb_readers"
+            ],
+            "title": "Filing Access",
+            "default": "default_groups"
+          },
+          "sync_interval_hours": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Interval Hours"
+          },
+          "tool_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Name"
+          },
+          "tool_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Description"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "KBCreateRequest"
+      },
+      "KBUpdateRequest": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "content_language": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Language"
+          },
+          "chunking_config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunking Config"
+          },
+          "retrieval_config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retrieval Config"
+          },
+          "scraping_config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scraping Config"
+          },
+          "document_processing_config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Processing Config"
+          },
+          "upload_config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upload Config"
+          },
+          "acl_groups": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acl Groups"
+          },
+          "default_acl_groups": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Acl Groups"
+          },
+          "accepts_email_attachments": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepts Email Attachments"
+          },
+          "filing_access": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "default_groups",
+                  "kb_readers"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filing Access"
+          },
+          "sync_interval_hours": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Interval Hours"
+          },
+          "clear_sync_interval": {
+            "type": "boolean",
+            "title": "Clear Sync Interval",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "KBUpdateRequest"
       }
     }
   }

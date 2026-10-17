@@ -233,6 +233,16 @@ use it when you parse the result.
    uploads on (`kb_upload_archive_enabled`) and it stays within their file
    count, unpacked size and compression ratio (exit 3, naming the limit and who
    changes it).
+   Inspect status with `cavelon kb documents --kb <kb>` (`kb_documents` over
+   MCP). A `held` document is not indexed or readable: ask a person with
+   `knowledge_bases.manage_documents` to review and release it in the Admin.
+   Neither release route accepts tokens, even from a person's terminal or in
+   YOLO. Never call it or retry ingestion to get around privacy review.
+   `kb files <document-id> --kb <kb>` lists conversion file ids and a privacy
+   summary. `kb download <document-id> --kb <kb> --file <file-id> --output <new-path>`
+   saves a readable PDF/workbook inside the solution; omit `--file` for the
+   instance's normal (redacted where configured) download. The vault and
+   conversion report stay with a dashboard person.
    **Updating a document**: upload the new version under the same file name.
    `kb upload` names each file that matches an active document of the
    knowledge base, and what happens to it depends on the instance (try it with

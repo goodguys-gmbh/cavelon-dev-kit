@@ -287,7 +287,7 @@ async function deactivate(ctx: Context, kbId: string, matches: NameMatch[]): Pro
   }
 }
 
-async function resolveKbId(ctx: Context, ref: string): Promise<{ id: string; name?: string }> {
+export async function resolveKbId(ctx: Context, ref: string): Promise<{ id: string; name?: string }> {
   if (isUuid(ref)) return { id: ref };
   const page = await callStable<{ items: KnowledgeBase[] }>(ctx, "GET", "/api/v1/knowledge-bases", "knowledge bases", {
     query: { search: ref, page_size: 100 },
@@ -771,6 +771,12 @@ export const kbUpload: CommandSpec = {
     };
     const uploadedText = (where: string) =>
       created ? `Uploaded ${fileCount(created)}${where}.` : `Nothing new uploaded${where}: the content of ${deduplicated.length === 1 ? "the file is" : "every file is"} already active.`;
+    const held = () => documents.filter(d => d.status === "held");
+    const privacyReview = () => held().length ? {
+      held_documents: held().map(d => d.id),
+      needs_person: "A person reviews and releases the held documents in the Admin; tokens cannot release them.",
+    } : {};
+    const heldLines = () => held().map(d => `${d.filename}: held for privacy review; not indexed or readable. A person reviews it in the Admin. The old documents stay active.`);
     if (operationIds.length < fresh.length) ctx.warn("The instance returned no operation id for some documents; it may be older than the operations API.");
     if (failure) {
       const refused = await deactivate(ctx, kb.id, matches);
@@ -788,16 +794,21 @@ export const kbUpload: CommandSpec = {
     }
     if (boolOption(input, "wait") && ctx.mode === "cli" && operationIds.length) {
       const waited = await waitAndReport(ctx, operationIds, timeoutMs(ctx, stringOption(input, "timeout")));
-      // The old documents keep answering until the new ones are ingested; a failed ingestion keeps them.
-      const refused = waited.exitCode === ExitCode.ok ? await deactivate(ctx, kb.id, matches) : undefined;
-      if (waited.exitCode !== ExitCode.ok) for (const m of matches) if (m.outcome === undefined) m.outcome = "stays_active";
-      if (refused) ctx.warn(`The old documents stay active: ${refused.message}`);
       await refreshStatuses(ctx, kb.id, documents);
+      // The old documents keep answering until the new ones are ingested; a failed ingestion keeps them.
+      const ready = waited.exitCode === ExitCode.ok && !held().length;
+      const refused = ready ? await deactivate(ctx, kb.id, matches) : undefined;
+      if (!ready) for (const m of matches) if (m.outcome === undefined) m.outcome = "stays_active";
+      if (refused) ctx.warn(`The old documents stay active: ${refused.message}`);
       return {
-        data: { ...summary(), ...waited.data },
-        text: [uploadedText(""), ...matchLines(), waited.text].join("\n"),
-        exitCode: refused && waited.exitCode === ExitCode.ok ? refused.exitCode : waited.exitCode,
+        data: { ...summary(), ...waited.data, ...privacyReview() },
+        text: [uploadedText(""), ...matchLines(), waited.text, ...heldLines()].join("\n"),
+        exitCode: waited.exitCode !== ExitCode.ok ? waited.exitCode : refused?.exitCode ?? (held().length ? ExitCode.needsAction : ExitCode.ok),
       };
+    }
+    if (held().length) {
+      for (const m of matches) if (m.outcome === undefined) m.outcome = "stays_active";
+      return { data: { ...summary(), ...privacyReview() }, text: [uploadedText(` to ${kb.name ?? kb.id}`), ...matchLines(), ...heldLines()].join("\n"), exitCode: ExitCode.needsAction };
     }
     const refused = await deactivate(ctx, kb.id, matches);
     if (refused) ctx.warn(`The old documents stay active: ${refused.message}`);

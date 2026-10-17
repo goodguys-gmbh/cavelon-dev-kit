@@ -15,6 +15,7 @@ import { activate, apply, explain, pull, validate } from "./solution.js";
 import { schema } from "./schema.js";
 import { harnessClone, harnessDefault, harnessList, harnessNew, tenantCreate, tenantList } from "./tenants.js";
 import { kbUpload, testRun, trace } from "./work.js";
+import { kbDocuments, kbFiles, kbDownload } from "./documents.js";
 import { dbConnections, dbInstance, dbQueries, dbRuns, dbTest, dbTestRun } from "./db.js";
 import { dbConnectionCa, dbConnectionCreate, dbConnectionDelete, dbConnectionUpdate, dbLoginScript, dbSchema } from "./db-connections.js";
 import { dbQueryDelete, dbQueryEnable, dbQueryDisable, dbQueryRename } from "./db-query-management.js";
@@ -123,6 +124,9 @@ export const COMMANDS: CommandSpec[] = [
   wait,
   watch,
   kbUpload,
+  kbDocuments,
+  kbFiles,
+  kbDownload,
   testRun,
   trace,
   dbInstance,

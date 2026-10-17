@@ -390,7 +390,12 @@ describe("the OpenAPI snapshot", () => {
 
   it("keeps the instance's person-only marker through the trim", () => {
     const marked = operations(doc).filter((o) => o.personOnly?.marked).map((o) => `${o.method} ${o.path}: ${o.personOnly?.reason}`);
-    expect(marked).toEqual(["PUT /api/v1/secrets/{name}: Sets or deletes a secret value", "DELETE /api/v1/secrets/{name}: Sets or deletes a secret value"]);
+    expect(marked).toEqual([
+      "PUT /api/v1/secrets/{name}: Sets or deletes a secret value",
+      "DELETE /api/v1/secrets/{name}: Sets or deletes a secret value",
+      "POST /api/v1/admin/uploads/{file_id}/release: Releases a document held because its redaction is not clean",
+      "POST /api/v1/knowledge-bases/{kb_id}/documents/{doc_id}/release: Releases a document held because its redaction is not clean",
+    ]);
   });
 
   it("carry no developer notes, as scripts/scrub-contracts.mjs leaves them", () => {
