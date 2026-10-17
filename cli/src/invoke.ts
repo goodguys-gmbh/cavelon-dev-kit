@@ -133,7 +133,9 @@ export async function callOperation(ctx: Context, client: ApiClient, doc: OpenAp
   const response = await client.fetchRaw(op.method, target, { query, headers: { ...headers, ...confirmed }, json, form, sendTenant: args.sendTenant, signal });
   const contentType = response.headers.get("content-type") ?? "";
   const bytes = await bodyBytes(response, client.resolve(target), signal);
-  const isText = /json|text|xml|yaml|markdown|event-stream/.test(contentType) || bytes.length === 0;
+  const mediaType = contentType.split(";", 1)[0]!.trim().toLowerCase();
+  // OpenXML spreadsheets are ZIP bytes; "xml" inside their vendor MIME is not text.
+  const isText = mediaType.startsWith("text/") || /^application\/(?:[\w.+-]+\+)?(?:json|xml|yaml|x-yaml|markdown|event-stream)$/.test(mediaType) || bytes.length === 0;
   const text = isText ? new TextDecoder().decode(bytes) : "";
   let data: unknown = text;
   if (contentType.includes("json") && text) {

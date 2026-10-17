@@ -242,6 +242,19 @@ and fill the field in to set it. A file of comments only sets nothing.
   The preview names them with the Admin path where a person sets them.
 - **Knowledge-base documents** are not in the repository: the package declares
   the knowledge bases; `cavelon kb upload` brings the documents.
+  For tables/privacy, `document_processing_config` takes `table_optimizer`,
+  `export_tables_xlsx`, `privacy_document` and `privacy_outputs` (each privacy
+  mode is `off`, `pseudonymize` or `anonymize`), and `privacy_model` (a tenant
+  model registry entry's `id`, not `model_id`, or null). The names model must
+  be active with a non-OpenAI, non-Azure-OpenAI endpoint; its credentials stay
+  with a person in the Admin. The table optimizer uses `vision_model`.
+  `bitmap_area_threshold` no longer affects OCR on the current instance.
+  `read_document(file: "redacted_pdf" | "tables_xlsx")` fetches a readable
+  conversion file into the conversation; `max_chars: 0` lists the available
+  file kinds. The vault and conversion report are never agent-readable.
+  A `held_for_privacy_review` response needs a person's review in the Admin;
+  never release a held document yourself. See the instance's
+  `reference/kb-management-api` and `reference/builtin-tools` pages.
 - **A knowledge base reaches an agent only through a tool that reads it.**
   Naming it in a skill's `knowledge_base_assignments` only scopes the tools;
   the skill (or the agent) also needs a built-in that reads a knowledge base in

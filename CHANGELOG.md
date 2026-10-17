@@ -7,6 +7,21 @@ CLI, the skills and the plugin.
 
 ## Unreleased
 
+### Added
+
+- Document privacy and table support: `kb documents`, `kb files` and
+  `kb download` (also MCP tools) show held documents and conversion file ids,
+  save readable PDFs/workbooks without overwriting files, and preserve the
+  instance's privacy summary. KB processing settings use the model registry
+  entry id; the setup and `read_document(file: ...)` are documented.
+
+### Fixed
+
+- Excel downloads preserve their binary bytes rather than decoding the OpenXML
+  MIME type as text. A held upload needs human review and does not deactivate
+  replacement documents. Both document-release operations stay dashboard-only,
+  including in a person's token terminal and in YOLO mode.
+
 ### Changed
 
 - WinGet manifests use Microsoft's recommended 1.12 schema. Native Windows CI

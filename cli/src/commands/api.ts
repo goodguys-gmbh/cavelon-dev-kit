@@ -153,6 +153,12 @@ function byPathWords(op: Operation): (typeof FOR_A_PERSON)[number] | undefined {
   return FOR_A_PERSON.find((rule) => words.some((word) => rule.match(word)));
 }
 
+/** These releases require a dashboard session; the kit only holds tokens. */
+function privacyRelease(op: Operation): boolean {
+  return op.personOnly?.marked === true && op.method === "POST" &&
+    (op.path === "/api/v1/knowledge-bases/{kb_id}/documents/{doc_id}/release" || op.path === "/api/v1/admin/uploads/{file_id}/release");
+}
+
 export interface KeptForPerson {
   /** "instance" when the instance marks the operation, "kit" when the path's words decided. */
   source: "instance" | "kit";
@@ -170,7 +176,9 @@ export function keptForPerson(op: Operation, all: Operation[]): KeptForPerson | 
   if (all.some((o) => o.personOnly)) {
     if (!op.personOnly?.marked) return undefined;
     // The path's words only pick the most useful hint; the marker decided.
-    const hint = byPathWords(op)?.hint ?? `A person runs it: in Cavelon, or in their own terminal with \`cavelon api ${op.alias}\`.`;
+    const hint = privacyRelease(op)
+      ? "A person with knowledge_bases.manage_documents reviews and releases the document in the Admin. API keys and personal access tokens cannot release it, including from a person's terminal."
+      : byPathWords(op)?.hint ?? `A person runs it: in Cavelon, or in their own terminal with \`cavelon api ${op.alias}\`.`;
     return { source: "instance", ...(op.personOnly.reason ? { reason: op.personOnly.reason } : {}), hint };
   }
   if (op.readOnly) return undefined;
@@ -328,6 +336,13 @@ export const api: CommandSpec = {
     }
     const rawOutput = stringOption(input, "output");
     const output = rawOutput ? await confinedPath(ctx, rawOutput, "The output file", confine) : undefined;
+    if (privacyRelease(op)) {
+      throw new CavelonError(ExitCode.needsAction, {
+        code: "operation_for_a_person",
+        message: `${op.alias} requires a dashboard person; cavelon holds a token and does not send this request.`,
+        hint: keptForPerson(op, operations(doc))!.hint,
+      });
+    }
     if (driven) {
       const kept = keptForPerson(op, operations(doc));
       if (kept) {

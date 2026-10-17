@@ -31,7 +31,7 @@ const GROUPS: Array<{ title: string; intro: string; names: string[] }> = [
   {
     title: "Knowledge, tests and traces",
     intro: "Seed knowledge bases, run test suites, wait for the work and read what happened.",
-    names: ["kb upload", "test run", "wait", "watch", "trace"],
+    names: ["kb upload", "kb documents", "kb files", "kb download", "test run", "wait", "watch", "trace"],
   },
   {
     title: "Database connections and queries",
