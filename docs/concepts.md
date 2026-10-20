@@ -109,6 +109,15 @@ its configuration and answers no live traffic until `cavelon activate` puts it
 back through its readiness gate. `cavelon harness list` shows the tenant's
 solutions with their status; `harness new` and `harness clone` create drafts.
 
+On an instance with solution publication, an active solution can also have
+unpublished graph edits. `apply` reports whether it wrote that draft;
+`cavelon harness publication <solution>` inspects it and `cavelon publish`
+reviews publication through readiness. Live traffic keeps the published graph
+until publication. Shared tenant resources retain their existing behavior.
+See [solution publication](solution-publication.md) for person confirmation,
+waiting runs, discarding a draft and pinned-version rollback. Older instances
+keep their existing editing behavior; never infer isolation from status alone.
+
 ### Persona
 
 Each solution has a **persona**: who the assistant is, for every agent of the
@@ -651,11 +660,36 @@ it; `cavelon explain <value>` says what each one means. The agent records
 or `retrieval_fault`, by what the search returned. The package schema also allows cases
 that start a trigger and check how its run ends.
 
+To keep the instance's original conversation trace export, including its
+integrity manifest, save it to a new file inside the solution:
+
+```bash
+cavelon trace <conversation-id> --kind conversation --trace <trace-id> --export trace.json
+```
+
+This needs `conversations.view` and `conversations.export`; an instance that
+does not advertise the export operation reports it as unavailable. The same
+option is available on the MCP `trace` tool. The file is never overwritten,
+and the exported bytes are not shortened or reformatted. JSON output reports
+`file_sha256` for the saved file and preserves the instance's `manifest`.
+`manifest.trace_sha256` and a possible HMAC signature are supplied by the
+instance; the kit does not verify that HMAC or request its signing secret.
+An unsigned manifest (`signed: false`) is allowed. Treat the export as trace
+data with the same access and sharing restrictions as the original trace.
+
 A test run never waits for a person. A pipeline that reaches an approval ends
 there: the run records that the approval was reached, with its title and
 instructions, and the judge grades those; the branches after a person's
 decision are not reached by a test. The
 [`expense-approval` example](../examples/expense-approval/) has such a suite.
+
+On an instance offering unattended regression schedules, a person enables and
+manages them in the Admin under their recorded identity. Imports leave them
+off; schedule or automatic runs do not replace the latest manually started
+whole-suite run required for activation. A lost permission can pause a schedule.
+A client-ended streamed chat is recorded as cancelled by recent instances;
+`cavelon chat` itself uses a non-streamed request. Failed or cancelled trigger
+runs retain their documents for diagnosis on instances with that behavior.
 
 ## Readiness and activation
 

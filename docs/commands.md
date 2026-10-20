@@ -31,8 +31,8 @@ the environment over the files. The exit codes are listed in [Troubleshooting](t
 ## Contents
 
 - **Session:** [`setup`](#cavelon-setup), [`login`](#cavelon-login), [`logout`](#cavelon-logout), [`whoami`](#cavelon-whoami), [`use`](#cavelon-use), [`status`](#cavelon-status)
-- **Solution as code:** [`init`](#cavelon-init), [`pull`](#cavelon-pull), [`validate`](#cavelon-validate), [`fmt`](#cavelon-fmt), [`schema`](#cavelon-schema), [`apply`](#cavelon-apply), [`activate`](#cavelon-activate), [`explain`](#cavelon-explain)
-- **Tenants and solutions:** [`tenant create`](#cavelon-tenant-create), [`tenant list`](#cavelon-tenant-list), [`harness list`](#cavelon-harness-list), [`harness new`](#cavelon-harness-new), [`harness clone`](#cavelon-harness-clone), [`harness default`](#cavelon-harness-default)
+- **Solution as code:** [`init`](#cavelon-init), [`pull`](#cavelon-pull), [`validate`](#cavelon-validate), [`fmt`](#cavelon-fmt), [`schema`](#cavelon-schema), [`apply`](#cavelon-apply), [`activate`](#cavelon-activate), [`publish`](#cavelon-publish), [`explain`](#cavelon-explain)
+- **Tenants and solutions:** [`tenant create`](#cavelon-tenant-create), [`tenant list`](#cavelon-tenant-list), [`harness list`](#cavelon-harness-list), [`harness new`](#cavelon-harness-new), [`harness clone`](#cavelon-harness-clone), [`harness default`](#cavelon-harness-default), [`harness publication`](#cavelon-harness-publication), [`harness discard-draft`](#cavelon-harness-discard-draft), [`harness rollback`](#cavelon-harness-rollback)
 - **Knowledge, tests and traces:** [`kb upload`](#cavelon-kb-upload), [`kb documents`](#cavelon-kb-documents), [`kb files`](#cavelon-kb-files), [`kb download`](#cavelon-kb-download), [`test run`](#cavelon-test-run), [`wait`](#cavelon-wait), [`watch`](#cavelon-watch), [`trace`](#cavelon-trace)
 - **Database connections and queries:** [`db instance`](#cavelon-db-instance), [`db connections`](#cavelon-db-connections), [`db connections create`](#cavelon-db-connections-create), [`db connections update`](#cavelon-db-connections-update), [`db connections delete`](#cavelon-db-connections-delete), [`db connections ca`](#cavelon-db-connections-ca), [`db login-script`](#cavelon-db-login-script), [`db schema`](#cavelon-db-schema), [`db queries`](#cavelon-db-queries), [`db queries delete`](#cavelon-db-queries-delete), [`db queries enable`](#cavelon-db-queries-enable), [`db queries disable`](#cavelon-db-queries-disable), [`db queries rename`](#cavelon-db-queries-rename), [`db runs`](#cavelon-db-runs), [`db test`](#cavelon-db-test), [`db test-run`](#cavelon-db-test-run)
 - **Variables and secrets:** [`variables list`](#cavelon-variables-list), [`variables get`](#cavelon-variables-get), [`variables set`](#cavelon-variables-set), [`variables delete`](#cavelon-variables-delete), [`secrets list`](#cavelon-secrets-list), [`secrets set`](#cavelon-secrets-set), [`secrets delete`](#cavelon-secrets-delete)
@@ -324,7 +324,7 @@ Preview the package files against the instance and print a preview id; --confirm
 cavelon apply [options]
 ```
 
-Without --confirm, shows a preview. With --yolo, an eligible routine draft is previewed and imported in one call. The preview shows what changes, which active solutions it reaches, what the target still needs (secrets and variables with the command that sets each, grants, runtime bindings, trigger identities), loop budgets and ignored sections, and is stored in .cavelon/. A preview never creates the solution: one the env file names that is not on the instance yet gets the `cavelon harness new` command that creates it as a draft. A person sets the secrets (`cavelon secrets set <name>`, or in the Admin where the instance lets no token set one), never the agent. Where the instance says this credential cannot import (needs_a_person), it still previews but prints no confirm command: a person imports in the Admin or with their own personal access token. --confirm refuses before sending (exit 5). Show a preview that reaches an active solution or env/prod to a person before confirming. Such a preview (show_to_person: tenant-wide sections, an active solution, deletions, env/prod, or database query writes) a coding agent cannot confirm. Over MCP the client asks the person; from an agent's shell the person runs the confirm in their own terminal. A stale preview exits 4 and imports nothing: one whose target changed on the instance since, one whose package files changed since (what they hold, not their formatting; --allow-stale imports what the preview showed anyway), and one older than a day. So does an import its own check refuses when it applies, naming each blocker. --discard &lt;id\|all&gt; forgets stored previews; `cavelon status` lists them with when each expires. A solution's import leaves the package's tenant-wide sections (tenant_settings, model_registry, …) out; --include-tenant-wide imports them, for every solution of the tenant. An instance that does not publish include_tenant_wide imports them with every solution's package, and apply says so.
+Without --confirm, shows a preview. With --yolo, an eligible routine draft is previewed and imported in one call. An active solution qualifies only where the instance explicitly reports an isolated graph draft; publish stays a separate person-reviewed step. The preview shows what changes, which active solutions it reaches, what the target still needs (secrets and variables with the command that sets each, grants, runtime bindings, trigger identities), loop budgets and ignored sections, and is stored in .cavelon/. A preview never creates the solution: one the env file names that is not on the instance yet gets the `cavelon harness new` command that creates it as a draft. A person sets the secrets (`cavelon secrets set <name>`, or in the Admin where the instance lets no token set one), never the agent. Where the instance says this credential cannot import (needs_a_person), it still previews but prints no confirm command: a person imports in the Admin or with their own personal access token. --confirm refuses before sending (exit 5). Show a preview that reaches an active solution or env/prod to a person before confirming. Such a preview (show_to_person: tenant-wide sections, an active solution, deletions, env/prod, or database query writes) a coding agent cannot confirm. Over MCP the client asks the person; from an agent's shell the person runs the confirm in their own terminal. A stale preview exits 4 and imports nothing: one whose target changed on the instance since, one whose package files changed since (what they hold, not their formatting; --allow-stale imports what the preview showed anyway), and one older than a day. So does an import its own check refuses when it applies, naming each blocker. --discard &lt;id\|all&gt; forgets stored previews; `cavelon status` lists them with when each expires. A solution's import leaves the package's tenant-wide sections (tenant_settings, model_registry, …) out; --include-tenant-wide imports them, for every solution of the tenant. An instance that does not publish include_tenant_wide imports them with every solution's package, and apply says so.
 
 | Option | Description | MCP |
 |---|---|---|
@@ -374,6 +374,24 @@ cavelon activate --make-default
 cavelon activate --make-default --confirm
 cavelon activate --make-default --confirm <token>
 ```
+
+### cavelon publish
+
+Review and publish a solution's draft through its readiness gate.
+
+**changing** · MCP tool: `solution_publish`
+
+```text
+cavelon publish [options]
+```
+
+Previews first. Publishing and rollback change live traffic; discarding removes unpublished work. Each needs a person's fresh confirmation, including in YOLO mode. No force option is offered. A coding agent cannot confirm it: over MCP the client asks the person, and from an agent's shell the person runs the confirm in their own terminal.
+
+| Option | Description | MCP |
+|---|---|---|
+| `--harness <harness>` | Solution name, slug or id; default: selected environment or cavelon.yaml. | yes |
+| `--env <name>` | Use env/&lt;name&gt;.yaml's tenant and solution. | yes |
+| `--confirm [<token>]` | After review, ask the person to confirm exactly this change. In a person's terminal the flag alone confirms; run by a coding agent, `--confirm <token>` with the token its preview printed (the bare flag only shows the preview there, exit 5). | yes |
 
 ### cavelon explain
 
@@ -532,6 +550,61 @@ Examples:
 cavelon harness default support
 cavelon harness default support --confirm
 ```
+
+### cavelon harness publication
+
+Read published version, pending draft, readiness, waiting runs and rollback snapshots.
+
+**read-only** · MCP tool: `harness_publication`
+
+```text
+cavelon harness publication [solution] [options]
+```
+
+| Argument | Description |
+|---|---|
+| `solution` | Solution name, slug or id; default: environment or cavelon.yaml. |
+
+| Option | Description | MCP |
+|---|---|---|
+| `--env <name>` | Use env/&lt;name&gt;.yaml's tenant and solution. | yes |
+
+### cavelon harness discard-draft
+
+Review and discard a solution's unpublished draft.
+
+**changing (destructive)** · MCP tool: `harness_discard_draft`
+
+```text
+cavelon harness discard-draft [options]
+```
+
+Previews first. Publishing and rollback change live traffic; discarding removes unpublished work. Each needs a person's fresh confirmation, including in YOLO mode. No force option is offered. A coding agent cannot confirm it: over MCP the client asks the person, and from an agent's shell the person runs the confirm in their own terminal.
+
+| Option | Description | MCP |
+|---|---|---|
+| `--harness <harness>` | Solution name, slug or id; default: selected environment or cavelon.yaml. | yes |
+| `--env <name>` | Use env/&lt;name&gt;.yaml's tenant and solution. | yes |
+| `--confirm [<token>]` | After review, ask the person to confirm exactly this change. In a person's terminal the flag alone confirms; run by a coding agent, `--confirm <token>` with the token its preview printed (the bare flag only shows the preview there, exit 5). | yes |
+
+### cavelon harness rollback
+
+Review and restore a pinned published version as a new publication.
+
+**changing** · MCP tool: `harness_rollback`
+
+```text
+cavelon harness rollback [options]
+```
+
+Previews first. Publishing and rollback change live traffic; discarding removes unpublished work. Each needs a person's fresh confirmation, including in YOLO mode. No force option is offered. A coding agent cannot confirm it: over MCP the client asks the person, and from an agent's shell the person runs the confirm in their own terminal.
+
+| Option | Description | MCP |
+|---|---|---|
+| `--harness <harness>` | Solution name, slug or id; default: selected environment or cavelon.yaml. | yes |
+| `--env <name>` | Use env/&lt;name&gt;.yaml's tenant and solution. | yes |
+| `--confirm [<token>]` | After review, ask the person to confirm exactly this change. In a person's terminal the flag alone confirms; run by a coding agent, `--confirm <token>` with the token its preview printed (the bare flag only shows the preview there, exit 5). | yes |
+| `--snapshot <id>` | Pinned published snapshot id; default: the previous published version. | yes |
 
 ## Knowledge, tests and traces
 
@@ -734,7 +807,7 @@ Summarise the traces of a run, with a command for each span's detail.
 cavelon trace <run> [options]
 ```
 
-&lt;run&gt; is a trigger run id, a test run id, a conversation id or an operation id (op_…). Without --trace: one line per trace (or per test result). With --trace: its spans. With --span: one span in full.
+&lt;run&gt; is a trigger run id, a test run id, a conversation id or an operation id (op_…). Without --trace: one line per trace (or per test result). With --trace: its spans. With --span: one span in full. With --kind conversation --trace &lt;id&gt; --export &lt;file&gt;: save the instance's original JSON export and integrity manifest inside the solution. Needs conversations.view and conversations.export. Signatures remain unverified locally.
 
 | Argument | Description |
 |---|---|
@@ -746,6 +819,7 @@ cavelon trace <run> [options]
 | `--trace <trace_id>` | Show this trace's spans. | yes |
 | `--span <span_id>` | Show one span's input, output and error (needs --trace). | yes |
 | `--full` | Do not shorten span input and output. | yes |
+| `--export <file>` | Save the original trace export to a new file inside the solution (needs --kind conversation and --trace; excludes --span and --full). | yes |
 | `--limit <n>` | Return at most n items. | yes |
 | `--cursor <cursor>` | Continue after the previous page (its next_cursor). | yes |
 

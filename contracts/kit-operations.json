@@ -121,6 +121,11 @@
     "GET /api/v1/knowledge-bases/{kb_id}/documents/{doc_id}/download",
     "GET /api/v1/knowledge-bases/{kb_id}/documents/{doc_id}/files",
     "GET /api/v1/knowledge-bases/{kb_id}/documents/{doc_id}/files/{file_id}",
-    "POST /api/v1/knowledge-bases/{kb_id}/documents/{doc_id}/release"
+    "POST /api/v1/knowledge-bases/{kb_id}/documents/{doc_id}/release",
+    "GET /api/v1/conversations/{conversation_id}/traces/{trace_id}/export",
+    "GET /api/v1/harnesses/{harness_id}/publication",
+    "POST /api/v1/harnesses/{harness_id}/publish",
+    "POST /api/v1/harnesses/{harness_id}/rollback",
+    "POST /api/v1/harnesses/{harness_id}/discard-draft"
   ]
 }

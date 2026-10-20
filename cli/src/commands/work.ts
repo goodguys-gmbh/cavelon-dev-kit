@@ -20,7 +20,7 @@ import { confirmation } from "../confirm-token.js";
 import { confinedPath } from "../paths.js";
 import { clip, keyValues, moreHint, table } from "../format.js";
 import type { OpenApiDoc } from "../contracts.js";
-import { callStable, workflowOperation } from "../invoke.js";
+import { callOperation, callStable, workflowOperation } from "../invoke.js";
 import { deref, type Operation } from "../openapi.js";
 import { bindsNow, changedBy, limitError, limitsOrWarn, readLimits, type Limit, type PublishedLimits } from "../limits.js";
 import { getOperation } from "../operations.js";
@@ -1274,12 +1274,49 @@ async function testRunView(ctx: Context, id: string, results: TestResultState[],
   };
 }
 
+const TRACE_EXPORT = "/api/v1/conversations/{conversation_id}/traces/{trace_id}/export";
+
+async function exportTrace(ctx: Context, conversation: string, traceId: string, raw: string) {
+  const output = await confinedPath(ctx, raw, "The trace export", true);
+  const { doc, op } = await workflowOperation(ctx, "GET", TRACE_EXPORT, "conversation trace exports");
+  // This newer operation must be advertised; a missing contract is not evidence of support.
+  if (!doc) throw new CavelonError(ExitCode.failure, { code: "operation_unavailable", message: "The instance does not publish an OpenAPI contract for conversation trace exports." });
+  let handle;
+  try { handle = await fs.open(output, "wx", 0o600); }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") throw usageError(`The output file ${raw} already exists.`, "Choose a new output path.");
+    throw error;
+  }
+  let body: Uint8Array;
+  let manifest: Record<string, unknown>;
+  try {
+    const response = await callOperation(ctx, await ctx.client(), doc, op, { params: { conversation_id: [conversation], trace_id: [traceId] }, preserveBytes: true });
+    const data = response.data as { trace?: unknown; manifest?: unknown } | null;
+    if (!data || typeof data !== "object" || !data.trace || typeof data.trace !== "object" || Array.isArray(data.trace) || !data.manifest || typeof data.manifest !== "object" || Array.isArray(data.manifest) || !response.bytes) {
+      throw new CavelonError(ExitCode.failure, { code: "invalid_trace_export", message: "The instance did not return a JSON trace and manifest; no export was kept." });
+    }
+    body = response.bytes;
+    manifest = data.manifest as Record<string, unknown>;
+    await handle.writeFile(body);
+  } catch (error) {
+    await handle.close();
+    await fs.unlink(output);
+    throw error;
+  }
+  await handle.close();
+  return {
+    data: { conversation_id: conversation, trace_id: traceId, written: raw, bytes: body.length, file_sha256: createHash("sha256").update(body).digest("hex"), manifest, signature_verified: false },
+    text: `Wrote ${body.length} original bytes to ${raw}. The instance's manifest is preserved; its signature has not been verified locally.`,
+  };
+}
+
 export const trace: CommandSpec = {
   name: "trace",
   summary: "Summarise the traces of a run, with a command for each span's detail.",
   description:
     "<run> is a trigger run id, a test run id, a conversation id or an operation id (op_…).\n" +
-    "Without --trace: one line per trace (or per test result). With --trace: its spans. With --span: one span in full.",
+    "Without --trace: one line per trace (or per test result). With --trace: its spans. With --span: one span in full.\n" +
+    "With --kind conversation --trace <id> --export <file>: save the instance's original JSON export and integrity manifest inside the solution. Needs conversations.view and conversations.export. Signatures remain unverified locally.",
   readOnly: true,
   idempotent: true,
   mcpTool: "trace",
@@ -1289,6 +1326,7 @@ export const trace: CommandSpec = {
     trace: { type: "string", value: "<trace_id>", description: "Show this trace's spans." },
     span: { type: "string", value: "<span_id>", description: "Show one span's input, output and error (needs --trace)." },
     full: { type: "boolean", description: "Do not shorten span input and output." },
+    export: { type: "string", value: "<file>", description: "Save the original trace export to a new file inside the solution (needs --kind conversation and --trace; excludes --span and --full)." },
     limit: LIMIT_OPTION,
     cursor: CURSOR_OPTION,
   },
@@ -1299,6 +1337,14 @@ export const trace: CommandSpec = {
     if (kind && !["trigger", "test", "conversation"].includes(kind)) throw usageError("--kind must be trigger, test or conversation.");
     const limit = intOption(input, "limit", { min: 1, max: 500, fallback: 20 })!;
     const cursor = stringOption(input, "cursor");
+    const output = stringOption(input, "export");
+    if (output !== undefined) {
+      const traceId = stringOption(input, "trace");
+      if (!output || kind !== "conversation" || !traceId || id.startsWith("op_") || stringOption(input, "span") || boolOption(input, "full") || cursor) {
+        throw usageError("--export needs a conversation id, --kind conversation and --trace <trace_id>; it cannot be combined with --span, --full or --cursor.");
+      }
+      return exportTrace(ctx, id, traceId, output);
+    }
     if (id.startsWith("op_")) {
       const op = await getOperation(await ctx.client(), id);
       const ref = op.result_ref;

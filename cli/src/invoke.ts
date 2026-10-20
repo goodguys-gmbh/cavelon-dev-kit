@@ -24,6 +24,8 @@ export interface CallArguments {
   bytes?: Uint8Array;
   headers?: Record<string, string>;
   timeoutMs?: number;
+  /** Keep original response bytes too, including a JSON attachment. */
+  preserveBytes?: boolean;
   /** Platform calls send no tenant. */
   sendTenant?: boolean;
   /** False sends the request without asking for a confirmation id (sent again with the one the instance asked for). */
@@ -157,7 +159,9 @@ export async function callOperation(ctx: Context, client: ApiClient, doc: OpenAp
     });
     throw confirmationRefused(error, Boolean(confirmed) || args.confirmation === false);
   }
-  return { status: response.status, contentType, data: isText ? (text ? data : null) : undefined, bytes: isText ? undefined : bytes };
+  let responseData: unknown;
+  if (isText) responseData = text ? data : null;
+  return { status: response.status, contentType, data: responseData, bytes: !isText || args.preserveBytes ? bytes : undefined };
 }
 
 /**

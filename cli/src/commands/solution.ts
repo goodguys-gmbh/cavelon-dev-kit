@@ -57,6 +57,7 @@ import { checkedBy, MODEL_UNKNOWN_CODE, missingInventory, REFERENCE_UNKNOWN_CODE
 import { cavelonCommand, personCommand, printedCommand, spoken } from "../printed.js";
 import { secretStep, variableSetCommand } from "./values.js";
 import { maySetSecrets, SECRET_SETTER, SECRET_SETTER_IN_ADMIN, secretsInAdminOnly, VARIABLE_SETTER } from "../secret-access.js";
+import { publicationNotice } from "./publication.js";
 import { ACTIVATOR, accessFor, accessOf, mayActivate, operationAccess, principalOf, type CredentialAccess } from "../access.js";
 
 /**
@@ -758,6 +759,8 @@ function changesNothing(p: Preview): boolean {
 
 export function previewText(p: Preview, context: PreviewContext = {}): string {
   const lines: Array<[string, unknown]> = [["ready", p.ready ? "yes" : "no"]];
+  const publication = publicationNotice(p.publication);
+  if (publication) lines.push(["publication", publication]);
   const s = p.summary ?? {};
   for (const [label, map] of [["creates", s.creates], ["updates", s.updates], ["deletes", s.deletes]] as const) {
     const text = counts(map);
@@ -1053,6 +1056,7 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
     const text = keyValues([
       ["applied", `preview ${stored.preview_id}${stored.harness ? ` to ${stored.harness.slug}` : ""}${stored.env ? ` (env ${stored.env})` : ""}`],
       ["acted on", targetText(acting)],
+      ["publication", publicationNotice(result.publication)],
       ["tenant-wide", sharedText],
       ["created", counts(summary?.creates) || undefined],
       ["updated", counts(summary?.updates) || undefined],
@@ -1190,6 +1194,15 @@ function packageHarnessName(pkg: Record<string, unknown>, slug: string): string 
 
 const QUERY_IMPORT_REASON = "creates or changes database queries, whose SQL can read or change rows in the tenant's database";
 
+/** Only an explicit, scoped, versioned instance report establishes isolation from live graph traffic. */
+function graphDraftTarget(preview: Preview, harness: Harness | undefined): boolean {
+  const p = preview.publication as Record<string, unknown> | null | undefined;
+  return Boolean(harness && p?.target === "draft" && p.harness_id === harness.id &&
+    Number.isSafeInteger(p.published_version) && (p.published_version as number) >= 0 &&
+    Number.isSafeInteger(p.draft_revision) && (p.draft_revision as number) >= 0 &&
+    Array.isArray(preview.impact?.active_harnesses));
+}
+
 /**
  * Whether a preview needs a person's look before it is confirmed, and why; naming the active solutions it reaches. Tenant-wide
  * sections it imports come first: they change every solution of the tenant, active or not.
@@ -1207,7 +1220,7 @@ function personReason(
     return `changes what the whole tenant shares (${list(shared, 5)})${reaching}`;
   }
   const active = (preview.impact?.active_harnesses ?? []).map((h) => h.harness_slug ?? h.name).filter((n): n is string => Boolean(n));
-  if (harness?.status === "active" && !active.includes(harness.slug)) active.unshift(harness.slug);
+  if (harness?.status === "active" && !graphDraftTarget(preview, harness) && !active.includes(harness.slug)) active.unshift(harness.slug);
   if (active.length) return `reaches the active solution${active.length === 1 ? "" : "s"} ${list(active, 5)}`;
   if (preview.impact?.active_harnesses?.length) return "reaches an active solution";
   if (counts(preview.summary?.deletes) || mode === "replace") return "deletes";
@@ -1221,6 +1234,7 @@ export const apply: CommandSpec = {
   summary: "Preview the package files against the instance and print a preview id; --confirm <id> imports exactly that preview.",
   description:
     "Without --confirm, shows a preview. With --yolo, an eligible routine draft is previewed and imported in one call.\n" +
+    "An active solution qualifies only where the instance explicitly reports an isolated graph draft; publish stays a separate person-reviewed step.\n" +
     "The preview shows what changes, which active solutions it reaches, what the target\n" +
     "still needs (secrets and variables with the command that sets each, grants, runtime bindings, trigger identities), loop\n" +
     "budgets and ignored sections, and is stored in .cavelon/. A preview never creates the solution: one the env file names\n" +
@@ -1463,7 +1477,7 @@ export const apply: CommandSpec = {
     // remain a review step even when they have no known person-only reason.
     const queryEffectsKnown = !queryTools(disk.package).length ||
       Array.isArray((preview.database_queries as { would_write?: unknown } | undefined)?.would_write);
-    if (preview.preview_id && !reason && !refusal && harness?.status === "draft" &&
+    if (preview.preview_id && !reason && !refusal && (harness?.status === "draft" || graphDraftTarget(preview, harness)) &&
         scope === "agent_graph" && queryEffectsKnown && preview.summary && Array.isArray(preview.impact?.active_harnesses) &&
         await yoloAllows(ctx, harness)) {
       const applied = await confirmPreview(ctx, project, preview.preview_id, false, true);

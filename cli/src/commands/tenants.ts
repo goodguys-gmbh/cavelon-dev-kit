@@ -47,6 +47,9 @@ interface Harness {
   is_default?: boolean;
   description?: string | null;
   readiness?: { ready_to_activate?: boolean } | null;
+  published_version?: number;
+  has_draft?: boolean;
+  draft_revision?: number;
 }
 
 function idempotency(key: string | undefined): Record<string, string> | undefined {
@@ -306,6 +309,11 @@ export const tenantList: CommandSpec = {
   },
 };
 
+function draftMark(value: boolean | undefined): string {
+  if (value === undefined) return "?";
+  return value ? "yes" : "";
+}
+
 export const harnessList: CommandSpec = {
   name: "harness list",
   summary: "List the tenant's solutions (harnesses), marking the default route.",
@@ -333,14 +341,17 @@ export const harnessList: CommandSpec = {
         slug: h.slug,
         name: h.name,
         status: h.status,
+        ...(typeof h.published_version === "number" ? { published_version: h.published_version } : {}),
+        ...(typeof h.has_draft === "boolean" ? { has_draft: h.has_draft } : {}),
+        ...(typeof h.draft_revision === "number" ? { draft_revision: h.draft_revision } : {}),
         is_default: marksDefault ? h.is_default === true : null,
         ...(h.readiness ? { ready_to_activate: h.readiness.ready_to_activate ?? null } : {}),
       })),
       limit,
       stringOption(input, "cursor"),
     );
-    const rows = page.items.map((h) => ({ ...h, default: h.is_default ? "yes" : "" }));
-    const columns = ["slug", "name", "status", ...(marksDefault ? ["default"] : []), ...(boolOption(input, "readiness") ? ["ready_to_activate"] : []), "id"];
+    const rows = page.items.map((h) => ({ ...h, default: h.is_default ? "yes" : "", draft: draftMark(h.has_draft) }));
+    const columns = ["slug", "name", "status", ...(marksDefault ? ["default"] : []), ...(harnesses.some(h => typeof h.published_version === "number" || typeof h.has_draft === "boolean") ? ["published_version", "draft"] : []), ...(boolOption(input, "readiness") ? ["ready_to_activate"] : []), "id"];
     return {
       data: page,
       text: (table(rows, columns) || `No solutions yet. Create one: ${cavelonCommand("harness", "new", fill("slug"))}`) + moreHint(page.next_cursor, cavelonCommand("harness", "list")),

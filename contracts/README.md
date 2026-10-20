@@ -19,6 +19,27 @@ catalog, unrelated snapshots and defaults stay as recorded. Tests cover the
 file metadata against the response schema and an older instance without the
 file-list operation; these snapshots do not prove real document conversion.
 
+Also on 2026-10-20 the instance's development contract for solution publication
+was selected: four lifecycle routes and their DTOs, import response publication
+metadata, optional harness version/draft fields, bound-confirmation marks and
+eight publication/rollback error-catalog entries. The OpenAPI and catalog were
+generated from the instance's own generators without running a live instance;
+only the relevant shapes were selected. These routes are used only when an
+instance advertises them, with missing/older metadata remaining unknown.
+This records the interface, not deployment or real-person acceptance.
+
+On 2026-10-20 the conversation trace export and optional chat, page-context,
+tenant and execution-identity metadata were selectively refreshed from an
+immutable merged instance build's checked-in OpenAPI, without running an
+instance. The added operation is listed in `kit-operations.json`. This includes
+`PageContext.domain`, the chat confirmation/reader binding fields, the force
+activation person-only field marker, metadata extraction parallelism and its
+published write bounds, database quota usage, and execution-identity steering
+metadata. Existing required fields, unrelated shapes and feature defaults stay
+as recorded. The export response is an open JSON attachment; the CLI preserves
+its original bytes and manifest instead of reconstructing a trace summary.
+Snapshot tests do not verify server signatures or prove deployment.
+
 On 2026-10-12 the database connector contracts were selectively refreshed
 from an immutable merged instance build, without running an instance.
 Only database operations and their referenced schemas, the connector offer,

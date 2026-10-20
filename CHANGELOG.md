@@ -9,6 +9,17 @@ CLI, the skills and the plugin.
 
 ### Added
 
+- Solution-publication inspection, publish, draft discard and pinned-version
+  rollback commands/MCP tools when offered by the instance. Live publication,
+  rollback and draft removal keep fresh person confirmation in YOLO, bind
+  reviewed versions/revisions/affected waiting runs, and never force readiness.
+  Apply and solution listings preserve optional draft/publication metadata.
+
+- `trace --kind conversation --trace <id> --export <file>` saves the instance's
+  original JSON export and integrity manifest through CLI or MCP. Output stays
+  inside the solution and never overwrites a file; the saved file's SHA-256 is
+  reported separately from the instance's unverified signature.
+
 - Document privacy and table support: `kb documents`, `kb files` and
   `kb download` (also MCP tools) show held documents and conversion file ids,
   save readable PDFs/workbooks without overwriting files, and preserve the
@@ -23,6 +34,11 @@ CLI, the skills and the plugin.
   including in a person's token terminal and in YOLO mode.
 
 ### Changed
+
+- Refreshed optional published chat/page-context, tenant quota/parallelism and
+  execution-identity metadata, preserving older-instance fallbacks and feature
+  defaults. Testing guidance distinguishes unattended runs from activation
+  evidence and documents trace-export access and integrity limits.
 
 - WinGet manifests use Microsoft's recommended 1.12 schema. Native Windows CI
   and releases validate, install, verify the command hash/version and uninstall

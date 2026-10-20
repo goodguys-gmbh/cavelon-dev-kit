@@ -13,6 +13,7 @@ import { limitsSet } from "./limits-set.js";
 import { modelsList, modelsSetLimit } from "./models.js";
 import { activate, apply, explain, pull, validate } from "./solution.js";
 import { schema } from "./schema.js";
+import { publication, publish, discardDraft, rollback } from "./publication.js";
 import { harnessClone, harnessDefault, harnessList, harnessNew, tenantCreate, tenantList } from "./tenants.js";
 import { kbUpload, testRun, trace } from "./work.js";
 import { kbDocuments, kbFiles, kbDownload } from "./documents.js";
@@ -97,6 +98,10 @@ export const COMMANDS: CommandSpec[] = [
   tenantList,
   harnessList,
   harnessDefault,
+  publication,
+  publish,
+  discardDraft,
+  rollback,
   harnessNew,
   harnessClone,
   activate,

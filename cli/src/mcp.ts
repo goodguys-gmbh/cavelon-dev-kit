@@ -42,6 +42,7 @@ const INSTRUCTIONS =
   "Instance confirmation ids remain bound to the exact request and are requested only after person approval; routine automation " +
   "does not manufacture that approval. confirmation_required or confirmation_invalid changed nothing: return to a preview " +
   "and the required person approval. YOLO never overrides person-only access or customer database-write consent. " +
+  "Where the instance offers graph publication, apply reports whether scoped edits land in an unpublished draft. Read it with harness_publication and review solution_publish after tests; publishing, rollback and draft discard retain fresh person confirmation in YOLO. Never infer draft isolation on older instances. " +
   "chat sends one message to a solution and returns its answer: the way to try one that is not the default route. " +
   "kb_upload names files that match an active document of the knowledge base; with replace it replaces them, and where the " +
   "instance's upload cannot, it returns what it would deactivate and uploads nothing without its confirm_token. " +

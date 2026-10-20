@@ -284,6 +284,7 @@ cavelon apply --env test --confirm <preview-id> # import exactly what was previe
 cavelon kb upload seeds/faq --kb "Support FAQ" --wait
 cavelon test run --wait --timeout 5m
 cavelon trace <run>                             # why a case passed or failed
+cavelon trace <conversation-id> --kind conversation --trace <trace-id> --export trace.json  # original export + manifest
 cavelon activate                                # through the readiness gate, never by force
 ```
 
@@ -319,6 +320,7 @@ how to review and test its work.
 | [Install pages](docs/install/README.md) | one page per client, including OpenCode, Pi, Qwen Code, Cline, Kilo, Goose and OMP; install, approval scope, updating, removal and plugin packages |
 | [Qualification](docs/coding-agent-qualification.md) | which clients, versions and platforms were checked how: automated, simulated or by a person, and what remains open |
 | [Customer pilot](docs/customer-pilot.md) | the checklist and report template for one customer's platforms, model and network decisions, offline install and databases |
+| [Solution publication](docs/solution-publication.md) | review graph drafts, publish and roll back where the instance offers it |
 | [Getting started](docs/getting-started.md) | a full tutorial from an empty folder to an active solution |
 | [Building with a coding agent](docs/coding-agents.md) | briefing the agent, the loop as it runs it, what stays with you, reviewing and testing its work, prompts to copy |
 | [Concepts](docs/concepts.md) | instance, tenant, solution, package, environments, preview and confirm, operations, tests, activation, Platform mode |

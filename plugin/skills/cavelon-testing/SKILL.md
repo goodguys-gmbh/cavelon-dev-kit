@@ -233,6 +233,19 @@ the Admin. Then:
   the model with on the tool's span (`error_code`); `cavelon explain <code>`
   says how to fix it.
 
+Unattended schedules, where offered by the instance, are enabled by a person in
+the Admin. A schedule or automatic run is useful regression evidence but does
+not replace the latest manually started whole-suite run required for activation.
+Read the instance's current Graph Check errors and published catalog; fix the
+named node/configuration before trying activation again.
+
+On an instance with graph drafts, testing/Playground and live traffic may use
+different graph versions. Read `cavelon harness publication <solution> --json`
+and the instance's run/version metadata; a passing draft test does not put its
+changes live. Review `cavelon publish --harness <solution>` only after fixing
+readiness, and follow its person-confirmation instruction. Older instances
+keep their existing execution behavior.
+
 ## Reading what happened
 
 ```bash
@@ -250,6 +263,23 @@ carries the id its route needs. A case's traces are under its
 under the test run's id; a wrong id answers with a hint naming the right one.
 The spans list suggests the span to open first: the one that failed, else the
 last model call, else the knowledge search.
+
+To keep the instance's original conversation trace export, including its
+integrity manifest, save it to a new file inside the solution:
+
+```bash
+cavelon trace <conversation-id> --kind conversation --trace <trace-id> --export trace.json
+```
+
+This needs `conversations.view` and `conversations.export`; an instance that
+does not advertise the export operation reports it as unavailable. The same
+option is available on the MCP `trace` tool. The file is never overwritten,
+and the exported bytes are not shortened or reformatted. JSON output reports
+`file_sha256` for the saved file and preserves the instance's `manifest`.
+`manifest.trace_sha256` and a possible HMAC signature are supplied by the
+instance; the kit does not verify that HMAC or request its signing secret.
+An unsigned manifest (`signed: false`) is allowed. Treat the export as trace
+data with the same access and sharing restrictions as the original trace.
 
 Each step lists its assertions with pass or FAIL (`Assertions (1 of 2
 passed)`, then one line each with the expected and observed value of a failed

@@ -9,6 +9,8 @@ import { printMode } from "./printed.js";
  * same code. A test keeps this list in step with the codes in the source.
  */
 export const KIT_ERROR_CODES: CatalogEntry[] = [
+  { code: "invalid_trace_export", area: "cli", message: "The instance did not return a JSON trace and integrity manifest; no export was kept.", hint: "Retry the export; if it repeats, report the command and instance version without sharing sensitive trace contents." },
+  { code: "publication_state_unknown", area: "cli", message: "The instance did not describe complete version, draft, readiness or affected-run state; nothing was changed.", hint: "Review publication in the Admin or update the instance before publishing from the kit." },
   { code: "held_for_privacy_review", area: "cli", message: "This document is held for privacy review; it is not indexed or readable.", hint: "A person with knowledge_bases.manage_documents reviews and releases it in the Admin. Tokens and API keys cannot release it; YOLO does not change this." },
   { code: "document_file_for_a_person", area: "cli", message: "This document file is restricted or not agent-readable.", hint: "A person with knowledge_bases.manage_documents opens it in the Admin. The privacy vault and conversion report are never returned to agents." },
   // Login, instance and tenant.

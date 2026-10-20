@@ -161,7 +161,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/GraphPackageImportResponse"
+                }
               }
             }
           },
@@ -202,7 +204,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/GraphPackageImportResponse"
+                }
               }
             }
           },
@@ -6354,6 +6358,275 @@
         "x-cavelon-person-only": true,
         "x-cavelon-person-only-reason": "Releases a document held because its redaction is not clean"
       }
+    },
+    "/api/v1/conversations/{conversation_id}/traces/{trace_id}/export": {
+      "get": {
+        "tags": [
+          "conversations"
+        ],
+        "summary": "Export Conversation Trace",
+        "operationId": "export_conversation_trace_api_v1_conversations__conversation_id__traces__trace_id__export_get",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "trace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Trace Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {},
+          "404": {},
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/harnesses/{harness_id}/publication": {
+      "get": {
+        "tags": [
+          "harnesses"
+        ],
+        "summary": "Get Solution Publication",
+        "operationId": "get_solution_publication_api_v1_harnesses__harness_id__publication_get",
+        "parameters": [
+          {
+            "name": "harness_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Harness Id"
+            }
+          },
+          {
+            "name": "snapshot_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Snapshot Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HarnessPublicationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/harnesses/{harness_id}/publish": {
+      "post": {
+        "tags": [
+          "harnesses"
+        ],
+        "summary": "Publish Solution",
+        "operationId": "publish_solution_api_v1_harnesses__harness_id__publish_post",
+        "parameters": [
+          {
+            "name": "harness_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Harness Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HarnessPublish"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HarnessPublicationMutationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "428": {}
+        },
+        "x-cavelon-confirmation": "required",
+        "x-cavelon-confirmation-when": "Always: publishing the reviewed draft changes the solution used by live channels, triggers and API traffic."
+      }
+    },
+    "/api/v1/harnesses/{harness_id}/rollback": {
+      "post": {
+        "tags": [
+          "harnesses"
+        ],
+        "summary": "Rollback Solution",
+        "operationId": "rollback_solution_api_v1_harnesses__harness_id__rollback_post",
+        "parameters": [
+          {
+            "name": "harness_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Harness Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HarnessRollback"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HarnessPublicationMutationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "428": {}
+        },
+        "x-cavelon-confirmation": "required",
+        "x-cavelon-confirmation-when": "Always: restoring a published version changes live traffic and preserves the current draft in a recovery snapshot."
+      }
+    },
+    "/api/v1/harnesses/{harness_id}/discard-draft": {
+      "post": {
+        "tags": [
+          "harnesses"
+        ],
+        "summary": "Discard Solution Draft",
+        "operationId": "discard_solution_draft_api_v1_harnesses__harness_id__discard_draft_post",
+        "parameters": [
+          {
+            "name": "harness_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Harness Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicationExpected"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HarnessPublicationMutationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "428": {}
+        },
+        "x-cavelon-confirmation": "required",
+        "x-cavelon-confirmation-when": "Always: discarding removes the unpublished edits; the published graph keeps serving live traffic."
+      }
     }
   },
   "components": {
@@ -9407,6 +9680,29 @@
               }
             ],
             "title": "Controlled Timezone"
+          },
+          "confirmed_change_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmed Change Id"
+          },
+          "reader_binds_identity": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reader Binds Identity"
           }
         },
         "type": "object",
@@ -12878,7 +13174,9 @@
           "force": {
             "type": "boolean",
             "title": "Force",
-            "default": false
+            "default": false,
+            "x-cavelon-person-only": true,
+            "x-cavelon-person-only-reason": "Forces a solution live without its readiness evidence"
           },
           "reason": {
             "anyOf": [
@@ -13071,6 +13369,21 @@
               }
             ],
             "title": "Took Default Route From Name"
+          },
+          "published_version": {
+            "type": "integer",
+            "title": "Published Version",
+            "default": 0
+          },
+          "has_draft": {
+            "type": "boolean",
+            "title": "Has Draft",
+            "default": false
+          },
+          "draft_revision": {
+            "type": "integer",
+            "title": "Draft Revision",
+            "default": 0
           }
         },
         "type": "object",
@@ -13516,6 +13829,21 @@
             },
             "type": "array",
             "title": "Iteration Of"
+          },
+          "published_version": {
+            "type": "integer",
+            "title": "Published Version",
+            "default": 0
+          },
+          "has_draft": {
+            "type": "boolean",
+            "title": "Has Draft",
+            "default": false
+          },
+          "draft_revision": {
+            "type": "integer",
+            "title": "Draft Revision",
+            "default": 0
           }
         },
         "type": "object",
@@ -16650,6 +16978,18 @@
               }
             ],
             "title": "User Pressed Apply"
+          },
+          "domain": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 253
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain"
           }
         },
         "type": "object",
@@ -19725,6 +20065,17 @@
               }
             ],
             "title": "Max Database Queries"
+          },
+          "metadata_extraction_parallelism": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata Extraction Parallelism"
           }
         },
         "type": "object",
@@ -19872,6 +20223,19 @@
               }
             ],
             "title": "Max Database Queries"
+          },
+          "metadata_extraction_parallelism": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 64,
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata Extraction Parallelism"
           }
         },
         "type": "object",
@@ -19970,6 +20334,30 @@
             "type": "object",
             "title": "Tools",
             "default": {}
+          },
+          "database_connections": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Database Connections"
+          },
+          "database_queries": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Database Queries"
           }
         },
         "type": "object",
@@ -22109,6 +22497,22 @@
             "type": "array",
             "title": "Uncovered Solutions",
             "default": []
+          },
+          "rights_beyond_editors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Rights Beyond Editors",
+            "default": []
+          },
+          "steered_by": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Steered By",
+            "default": []
           }
         },
         "type": "object",
@@ -24159,6 +24563,459 @@
         },
         "type": "object",
         "title": "KBUpdateRequest"
+      },
+      "PublicationExpected": {
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "minimum": 0,
+            "title": "Expected Version"
+          },
+          "expected_draft_revision": {
+            "type": "integer",
+            "minimum": 0,
+            "title": "Expected Draft Revision"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_version",
+          "expected_draft_revision"
+        ],
+        "title": "PublicationExpected"
+      },
+      "PublicationChange": {
+        "properties": {
+          "entity": {
+            "type": "string",
+            "title": "Entity"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "added",
+              "changed",
+              "removed"
+            ],
+            "title": "Action"
+          }
+        },
+        "type": "object",
+        "required": [
+          "entity",
+          "id",
+          "name",
+          "action"
+        ],
+        "title": "PublicationChange"
+      },
+      "HarnessRollback": {
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "minimum": 0,
+            "title": "Expected Version"
+          },
+          "expected_draft_revision": {
+            "type": "integer",
+            "minimum": 0,
+            "title": "Expected Draft Revision"
+          },
+          "snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot Id"
+          },
+          "expected_waiting_run_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Expected Waiting Run Ids"
+          },
+          "confirm_affected_runs": {
+            "type": "boolean",
+            "title": "Confirm Affected Runs",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_version",
+          "expected_draft_revision"
+        ],
+        "title": "HarnessRollback"
+      },
+      "PublicationWaitingRun": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "node_ref": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Node Ref"
+          },
+          "node_name": {
+            "type": "string",
+            "title": "Node Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "node_ref",
+          "node_name"
+        ],
+        "title": "PublicationWaitingRun"
+      },
+      "HarnessPublicationMutationResponse": {
+        "properties": {
+          "published_version": {
+            "type": "integer",
+            "title": "Published Version"
+          },
+          "draft_revision": {
+            "type": "integer",
+            "title": "Draft Revision"
+          },
+          "has_draft": {
+            "type": "boolean",
+            "title": "Has Draft"
+          },
+          "draft_change_count": {
+            "type": "integer",
+            "title": "Draft Change Count"
+          },
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/PublicationChange"
+            },
+            "type": "array",
+            "title": "Changes"
+          },
+          "readiness": {
+            "$ref": "#/components/schemas/HarnessReadinessResponse"
+          },
+          "waiting_runs_affected": {
+            "type": "integer",
+            "title": "Waiting Runs Affected"
+          },
+          "waiting_runs": {
+            "items": {
+              "$ref": "#/components/schemas/PublicationWaitingRun"
+            },
+            "type": "array",
+            "title": "Waiting Runs"
+          },
+          "review_run_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Review Run Ids"
+          },
+          "published_snapshots": {
+            "items": {
+              "$ref": "#/components/schemas/PublishedSnapshotResponse"
+            },
+            "type": "array",
+            "title": "Published Snapshots"
+          },
+          "activation_override": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ActivationOverrideResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "can_rollback": {
+            "type": "boolean",
+            "title": "Can Rollback"
+          },
+          "harness": {
+            "$ref": "#/components/schemas/HarnessResponse"
+          },
+          "published_snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published Snapshot Id"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "published_version",
+          "draft_revision",
+          "has_draft",
+          "draft_change_count",
+          "changes",
+          "readiness",
+          "waiting_runs_affected",
+          "waiting_runs",
+          "review_run_ids",
+          "published_snapshots",
+          "activation_override",
+          "can_rollback",
+          "harness"
+        ],
+        "title": "HarnessPublicationMutationResponse"
+      },
+      "HarnessPublicationResponse": {
+        "properties": {
+          "published_version": {
+            "type": "integer",
+            "title": "Published Version"
+          },
+          "draft_revision": {
+            "type": "integer",
+            "title": "Draft Revision"
+          },
+          "has_draft": {
+            "type": "boolean",
+            "title": "Has Draft"
+          },
+          "draft_change_count": {
+            "type": "integer",
+            "title": "Draft Change Count"
+          },
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/PublicationChange"
+            },
+            "type": "array",
+            "title": "Changes"
+          },
+          "readiness": {
+            "$ref": "#/components/schemas/HarnessReadinessResponse"
+          },
+          "waiting_runs_affected": {
+            "type": "integer",
+            "title": "Waiting Runs Affected"
+          },
+          "waiting_runs": {
+            "items": {
+              "$ref": "#/components/schemas/PublicationWaitingRun"
+            },
+            "type": "array",
+            "title": "Waiting Runs"
+          },
+          "review_run_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Review Run Ids"
+          },
+          "published_snapshots": {
+            "items": {
+              "$ref": "#/components/schemas/PublishedSnapshotResponse"
+            },
+            "type": "array",
+            "title": "Published Snapshots"
+          },
+          "activation_override": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ActivationOverrideResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "can_rollback": {
+            "type": "boolean",
+            "title": "Can Rollback"
+          }
+        },
+        "type": "object",
+        "required": [
+          "published_version",
+          "draft_revision",
+          "has_draft",
+          "draft_change_count",
+          "changes",
+          "readiness",
+          "waiting_runs_affected",
+          "waiting_runs",
+          "review_run_ids",
+          "published_snapshots",
+          "activation_override",
+          "can_rollback"
+        ],
+        "title": "HarnessPublicationResponse"
+      },
+      "HarnessPublish": {
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "minimum": 0,
+            "title": "Expected Version"
+          },
+          "expected_draft_revision": {
+            "type": "integer",
+            "minimum": 0,
+            "title": "Expected Draft Revision"
+          },
+          "force": {
+            "type": "boolean",
+            "title": "Force",
+            "default": false,
+            "x-cavelon-person-only": true,
+            "x-cavelon-person-only-reason": "Forces a solution live without its readiness evidence"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "expected_waiting_run_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Expected Waiting Run Ids"
+          },
+          "confirm_affected_runs": {
+            "type": "boolean",
+            "title": "Confirm Affected Runs",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_version",
+          "expected_draft_revision"
+        ],
+        "title": "HarnessPublish"
+      },
+      "PublishedSnapshotResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "version",
+          "label",
+          "created_at"
+        ],
+        "title": "PublishedSnapshotResponse"
+      },
+      "GraphPackageImportResponse": {
+        "properties": {
+          "publication": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GraphPublicationMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "GraphPackageImportResponse"
+      },
+      "GraphPublicationMetadata": {
+        "properties": {
+          "target": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "published"
+            ],
+            "title": "Target"
+          },
+          "harness_id": {
+            "type": "string",
+            "title": "Harness Id"
+          },
+          "published_version": {
+            "type": "integer",
+            "title": "Published Version"
+          },
+          "draft_revision": {
+            "type": "integer",
+            "title": "Draft Revision"
+          }
+        },
+        "type": "object",
+        "required": [
+          "target",
+          "harness_id",
+          "published_version",
+          "draft_revision"
+        ],
+        "title": "GraphPublicationMetadata"
       }
     }
   }

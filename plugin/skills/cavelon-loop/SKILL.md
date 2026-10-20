@@ -154,7 +154,21 @@ use it when you parse the result.
 
 ## The loop
 
-1. **Pull** what is live: `cavelon pull`. It refuses when `package/` has
+When the instance advertises solution publication, an active solution's scoped
+graph apply writes an unpublished draft. Read the explicit `publication`
+report; older instances keep their previous behavior. Inspect it with
+`cavelon harness publication <solution> --json`, run tests and fix readiness,
+then review `cavelon publish --harness <solution>`. Publication changes live
+traffic and always needs the person's fresh MCP/own-terminal confirmation,
+including in YOLO. Never force it from the kit. Conflicting versions, revisions
+or affected waiting runs require a fresh review. Shared tenant resources keep
+their existing behavior and are not isolated by the graph draft.
+`cavelon harness discard-draft --harness <solution>` reviews removal of the
+pending draft; `cavelon harness rollback --harness <solution>` reviews an earlier
+pinned version as a new publication. Rollback first retains unpublished edits
+in a pinned recovery snapshot and clears the draft; report its warnings.
+
+1. **Pull** the instance's editable package: `cavelon pull`. It refuses when `package/` has
    uncommitted changes (outside git: files changed since the last pull);
    commit or apply them first. A file as the last pull or confirmed apply left
    it counts as unchanged, so a pull right after an apply goes ahead without a
@@ -323,7 +337,7 @@ A technical preview is not a request for a chat approval. Within the user's
 requested work, read and confirm a preview that needs no person without
 asking them again or showing every intermediate preview. For `apply`, check
 `show_to_person: false` and no `needs_person` requirement. This includes
-`apply` to a draft solution in a test environment (no query
+`apply` to a draft solution, or an active solution's explicitly reported isolated graph draft, in a test environment (no query
 writes or other reason to show it to a person), `loop start` of a trigger
 of a draft solution, `loop cancel` and `sandbox seed` of a test run or Sandbox
 you started, `kb upload --replace`, and known routine `api` operations.
@@ -331,7 +345,7 @@ Summarize the outcome with the work. A preview needs the person's decision
 when:
 
 - the preview lists an active solution under "reaches active", or the target
-  solution is active;
+  solution is active without explicit isolated-draft metadata;
 - the environment is `prod` (`--env prod`), or the preview deletes anything
   (`--mode replace`);
 - the preview changes tenant-wide sections (`tenant-wide: … change for every
