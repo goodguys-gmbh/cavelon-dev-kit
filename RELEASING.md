@@ -191,11 +191,27 @@ Use Microsoft's recommended [OpenID Connect authentication](https://github.com/A
    profile using that validated identity.
 2. Create a single-tenant Entra app registration and a federated credential for
    GitHub Actions. Select repository `goodguys-gmbh/cavelon-dev-kit`, entity type
-   **Environment**, and environment `release`. The exact subject is
-   `repo:goodguys-gmbh/cavelon-dev-kit:environment:release`, issuer
-   `https://token.actions.githubusercontent.com`, and audience
-   `api://AzureADTokenExchange`. No client secret or delegated API permission is
-   needed for this exchange.
+   **Environment**, and environment `release`. Before saving, get the exact
+   subject from this repository's published OIDC prefix:
+
+   ```bash
+   gh api repos/goodguys-gmbh/cavelon-dev-kit/actions/oidc/customization/sub \
+     --jq '(.sub_claim_prefix // error("Inspect the release login diagnostics for the subject")) + ":environment:release"'
+   ```
+
+   This repository uses [immutable subject claims](https://docs.github.com/en/actions/reference/security/oidc#immutable-subject-claims):
+   `repo:OWNER@OWNER-ID/REPO@REPO-ID:environment:release`. Azure's GitHub form
+   may generate the older name-only subject; replace it with the exact value
+   above. For a repository using the older format, its prefix is
+   `repo:OWNER/REPO`. If the API does not publish a prefix, inspect the Azure
+   login step's **Federated token details → subject claim**, without printing
+   the raw token. An `AADSTS700213` login failure means these exact values do
+   not match; correct the existing federated credential rather than disabling
+   immutable claims or using a wildcard.
+
+   Keep issuer `https://token.actions.githubusercontent.com` and audience
+   `api://AzureADTokenExchange`. No client secret or delegated API permission
+   is needed for this exchange.
 3. Assign the profile-scoped signer role to that app's service principal. This
    permits signing with that profile, not account or subscription administration.
 4. Set the following variables in GitHub's `release` environment. Keep its
