@@ -1,9 +1,9 @@
 import { accessFor, operationAccess, whoInstead } from "../access.js";
 import { positional, stringOption, type CommandSpec, type Context, type Input } from "../command.js";
-import { confirmation, confirmTokenRequired, PERSON_CONFIRMS_HELP } from "../confirm-token.js";
+import { confirmation, confirmTokenRequired, PERSON_CONFIRMS_HELP, type Confirmation } from "../confirm-token.js";
 import { CavelonError, ExitCode, usageError } from "../errors.js";
 import { clip, keyValues, table } from "../format.js";
-import { harnessNotFoundError, lookupHarness } from "../harness-ref.js";
+import { harnessNotFoundError, lookupHarness, type HarnessSummary } from "../harness-ref.js";
 import { callOperation, workflowOperation } from "../invoke.js";
 import { cavelonCommand } from "../printed.js";
 
@@ -73,46 +73,101 @@ export const publication: CommandSpec = {
 };
 
 type Action = "publish" | "discard-draft" | "rollback";
-function changeCommand(action: Action): CommandSpec {
-  const words = action === "publish" ? ["publish"] : ["harness", action];
-  const tool = action === "publish" ? "solution_publish" : `harness_${action.replaceAll("-", "_")}`;
+type Snapshot = Publication["published_snapshots"][number];
+const ACTIONS = {
+  publish: { words: ["publish"], tool: "solution_publish", summary: "Review and publish a solution's draft through its readiness gate." },
+  "discard-draft": { words: ["harness", "discard-draft"], tool: "harness_discard_draft", summary: "Review and discard a solution's unpublished draft." },
+  rollback: { words: ["harness", "rollback"], tool: "harness_rollback", summary: "Review and restore a pinned published version as a new publication." },
+};
+
+function earlierSnapshot(p: Publication, requested: string | undefined, harness: HarnessSummary): Snapshot {
+  const snapshots = p.published_snapshots.filter(s => typeof s.id === "string" && s.id.length > 0 && Number.isSafeInteger(s.version) && s.version < p.published_version).sort((a, b) => b.version - a.version);
+  const snapshot = requested ? snapshots.find(s => s.id === requested) : snapshots[0];
+  if (!p.can_rollback || !snapshot) throw usageError("No earlier pinned published snapshot matches this rollback.", `Choose a snapshot id from ${cavelonCommand("harness", "publication", harness.slug, "--json")}.`);
+  return snapshot;
+}
+
+function mutationBody(action: Action, p: Publication, snapshot?: Snapshot): Record<string, unknown> {
+  const body: Record<string, unknown> = { expected_version: p.published_version, expected_draft_revision: p.draft_revision };
+  if (snapshot) body.snapshot_id = snapshot.id;
+  if (action !== "discard-draft") {
+    body.confirm_affected_runs = p.waiting_runs_affected > 0;
+    body.expected_waiting_run_ids = [...p.review_run_ids].sort((a, b) => a.localeCompare(b));
+  }
+  return body;
+}
+
+function commandWords(action: Action, input: Input, harness: HarnessSummary, snapshot?: Snapshot): string[] {
+  const words = [...ACTIONS[action].words, "--harness", harness.slug];
+  const env = stringOption(input, "env");
+  if (env) words.push("--env", env);
+  if (snapshot) words.push("--snapshot", snapshot.id);
+  words.push("--confirm");
+  return words;
+}
+
+function consequenceOf(action: Action, harness: HarnessSummary, p: Publication, snapshot?: Snapshot): string {
+  if (action === "publish") return `Publish ${harness.name}'s reviewed draft to live traffic.`;
+  if (action === "discard-draft") return `Discard ${harness.name}'s unpublished edits; the published graph stays in service.`;
+  let message = `Restore published v${snapshot!.version} for ${harness.name} as a new live publication.`;
+  if (p.has_draft) message += " Unpublished edits will be saved in a pinned recovery snapshot and the working draft cleared.";
+  return message;
+}
+
+async function checkMutationAccess(ctx: Context, action: Action) {
+  const access = await accessFor(await ctx.client());
+  if (action !== "discard-draft" && access?.principal.token?.may_activate === false) {
+    throw new CavelonError(ExitCode.unauthorized, { code: "token_activation_refused", message: "This personal access token does not allow activation, publication or rollback.", hint: "A person performs it in the Admin or creates an appropriately scoped token with May activate." });
+  }
+  const permission = operationAccess(access, `POST ${BASE}/${action}`);
+  if (permission.allowed === false) throw new CavelonError(ExitCode.unauthorized, { code: "permission_missing", message: "This credential cannot perform the publication change; nothing was changed.", hint: whoInstead(access, permission) });
+}
+
+function previewResult(harness: HarnessSummary, p: Publication, gate: Confirmation, consequence: string, words: string[], snapshot?: Snapshot) {
+  const confirm = gate.confirm(cavelonCommand(...words));
   return {
-    name: words.join(" "),
-    summary: action === "publish" ? "Review and publish a solution's draft through its readiness gate." : action === "rollback" ? "Review and restore a pinned published version as a new publication." : "Review and discard a solution's unpublished draft.",
+    data: { changed: false, harness, publication: p, ...(snapshot ? { rollback_snapshot: snapshot } : {}), confirm, ...gate.fields },
+    text: [consequence, stateText(p), gate.where, ...(gate.mismatch ? [gate.mismatch] : []), `Show this to a person; with their yes: ${confirm}`].join("\n"),
+    ...(gate.exitCode ? { exitCode: gate.exitCode } : {}),
+  };
+}
+
+async function runChange(ctx: Context, input: Input, action: Action) {
+  const tool = ACTIONS[action].tool;
+  if (ctx.mode === "mcp" && input.options.confirm === true) throw confirmTokenRequired(tool);
+  const harness = await target(ctx, input);
+  let p = await read(ctx, harness.id);
+  if (action !== "rollback" && !p.has_draft) return { data: { changed: false, harness, publication: p }, text: "No unpublished draft; nothing was changed." };
+  if (action === "publish" && p.readiness.blockers.length) return { data: { changed: false, harness, publication: p, blockers: p.readiness.blockers }, text: `${stateText(p)}\n\nPublication is blocked. Fix the instance's readiness/Graph Check findings and review again.`, exitCode: ExitCode.validation };
+  let snapshot: Snapshot | undefined;
+  if (action === "rollback") {
+    snapshot = earlierSnapshot(p, stringOption(input, "snapshot"), harness);
+    p = await read(ctx, harness.id, snapshot.id);
+  }
+  const { doc, op } = await operation(ctx, `${BASE}/${action}`, "POST");
+  await checkMutationAccess(ctx, action);
+  const body = mutationBody(action, p, snapshot);
+  const words = commandWords(action, input, harness, snapshot);
+  const consequence = consequenceOf(action, harness, p, snapshot);
+  const changes = [...p.changes].sort((a, b) => (a.entity + ":" + a.id).localeCompare(b.entity + ":" + b.id));
+  const waiting = [...p.waiting_runs].sort((a, b) => a.id.localeCompare(b.id));
+  const gate = await confirmation(ctx, input, tool, { harness: harness.id, body, changes, waiting_runs: waiting, has_draft: p.has_draft }, { person: { what: `${consequence}\n${stateText(p)}`, words } });
+  if (!gate.confirmed) return previewResult(harness, p, gate, consequence, words, snapshot);
+  const result = await callOperation(ctx, await ctx.client(), doc, op, { params: { harness_id: [harness.id] }, body });
+  const data = result.data as Record<string, unknown>;
+  const warnings = Array.isArray(data.warnings) ? data.warnings.map(w => clip(String(w), 500)) : [];
+  return { data: { changed: true, harness, result: data }, text: [`${action} completed for ${harness.name}.`, ...warnings].join("\n") };
+}
+
+function changeCommand(action: Action): CommandSpec {
+  const config = ACTIONS[action];
+  return {
+    name: config.words.join(" "), summary: config.summary,
     description: "Previews first. Publishing and rollback change live traffic; discarding removes unpublished work. Each needs a person's fresh confirmation, including in YOLO mode. No force option is offered.\n" + PERSON_CONFIRMS_HELP,
-    readOnly: false, destructive: action === "discard-draft", mcpTool: tool, operations: [`GET ${READ}`, `POST ${BASE}/${action}`],
+    readOnly: false, destructive: action === "discard-draft", mcpTool: config.tool,
+    operations: [`GET ${READ}`, `POST ${BASE}/${action}`],
     options: { harness: harnessOption, env: envOption, confirm: confirmOption, ...(action === "rollback" ? { snapshot: { type: "string" as const, value: "<id>", description: "Pinned published snapshot id; default: the previous published version." } } : {}) },
-    async run(ctx, input) {
-      if (ctx.mode === "mcp" && input.options.confirm === true) throw confirmTokenRequired(tool);
-      const harness = await target(ctx, input);
-      let p = await read(ctx, harness.id);
-      if (action !== "rollback" && !p.has_draft) return { data: { changed: false, harness, publication: p }, text: "No unpublished draft; nothing was changed." };
-      if (action === "publish" && p.readiness.blockers.length) return { data: { changed: false, harness, publication: p, blockers: p.readiness.blockers }, text: `${stateText(p)}\n\nPublication is blocked. Fix the instance's readiness/Graph Check findings and review again.`, exitCode: ExitCode.validation };
-      const requested = stringOption(input, "snapshot");
-      const snapshots = p.published_snapshots.filter(s => typeof s.id === "string" && s.id.length > 0 && Number.isSafeInteger(s.version) && s.version < p.published_version).sort((a, b) => b.version - a.version);
-      const snapshot = action === "rollback" ? requested ? snapshots.find(s => s.id === requested) : snapshots[0] : undefined;
-      if (action === "rollback" && (!p.can_rollback || !snapshot)) throw usageError("No earlier pinned published snapshot matches this rollback.", `Choose a snapshot id from ${cavelonCommand("harness", "publication", harness.slug, "--json")}.`);
-      if (snapshot) p = await read(ctx, harness.id, snapshot.id);
-      const { doc, op } = await operation(ctx, `${BASE}/${action}`, "POST");
-      const access = await accessFor(await ctx.client());
-      if (action !== "discard-draft" && access?.principal.token?.may_activate === false) {
-        throw new CavelonError(ExitCode.unauthorized, { code: "token_activation_refused", message: "This personal access token does not allow activation, publication or rollback.", hint: "A person performs it in the Admin or creates an appropriately scoped token with May activate." });
-      }
-      const permission = operationAccess(access, `POST ${BASE}/${action}`);
-      if (permission.allowed === false) throw new CavelonError(ExitCode.unauthorized, { code: "permission_missing", message: "This credential cannot perform the publication change; nothing was changed.", hint: whoInstead(access, permission) });
-      const body = { expected_version: p.published_version, expected_draft_revision: p.draft_revision, ...(snapshot ? { snapshot_id: snapshot.id } : {}), ...(action !== "discard-draft" ? { confirm_affected_runs: p.waiting_runs_affected > 0, expected_waiting_run_ids: [...p.review_run_ids].sort() } : {}) };
-      const commandWords = [...words, "--harness", harness.slug, ...(stringOption(input, "env") ? ["--env", stringOption(input, "env")!] : []), ...(snapshot ? ["--snapshot", snapshot.id] : []), "--confirm"];
-      const consequence = action === "publish" ? `Publish ${harness.name}'s reviewed draft to live traffic.` : action === "rollback" ? `Restore published v${snapshot!.version} for ${harness.name} as a new live publication.${p.has_draft ? " Unpublished edits will be saved in a pinned recovery snapshot and the working draft cleared." : ""}` : `Discard ${harness.name}'s unpublished edits; the published graph stays in service.`;
-      const gate = await confirmation(ctx, input, tool, { harness: harness.id, body, changes: [...p.changes].sort((a, b) => `${a.entity}:${a.id}` < `${b.entity}:${b.id}` ? -1 : `${a.entity}:${a.id}` > `${b.entity}:${b.id}` ? 1 : 0), waiting_runs: [...p.waiting_runs].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0), has_draft: p.has_draft }, { person: { what: `${consequence}\n${stateText(p)}`, words: commandWords } });
-      if (!gate.confirmed) {
-        const confirm = gate.confirm(cavelonCommand(...commandWords));
-        return { data: { changed: false, harness, publication: p, ...(snapshot ? { rollback_snapshot: snapshot } : {}), confirm, ...gate.fields }, text: [consequence, stateText(p), gate.where, ...(gate.mismatch ? [gate.mismatch] : []), `Show this to a person; with their yes: ${confirm}`].join("\n"), ...(gate.exitCode ? { exitCode: gate.exitCode } : {}) };
-      }
-      const result = await callOperation(ctx, await ctx.client(), doc, op, { params: { harness_id: [harness.id] }, body });
-      const data = result.data as Record<string, unknown>;
-      const warnings = Array.isArray(data.warnings) ? data.warnings.map(w => clip(String(w), 500)) : [];
-      return { data: { changed: true, harness, result: data }, text: `${action} completed for ${harness.name}.${warnings.length ? `\n${warnings.join("\n")}` : ""}` };
-    },
+    run: (ctx, input) => runChange(ctx, input, action),
   };
 }
 export const publish = changeCommand("publish");

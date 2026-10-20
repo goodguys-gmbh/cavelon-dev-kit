@@ -309,6 +309,11 @@ export const tenantList: CommandSpec = {
   },
 };
 
+function draftMark(value: boolean | undefined): string {
+  if (value === undefined) return "?";
+  return value ? "yes" : "";
+}
+
 export const harnessList: CommandSpec = {
   name: "harness list",
   summary: "List the tenant's solutions (harnesses), marking the default route.",
@@ -345,7 +350,7 @@ export const harnessList: CommandSpec = {
       limit,
       stringOption(input, "cursor"),
     );
-    const rows = page.items.map((h) => ({ ...h, default: h.is_default ? "yes" : "", draft: h.has_draft === true ? "yes" : h.has_draft === false ? "" : "?" }));
+    const rows = page.items.map((h) => ({ ...h, default: h.is_default ? "yes" : "", draft: draftMark(h.has_draft) }));
     const columns = ["slug", "name", "status", ...(marksDefault ? ["default"] : []), ...(harnesses.some(h => typeof h.published_version === "number" || typeof h.has_draft === "boolean") ? ["published_version", "draft"] : []), ...(boolOption(input, "readiness") ? ["ready_to_activate"] : []), "id"];
     return {
       data: page,
