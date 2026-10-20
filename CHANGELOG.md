@@ -9,6 +9,10 @@ CLI, the skills and the plugin.
 
 ### Added
 
+- Opt-in Azure OIDC authentication for Windows release signing, using short-lived
+  tokens in the protected release environment. Existing client-secret signing
+  remains supported; incomplete enabled configuration fails the release.
+
 - Solution-publication inspection, publish, draft discard and pinned-version
   rollback commands/MCP tools when offered by the instance. Live publication,
   rollback and draft removal keep fresh person confirmation in YOLO, bind
