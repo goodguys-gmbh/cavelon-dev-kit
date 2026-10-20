@@ -30,10 +30,11 @@ Solution-owned files and directory links must stay inside the solution, separate
 from the kit's login and cache; see [local file safety](docs/security.md#files-on-your-machine).
 
 > [!NOTE]
-> **Current release: 0.2.7.** The Windows installer now retries brief file-sharing
-> and lock violations during updates. Coding-client checks also avoid an
-> OpenCode startup dependency-fetch stall and retain bounded failure diagnostics.
-> The original Windows startup report remains under investigation.
+> **Current release: 0.2.8.** Work with document privacy settings and converted
+> PDFs/workbooks, review and publish solution drafts or roll back a publication,
+> and save original conversation trace exports. Windows release signing now
+> supports short-lived Azure OIDC authentication. Critical changes still need
+> the person's approval, including in YOLO mode.
 > See the [changelog](CHANGELOG.md) for all changes.
 >
 > **Updating an existing install?** Run the installer below again and answer

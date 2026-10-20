@@ -5,13 +5,15 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 project uses [semantic versioning](https://semver.org/): one version for the
 CLI, the skills and the plugin.
 
-## Unreleased
+## [0.2.8] - 2026-10-20
 
 ### Added
 
-- Opt-in Azure OIDC authentication for Windows release signing, using short-lived
-  tokens in the protected release environment. Existing client-secret signing
-  remains supported; incomplete enabled configuration fails the release.
+- Windows release signing now uses Azure OIDC authentication with short-lived
+  tokens in the protected release environment and a profile-scoped signing role.
+  The workflow requires a valid Authenticode signature before publishing.
+  Existing client-secret signing remains supported; incomplete enabled
+  configuration fails the release.
 
 - Solution-publication inspection, publish, draft discard and pinned-version
   rollback commands/MCP tools when offered by the instance. Live publication,

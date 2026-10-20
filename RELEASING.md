@@ -59,7 +59,7 @@ The CLI, the skills and the plugin share one version.
 4. **Watch the Release workflow.** `verify` runs typecheck, lint, tests and the
    build on the tagged commit; `stage-npm` (environment `release`) runs
    `npm stage publish --access public`. Then `executables` builds each
-   executable on its platform, signs it where the signing secrets are set, and
+   executable on its platform, signs it where signing is configured, and
    runs its smoke test; `attest` writes `checksums.txt` and the build
    provenance attestations; `github-release` creates the release (a re-run
    replaces its files); `offline-bundle`, `pypi`, `homebrew` and `winget`

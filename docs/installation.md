@@ -173,24 +173,32 @@ The executables are built with [Bun](https://bun.sh), which bundles `cavelon`
 and a JavaScript runtime into one file. It keeps the token in your system's
 credential store as the npm package does.
 
-#### Unsigned executables: Gatekeeper and SmartScreen
+#### Executable signatures, Gatekeeper and SmartScreen
 
-Until the executables are signed (on macOS also notarised), macOS and Windows
-may warn about them. The install scripts download with `curl` and PowerShell,
-which do not mark the file as downloaded from the internet, so neither system
-asks when you run `cavelon` installed that way. If you download an executable
-from the release page in a browser:
+From 0.2.8, Windows releases are configured for Azure Artifact Signing; the
+release workflow requires a valid Authenticode signature before publishing
+the executable. Older downloads remain unsigned. A valid signature identifies
+the publisher but does not guarantee that SmartScreen reputation checks or
+your organisation's policies will allow the program. To check a Windows file:
+
+```powershell
+Get-AuthenticodeSignature .\cavelon-windows-x64.exe | Format-List
+```
+
+macOS executables are not yet signed with Developer ID or notarised. A browser
+download may therefore be blocked:
 
 - **macOS** refuses to open it, because Apple could not check it for
   malicious software. Remove the browser's mark once:
   `xattr -d com.apple.quarantine ./cavelon-darwin-arm64`, or open
   **System Settings → Privacy & Security** and choose **Open Anyway**.
-- **Windows** shows "Windows protected your PC" (SmartScreen). Choose
+- **Windows** may show "Windows protected your PC" (SmartScreen). Choose
   **More info → Run anyway**, or remove the mark in PowerShell:
   `Unblock-File .\cavelon-windows-x64.exe`.
 - On Windows 11 with **Smart App Control** turned on, and where your
   organisation allows only signed programs, an unsigned `cavelon` does not
-  start at all. Use `npx` there ([With Node.js](#with-nodejs-npx-or-npm)).
+  start at all. For older unsigned downloads, use `npx` there
+  ([With Node.js](#with-nodejs-npx-or-npm)) or update to a signed release.
 
 Check the checksum or the attestation (above) before you do either.
 
@@ -229,7 +237,7 @@ and the update notice its upgrade command. Wheels exist for Linux (x64 and
 arm64, glibc 2.17 or newer), macOS 13 or newer (Apple silicon and Intel) and
 Windows x64; on any other platform (Alpine's musl, for example) pip finds no
 matching wheel, and the one-line install or `npx` are the way in. The wheels
-carry the same unsigned executables as the release (see above).
+carry the same executables and platform signatures as the release (see above).
 
 In CI and cloud agents, `uvx cavelon` works like `npx -y @cavelon/cli`: write
 `uvx cavelon@<version> …` to stay on one release.
