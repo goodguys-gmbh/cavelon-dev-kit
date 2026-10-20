@@ -336,6 +336,7 @@ export interface FakeState {
   operations: Map<string, FakeOperation>;
   /** By "trigger:<run id>" or "conversation:<conversation id>". */
   traces: Map<string, Array<Record<string, unknown>>>;
+  traceExports: Map<string, string>;
   requests: RecordedRequest[];
   features: Record<string, boolean>;
   serveDocs: boolean;
@@ -777,6 +778,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     runs: [],
     operations: new Map(),
     traces: new Map(),
+    traceExports: new Map(),
     requests: [],
     features: { personal_access_tokens_enabled: true, operations_api_enabled: true },
     serveDocs: true,
@@ -1614,6 +1616,14 @@ export async function startFakeServer(): Promise<FakeServer> {
       }
       res.write(`data: ${JSON.stringify({ type: "end", reason: "terminal" })}\n\n`);
       return res.end();
+    }
+
+    m = /^\/api\/v1\/conversations\/([^/]+)\/traces\/([^/]+)\/export$/.exec(p);
+    if (m && method === "GET") {
+      const exported = state.traceExports.get(`${m[1]}:${m[2]}`);
+      if (exported === undefined) return send(res, 404, { detail: "Trace not found" });
+      res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+      return res.end(exported);
     }
 
     m = /^\/api\/v1\/(triggers\/runs|conversations)\/([^/]+)\/traces(?:\/([^/]+))?$/.exec(p);

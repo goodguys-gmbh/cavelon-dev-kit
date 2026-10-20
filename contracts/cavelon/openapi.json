@@ -6354,6 +6354,55 @@
         "x-cavelon-person-only": true,
         "x-cavelon-person-only-reason": "Releases a document held because its redaction is not clean"
       }
+    },
+    "/api/v1/conversations/{conversation_id}/traces/{trace_id}/export": {
+      "get": {
+        "tags": [
+          "conversations"
+        ],
+        "summary": "Export Conversation Trace",
+        "operationId": "export_conversation_trace_api_v1_conversations__conversation_id__traces__trace_id__export_get",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "trace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Trace Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "403": {},
+          "404": {},
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -9407,6 +9456,29 @@
               }
             ],
             "title": "Controlled Timezone"
+          },
+          "confirmed_change_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmed Change Id"
+          },
+          "reader_binds_identity": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reader Binds Identity"
           }
         },
         "type": "object",
@@ -12878,7 +12950,9 @@
           "force": {
             "type": "boolean",
             "title": "Force",
-            "default": false
+            "default": false,
+            "x-cavelon-person-only": true,
+            "x-cavelon-person-only-reason": "Forces a solution live without its readiness evidence"
           },
           "reason": {
             "anyOf": [
@@ -16650,6 +16724,18 @@
               }
             ],
             "title": "User Pressed Apply"
+          },
+          "domain": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 253
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain"
           }
         },
         "type": "object",
@@ -19725,6 +19811,17 @@
               }
             ],
             "title": "Max Database Queries"
+          },
+          "metadata_extraction_parallelism": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata Extraction Parallelism"
           }
         },
         "type": "object",
@@ -19872,6 +19969,19 @@
               }
             ],
             "title": "Max Database Queries"
+          },
+          "metadata_extraction_parallelism": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 64,
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata Extraction Parallelism"
           }
         },
         "type": "object",
@@ -19970,6 +20080,30 @@
             "type": "object",
             "title": "Tools",
             "default": {}
+          },
+          "database_connections": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Database Connections"
+          },
+          "database_queries": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Database Queries"
           }
         },
         "type": "object",
@@ -22108,6 +22242,22 @@
             },
             "type": "array",
             "title": "Uncovered Solutions",
+            "default": []
+          },
+          "rights_beyond_editors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Rights Beyond Editors",
+            "default": []
+          },
+          "steered_by": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Steered By",
             "default": []
           }
         },

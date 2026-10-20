@@ -734,7 +734,7 @@ Summarise the traces of a run, with a command for each span's detail.
 cavelon trace <run> [options]
 ```
 
-&lt;run&gt; is a trigger run id, a test run id, a conversation id or an operation id (op_…). Without --trace: one line per trace (or per test result). With --trace: its spans. With --span: one span in full.
+&lt;run&gt; is a trigger run id, a test run id, a conversation id or an operation id (op_…). Without --trace: one line per trace (or per test result). With --trace: its spans. With --span: one span in full. With --kind conversation --trace &lt;id&gt; --export &lt;file&gt;: save the instance's original JSON export and integrity manifest inside the solution. Needs conversations.view and conversations.export. Signatures remain unverified locally.
 
 | Argument | Description |
 |---|---|
@@ -746,6 +746,7 @@ cavelon trace <run> [options]
 | `--trace <trace_id>` | Show this trace's spans. | yes |
 | `--span <span_id>` | Show one span's input, output and error (needs --trace). | yes |
 | `--full` | Do not shorten span input and output. | yes |
+| `--export <file>` | Save the original trace export to a new file inside the solution (needs --kind conversation and --trace; excludes --span and --full). | yes |
 | `--limit <n>` | Return at most n items. | yes |
 | `--cursor <cursor>` | Continue after the previous page (its next_cursor). | yes |
 

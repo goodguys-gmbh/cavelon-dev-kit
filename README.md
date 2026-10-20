@@ -284,6 +284,7 @@ cavelon apply --env test --confirm <preview-id> # import exactly what was previe
 cavelon kb upload seeds/faq --kb "Support FAQ" --wait
 cavelon test run --wait --timeout 5m
 cavelon trace <run>                             # why a case passed or failed
+cavelon trace <conversation-id> --kind conversation --trace <trace-id> --export trace.json  # original export + manifest
 cavelon activate                                # through the readiness gate, never by force
 ```
 
