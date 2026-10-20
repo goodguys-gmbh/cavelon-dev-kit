@@ -239,6 +239,13 @@ not replace the latest manually started whole-suite run required for activation.
 Read the instance's current Graph Check errors and published catalog; fix the
 named node/configuration before trying activation again.
 
+On an instance with graph drafts, testing/Playground and live traffic may use
+different graph versions. Read `cavelon harness publication <solution> --json`
+and the instance's run/version metadata; a passing draft test does not put its
+changes live. Review `cavelon publish --harness <solution>` only after fixing
+readiness, and follow its person-confirmation instruction. Older instances
+keep their existing execution behavior.
+
 ## Reading what happened
 
 ```bash

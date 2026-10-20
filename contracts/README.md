@@ -19,6 +19,15 @@ catalog, unrelated snapshots and defaults stay as recorded. Tests cover the
 file metadata against the response schema and an older instance without the
 file-list operation; these snapshots do not prove real document conversion.
 
+Also on 2026-10-20 the instance's development contract for solution publication
+was selected: four lifecycle routes and their DTOs, import response publication
+metadata, optional harness version/draft fields, bound-confirmation marks and
+eight publication/rollback error-catalog entries. The OpenAPI and catalog were
+generated from the instance's own generators without running a live instance;
+only the relevant shapes were selected. These routes are used only when an
+instance advertises them, with missing/older metadata remaining unknown.
+This records the interface, not deployment or real-person acceptance.
+
 On 2026-10-20 the conversation trace export and optional chat, page-context,
 tenant and execution-identity metadata were selectively refreshed from an
 immutable merged instance build's checked-in OpenAPI, without running an

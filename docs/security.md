@@ -24,7 +24,7 @@ instance's token dialog recommends:
 | operating the platform itself | **Platform mode**, for platform operators only |
 
 Keep **May activate** off unless the token should put solutions live; without
-it, `cavelon activate` is refused and a person activates in the Admin.
+it, activation, publish and rollback are refused and a person performs them in the Admin.
 `cavelon whoami` lists what the token may do in the tenant (its permissions,
 an API key's scopes, and the operations a person runs instead), and the MCP
 server marks the tools it may not use, so your agent does not learn it from
@@ -349,6 +349,9 @@ your requested work; critical previews are presented in the approval step.
 | `trigger identity` | `trigger_identity` | the API key a trigger's runs act as | preview, always, and your yes |
 | `activate` | `activate` | puts a solution live, through the readiness gate | preview and your yes when a channel or active trigger reaches it, activation takes the default route (including assigning an unassigned route), or reach or route effect is unknown; with `--make-default`, also the explicit route change. Only known no reach and readiness's explicit `takes_default_route: false` activate at once. A missing response flag stays unknown even with a schema default; success reports the actual `took_default_route` effect |
 | `deactivate` | `deactivate` | takes a solution out of live traffic | preview, always, and your yes; the default route is refused |
+| `publish` | `solution_publish` | puts the reviewed solution draft live | preview, fresh person approval, readiness and exact version/revision/waiting-run checks; no force, including in YOLO |
+| `harness discard-draft` | `harness_discard_draft` | removes unpublished solution edits | preview and fresh person approval, with exact version/revision checks; published graph stays in service |
+| `harness rollback` | `harness_rollback` | restores an earlier pinned published graph as a new version | preview and fresh person approval, exact version/revision/waiting-run checks; pending draft is retained in a pinned recovery snapshot before being cleared |
 | `harness default` | `harness_default` | which solution the tenant's chat and widget answer with | preview, always, and your yes |
 | `harness new`, `harness clone` | `harness_new`, `harness_clone` | a new draft solution | at once (a draft answers no live traffic) |
 | `apply` | `apply` | imports the package into a solution | preview; confirmed with the preview's id, and your yes when the preview changes tenant-wide sections, reaches an active solution, deletes, goes to `env/prod` or writes saved database queries; eligible routine imports combine the steps under YOLO |

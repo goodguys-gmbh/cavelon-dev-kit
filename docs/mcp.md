@@ -134,6 +134,10 @@ only reads it).
 | `harness_new` | `cavelon harness new` | changing |
 | `harness_clone` | `cavelon harness clone` | changing |
 | `harness_default` | `cavelon harness default` | changing |
+| `harness_publication` | `cavelon harness publication` | read-only |
+| `solution_publish` | `cavelon publish` | changing |
+| `harness_discard_draft` | `cavelon harness discard-draft` | changing |
+| `harness_rollback` | `cavelon harness rollback` | changing |
 | `activate` | `cavelon activate` | changing |
 | `deactivate` | `cavelon deactivate` | destructive |
 | `chat` | `cavelon chat` | changing |
@@ -263,7 +267,7 @@ repeat them:
   `timeout`, waits until the operations settle or the timeout passes, at most
   50 seconds (a longer timeout is cut there, with a warning). Its answer says
   `waited_ms`, and `timed_out` is true only when it waited the whole timeout.
-- **What needs `confirm`.** By default, `apply` returns a preview and imports
+- **What needs `confirm`.** `solution_publish`, `harness_discard_draft` and `harness_rollback` always preview and need the person's fresh approval. By default, `apply` returns a preview and imports
   only with `confirm` set to that preview's id. `tenant_create`, `variables_set` where
   it replaces another value, `loop_start`, `limits_set`, `models_set_limit`,
   `loop_cancel`, `sandbox_seed`, `trigger_identity`, `harness_default`, `db_connection_delete`,
@@ -483,3 +487,14 @@ profile. It registers Cavelon tools as essential native tools, and its TUI asks
 the person afresh for each guarded change. Built-in MCP, print and RPC approval
 do not substitute for that dialog. Missing UI returns a command for the person's
 own terminal. See [OMP](install/omp.md).
+
+## Solution publication
+
+Where the instance advertises it, `harness_publication` reads the pending draft,
+published versions, readiness and waiting-run impact. `solution_publish`,
+`harness_discard_draft` and `harness_rollback` preview first and require the
+person's fresh confirmation through MCP or their own terminal, even in YOLO.
+They bind the reviewed versions and affected waiting-run set; conflicts need
+a new preview. The kit never forces publication. See
+[solution publication](solution-publication.md) for the full lifecycle and
+rollback's pinned recovery snapshot.

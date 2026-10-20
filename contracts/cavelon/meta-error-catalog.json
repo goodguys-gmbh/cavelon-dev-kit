@@ -4035,6 +4035,62 @@
       "message": "A write query that asks the person first names a parameter content, content_base64, body_html, body_text or confirm_token. The confirmation card renders arguments of these names as mail or file content (a body as text or not at all, content as its size), not as the value written, so the person would approve something other than what runs.",
       "hint": "Rename the parameter, for example to note_text, in the SQL and the parameter list.",
       "docs": "/docs/concepts/database-connections#queries-and-parameters"
+    },
+    {
+      "code": "publication_changed",
+      "area": "solution",
+      "message": "The published version or draft changed after review.",
+      "hint": "Read the publication review again and confirm its current version and draft revision.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "publication_waiting_runs_changed",
+      "area": "solution",
+      "message": "The affected waiting runs changed after review.",
+      "hint": "Read the publication review again and confirm its current affected runs.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "publication_waiting_runs_confirmation_required",
+      "area": "solution",
+      "message": "Publishing affects waiting runs whose paused node or continuation changed.",
+      "hint": "Review those runs and explicitly confirm them before publishing.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "published_graph_changed",
+      "area": "solution",
+      "message": "A publish changed the node or continuation of a waiting run.",
+      "hint": "Start a new run against the published solution; the previous pause cannot be reinterpreted safely.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "published_snapshot_not_found",
+      "area": "solution",
+      "message": "The selected published version is unavailable for this solution.",
+      "hint": "Choose one of the published snapshots in this solution's publication review.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "rollback_restore_blocked",
+      "area": "solution",
+      "message": "A stored version cannot be restored with the current permissions or resources.",
+      "hint": "Resolve the named restore blockers. Readiness checks alone do not block an emergency rollback.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "solution_has_no_draft",
+      "area": "solution",
+      "message": "The solution has no unpublished draft.",
+      "hint": "Save an edit before publishing; live traffic keeps the published version.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
+    },
+    {
+      "code": "solution_not_active",
+      "area": "solution",
+      "message": "This operation needs an active solution.",
+      "hint": "Activate the solution before publishing or rolling back a version.",
+      "docs": "/docs/reference/api-endpoints#errors-and-retries"
     }
   ]
 }

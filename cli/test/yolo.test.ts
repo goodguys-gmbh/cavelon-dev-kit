@@ -281,3 +281,21 @@ it("automates only the selected draft trigger and keeps supplied stale tokens me
     expect(server.state.requests.filter(r => r.method === "POST" && /\/triggers\/[^/]+\/run$/.test(r.path))).toHaveLength(1);
   } finally { await client.close(); }
 });
+
+it("YOLO applies an explicitly published active graph draft while leaving publication separate", async () => {
+  support().status = "active";
+  server.state.previewExtras = { publication: { target: "draft", harness_id: support().id, published_version: 3, draft_revision: 5 } };
+  const result = await cli(sb, ["--yolo", "apply", "--json"], { cwd: dir, env: agent });
+  expect(result.code, result.stdout + result.stderr).toBe(0);
+  expect(result.json()).toMatchObject({ applied: true, approval: { source: "yolo" }, result: { publication: { target: "draft" } } });
+  expect(imports()).toHaveLength(1);
+  expect(server.state.requests.some(r => r.path.endsWith("/publish"))).toBe(false);
+});
+
+it.each([undefined, { target: "draft" }, { target: "draft", harness_id: "another-solution", published_version: 3, draft_revision: 5 }])("partial or foreign active draft metadata still needs a person: %j", async publication => {
+  support().status = "active";
+  server.state.previewExtras = { publication };
+  const result = await cli(sb, ["--yolo", "apply", "--json"], { cwd: dir, env: agent });
+  expect(result.json()).toMatchObject({ previewed: true, show_to_person: true });
+  expect(imports()).toEqual([]);
+});

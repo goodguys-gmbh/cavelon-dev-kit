@@ -109,6 +109,15 @@ its configuration and answers no live traffic until `cavelon activate` puts it
 back through its readiness gate. `cavelon harness list` shows the tenant's
 solutions with their status; `harness new` and `harness clone` create drafts.
 
+On an instance with solution publication, an active solution can also have
+unpublished graph edits. `apply` reports whether it wrote that draft;
+`cavelon harness publication <solution>` inspects it and `cavelon publish`
+reviews publication through readiness. Live traffic keeps the published graph
+until publication. Shared tenant resources retain their existing behavior.
+See [solution publication](solution-publication.md) for person confirmation,
+waiting runs, discarding a draft and pinned-version rollback. Older instances
+keep their existing editing behavior; never infer isolation from status alone.
+
 ### Persona
 
 Each solution has a **persona**: who the assistant is, for every agent of the

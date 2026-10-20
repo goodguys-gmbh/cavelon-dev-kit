@@ -99,6 +99,12 @@ does not grant standing permission for other targets.
 | Unknown API mutation or unclear effects | Personal approval required | Same |
 | Person-only operation, secret or credential handling | Existing refusal or Admin route | Same |
 
+An active solution's graph draft qualifies like an ordinary draft import only
+when the instance explicitly reports a matching harness, published version and
+draft revision, and known scope without shared/live/query effects. Missing or
+partial metadata keeps the existing critical confirmation. Publish remains a
+separate person-reviewed step.
+
 Not every token-only command is eligible for automatic execution. In
 particular, replacing knowledge-base documents, replacing a Sandbox workspace,
 cancelling runs and deleting connections retain their preview and confirmation
@@ -107,7 +113,8 @@ steps. A draft label alone does not make every operation routine.
 ## What still needs your decision
 
 The existing critical gates remain: live routing and activation effects,
-changes to active solutions, tenant-wide settings, deletion or replacement
+changes to active published graphs (or unknown isolation), publication and
+rollback, draft removal, tenant-wide settings, deletion or replacement
 imports, production imports, limits and budgets, trigger identities, and
 unknown API changes. Creation, modification and deletion of saved database
 queries remain critical even when the selected solution is a draft: their

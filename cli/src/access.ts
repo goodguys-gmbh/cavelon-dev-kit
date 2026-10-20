@@ -36,6 +36,10 @@ const SETTINGS_VALUES: AnyOf = ["settings.secrets.manage", "settings.manage"];
  * restrictions, never grant access; a refusal that names others wins.
  */
 export const OPERATION_PERMISSIONS: Readonly<Record<string, ReadonlyArray<string | AnyOf>>> = {
+  "GET /api/v1/harnesses/{harness_id}/publication": ["harnesses.view"],
+  "POST /api/v1/harnesses/{harness_id}/publish": ["harnesses.manage", "harnesses.activate"],
+  "POST /api/v1/harnesses/{harness_id}/rollback": ["harnesses.manage", "harnesses.activate"],
+  "POST /api/v1/harnesses/{harness_id}/discard-draft": ["harnesses.manage"],
   "POST /api/v1/agent-graph/import": ["agents.edit"],
   "POST /api/v1/harnesses": ["harnesses.manage"],
   "POST /api/v1/harnesses/{harness_id}/activate": ["harnesses.manage", ACTIVATE_PERMISSION],

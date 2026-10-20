@@ -9,6 +9,12 @@ CLI, the skills and the plugin.
 
 ### Added
 
+- Solution-publication inspection, publish, draft discard and pinned-version
+  rollback commands/MCP tools when offered by the instance. Live publication,
+  rollback and draft removal keep fresh person confirmation in YOLO, bind
+  reviewed versions/revisions/affected waiting runs, and never force readiness.
+  Apply and solution listings preserve optional draft/publication metadata.
+
 - `trace --kind conversation --trace <id> --export <file>` saves the instance's
   original JSON export and integrity manifest through CLI or MCP. Output stays
   inside the solution and never overwrites a file; the saved file's SHA-256 is

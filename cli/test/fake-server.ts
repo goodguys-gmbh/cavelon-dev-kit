@@ -337,6 +337,9 @@ export interface FakeState {
   /** By "trigger:<run id>" or "conversation:<conversation id>". */
   traces: Map<string, Array<Record<string, unknown>>>;
   traceExports: Map<string, string>;
+  publications: Map<string, Record<string, any>>;
+  /** False simulates missing confirmation markers on an otherwise enforcing instance. */
+  confirmationMarks?: boolean;
   requests: RecordedRequest[];
   features: Record<string, boolean>;
   serveDocs: boolean;
@@ -779,6 +782,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     operations: new Map(),
     traces: new Map(),
     traceExports: new Map(),
+    publications: new Map(),
     requests: [],
     features: { personal_access_tokens_enabled: true, operations_api_enabled: true },
     serveDocs: true,
@@ -899,7 +903,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     }
     if (p === "/openapi.json" || (p === "/api/v1/openapi.json" && !state.rootPathsReachApi)) {
       res.writeHead(200, { "content-type": "application/json" });
-      const marked = withActivationRoute(withChatReaders(withConfirmations(withMarkers(state.personOnly, state.secretFields), state.confirmations !== null), state.readerOverrides, state.chatUserEmailVerified), state.activationRouteFields !== false);
+      const marked = withActivationRoute(withChatReaders(withConfirmations(withMarkers(state.personOnly, state.secretFields), state.confirmations !== null && state.confirmationMarks !== false), state.readerOverrides, state.chatUserEmailVerified), state.activationRouteFields !== false);
       return res.end(withOracleDialect(withoutOperations(withTenantWideFlag(withUploadReplace(marked, state.uploadReplace), state.tenantWideFlag), state.openapiWithout), state.oracleDialect));
     }
 
@@ -1584,7 +1588,7 @@ export async function startFakeServer(): Promise<FakeServer> {
               },
             }
           : {};
-      return send(res, 200, { applied: true, mode: request.mode, summary: preview.summary, imported_agents: ["helper"], warnings: [], ...importedShared });
+      return send(res, 200, { applied: true, mode: request.mode, summary: preview.summary, imported_agents: ["helper"], warnings: [], ...(state.previewExtras.publication ? { publication: state.previewExtras.publication } : {}), ...importedShared });
     }
 
     if (p === "/api/v1/operations" && state.serveOperations) {
@@ -1616,6 +1620,27 @@ export async function startFakeServer(): Promise<FakeServer> {
       }
       res.write(`data: ${JSON.stringify({ type: "end", reason: "terminal" })}\n\n`);
       return res.end();
+    }
+
+    m = /^\/api\/v1\/harnesses\/([^/]+)\/(publication|publish|discard-draft|rollback)$/.exec(p);
+    if (m) {
+      const publication = state.publications.get(m[1]!);
+      if (!publication) return send(res, 404, { detail: "No publication" });
+      if (m[2] === "publication" && method === "GET") return send(res, 200, publication);
+      if (method === "POST") {
+        const request = body.json as Record<string, unknown>;
+        if (request.expected_version !== publication.published_version || request.expected_draft_revision !== publication.draft_revision) return send(res, 409, { detail: { code: "publication_stale", message: "Publication changed; review again" } });
+        if (m[2] !== "discard-draft" && JSON.stringify([...(request.expected_waiting_run_ids as string[] ?? [])].sort()) !== JSON.stringify([...publication.review_run_ids].sort())) return send(res, 409, { detail: { code: "publication_waiting_runs_changed", message: "Affected waiting runs changed" } });
+        if (m[2] !== "discard-draft" && publication.waiting_runs_affected && request.confirm_affected_runs !== true) return send(res, 409, { detail: "Confirm affected waiting runs" });
+        if (m[2] === "publish" && publication.readiness.blockers.length) return send(res, 409, { detail: "Readiness blocks publication" });
+        if (m[2] === "rollback" && !publication.published_snapshots.some((snapshot: Record<string, unknown>) => snapshot.id === request.snapshot_id)) return send(res, 404, { detail: "Snapshot not found" });
+        if (m[2] !== "discard-draft") publication.published_version++;
+        publication.has_draft = false;
+        publication.draft_revision++;
+        publication.changes = [];
+        publication.draft_change_count = 0;
+        return send(res, 200, { ...publication, harness: state.harnesses.find(h => h.id === m![1]), warnings: m[2] === "rollback" ? ["Draft retained in pinned recovery snapshot recovery-1; rollback readiness findings are warnings."] : [] });
+      }
     }
 
     m = /^\/api\/v1\/conversations\/([^/]+)\/traces\/([^/]+)\/export$/.exec(p);
@@ -1697,6 +1722,8 @@ export async function startFakeServer(): Promise<FakeServer> {
       return m ? state.harnesses.find((h) => h.tenant_id === tid && h.id === m[1]) : undefined;
     };
     if (method === "POST") {
+      const publication = harnessOf(/^\/api\/v1\/harnesses\/([^/]+)\/(publish|rollback|discard-draft)$/);
+      if (publication) return p.split("/").pop();
       const toDefault = harnessOf(/^\/api\/v1\/harnesses\/([^/]+)\/default$/);
       if (toDefault) return toDefault.is_default ? undefined : "default";
       const activated = harnessOf(/^\/api\/v1\/harnesses\/([^/]+)\/activate$/);
@@ -1727,7 +1754,7 @@ export async function startFakeServer(): Promise<FakeServer> {
   /** The operation a confirmation names, by its method and path, as the published marks list them. */
   function markedOperation(method: string, p: string): boolean {
     const routes: Array<[string, RegExp]> = [
-      ["POST", /^\/api\/v1\/harnesses\/[^/]+\/(default|activate|deactivate)$/],
+      ["POST", /^\/api\/v1\/harnesses\/[^/]+\/(default|activate|deactivate|publish|rollback|discard-draft)$/],
       ["POST", /^\/api\/v1\/agent-graph\/import$/],
       ["DELETE", /^\/api\/v1\/variables\/[^/]+$/],
       ["PUT", /^\/api\/v1\/triggers\/[^/]+\/execution-identity$/],
