@@ -153,7 +153,7 @@ The CLI, the skills and the plugin share one version.
 
 Until these are set up, the release workflow skips the step and says so; the
 executables are released unsigned, and the docs say what users see then.
-Secrets go into the `release` environment (Settings → Environments →
+Secrets and signing configuration go into the `release` environment (Settings → Environments →
 `release`), which accepts only `v*` tags, so no branch's workflow can read them;
 the names that are not secret go into its variables.
 
@@ -181,15 +181,49 @@ looks the notarisation up online the first time.
 Set up for [Azure Artifact Signing](https://learn.microsoft.com/azure/artifact-signing/)
 (formerly Trusted Signing): an Azure subscription, a signing account, an
 identity validation of the company and a public-trust certificate profile, and
-an app registration that holds the certificate profile signer role on that
-account.
+an app registration that holds **Artifact Signing Certificate Profile Signer**
+on that certificate profile. Keep the signing role scoped to the profile;
+the release identity needs no subscription Contributor or Owner role.
+
+Use Microsoft's recommended [OpenID Connect authentication](https://github.com/Azure/artifact-signing-action/blob/main/docs/OIDC.md):
+
+1. Complete company identity validation and create a **Public Trust** certificate
+   profile using that validated identity.
+2. Create a single-tenant Entra app registration and a federated credential for
+   GitHub Actions. Select repository `goodguys-gmbh/cavelon-dev-kit`, entity type
+   **Environment**, and environment `release`. The exact subject is
+   `repo:goodguys-gmbh/cavelon-dev-kit:environment:release`, issuer
+   `https://token.actions.githubusercontent.com`, and audience
+   `api://AzureADTokenExchange`. No client secret or delegated API permission is
+   needed for this exchange.
+3. Assign the profile-scoped signer role to that app's service principal. This
+   permits signing with that profile, not account or subscription administration.
+4. Set the following variables in GitHub's `release` environment. Keep its
+   existing `v*` tag-only policy and the admin-only release-tag ruleset.
 
 | Name | Kind | What |
 |---|---|---|
-| `AZURE_CLIENT_SECRET` | secret | the app registration's client secret |
+| `AZURE_SIGNING_AUTH` | variable | `oidc` for the federated release identity |
 | `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` | variables | the app registration's directory and client id |
 | `AZURE_SIGNING_ENDPOINT` | variable | the signing account's endpoint, such as `https://weu.codesigning.azure.net/` |
 | `AZURE_SIGNING_ACCOUNT`, `AZURE_CERTIFICATE_PROFILE` | variables | the signing account's and the certificate profile's names |
+
+The Windows job obtains a short-lived token with the pinned Azure login action
+and signs through its Azure CLI credential. Login allows no visible subscription
+because the app has only the profile's data-plane role. Account metadata is
+masked before login/signing, and login cleanup remains enabled. Setting `oidc`
+with missing configuration fails the release rather than silently skipping
+signing. An unset signing configuration continues to produce unsigned builds.
+
+Existing installations using `AZURE_CLIENT_SECRET` in the `release` environment
+keep working with `AZURE_SIGNING_AUTH` unset or set to `secret`. An explicit
+`oidc` selection does not use that secret, even if one remains configured.
+
+Verify an actual Windows build in the next authorized release: the workflow
+requires a valid Authenticode signature and records its certificate details.
+Record the verified publisher and the released artifact's hash; identity
+validation and configuration tests alone do not prove a signed executable.
+Previous unsigned downloads are not changed by enabling signing.
 
 A certificate from another authority lives in a hardware token or a cloud HSM
 since 2023; replace the signing step with that provider's tool then.

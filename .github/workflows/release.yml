@@ -4,12 +4,12 @@
 # then approves the staged version on npmjs.com with 2FA before it is public.
 #
 # After staging, it builds the standalone executables on each platform (signed
-# when the signing secrets are set), attests them, and creates the GitHub
+# when signing is configured), attests them, and creates the GitHub
 # release with the executables, checksums.txt and the install scripts. Then it
 # publishes the PyPI wheels, updates the Homebrew tap (when HOMEBREW_TAP_TOKEN
 # is set) and writes the winget manifest for submission. Beside them it renders
 # the plugin packages for Cursor, VS Code, Kiro and Gemini CLI and attaches
-# them to the release. RELEASING.md lists the secrets.
+# them to the release. RELEASING.md lists the signing setup and secrets.
 #
 # A release starts with a tag `vX.Y.Z` matching cli/package.json. Only repository
 # admins may create `v*` tags (ruleset "Release tags: admins only"), and the
@@ -88,10 +88,11 @@ jobs:
     needs: stage-npm
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
-    # The signing secrets are secrets of this environment, which accepts only v* tags.
+    # Signing configuration belongs to this environment, which accepts only v* tags.
     environment: release
     permissions:
       contents: read
+      id-token: write # short-lived Azure authentication in the protected release environment
     strategy:
       fail-fast: true
       matrix:
@@ -122,19 +123,20 @@ jobs:
 
       # Signing runs only when its secrets are set; until then the executables
       # are released unsigned (docs/installation.md says what that means).
-      - name: Which signing secrets are set
+      - name: Resolve signing configuration
         id: signing
         shell: bash
         env:
           MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
           APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-        run: |
-          {
-            echo "macos=$([ "$RUNNER_OS" = macOS ] && [ -n "$MACOS_CERTIFICATE_P12" ] && echo true || echo false)"
-            echo "notarize=$([ "$RUNNER_OS" = macOS ] && [ -n "$MACOS_CERTIFICATE_P12" ] && [ -n "$APPLE_API_KEY_P8" ] && echo true || echo false)"
-            echo "windows=$([ "$RUNNER_OS" = Windows ] && [ -n "$AZURE_CLIENT_SECRET" ] && echo true || echo false)"
-          } >> "$GITHUB_OUTPUT"
+          AZURE_SIGNING_AUTH: ${{ vars.AZURE_SIGNING_AUTH }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_SIGNING_ENDPOINT: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          AZURE_SIGNING_ACCOUNT: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          AZURE_CERTIFICATE_PROFILE: ${{ vars.AZURE_CERTIFICATE_PROFILE }}
+        run: node ../.github/scripts/signing-config.mjs
       - name: Sign (macOS, Developer ID, hardened runtime)
         if: steps.signing.outputs.macos == 'true'
         env:
@@ -174,13 +176,24 @@ jobs:
       - name: Remove the signing keychain
         if: always() && steps.signing.outputs.macos == 'true'
         run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true
+      - name: Log in to Azure for Windows signing (OIDC)
+        if: steps.signing.outputs.windows_auth == 'oidc'
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        env:
+          AZURE_CORE_OUTPUT: none
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          allow-no-subscriptions: true
       - name: Sign (Windows, Azure Artifact Signing)
         if: steps.signing.outputs.windows == 'true'
         uses: azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2.0.0
         with:
           azure-tenant-id: ${{ vars.AZURE_TENANT_ID }}
           azure-client-id: ${{ vars.AZURE_CLIENT_ID }}
-          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          azure-client-secret: ${{ steps.signing.outputs.windows_auth == 'secret' && secrets.AZURE_CLIENT_SECRET || '' }}
+          exclude-environment-credential: ${{ steps.signing.outputs.windows_auth == 'oidc' }}
+          exclude-azure-cli-credential: ${{ steps.signing.outputs.windows_auth != 'oidc' }}
           endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
           signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT }}
           certificate-profile-name: ${{ vars.AZURE_CERTIFICATE_PROFILE }}

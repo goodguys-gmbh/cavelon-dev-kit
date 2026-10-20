@@ -409,6 +409,12 @@ your requested work; critical previews are presented in the approval step.
   The release workflow builds each executable from the tagged commit and
   attests it; `gh attestation verify <file> --repo goodguys-gmbh/cavelon-dev-kit`
   checks that. The install scripts send nothing else anywhere.
+- **Windows code signing.** When configured, release builds can authenticate to
+  Azure Artifact Signing with short-lived GitHub OIDC tokens. The release
+  identity is limited to signing with its certificate profile, and the GitHub
+  `release` environment accepts only protected release tags. No stored Azure
+  client secret is needed in OIDC mode. The workflow checks Authenticode after
+  signing; enrollment alone does not make existing unsigned releases signed.
 - **The standalone executable** carries the same code as the npm package, with
   the Bun runtime it runs on. Like the npm package, it reads no `.env` or
   `bunfig.toml` from the folder it runs in, so a repository cannot change its
