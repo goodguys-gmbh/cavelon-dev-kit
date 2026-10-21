@@ -30,11 +30,12 @@ Solution-owned files and directory links must stay inside the solution, separate
 from the kit's login and cache; see [local file safety](docs/security.md#files-on-your-machine).
 
 > [!NOTE]
-> **Current release: 0.2.8.** Work with document privacy settings and converted
-> PDFs/workbooks, review and publish solution drafts or roll back a publication,
-> and save original conversation trace exports. Windows release signing now
-> supports short-lived Azure OIDC authentication. Critical changes still need
-> the person's approval, including in YOLO mode.
+> **Current release: 0.2.9.** Review pending edits, blockers, warnings and
+> readiness checks before publishing a solution. One personal publish form
+> explains the effects on live traffic and waiting runs; your approval
+> publishes directly through the kit. Changed findings require a fresh review.
+> Critical changes still need your approval, including in YOLO mode.
+> See [solution publication](docs/solution-publication.md) for the workflow.
 > See the [changelog](CHANGELOG.md) for all changes.
 >
 > **Updating an existing install?** Run the installer below again and answer
