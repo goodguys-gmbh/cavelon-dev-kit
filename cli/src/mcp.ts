@@ -1,7 +1,7 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListToolsRequestSchema, type RequestId, type Tool } from "@modelcontextprotocol/sdk/types.js";
 import { accessFor, allOf, credentialWords, operationAccess, whoInstead, type CredentialAccess } from "./access.js";
-import { formerlyWarning, ownsTenant, propertyName, type CommandSpec, type Input, type PersonAnswer } from "./command.js";
+import { formerlyWarning, ownsTenant, propertyName, type CommandSpec, type Input, type PersonAnswer, type PersonApproval } from "./command.js";
 import { MCP_MAX_WAIT_MS } from "./commands/async.js";
 import { PERSON_WAIT_MS } from "./confirm-token.js";
 import { createContext, withWarnings } from "./context.js";
@@ -283,9 +283,10 @@ function clientAsks(server: Server): boolean {
  * tool call that asks. Bounded: no answer within PERSON_WAIT_MS, or a client
  * that fails to ask, changes nothing.
  */
-async function askThroughClient(server: Server, message: string, relatedRequestId: RequestId): Promise<PersonAnswer> {
+async function askThroughClient(server: Server, message: string, relatedRequestId: RequestId, approval?: PersonApproval): Promise<PersonAnswer> {
   try {
-    const result = await server.elicitInput({ mode: "form", message, requestedSchema: APPROVAL_SCHEMA }, { timeout: PERSON_WAIT_MS, relatedRequestId });
+    const requestedSchema = approval ? { ...APPROVAL_SCHEMA, properties: { approve: { ...APPROVAL_SCHEMA.properties.approve, ...approval } } } : APPROVAL_SCHEMA;
+    const result = await server.elicitInput({ mode: "form", message, requestedSchema }, { timeout: PERSON_WAIT_MS, relatedRequestId });
     if (result.action === "accept" && result.content?.approve === true) return "approved";
     if (result.action === "decline" || result.action === "accept" && result.content?.approve === false) return "declined";
     return result.action === "cancel" ? "unanswered" : "unavailable";
@@ -365,8 +366,8 @@ export function createMcpServer(io: Io, commands: CommandSpec[], updates: Sessio
       return fail(error);
     }
     const ctx = createContext(mcpIo(folder.io), { ...launch, json: true, tenant: tenant ?? launch.tenant, solutionEnv: solutionEnv ?? launch.solutionEnv, sessionTenants }, "mcp");
-    if (!clientUiUnavailable && clientAsks(server)) ctx.askPerson = async (message) => {
-      const answer = await askThroughClient(server, message, requestId);
+    if (!clientUiUnavailable && clientAsks(server)) ctx.askPerson = async (message, approval) => {
+      const answer = await askThroughClient(server, message, requestId, approval);
       if (answer === "unavailable") clientUiUnavailable = true;
       return answer;
     };

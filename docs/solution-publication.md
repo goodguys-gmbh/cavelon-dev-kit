@@ -2,7 +2,7 @@
 
 These commands apply when the instance advertises its solution-publication
 API. Older instances report `operation_unavailable`; their existing editing
-behavior is unchanged. This support is unreleased.
+behavior is unchanged. Publication commands are available from kit 0.2.8.
 
 An active solution can have a **published version** serving live traffic and
 an **unpublished draft** for graph edits. `apply` shows the instance's
@@ -22,7 +22,8 @@ existing shared behavior; a graph draft does not isolate changes to them.
    ```
 
 3. Run the solution's tests and fix the instance's Graph Check/readiness
-   findings. Review the unpublished changes and affected waiting runs:
+   blockers. Review the unpublished changes, remaining warnings, readiness
+   check results and affected waiting runs:
 
    ```bash
    cavelon publish --harness <solution>
@@ -40,6 +41,35 @@ terminal. YOLO does not skip this confirmation. The kit offers no force option;
 readiness blockers must be fixed. The instance rechecks readiness and the
 reviewed version, draft revision and waiting-run set before applying anything.
 A conflict needs a new review and a fresh confirmation.
+
+### Publish from your coding agent
+
+Ask the agent to check the solution and prepare publication. It first shows
+the pending edits, blocking findings, remaining warnings and readiness checks.
+The review includes the instance's test findings; publication does not start
+a new test run. Blockers must be fixed before a publish form is offered.
+
+Once the review is ready, a client that supports MCP forms presents one form
+with the solution, target instance and tenant, published version and draft
+revision, remaining warnings, affected waiting runs and the consequences for
+live traffic. Its **Publish this solution** field asks you to accept those
+warnings and effects and approve that exact publication. Your explicit Yes
+publishes directly through the kit using your existing permissions. No
+separate chat confirmation is needed. No or Cancel publishes nothing.
+
+Changed readiness findings invalidate the preview, just as changed edits or
+versions do. After the MCP form's Yes, the kit reads the review again before
+requesting the instance's confirmation and publishing. A changed review
+requires a fresh preview and approval; the instance still checks versions,
+waiting runs and readiness at publication time. A warning is something you
+can knowingly accept; a blocker cannot be overridden by the kit.
+
+Without a usable MCP form, the kit supplies the command for you to run in your
+own terminal after reviewing the findings. It does not open a separate web
+page or give the agent a way to answer for you. The terminal flow uses the
+same publication API and permissions.
+
+### Discard or roll back
 
 For an environment selected through `env/<name>.yaml`, pass `--env <name>` on
 inspection and mutation commands; the printed confirmation retains it.

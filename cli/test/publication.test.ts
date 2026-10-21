@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { ElicitRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import type { OpenApiDoc } from "../src/contracts.js";
 import { schemaErrors } from "../src/openapi.js";
@@ -32,6 +33,102 @@ it("reads publication and previews live changes even with YOLO, without a mutati
   const preview = await cli(sb, ["publish", "--harness", "support", "--yolo", "--json"]);
   expect(preview.code, preview.stderr).toBe(0); expect(preview.json()).toMatchObject({ changed: false, publication: { waiting_runs_affected: 1 } });
   expect(mutations()).toEqual([]);
+});
+it("shows readiness warnings and checks before asking anyone to publish", async () => {
+  publication.readiness.warnings = [{ key: "tests", label: "Solution tests", state: "warning", detail: "The last suite failed; review the trace", href: "/tests" }];
+  publication.readiness.checks = [{ key: "graph", label: "Graph Check", state: "passed", detail: "All nodes are connected", href: "/graph" }];
+  for (const args of [["harness", "publication", "support"], ["publish", "--harness", "support"]]) {
+    const result = await cli(sb, args);
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.stdout).toContain("readiness warnings");
+    expect(result.stdout).toContain("Solution tests");
+    expect(result.stdout).toContain("The last suite failed; review the trace");
+    expect(result.stdout).toContain("Graph Check");
+    expect(result.stdout).toContain("All nodes are connected");
+  }
+  expect(mutations()).toEqual([]);
+});
+it.each([true, false])("shows one publication-specific risk form and publishes only with its explicit yes (%s)", async approve => {
+  publication.readiness.warnings = [{ key: "tests", label: "Solution tests", state: "warning", detail: "The last suite failed", href: "/tests" }];
+  const io: Io = { stdout: { write: () => true }, stderr: { write: () => true }, stdin: Readable.from([]) as unknown as InStream, env: sb.env, cwd: sb.home, now: () => new Date(), sleep: ms => new Promise(resolve => setTimeout(resolve, ms)) };
+  const [clientSide, serverSide] = InMemoryTransport.createLinkedPair(); const mcp = createMcpServer(io, COMMANDS); const client = askingClient();
+  const forms: Array<{ message: string; requestedSchema: unknown }> = [];
+  client.setRequestHandler(ElicitRequestSchema, async request => {
+    if (request.params.mode === "url") throw new Error("Expected a publish form");
+    forms.push(request.params);
+    return { action: "accept", content: { approve } };
+  });
+  await mcp.connect(serverSide); await client.connect(clientSide);
+  const call = async (confirm?: string) => {
+    const result = await client.callTool({ name: "solution_publish", arguments: { harness: "support", ...(confirm ? { confirm } : {}) } });
+    return JSON.parse((result.content as Array<{ text: string }>)[0]!.text);
+  };
+  try {
+    const preview = await call();
+    expect(forms).toEqual([]); expect(mutations()).toEqual([]);
+    const result = await call(preview.confirm_token);
+    expect(forms).toHaveLength(1);
+    expect(forms[0]!.requestedSchema).toMatchObject({ properties: { approve: { type: "boolean", title: "Publish this solution", description: expect.stringContaining("remaining warnings") } }, required: ["approve"] });
+    expect(forms[0]!.message).toContain("Support");
+    expect(forms[0]!.message).toContain(server.url);
+    expect(forms[0]!.message).toContain("revision 5");
+    expect(forms[0]!.message).toContain("The last suite failed");
+    expect(forms[0]!.message).toContain("live traffic");
+    expect(forms[0]!.message).toContain("accept any remaining warnings");
+    expect(forms[0]!.message).toContain("00000000-0000-4000-8000-000000000001");
+    expect(mutations()).toHaveLength(approve ? 1 : 0);
+    expect(result).toMatchObject(approve ? { changed: true } : { error: { code: "confirm_declined" } });
+  } finally { await client.close(); await mcp.close(); }
+});
+it.each(["warnings", "checks"])("requires a fresh review when readiness %s change, even at the same draft revision", async field => {
+  publication.readiness[field] = [{ key: "tests", label: "Tests", state: "warning", detail: "No recent tests", href: "/tests" }];
+  const io: Io = { stdout: { write: () => true }, stderr: { write: () => true }, stdin: Readable.from([]) as unknown as InStream, env: sb.env, cwd: sb.home, now: () => new Date(), sleep: ms => new Promise(resolve => setTimeout(resolve, ms)) };
+  const [clientSide, serverSide] = InMemoryTransport.createLinkedPair(); const mcp = createMcpServer(io, COMMANDS); const client = askingClient();
+  await mcp.connect(serverSide); await client.connect(clientSide);
+  const call = async (confirm?: string) => {
+    const result = await client.callTool({ name: "solution_publish", arguments: { harness: "support", ...(confirm ? { confirm } : {}) } });
+    return JSON.parse((result.content as Array<{ text: string }>)[0]!.text);
+  };
+  try {
+    const preview = await call();
+    publication.readiness[field][0].detail = "The latest suite failed";
+    expect(await call(preview.confirm_token)).toMatchObject({ changed: false, token_mismatch: true, exit_code: 4 });
+    expect(client.asked).toEqual([]); expect(mutations()).toEqual([]);
+    expect(server.state.requests.filter(r => r.path === "/api/v1/confirmations")).toEqual([]);
+  } finally { await client.close(); await mcp.close(); }
+});
+it("allows older publication reports without optional warnings or checks", async () => {
+  delete publication.readiness.warnings; delete publication.readiness.checks;
+  const preview = await cli(sb, ["publish", "--harness", "support"]);
+  expect(preview.code, preview.stderr).toBe(0); expect(preview.stdout).toContain("not reported");
+  expect((await cli(sb, ["publish", "--harness", "support", "--confirm", "--json"])).json()).toMatchObject({ changed: true });
+});
+it.each(["warnings", "checks"])("refuses malformed readiness %s instead of hiding findings", async field => {
+  publication.readiness[field] = { detail: "Not a usable review" };
+  const result = await cli(sb, ["publish", "--harness", "support", "--confirm", "--json"]);
+  expect(result.code).not.toBe(0); expect(result.stdout).toContain("publication_state_unknown");
+  expect(mutations()).toEqual([]);
+});
+it("does not publish if the review changes while the person is reading the form", async () => {
+  const io: Io = { stdout: { write: () => true }, stderr: { write: () => true }, stdin: Readable.from([]) as unknown as InStream, env: sb.env, cwd: sb.home, now: () => new Date(), sleep: ms => new Promise(resolve => setTimeout(resolve, ms)) };
+  const [clientSide, serverSide] = InMemoryTransport.createLinkedPair(); const mcp = createMcpServer(io, COMMANDS); const client = askingClient();
+  let forms = 0;
+  client.setRequestHandler(ElicitRequestSchema, async () => {
+    forms++;
+    publication.readiness.warnings.push({ key: "tests", label: "Tests", state: "warning", detail: "A new suite failed while the form was open", href: "/tests" });
+    return { action: "accept", content: { approve: true } };
+  });
+  await mcp.connect(serverSide); await client.connect(clientSide);
+  const call = async (confirm?: string) => {
+    const result = await client.callTool({ name: "solution_publish", arguments: { harness: "support", ...(confirm ? { confirm } : {}) } });
+    return JSON.parse((result.content as Array<{ text: string }>)[0]!.text);
+  };
+  try {
+    const preview = await call();
+    expect(await call(preview.confirm_token)).toMatchObject({ error: { code: "publication_review_changed" } });
+    expect(forms).toBe(1); expect(mutations()).toEqual([]);
+    expect(server.state.requests.filter(r => r.path === "/api/v1/confirmations")).toEqual([]);
+  } finally { await client.close(); await mcp.close(); }
 });
 it("publishes the reviewed version/revision and waiting set after a person's terminal confirmation", async () => {
   const result = await cli(sb, ["publish", "--harness", "support", "--confirm", "--json"]);
@@ -90,6 +187,11 @@ it.each(["approves", "declines"] as const)("asks a fresh MCP person, who %s; a c
   };
   try {
     publication.changes.push({ entity: "node", id: "node-2", name: "Second", action: "changed" });
+    publication.readiness.warnings = [
+      { key: "tests", label: "Tests", state: "warning", detail: "No recent tests", href: "/tests" },
+      { key: "knowledge", label: "Knowledge", state: "warning", detail: "A source is stale", href: "/knowledge" },
+    ];
+    publication.readiness.checks = [...publication.readiness.warnings];
     publication.waiting_runs.push({ id: "00000000-0000-4000-8000-000000000003", node_ref: { kind: "node", id: "node-2" }, node_name: "Second approval" });
     publication.review_run_ids.push("00000000-0000-4000-8000-000000000003");
     publication.waiting_runs_affected = 2;
@@ -101,6 +203,7 @@ it.each(["approves", "declines"] as const)("asks a fresh MCP person, who %s; a c
     expect(server.state.requests.filter(r => r.path === "/api/v1/confirmations")).toEqual([]);
     const fresh = await call();
     publication.changes.reverse(); publication.waiting_runs.reverse(); publication.review_run_ids.reverse();
+    publication.readiness.warnings.reverse(); publication.readiness.checks.reverse();
     await call({ confirm: fresh.data.confirm_token });
     expect(client.asked).toHaveLength(1); expect(client.asked[0]).toContain("00000000-0000-4000-8000-000000000001");
     expect(mutations()).toHaveLength(answer === "approves" ? 1 : 0);

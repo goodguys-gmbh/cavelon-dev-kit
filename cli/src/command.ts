@@ -113,7 +113,7 @@ export interface Context {
    * a change and returns their answer, which the agent cannot give. Unset in
    * a terminal and for a client that cannot ask.
    */
-  askPerson?: (message: string) => Promise<PersonAnswer>;
+  askPerson?: (message: string, approval?: PersonApproval) => Promise<PersonAnswer>;
   /**
    * Set once the person approved the change this command makes: in their own
    * terminal with --confirm, or in the MCP client's dialog. Only then does the
@@ -127,6 +127,12 @@ export interface Context {
 
 /** A person's answer, or the absence of one; `unavailable` means the client's form request failed. */
 export type PersonAnswer = "approved" | "declined" | "unanswered" | "unavailable";
+
+/** Operation-specific wording for the same single, explicit approval field. */
+export interface PersonApproval {
+  title: string;
+  description: string;
+}
 
 export interface CommandSpec {
   /** Words, e.g. "tenant create". */

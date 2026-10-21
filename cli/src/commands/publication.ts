@@ -5,6 +5,7 @@ import { CavelonError, ExitCode, usageError } from "../errors.js";
 import { clip, keyValues, table } from "../format.js";
 import { harnessNotFoundError, lookupHarness, type HarnessSummary } from "../harness-ref.js";
 import { callOperation, workflowOperation } from "../invoke.js";
+import { canonical } from "../package-files.js";
 import { cavelonCommand } from "../printed.js";
 
 const BASE = "/api/v1/harnesses/{harness_id}";
@@ -46,18 +47,48 @@ async function read(ctx: Context, id: string, snapshot?: string): Promise<Public
   const { doc, op } = await operation(ctx, READ);
   const result = await callOperation(ctx, await ctx.client(), doc, op, { params: { harness_id: [id], ...(snapshot ? { snapshot_id: [snapshot] } : {}) } });
   const p = result.data as Publication | null;
-  if (!p || !Number.isSafeInteger(p.published_version) || p.published_version < 0 || !Number.isSafeInteger(p.draft_revision) || p.draft_revision < 0 || typeof p.has_draft !== "boolean" || !Array.isArray(p.changes) || !Array.isArray(p.readiness?.blockers) || !Number.isSafeInteger(p.waiting_runs_affected) || p.waiting_runs_affected < 0 || !Array.isArray(p.review_run_ids) || p.review_run_ids.some(id => typeof id !== "string") || !Array.isArray(p.waiting_runs) || !Array.isArray(p.published_snapshots) || typeof p.can_rollback !== "boolean") {
+  if (!p || !Number.isSafeInteger(p.published_version) || p.published_version < 0 || !Number.isSafeInteger(p.draft_revision) || p.draft_revision < 0 || typeof p.has_draft !== "boolean" || !Array.isArray(p.changes) || !Array.isArray(p.readiness?.blockers) || [p.readiness.warnings, p.readiness.checks].some(value => value !== undefined && !Array.isArray(value)) || !Number.isSafeInteger(p.waiting_runs_affected) || p.waiting_runs_affected < 0 || !Array.isArray(p.review_run_ids) || p.review_run_ids.some(id => typeof id !== "string") || !Array.isArray(p.waiting_runs) || !Array.isArray(p.published_snapshots) || typeof p.can_rollback !== "boolean") {
     throw new CavelonError(ExitCode.failure, { code: "publication_state_unknown", message: "The instance did not describe a complete publication state; nothing was changed.", hint: "Read the solution's publication state in the Admin or update the instance." });
   }
   return p;
+}
+function findingsText(label: string, findings: unknown[] | undefined): string {
+  if (!findings?.length) return "";
+  const lines = findings.slice(0, 20).map(finding => {
+    if (finding && typeof finding === "object") {
+      const f = finding as Record<string, unknown>;
+      if (typeof f.label === "string" && typeof f.state === "string" && typeof f.detail === "string") {
+        return clip(`${f.label} (${f.state}): ${f.detail}${Array.isArray(f.items) && f.items.length ? ` ${JSON.stringify(f.items)}` : ""}`, 500);
+      }
+    }
+    return clip(JSON.stringify(finding), 500);
+  });
+  if (findings.length > 20) lines.push(`${findings.length - 20} more findings; read --json for the full review before approving.`);
+  return `\n\n${label}:\n${lines.join("\n")}`;
 }
 function stateText(p: Publication): string {
   return keyValues([
     ["published", `v${p.published_version}`],
     ["draft", p.has_draft ? `${p.draft_change_count} unpublished changes (revision ${p.draft_revision})` : "none"],
     ["readiness blockers", p.readiness.blockers.length],
+    ["readiness warnings", p.readiness.warnings?.length ?? "not reported"],
     ["waiting runs affected", p.waiting_runs_affected],
-  ]) + (p.waiting_runs.length ? `\n\nWaiting runs:\n${table(p.waiting_runs.slice(0, 20), ["id", "node_name"])}` : "") + (p.readiness.blockers.length ? `\n\nBlockers:\n${p.readiness.blockers.slice(0, 20).map(b => clip(JSON.stringify(b), 500)).join("\n")}` : "") + (p.changes.length ? `\n\n${table(p.changes.slice(0, 50), ["entity", "name", "action", "id"])}` : "") + (p.changes.length > 50 ? `\n${p.changes.length - 50} more changes; --json includes all.` : "");
+  ]) + findingsText("Blockers", p.readiness.blockers) + findingsText("Warnings", p.readiness.warnings) + findingsText("Readiness checks", p.readiness.checks) + (p.waiting_runs.length ? `\n\nWaiting runs:\n${table(p.waiting_runs.slice(0, 20), ["id", "node_name"])}` : "") + (p.changes.length ? `\n\n${table(p.changes.slice(0, 50), ["entity", "name", "action", "id"])}` : "") + (p.changes.length > 50 ? `\n${p.changes.length - 50} more changes; --json includes all.` : "");
+}
+
+/** Readiness can change without a graph edit, for example when a new test finishes. */
+function readinessReview(p: Publication) {
+  const sorted = (values: unknown[] | undefined) => values ? [...values].sort((a, b) => canonical(a).localeCompare(canonical(b))) : null;
+  return { ready_to_activate: p.readiness.ready_to_activate ?? null, blockers: sorted(p.readiness.blockers), warnings: sorted(p.readiness.warnings), checks: sorted(p.readiness.checks) };
+}
+
+function publishRisks(p: Publication): string {
+  return [
+    "Publishing risks:",
+    "New live requests will use the reviewed draft; this is not a test run.",
+    ...(p.waiting_runs_affected ? [`The instance reports ${p.waiting_runs_affected} affected waiting runs; review the listed runs.`] : []),
+    ...(p.readiness.warnings?.length ? ["Readiness warnings remain. Publish only if you accept the warnings shown above."] : []),
+  ].join("\n");
 }
 
 export const publication: CommandSpec = {
@@ -97,6 +128,12 @@ function mutationBody(action: Action, p: Publication, snapshot?: Snapshot): Reco
   return body;
 }
 
+function reviewedChange(harnessId: string, action: Action, p: Publication, snapshot?: Snapshot) {
+  const changes = [...p.changes].sort((a, b) => (a.entity + ":" + a.id).localeCompare(b.entity + ":" + b.id));
+  const waiting = [...p.waiting_runs].sort((a, b) => a.id.localeCompare(b.id));
+  return { harness: harnessId, body: mutationBody(action, p, snapshot), changes, waiting_runs: waiting, has_draft: p.has_draft, ...(action !== "discard-draft" ? { readiness: readinessReview(p), waiting_runs_affected: p.waiting_runs_affected } : {}) };
+}
+
 function commandWords(action: Action, input: Input, harness: HarnessSummary, snapshot?: Snapshot): string[] {
   const words = [...ACTIONS[action].words, "--harness", harness.slug];
   const env = stringOption(input, "env");
@@ -123,11 +160,11 @@ async function checkMutationAccess(ctx: Context, action: Action) {
   if (permission.allowed === false) throw new CavelonError(ExitCode.unauthorized, { code: "permission_missing", message: "This credential cannot perform the publication change; nothing was changed.", hint: whoInstead(access, permission) });
 }
 
-function previewResult(harness: HarnessSummary, p: Publication, gate: Confirmation, consequence: string, words: string[], snapshot?: Snapshot) {
+function previewResult(harness: HarnessSummary, p: Publication, gate: Confirmation, review: string, words: string[], snapshot?: Snapshot) {
   const confirm = gate.confirm(cavelonCommand(...words));
   return {
     data: { changed: false, harness, publication: p, ...(snapshot ? { rollback_snapshot: snapshot } : {}), confirm, ...gate.fields },
-    text: [consequence, stateText(p), gate.where, ...(gate.mismatch ? [gate.mismatch] : []), `Show this to a person; with their yes: ${confirm}`].join("\n"),
+    text: [review, gate.where, ...(gate.mismatch ? [gate.mismatch] : []), `Show this to a person; with their yes: ${confirm}`].join("\n"),
     ...(gate.exitCode ? { exitCode: gate.exitCode } : {}),
   };
 }
@@ -149,10 +186,17 @@ async function runChange(ctx: Context, input: Input, action: Action) {
   const body = mutationBody(action, p, snapshot);
   const words = commandWords(action, input, harness, snapshot);
   const consequence = consequenceOf(action, harness, p, snapshot);
-  const changes = [...p.changes].sort((a, b) => (a.entity + ":" + a.id).localeCompare(b.entity + ":" + b.id));
-  const waiting = [...p.waiting_runs].sort((a, b) => a.id.localeCompare(b.id));
-  const gate = await confirmation(ctx, input, tool, { harness: harness.id, body, changes, waiting_runs: waiting, has_draft: p.has_draft }, { person: { what: `${consequence}\n${stateText(p)}`, words } });
-  if (!gate.confirmed) return previewResult(harness, p, gate, consequence, words, snapshot);
+  const review = `${consequence}\n${stateText(p)}${action === "publish" ? `\n\n${publishRisks(p)}` : ""}`;
+  const change = reviewedChange(harness.id, action, p, snapshot);
+  const gate = await confirmation(ctx, input, tool, change, { person: { what: review, words, ...(action === "publish" ? { approval: { title: "Publish this solution", description: "I reviewed this draft, accept any remaining warnings and the effects on live traffic and affected waiting runs, and approve this publication." } } : {}) } });
+  if (!gate.confirmed) return previewResult(harness, p, gate, review, words, snapshot);
+  if (action === "publish" && ctx.mode === "mcp") {
+    // A test or another editor can change the review while the person reads the form.
+    const current = await read(ctx, harness.id);
+    if (canonical(change) !== canonical(reviewedChange(harness.id, action, current))) {
+      throw new CavelonError(ExitCode.conflict, { code: "publication_review_changed", message: "The publication review changed while awaiting approval; nothing was published.", hint: "Read the updated publication findings and request a fresh preview and personal approval." });
+    }
+  }
   const result = await callOperation(ctx, await ctx.client(), doc, op, { params: { harness_id: [harness.id] }, body });
   const data = result.data as Record<string, unknown>;
   const warnings = Array.isArray(data.warnings) ? data.warnings.map(w => clip(String(w), 500)) : [];
