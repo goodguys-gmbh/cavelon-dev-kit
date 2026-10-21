@@ -158,8 +158,15 @@ When the instance advertises solution publication, an active solution's scoped
 graph apply writes an unpublished draft. Read the explicit `publication`
 report; older instances keep their previous behavior. Inspect it with
 `cavelon harness publication <solution> --json`, run tests and fix readiness,
-then review `cavelon publish --harness <solution>`. Publication changes live
-traffic and always needs the person's fresh MCP/own-terminal confirmation,
+then review `cavelon publish --harness <solution>`. Show the person the pending
+edits, blockers, remaining warnings, readiness checks and affected waiting runs
+before requesting publication. Blockers must be fixed; the person's single
+publish form can accept remaining warnings and live-traffic effects. Call
+`solution_publish` with the preview's token to open that form, without asking
+for an extra chat yes. A client without a usable form returns an own-terminal
+command. Changed findings need a fresh review, including changes while the
+form was open. Publication changes live traffic and always needs the person's
+fresh MCP/own-terminal confirmation,
 including in YOLO. Never force it from the kit. Conflicting versions, revisions
 or affected waiting runs require a fresh review. Shared tenant resources keep
 their existing behavior and are not isolated by the graph draft.

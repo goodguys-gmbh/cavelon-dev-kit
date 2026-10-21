@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { actingTarget, targetLine, type ActingTarget, type PlatformTarget } from "./acting.js";
 import { drivenByAgent, type DrivenBy } from "./agent-env.js";
-import type { Context, Input } from "./command.js";
+import type { Context, Input, PersonApproval } from "./command.js";
 import { CavelonError, ExitCode, type ExitCodeValue } from "./errors.js";
 import { canonical } from "./package-files.js";
 import { personCommand, PREVIEW_TOKEN, type Word } from "./printed.js";
@@ -76,6 +76,8 @@ export interface PersonChange {
   what: string;
   /** The confirming command's words (with `--confirm`), as the person runs it in their own terminal. */
   words: Word[];
+  /** Wording that identifies the action and the risks accepted by the person's yes. */
+  approval?: PersonApproval;
 }
 
 /** What the help of a command whose change is a `PersonChange` says about who confirms it. */
@@ -160,7 +162,7 @@ async function gateOf(
     }
     if (!tokenGiven) return { confirmed: false, fields, confirm };
     if (given === token) {
-      await personApproves(ctx, driven!, { tool, what: person.what, command }, options);
+      await personApproves(ctx, driven!, { tool, what: person.what, command, approval: person.approval }, options);
       return { confirmed: true, fields: {}, confirm };
     }
     return {
@@ -212,13 +214,14 @@ export function personRoute(ctx: Context, driven: DrivenBy): PersonRoute {
 export async function personApproves(
   ctx: Context,
   driven: DrivenBy,
-  change: { tool: string; what: string; command: string; guarded?: boolean },
+  change: { tool: string; what: string; command: string; guarded?: boolean; approval?: PersonApproval },
   target: PlatformTarget = {},
 ): Promise<void> {
   if (personRoute(ctx, driven) === "terminal") throw needsPerson(change.command);
   const where = targetLine(await actingTarget(ctx, target));
   const answer = await ctx.askPerson!(
-    [change.what, where, `A coding agent asks to make this change through cavelon (${change.tool}). Approve only this exact change.`].filter(Boolean).join("\n"),
+    [change.approval?.title, change.what, where, change.approval?.description, `A coding agent asks to make this change through cavelon (${change.tool}). Approve only this exact change.`].filter(Boolean).join("\n"),
+    change.approval,
   );
   if (answer === "approved") {
     ctx.approved = { guarded: change.guarded ?? true };

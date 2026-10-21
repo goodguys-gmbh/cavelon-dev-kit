@@ -5,6 +5,17 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 project uses [semantic versioning](https://semver.org/): one version for the
 CLI, the skills and the plugin.
 
+## [Unreleased]
+
+### Changed
+
+- Publication reviews now show readiness warnings and check results before
+  the person's single, publication-specific MCP form. The form explains live
+  traffic and waiting-run effects and explicitly acknowledges remaining
+  warnings. Changed findings invalidate previews, and the kit rechecks the
+  review after form approval. Readiness blockers still prevent publication;
+  YOLO and terminal fallback retain their existing approval rules.
+
 ## [0.2.8] - 2026-10-20
 
 ### Added

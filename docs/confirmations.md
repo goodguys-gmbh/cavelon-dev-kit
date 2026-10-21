@@ -40,6 +40,13 @@ After a failed form request, later previews on that MCP connection use the
 terminal route; restarting the connection lets the client offer dialogs again.
 An explicit No remains `confirm_declined` and is never retried automatically.
 
+For [solution publication](solution-publication.md#publish-from-your-coding-agent),
+the form names the publication and asks you to accept the displayed readiness
+warnings and effects on live traffic and waiting runs. The kit shows blockers,
+warnings and check results first, binds the review to the preview, and checks
+it again after the MCP form's approval. This is one personal approval step;
+readiness blockers cannot be acknowledged away.
+
 ## Opt in to YOLO for routine work
 
 A person can enable YOLO in the one-line installer's second question. This
