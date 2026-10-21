@@ -5,7 +5,7 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 project uses [semantic versioning](https://semver.org/): one version for the
 CLI, the skills and the plugin.
 
-## [Unreleased]
+## [0.2.9] - 2026-10-21
 
 ### Changed
 
@@ -15,6 +15,10 @@ CLI, the skills and the plugin.
   warnings. Changed findings invalidate previews, and the kit rechecks the
   review after form approval. Readiness blockers still prevent publication;
   YOLO and terminal fallback retain their existing approval rules.
+
+- Updated the Vite test dependency and its locked development dependencies.
+- Release setup documentation reads GitHub's published immutable OIDC subject
+  before configuring the Windows signing federation.
 
 ## [0.2.8] - 2026-10-20
 

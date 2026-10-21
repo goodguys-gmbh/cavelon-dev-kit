@@ -3,6 +3,8 @@
 These commands apply when the instance advertises its solution-publication
 API. Older instances report `operation_unavailable`; their existing editing
 behavior is unchanged. Publication commands are available from kit 0.2.8.
+The warnings/check results and publication-specific approval form described
+below are available from kit 0.2.9.
 
 An active solution can have a **published version** serving live traffic and
 an **unpublished draft** for graph edits. `apply` shows the instance's
