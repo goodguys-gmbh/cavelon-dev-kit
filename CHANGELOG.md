@@ -5,7 +5,7 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 project uses [semantic versioning](https://semver.org/): one version for the
 CLI, the skills and the plugin.
 
-## [Unreleased]
+## [0.2.11] - 2026-10-22
 
 ### Changed
 
@@ -13,6 +13,8 @@ CLI, the skills and the plugin.
   nodes and useful saved demo inputs, with Masterloop iteration exceptions.
   Draft creation returns the guidance through CLI and MCP; the support FAQ
   example includes a Chat Start and a demo question covered by its tests.
+
+- Updated the CLI and test dependencies, including the Vitest security fix.
 
 ### Fixed
 
