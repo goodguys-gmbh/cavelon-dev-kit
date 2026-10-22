@@ -30,12 +30,13 @@ Solution-owned files and directory links must stay inside the solution, separate
 from the kit's login and cache; see [local file safety](docs/security.md#files-on-your-machine).
 
 > [!NOTE]
-> **Current release: 0.2.9.** Review pending edits, blockers, warnings and
-> readiness checks before publishing a solution. One personal publish form
-> explains the effects on live traffic and waiting runs; your approval
-> publishes directly through the kit. Changed findings require a fresh review.
-> Critical changes still need your approval, including in YOLO mode.
-> See [solution publication](docs/solution-publication.md) for the workflow.
+> **Current release: 0.2.10.** Codex plugin and skill updates now work with
+> both Git and local marketplaces. Local sources no longer fail on a Git-only
+> upgrade command; update their checkout or offline files first. Git sources
+> update normally. See [Codex updates](docs/install/codex.md#update).
+> Solution publication still reviews blockers and warnings before your
+> personal approval, including in YOLO mode
+> ([publication guide](docs/solution-publication.md)).
 > See the [changelog](CHANGELOG.md) for all changes.
 >
 > **Updating an existing install?** Run the installer below again and answer
