@@ -5,6 +5,15 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 project uses [semantic versioning](https://semver.org/): one version for the
 CLI, the skills and the plugin.
 
+## [Unreleased]
+
+### Changed
+
+- New-solution guidance now includes connected Canvas Chat/Trigger Start
+  nodes and useful saved demo inputs, with Masterloop iteration exceptions.
+  Draft creation returns the guidance through CLI and MCP; the support FAQ
+  example includes a Chat Start and a demo question covered by its tests.
+
 ## [0.2.10] - 2026-10-22
 
 ### Fixed

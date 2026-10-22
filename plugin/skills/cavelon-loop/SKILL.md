@@ -195,6 +195,11 @@ in a pinned recovery snapshot and clears the draft; report its warnings.
    remove it unless the person wants it.
 2. **Edit** the files in `package/` (one file per schema section) and `tests/`
    (one file per test suite). See the cavelon-authoring skill.
+   For a new ordinary chat/trigger solution, also author the connected Chat
+   Start or Trigger Start with realistic saved demo input; an entrypoint
+   agent alone leaves the Canvas debug entry incomplete. Follow the
+   authoring skill's Canvas entrypoints reference, including its Masterloop
+   iteration exceptions. This does not activate a trigger or run its demo.
 3. **Validate** offline: `cavelon validate`. Fix every error; `cavelon explain
    <code>` says what a code means and how to fix it. Besides the schema it
    finds duplicate slugs, handoffs and test assertions naming an agent the

@@ -10,6 +10,23 @@ A solution is ready when its test suites pass on the instance, not when the
 package validates. Test against a draft solution or a test tenant
 (`--env test`), never by trying things on an active solution.
 
+## Canvas debug readiness
+
+For a newly authored ordinary chat/trigger solution, check its connected
+Chat Start or Trigger Start as well as its suites. The Chat Start should
+have a useful `config.demo_message`; a Trigger Start should bind the right
+`config.trigger_slug` and save `config.demo_payload` matching that trigger's
+payload contract. Check a realistic happy path and a relevant edge case in
+the suites. The cavelon-authoring skill's Canvas entrypoints reference covers
+the package shapes and exceptions for Masterloop iteration harnesses.
+
+After apply, inspect the saved input and route in the draft's Canvas when
+the UI is available (`cavelon docs get concepts/playground-and-debugging`).
+**Run demo executes real tools**, including external writes. Check the test
+tenant, bindings and effects before running it; no secret belongs in demo
+input. If you cannot inspect the UI, report that check as outstanding rather
+than claiming a Canvas run from package validation alone.
+
 ## Test suites
 
 Suites live in `tests/`, one YAML file per suite, and `apply` imports them with

@@ -11,6 +11,17 @@ format as a JSON Schema; `cavelon` splits it along that schema's top-level
 sections, so the files follow whatever the instance version defines. Do not
 assume a section or field exists: check the schema or the docs first.
 
+## New solutions: make the Canvas useful
+
+For a new ordinary chat or trigger solution, include its connected **Chat
+Start** (`chat_start`) or **Trigger Start** (`trigger_start`) and useful saved
+demo input as part of authoring, even though start nodes are optional. An
+agent marked `is_entrypoint: true` alone does not provide that Canvas debug
+entry. See [Canvas entrypoints](references/canvas-entrypoints.md) for the
+package shape, trigger demo defaults and Masterloop iteration exceptions.
+Preserve an existing solution's entry design unless the requested work needs
+it changed; do not add live triggers just to provide a demo.
+
 ## Before you plan: the instance's limits
 
 Read `cavelon limits` (or the `limits` MCP tool) before you design or change a

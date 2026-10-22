@@ -208,6 +208,7 @@ describe("init", () => {
     expect(manifest).toEqual({ package_version: "v3", exported_at: expect.stringMatching(/^\d{4}-\d\d-\d\dT/), source_tenant_id: tenant, source_tenant_slug: "acme" });
     // A manifest alone is no package yet: the next step is still to write one.
     expect(made.json<{ next: string[] }>().next).toEqual(expect.arrayContaining(["Write the package files in package/, then: cavelon validate"]));
+    expect(made.json<{ next: string[] }>().next).toEqual(expect.arrayContaining([expect.stringMatching(/chat_start.*demo_message.*trigger_start.*demo_payload/)]));
     expect((await cli(sb, ["validate", "--offline"], { cwd: dir })).stderr).toMatch(/No package files in package\/ yet/);
 
     // With the package files written by hand, the manifest is valid.

@@ -253,6 +253,7 @@ package/
   knowledge_bases.yaml   the knowledge base "Support FAQ"
   skills.yaml            "Answer from the FAQ": the search tool, the knowledge base it searches, and how to answer
   agents.yaml            one agent, its model and its prompt: what it does
+  registry_entities.yaml Chat Start, a demo question and the edge to the agent
   persona.yaml           who the assistant is: its name, voice, greeting and fallback
 tests/
   smoke.yaml             four test cases: three the FAQ answers, one it must decline
@@ -272,6 +273,13 @@ documents by their metadata, and `read_document` reads one by id).
 `cavelon validate` warns about an agent that is given a knowledge base no such
 tool reaches.
 
+The Chat Start in `registry_entities.yaml` connects to the FAQ agent and
+saves a support-hours question in `config.demo_message` for Canvas debugging.
+For your own new chat/trigger solutions, include a connected start with useful
+demo input too. Start nodes remain optional; constrained Masterloop iteration
+harnesses keep their own entrypoint rules. Running a demo executes real tools,
+so inspect the test tenant and effects first.
+
 ### Under your own name
 
 The example's files name the solution `support-faq` and the knowledge base
@@ -283,6 +291,7 @@ change these to your own:
 |---|---|
 | `package/harnesses.yaml` | `slug` (the one in `cavelon.yaml`) and `name` |
 | `package/agents.yaml` | `harness_slug` |
+| `package/registry_entities.yaml` | `harness_slug` on the start node and edge |
 | `tests/smoke.yaml` | `harness_slug` |
 | `package/knowledge_bases.yaml` | `name` of the knowledge base |
 | `package/skills.yaml` | `knowledge_base_name` under `knowledge_base_assignments` |

@@ -27,7 +27,7 @@ import { isUuid, lookupTenantId, requireInstance, requireToken, tenantRequiredEr
 import type { PackageSchema } from "../contracts.js";
 import { cavelonCommand, fill, folderCommand } from "../printed.js";
 import { chooseTenant, listsTenants, noTenantError, tenantOpenError, tenantRef, tenantTitle } from "../tenant-choice.js";
-import { createHarness } from "./tenants.js";
+import { createHarness, NEW_HARNESS_AUTHORING_HINT } from "./tenants.js";
 import { schemaFor, setProjectKey } from "./solution.js";
 
 /**
@@ -808,6 +808,7 @@ async function runInit(ctx: Context, input: Parameters<CommandSpec["run"]>[1]) {
       next.unshift(
         `Bring the draft into package/ (its manifest): ${folderCommand("pull")}`,
         `Write the package files in package/, then: ${folderCommand("validate")}`,
+        NEW_HARNESS_AUTHORING_HINT,
         `Preview it on the instance: ${folderCommand("apply", "--env", "test")}`,
       );
     } else if (harness) next.unshift(`Bring the solution into package/: ${folderCommand("pull")}`);

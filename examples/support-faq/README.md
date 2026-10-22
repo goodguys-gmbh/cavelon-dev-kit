@@ -14,6 +14,7 @@ support-faq/
     knowledge_bases.yaml the knowledge base "Support FAQ"
     skills.yaml         "Answer from the FAQ": the search tool and the knowledge base it searches
     agents.yaml         the one agent, its model and prompt: what it does
+    registry_entities.yaml Chat Start, its demo question and the edge to the agent
     persona.yaml        who the assistant is: its name, voice, greeting and fallback
   tests/smoke.yaml    four test cases: three the FAQ answers, one it must decline
   env/test.yaml       where `cavelon apply --env test` goes
@@ -52,7 +53,8 @@ If someone in your tenant has tried the example already, copy it under your
 own name, because knowledge bases are matched by name across the tenant and
 two copies would share one. Change the solution's slug in `cavelon.yaml` and
 `env/test.yaml`, its `slug` and `name` in `package/harnesses.yaml`,
-`harness_slug` in `package/agents.yaml` and `tests/smoke.yaml`, the knowledge
+`harness_slug` in `package/agents.yaml`, `package/registry_entities.yaml` and
+`tests/smoke.yaml`, the knowledge
 base's `name` in `package/knowledge_bases.yaml` and `knowledge_base_name` in
 `package/skills.yaml`, and use that name with `kb upload --kb` below.
 
@@ -73,6 +75,12 @@ From here, change the prompt, the FAQ or the tests, and run the loop again:
 `validate`, `apply`, `test run`, `trace`. With the Cavelon plugin in your coding
 agent, open this folder and ask it, for example, to "add a question about
 shipping costs to the smoke tests and make it pass".
+
+The Canvas also has a Chat Start connected to the FAQ agent. Its saved demo
+message asks about support hours, one of the smoke cases. After the import
+and FAQ upload, open the draft in the Canvas to inspect or change that input
+and debug the route. Running a demo executes the solution's real tools; use
+the test tenant and check their effects first.
 
 When the tests pass, activate the solution through its readiness gate:
 `cavelon activate`.
