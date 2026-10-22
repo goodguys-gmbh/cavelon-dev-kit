@@ -247,10 +247,11 @@ describe("init creates the solution it is given", () => {
       const result = await mcp.call("init", { tenant, harness: "Order Status" });
       expect(result.isError, JSON.stringify(result.body)).toBe(false);
       // Tool calls, in the order that works: the draft, its manifest, the files, the preview.
-      expect(result.body.next.slice(0, 4)).toEqual([
+      expect(result.body.next.slice(0, 5)).toEqual([
         'Solution order-status is not on the instance yet: create it as a draft with harness_new {"slug":"order-status","name":"Order Status"}.',
         "Bring the draft into package/ (its manifest): pull {}",
         "Write the package files in package/, then: validate {}",
+        expect.stringMatching(/chat_start.*demo_message.*trigger_start.*demo_payload/),
         'Preview it on the instance: apply {"env":"test"}',
       ]);
       expect(server.state.harnesses.find((h) => h.slug === "order-status")).toBeUndefined();

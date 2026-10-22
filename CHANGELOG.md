@@ -14,6 +14,12 @@ CLI, the skills and the plugin.
   Draft creation returns the guidance through CLI and MCP; the support FAQ
   example includes a Chat Start and a demo question covered by its tests.
 
+### Fixed
+
+- Removing file-based skills also removes their empty reference directories,
+  including when switching from fallback files to a native plugin. Personal
+  files remain in place.
+
 ## [0.2.10] - 2026-10-22
 
 ### Fixed

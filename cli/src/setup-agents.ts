@@ -722,6 +722,7 @@ async function removeSkills(record: { dir: string; created_dir?: string }, skill
       if (isGenerated(await readTextFile(full).catch(() => undefined))) {
         await fs.rm(full, { force: true });
         removed++;
+        await removeEmptyDirs(path.dirname(full), folder);
       }
     }
     await fs.rmdir(folder).catch(() => undefined);
