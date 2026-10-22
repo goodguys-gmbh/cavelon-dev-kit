@@ -779,7 +779,7 @@ describe("the update warning over MCP", () => {
   const NPX: Install = detectInstall({ executable: false, file: "/u/ada/.npm/_npx/0123abcd/node_modules/@cavelon/cli", platform: "linux", env: {}, exists: () => false });
   const UPDATE = "curl -fsSL https://github.com/goodguys-gmbh/cavelon-dev-kit/releases/latest/download/install.sh | sh";
   const CLAUDE = "`claude plugin marketplace update cavelon-dev-kit` and `claude plugin update cavelon@cavelon-dev-kit`";
-  const CODEX = "`codex plugin marketplace upgrade cavelon-dev-kit` and `codex plugin add cavelon@cavelon-dev-kit`";
+  const CODEX = "`cavelon setup --update --agents codex`";
   const INSTALL_DOCS = "https://github.com/goodguys-gmbh/cavelon-dev-kit/blob/main/docs/install";
   const RELEASES = "https://api.github.com/repos/goodguys-gmbh/cavelon-dev-kit/releases/latest";
 

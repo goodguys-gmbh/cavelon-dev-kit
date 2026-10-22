@@ -57,12 +57,16 @@ if (agent === "cavelon" && call === "mcp") {
   writeFileSync(path.join(extension, "gemini-extension.json"), JSON.stringify({ name: "cavelon", version: metadata.ref.slice(1) }));
   out('Extension "cavelon" updated.');
 } else if (call === "plugin marketplace update cavelon-dev-kit" || call === "plugin marketplace upgrade cavelon-dev-kit" || call === "plugin update cavelon@cavelon-dev-kit --scope user") {
+  if (call === "plugin marketplace upgrade cavelon-dev-kit" && state.marketplaceSources?.["cavelon-dev-kit"]?.sourceType === "local") {
+    process.stderr.write("marketplace cavelon-dev-kit is not configured as a Git marketplace\n");
+    process.exit(1);
+  }
   out("Updated Cavelon.");
 } else if (call === "plugin list --json") {
   if (agent === "claude") out(state.plugins.map((id) => ({ id, version: "0.1.2", scope: "user", enabled: true })));
-  else out({ installed: state.plugins.map((id) => ({ pluginId: id, installed: true, enabled: true })) });
+  else out({ installed: state.plugins.map((id) => ({ pluginId: id, installed: true, enabled: !state.disabledPlugins?.includes(id) })) });
 } else if (call === "plugin marketplace list --json") {
-  const list = state.marketplaces.map((name) => ({ name, source: "github", repo: "goodguys-gmbh/cavelon-dev-kit" }));
+  const list = state.marketplaces.map((name) => ({ name, marketplaceSource: state.marketplaceSources?.[name] ?? { sourceType: "git", source: "https://github.com/goodguys-gmbh/cavelon-dev-kit.git" } }));
   out(agent === "claude" ? list : { marketplaces: list });
 } else if (call === "plugin marketplace add goodguys-gmbh/cavelon-dev-kit") {
   state.marketplaces.push("cavelon-dev-kit");

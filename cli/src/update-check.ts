@@ -324,7 +324,7 @@ async function initSkillsVersion(cwd: string): Promise<string | undefined> {
 
 const PLUGIN_UPDATE = {
   claude: "`claude plugin marketplace update cavelon-dev-kit` and `claude plugin update cavelon@cavelon-dev-kit`",
-  codex: "`codex plugin marketplace upgrade cavelon-dev-kit` and `codex plugin add cavelon@cavelon-dev-kit`",
+  codex: "`cavelon setup --update --agents codex`",
 };
 const INSTALL_DOCS = `https://github.com/${REPOSITORY}/blob/main/docs/install`;
 

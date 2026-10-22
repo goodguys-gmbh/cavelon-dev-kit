@@ -58,6 +58,28 @@ it.each(["claude", "codex"])("updates an existing %s plugin without acquiring re
   expect(log(name).some(call => call.startsWith("plugin uninstall") || call.startsWith("plugin remove"))).toBe(false);
 });
 
+it.each(["installed", "new", "disabled"])("refreshes a local Codex marketplace's %s plugin without Git or source changes", async status => {
+  const env = pathEnv(fakeBin(["codex"]));
+  const source = path.join(sb.home, "offline marketplace");
+  mkdirSync(source);
+  writeFileSync(path.join(source, "keep.txt"), "local files belong to the person");
+  const marketplaceSources = { [MARKETPLACE]: { sourceType: "local", source } };
+  const disabledPlugins = status === "disabled" ? [PLUGIN_ID] : [];
+  const stateFile = path.join(sb.home, ".fake-codex.json");
+  writeFileSync(stateFile, JSON.stringify({ marketplaces: [MARKETPLACE], marketplaceSources, plugins: status === "new" ? [] : [PLUGIN_ID], disabledPlugins }));
+  const result = await cli(sb, ["setup", "--update", "--yes", "--agents", "codex", "--json"], { env });
+  expect(result.code, result.stdout + result.stderr).toBe(0);
+  expect(log("codex").some(call => call.startsWith("plugin marketplace upgrade"))).toBe(false);
+  expect(log("codex").includes(`plugin add ${PLUGIN_ID}`)).toBe(status !== "disabled");
+  expect(readJson(stateFile)).toMatchObject({ marketplaces: [MARKETPLACE], marketplaceSources, disabledPlugins });
+  expect(read(path.join(source, "keep.txt"))).toBe("local files belong to the person");
+  if (status !== "new") {
+    await cli(sb, ["setup", "--remove", "--yes", "--agents", "codex"], { env });
+    expect(readJson(stateFile).plugins).toEqual([PLUGIN_ID]);
+    expect(log("codex").some(call => call.startsWith("plugin marketplace remove"))).toBe(false);
+  }
+});
+
 it("reports a plugin update failure while preserving the independently selected MCP mode", async () => {
   const env = { ...pathEnv(fakeBin(["claude"])), FAKE_AGENT_FAIL: "plugin update" };
   writeFileSync(path.join(sb.home, ".fake-claude.json"), JSON.stringify({ marketplaces: [MARKETPLACE], plugins: [PLUGIN_ID] }));

@@ -5,6 +5,16 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 project uses [semantic versioning](https://semver.org/): one version for the
 CLI, the skills and the plugin.
 
+## [Unreleased]
+
+### Fixed
+
+- Codex setup updates now refresh the plugin and its skills from a registered
+  local marketplace without running the Git-only marketplace upgrade command.
+  Local checkout and offline bundle files remain unchanged; Git marketplaces
+  still update normally. Disabled plugins stay disabled. Update guidance now
+  distinguishes Git and local sources.
+
 ## [0.2.9] - 2026-10-21
 
 ### Changed
