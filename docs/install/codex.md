@@ -48,13 +48,46 @@ In a session, `/mcp` lists the server and its tools.
 
 ## Update
 
+After updating the CLI, refresh the plugin and all four skills together:
+
+```bash
+cavelon setup --update --agents codex
+```
+
+The install/update script offers this same update. Start a new Codex session
+afterwards to load the refreshed skills.
+
+Setup detects how the marketplace was registered. A Git source is updated
+before refreshing the plugin. A local source is read as it stands: setup does
+not pull a developer checkout or replace offline files. Unpack the new offline
+release into the registered folder, or update your checkout yourself, first.
+
+By hand, for a **Git marketplace**:
+
 ```bash
 codex plugin marketplace upgrade cavelon-dev-kit
 codex plugin add cavelon@cavelon-dev-kit
 ```
 
-From an unpacked `cavelon-marketplace.tar.gz`, unpack the new release's file
-over the same folder first.
+For a **local marketplace**, refresh its files first, then run only:
+
+```bash
+codex plugin add cavelon@cavelon-dev-kit
+```
+
+If Codex says the marketplace “is not configured as a Git marketplace”, it
+was registered from a directory. Check it with
+`codex plugin marketplace list --json`. To switch an existing online
+installation to the official Git source:
+
+```bash
+codex plugin marketplace remove cavelon-dev-kit
+codex plugin marketplace add goodguys-gmbh/cavelon-dev-kit
+codex plugin add cavelon@cavelon-dev-kit
+```
+
+Removing the registration keeps the original local directory. Keep local
+registration for offline use; it needs no Git upgrade.
 
 ## Remove
 

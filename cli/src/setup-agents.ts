@@ -274,7 +274,14 @@ export interface AgentPlan {
   changes: Change[];
   native?: NativeInstallPlan;
   /** The plugin's state, read from the agent (plugin method). */
-  plugin?: { marketplace: boolean; installed: boolean; enabled: boolean };
+  plugin?: PluginState;
+}
+
+interface PluginState {
+  marketplace: boolean;
+  installed: boolean;
+  enabled: boolean;
+  marketplaceSource?: { sourceType?: string; source?: string };
 }
 
 const RUN_TIMEOUT_MS = 180_000;
@@ -285,7 +292,7 @@ function display(program: string, args: string[]): string {
 }
 
 /** The plugin's state as the agent reports it, or why it could not be read. */
-async function pluginState(kind: PluginKind, program: string, env: Env): Promise<{ marketplace: boolean; installed: boolean; enabled: boolean } | { error: string }> {
+async function pluginState(kind: PluginKind, program: string, env: Env): Promise<PluginState | { error: string }> {
   const read = async (args: string[]): Promise<{ value: unknown } | { error: string }> => {
     const result = await runProgram(program, args, { env, timeoutMs: LIST_TIMEOUT_MS });
     if (result.code !== 0) return { error: result.error ?? `\`${display(program, args)}\` failed: ${firstLine(result.stderr || result.stdout)}` };
@@ -314,8 +321,8 @@ async function pluginState(kind: PluginKind, program: string, env: Env): Promise
   const installed = ((plugins.value as { installed?: Array<{ pluginId?: string; installed?: boolean; enabled?: boolean }> })?.installed ?? []).find(
     (p) => p.pluginId === PLUGIN_ID && p.installed !== false,
   );
-  const names = ((markets.value as { marketplaces?: Array<{ name?: string }> })?.marketplaces ?? []).map((m) => m.name);
-  return { marketplace: names.includes(MARKETPLACE), installed: Boolean(installed), enabled: installed?.enabled !== false };
+  const marketplace = ((markets.value as { marketplaces?: Array<{ name?: string; marketplaceSource?: PluginState["marketplaceSource"] }> })?.marketplaces ?? []).find((m) => m.name === MARKETPLACE);
+  return { marketplace: Boolean(marketplace), installed: Boolean(installed), enabled: installed?.enabled !== false, marketplaceSource: marketplace?.marketplaceSource };
 }
 
 function firstLine(text: string): string {
@@ -437,7 +444,14 @@ export async function planAgent(agent: SetupAgent, found: Found, env: Env, comma
     if (!state.marketplace && commands.marketplaceAdd.length) {
       plan.changes.push({ kind: "marketplace", summary: "add the Cavelon plugin marketplace", target: display(program, commands.marketplaceAdd), outcome: "planned" });
     }
-    if (update && state.marketplace && commands.marketplaceUpdate.length) plan.changes.push({ kind: "marketplace", summary: "refresh the Cavelon plugin marketplace", target: display(program, commands.marketplaceUpdate), outcome: "planned", refresh: true });
+    if (update && state.marketplace && commands.marketplaceUpdate.length) {
+      // Codex upgrades Git sources only. Local sources include offline bundles and developer checkouts.
+      const local = kind === "codex" && state.marketplaceSource?.sourceType === "local";
+      plan.changes.push(local
+        ? { kind: "marketplace", summary: "keep the local Cavelon plugin marketplace", target: state.marketplaceSource?.source ?? MARKETPLACE, outcome: "unchanged",
+          reason: "refresh the plugin from the existing local files; unpack the new offline release or update your checkout first to use a newer version" }
+        : { kind: "marketplace", summary: "refresh the Cavelon plugin marketplace", target: display(program, commands.marketplaceUpdate), outcome: "planned", refresh: true });
+    }
     const refresh = update && state.installed && state.enabled;
     plan.changes.push({
       kind: "plugin",

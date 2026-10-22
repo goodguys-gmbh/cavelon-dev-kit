@@ -96,6 +96,9 @@ terminal it then asks two separate questions:
    Gemini's older published extension is reinstalled through its own CLI at
    this release, preserving enablement and backing up the previous files. Custom
    or local extension sources are reported for manual update.
+   Codex Git marketplaces are upgraded; local marketplaces refresh the plugin
+   from their existing files. Update a local checkout or unpack the new offline
+   bundle into its registered folder first ([Codex updates](install/codex.md#update)).
 2. **Enable YOLO for new agent sessions?** `y` enables it, `n` disables it,
    and Enter keeps your current choice (standard mode on a new installation).
    Routine changes can preview and execute in one step in the session's selected
@@ -699,8 +702,7 @@ npm i -g @cavelon/cli                                   # the CLI, if npm instal
 uv tool upgrade cavelon                                 # the CLI, if uv installed it (pipx upgrade cavelon for pipx)
 claude plugin marketplace update cavelon-dev-kit       # Claude Code
 claude plugin update cavelon@cavelon-dev-kit
-codex plugin marketplace upgrade cavelon-dev-kit        # Codex
-codex plugin add cavelon@cavelon-dev-kit
+cavelon setup --update --agents codex                   # Codex (Git or local marketplace)
 gemini extensions update cavelon                        # Gemini CLI
 cavelon init --update                                   # in a solution set up with --agents
 ```
