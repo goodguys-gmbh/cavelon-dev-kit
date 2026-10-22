@@ -329,6 +329,7 @@ describe("cavelon mcp", () => {
 
   it("returns an operation id at once instead of blocking", async () => {
     const created = payload(await client.callTool({ name: "harness_new", arguments: { slug: "support" } }));
+    expect(created.next).toEqual(expect.arrayContaining([expect.stringMatching(/chat_start.*demo_message.*trigger_start.*demo_payload/)]));
     server.state.suites.push({ id: "5a17e000-0000-4000-8000-0000000000f1", tenant_id: tenant, name: "smoke", harness_id: created.id, archived_at: null });
     server.state.defaultSteps = ["running", "running", "running", "succeeded"];
     const started = payload(await client.callTool({ name: "test_run", arguments: { suite: ["smoke"] } }));

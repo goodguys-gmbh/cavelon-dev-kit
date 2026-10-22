@@ -36,6 +36,12 @@ Do not work around it; use the other column.
    skill). `cavelon validate`, then `cavelon apply --env test`: the preview shows
    the loop's budget, Sandboxes that an active solution writes to, and triggers
    whose execution identity is missing.
+   Give an externally triggered parent a connected Trigger Start with
+   `config.trigger_slug` and realistic `config.demo_payload` derived from
+   the trigger's schema/sample. See the authoring skill's Canvas entrypoints
+   reference. Do not add starts to constrained native/pure iteration
+   harnesses: preserve their required entrypoint rules. Saved
+   demo input neither binds an execution identity nor starts a loop.
 2. **Bind the test Sandbox** in `env/test.yaml` (`runtime_bindings`), never the
    live one: a loop test needs a Sandbox of its own, because only one writer at a
    time may use it.

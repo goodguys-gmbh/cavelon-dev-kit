@@ -491,6 +491,8 @@ export async function createHarness(ctx: Context, body: { slug: string; name: st
   return callStable<Harness>(ctx, "POST", "/api/v1/harnesses", "creating solutions", { body, headers: idempotency(idempotencyKey) });
 }
 
+export const NEW_HARNESS_AUTHORING_HINT = "For a new chat/trigger solution, add a connected chat_start with config.demo_message or trigger_start with config.trigger_slug and config.demo_payload in package/registry_entities.yaml. Match demo data to the trigger's schema; keep Masterloop iteration entrypoints under their own rules. See the cavelon-authoring skill.";
+
 export const harnessNew: CommandSpec = {
   name: "harness new",
   summary: "Create an empty draft solution (harness).",
@@ -510,12 +512,12 @@ export const harnessNew: CommandSpec = {
     if (description) body.description = description;
     const harness = await createHarness(ctx, body, stringOption(input, "idempotency-key"));
     return {
-      data: harness,
+      data: { ...harness, next: [NEW_HARNESS_AUTHORING_HINT] },
       text: keyValues([
         ["created", `${harness.name} (${harness.slug})`],
         ["id", harness.id],
         ["status", harness.status],
-      ]),
+      ]) + `\n\nNext: ${NEW_HARNESS_AUTHORING_HINT}`,
     };
   },
 };

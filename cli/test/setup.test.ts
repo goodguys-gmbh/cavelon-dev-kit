@@ -305,6 +305,9 @@ describe("cavelon setup writes each agent's user configuration", () => {
     writeFileSync(layout.codexConfig, codex);
     mkdirSync(path.join(layout.geminiSkills, "cavelon-loop"), { recursive: true });
     writeFileSync(path.join(layout.geminiSkills, "cavelon-loop", "SKILL.md"), "my own notes\n");
+    const personalReference = path.join(layout.geminiSkills, "cavelon-authoring", "references", "personal.md");
+    mkdirSync(path.dirname(personalReference), { recursive: true });
+    writeFileSync(personalReference, "my own reference\n");
 
     const result = await onPlatform("linux", () => cli(sb, ["setup", "--yes", "--json", "--agents", "cursor,codex,gemini"], { env }));
     expect(result.code).toBe(0);
@@ -320,6 +323,7 @@ describe("cavelon setup writes each agent's user configuration", () => {
     expect(read(layout.cursorMcp)).toBe(own);
     expect(read(path.join(layout.geminiSkills, "cavelon-loop", "SKILL.md"))).toBe("my own notes\n");
     expect(existsSync(path.join(layout.geminiSkills, "cavelon-testing"))).toBe(false);
+    expect(read(personalReference)).toBe("my own reference\n");
   });
 
   it("follows CLAUDE_CONFIG_DIR, CODEX_HOME and GEMINI_CLI_HOME", async () => {

@@ -1,0 +1,15 @@
+orchestration_nodes:
+  - slug: chat
+    name: Chat
+    node_type: chat_start
+    harness_slug: support-faq
+    config:
+      demo_message: When can I reach your support team?
+    canvas_x: 0
+    canvas_y: 200
+graph_edges:
+  - harness_slug: support-faq
+    from_node_ref: {kind: orchestration, slug: chat}
+    to_node_ref: {kind: agent, slug: faq-agent}
+    edge_type: pipeline
+    config: {}

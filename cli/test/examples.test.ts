@@ -132,6 +132,25 @@ describe.each(["support-faq", "expense-approval"])("examples/%s", (example) => {
     }
     expect(agents.some((a) => (a.skill_assignments ?? []).length)).toBe(true);
   });
+
+  it("offers a connected Canvas chat entry with a demo question covered by its suite", () => {
+    const { orchestration_nodes: nodes, graph_edges: edges } = read<{ orchestration_nodes: Node[]; graph_edges: Edge[] }>("package", "registry_entities.yaml");
+    const agents = read<Agent[]>("package", "agents.yaml");
+    const starts = nodes.filter((n) => n.node_type === "chat_start");
+    expect(starts).toHaveLength(1);
+    const start = starts[0]!;
+    expect(start.harness_slug).toBe(read<{ harness: string }>("cavelon.yaml").harness);
+    expect(start.config.demo_message).toEqual(expect.any(String));
+    expect((start.config.demo_message as string).trim()).not.toBe("");
+    if (example === "support-faq") {
+      const cases = read<Suite>("tests", "smoke.yaml").test_cases;
+      expect(cases.flatMap((c) => c.steps.map((s) => s.user_message))).toContain(start.config.demo_message);
+    }
+    expect(edges.some((e) => e.edge_type === "pipeline" && e.harness_slug === start.harness_slug
+      && e.from_node_ref.kind === "orchestration" && e.from_node_ref.slug === start.slug
+      && e.to_node_ref.kind === "agent" && agents.some((a) => a.slug === e.to_node_ref.slug))).toBe(true);
+    expect(edges.some((e) => e.to_node_ref.kind === "orchestration" && e.to_node_ref.slug === start.slug)).toBe(false);
+  });
 });
 
 describe("examples/expense-approval", () => {
