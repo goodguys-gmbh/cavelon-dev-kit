@@ -18,6 +18,9 @@ CLI, the skills and the plugin.
 
 ### Fixed
 
+- Testing guidance distinguishes plain-text trigger output checks from JSON
+  paths, preventing assertions against a nonexistent `answer` wrapper.
+
 - Removing file-based skills also removes their empty reference directories,
   including when switching from fallback files to a native plugin. Personal
   files remain in place.

@@ -102,6 +102,27 @@ it as a judge criterion instead of checking it, so read `cavelon docs get
 concepts/regression-testing` for the types the instance knows before relying on
 `answered_by` or `handoff_to`.
 
+## Trigger output checks
+
+Inspect a completed trigger's output before choosing its assertions. A text
+agent returns text directly; it has no implicit `answer` JSON field. Omit
+`json_path` for text and check the output itself, for example:
+
+```yaml
+type: trigger
+trigger:
+  trigger_slug: stock-updated
+  input: {item_id: DEMO-SKU-0, quantity: 0, active: false}
+  expect_status: completed
+  output:
+    - contains: "quantity=0; active=false"
+```
+
+Use `json_path` only for structured JSON output and a path that the actual
+output contains. Prefer `contains` or a bounded `matches` pattern when exact
+punctuation is not part of the requirement. A completed run can still have
+failed assertions; fix and rerun those before calling the suite passed.
+
 ## Testing an approval
 
 A test run never waits for a person and never approves anything. A run that
