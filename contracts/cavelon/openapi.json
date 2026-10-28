@@ -108,6 +108,31 @@
               "default": false,
               "title": "Include Tenant Wide"
             }
+          },
+          {
+            "name": "engagement_rules_kinds",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "starters",
+                      "calendar",
+                      "banner",
+                      "decoration"
+                    ],
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Engagement Rules Kinds"
+            }
           }
         ],
         "responses": {
@@ -324,6 +349,57 @@
           },
           "422": {}
         }
+      }
+    },
+    "/api/v1/bot-persona/engagement/preview": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Preview Engagement",
+        "operationId": "preview_engagement_api_v1_bot_persona_engagement_preview_post",
+        "parameters": [
+          {
+            "name": "harness_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Harness Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EngagementPreviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EngagementPreviewResponse"
+                }
+              }
+            }
+          },
+          "422": {},
+          "404": {}
+        },
+        "x-cavelon-read-only": true
       }
     },
     "/api/v1/chat": {
@@ -12962,6 +13038,130 @@
         ],
         "title": "DocumentResponse"
       },
+      "EngagementPreviewFocus": {
+        "properties": {
+          "shown": {
+            "type": "boolean",
+            "title": "Shown"
+          },
+          "instead_rule_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instead Rule Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "shown"
+        ],
+        "title": "EngagementPreviewFocus"
+      },
+      "EngagementPreviewRequest": {
+        "properties": {
+          "rules": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array",
+                "maxItems": 50
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rules"
+          },
+          "page_host": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 253
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Host"
+          },
+          "page_path": {
+            "type": "string",
+            "maxLength": 512,
+            "title": "Page Path",
+            "default": "/"
+          },
+          "at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At"
+          },
+          "focus_rule_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 48
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Focus Rule Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "EngagementPreviewRequest"
+      },
+      "EngagementPreviewResponse": {
+        "properties": {
+          "teaser_messages": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Teaser Messages",
+            "default": []
+          },
+          "teaser_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Teaser Keys",
+            "default": []
+          },
+          "engagement": {
+            "$ref": "#/components/schemas/WidgetEngagement"
+          },
+          "focus": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EngagementPreviewFocus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "EngagementPreviewResponse"
+      },
       "EntitlementsResponse": {
         "properties": {
           "academy_access": {
@@ -25006,6 +25206,13 @@
           "draft_revision": {
             "type": "integer",
             "title": "Draft Revision"
+          },
+          "live_fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Live Fields"
           }
         },
         "type": "object",
@@ -25016,6 +25223,325 @@
           "draft_revision"
         ],
         "title": "GraphPublicationMetadata"
+      },
+      "WidgetEngagement": {
+        "properties": {
+          "has_rules": {
+            "type": "boolean",
+            "title": "Has Rules",
+            "default": false
+          },
+          "starters_rule_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Starters Rule Id"
+          },
+          "has_campaigns": {
+            "type": "boolean",
+            "title": "Has Campaigns",
+            "default": false
+          },
+          "calendar": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WidgetEngagementCalendar"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "banners": {
+            "items": {
+              "$ref": "#/components/schemas/WidgetEngagementBanner"
+            },
+            "type": "array",
+            "title": "Banners",
+            "default": []
+          },
+          "decoration": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WidgetEngagementDecoration"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "server_now": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Server Now"
+          }
+        },
+        "type": "object",
+        "title": "WidgetEngagement"
+      },
+      "WidgetEngagementBanner": {
+        "properties": {
+          "rule_id": {
+            "type": "string",
+            "title": "Rule Id"
+          },
+          "layout": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Layout"
+          },
+          "display": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Display"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rule_id",
+          "layout",
+          "display"
+        ],
+        "title": "WidgetEngagementBanner"
+      },
+      "WidgetEngagementCalendar": {
+        "properties": {
+          "rule_id": {
+            "type": "string",
+            "title": "Rule Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "intro": {
+            "type": "string",
+            "title": "Intro",
+            "default": ""
+          },
+          "teaser": {
+            "type": "string",
+            "title": "Teaser",
+            "default": ""
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Start Date"
+          },
+          "days_total": {
+            "type": "integer",
+            "title": "Days Total"
+          },
+          "today": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Today"
+          },
+          "allow_past_doors": {
+            "type": "boolean",
+            "title": "Allow Past Doors",
+            "default": true
+          },
+          "doors": {
+            "items": {
+              "$ref": "#/components/schemas/WidgetEngagementDoor"
+            },
+            "type": "array",
+            "title": "Doors",
+            "default": []
+          },
+          "next_unlock_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Unlock At"
+          },
+          "look": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Look",
+            "default": {}
+          },
+          "door_layout": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Door Layout"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rule_id",
+          "title",
+          "start_date",
+          "days_total"
+        ],
+        "title": "WidgetEngagementCalendar"
+      },
+      "WidgetEngagementDecoration": {
+        "properties": {
+          "rule_id": {
+            "type": "string",
+            "title": "Rule Id"
+          },
+          "effect": {
+            "type": "string",
+            "title": "Effect"
+          },
+          "accessory": {
+            "type": "string",
+            "title": "Accessory"
+          },
+          "badge_emoji": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Badge Emoji"
+          },
+          "places": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Places",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "rule_id",
+          "effect",
+          "accessory"
+        ],
+        "title": "WidgetEngagementDecoration"
+      },
+      "WidgetEngagementDoor": {
+        "properties": {
+          "day": {
+            "type": "integer",
+            "title": "Day"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "default": ""
+          },
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "default": ""
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon"
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Url"
+          },
+          "image_alt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Alt"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question"
+          },
+          "question_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Key"
+          },
+          "link": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link"
+          }
+        },
+        "type": "object",
+        "required": [
+          "day"
+        ],
+        "title": "WidgetEngagementDoor"
       }
     }
   }

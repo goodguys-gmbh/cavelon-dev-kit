@@ -183,6 +183,7 @@ describe("cavelon mcp", () => {
         "api_list",
         "docs_get",
         "docs_search",
+        "engagement_preview",
         "explain",
         "apply",
         "fmt",

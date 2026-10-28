@@ -130,6 +130,56 @@ comment with its default. `cavelon validate` warns when a greeting or fallback
 is on but its text is empty (`persona_message_empty`). The instance's page
 `concepts/personas` (`cavelon docs get concepts/personas`) explains the rest.
 
+#### Engagement rules and fields that take effect at once
+
+The persona's `engagement_rules` hold what a website visitor is offered
+before typing: page starter questions (`starters`) and the campaigns people
+usually edit in the Admin's Engagement tab: door calendars (`calendar`),
+banners (`banner`) and seasonal decorations (`decoration`). Each rule has an
+`id` that stays the same for its whole life, because the instance counts a
+rule's results by `rule_id`. Where the instance's package schema describes the
+kinds, `validate` and `fmt` check and order them like any other field; an
+older schema takes any rule. Left out, an import keeps the solution's rules,
+while `engagement_rules: []` removes them: the two never count as the same.
+
+`cavelon engagement preview --page <url> --at <time>` sends the folder's rules
+to the instance's read-only preview and shows the starters, the calendar's open
+doors, the banners and the decoration a visitor would get there. Nothing is
+stored or counted.
+
+On an active solution, the persona's widget fields reach visitors as soon as
+an import writes them, not with the next publication. The instance marks them
+`x-cavelon-live` in its package schema and lists the ones an import changes in
+the preview's `publication.live_fields`. An instance that publishes neither is
+read as its docs describe it: the engagement rules, the greeting and the
+teasers. The apply preview names these fields instead of saying that live
+traffic stays on the published version. It also asks for a person's review, and
+lists the rules it adds, removes or changes by id, kind and name. It warns when
+rules people made in the Admin would be removed or replaced.
+
+#### Fields the folder does not manage
+
+`cavelon.yaml` can leave fields to the Admin:
+
+```yaml
+unmanaged:                           # pull does not write these, apply does not send them
+  - /persona/widget_title
+managed_kinds:                       # of this list, the folder manages only these kinds
+  /persona/engagement_rules: [starters]
+```
+
+Each entry is a JSON pointer to a field inside a section. With
+`managed_kinds`, `pull` writes only the rules of those kinds, asking the export
+for them where it takes `engagement_rules_kinds`. `apply` sends them with
+`engagement_rules_kinds`, so the import replaces only those kinds and the
+campaigns edited in the Admin stay. An instance that cannot import some kinds
+only would replace the whole list, so there `apply` leaves the list out and
+says so. `validate` warns about a field the folder sets that it does not manage
+(`unmanaged_field_set`), a rule of a kind it does not manage
+(`managed_kinds_left_out`), a list the instance can only replace whole
+(`managed_kinds_unsupported`), and a pointer or kind the schema does not have
+(`managed_setting_unknown`).
+
 ### Default route
 
 A tenant answers where a conversation names no solution (its chat, its widget)

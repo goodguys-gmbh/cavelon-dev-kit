@@ -148,6 +148,7 @@ only reads it).
 | `package_schema` | `cavelon schema` | read-only |
 | `apply` | `cavelon apply` | destructive |
 | `explain` | `cavelon explain` | read-only |
+| `engagement_preview` | `cavelon engagement preview` | read-only |
 | `variables_list` | `cavelon variables list` | read-only |
 | `variables_get` | `cavelon variables get` | read-only |
 | `variables_set` | `cavelon variables set` | changing |

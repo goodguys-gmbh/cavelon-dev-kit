@@ -230,6 +230,32 @@ and fill the field in to set it. A file of comments only sets nothing.
   (`persona_message_empty`). Write the text, or turn it off.
 - Leave the persona out (all fields commented) only for a solution nobody
   talks to directly: a pipeline, a loop, a solution another solution calls.
+- **Engagement rules** (`engagement_rules`) are the page starter questions
+  (`kind: starters`) and the campaigns: `calendar`, `banner` and
+  `decoration`. Give every rule a stable `id` of lowercase letters, digits and
+  hyphens, and never reuse one for something else: the instance counts results
+  by `rule_id`. `cavelon schema persona.engagement_rules` shows each kind's
+  fields. A minimal campaign:
+
+  ```yaml
+  engagement_rules:
+    - id: winter-snow
+      kind: decoration
+      name: Winter snow
+      enabled: true
+      window: { timezone: Europe/Vienna, starts_at: "2026-12-01T00:00", ends_at: "2027-01-07T00:00" }
+      content: { effect: snow }
+  ```
+
+  Left out, an import keeps the solution's rules; `[]` deletes them all.
+  Campaigns are usually edited in the Admin. When people do that, add
+  `managed_kinds: {/persona/engagement_rules: [starters]}` to `cavelon.yaml`, so
+  `pull` and `apply` touch only the starters. Try a page and a date with
+  `cavelon engagement preview --page <url> --at <time>`. On an active solution,
+  rules, greeting and teasers reach visitors at once, without a publication,
+  so the preview asks for a person. A site with a Content Security Policy must
+  allow the widget's `chat-widget-engagement.js` and the image hosts a campaign
+  uses: `cavelon docs get channels/widget`.
 - Without `harness_id`, the persona operations of `cavelon api`
   (`get_bot_persona`, `upsert_bot_persona`) reach the tenant's default route;
   in a solution folder, `cavelon api` sends the folder's solution, and says

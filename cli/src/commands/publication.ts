@@ -219,9 +219,11 @@ export const discardDraft = changeCommand("discard-draft");
 export const rollback = changeCommand("rollback");
 
 /** Do not infer isolation from an active status alone; only the instance's explicit report establishes it. */
-export function publicationNotice(value: unknown): string | undefined {
+export function publicationNotice(value: unknown, live: string[] = []): string | undefined {
   const p = value as { target?: unknown; published_version?: unknown } | null;
-  if (p?.target === "draft") return `Unpublished draft; live traffic stays on published v${typeof p.published_version === "number" ? p.published_version : "?"}. Review ${cavelonCommand("publish")} before putting these edits live. Tenant-wide resources retain their existing behavior.`;
+  // Persona widget fields do not wait for a publication: saying live traffic stays on the published version would be wrong for them.
+  const except = live.length ? ` Except ${live.join(", ")}: persona widget fields reach visitors at once, without a publication.` : "";
+  if (p?.target === "draft") return `Unpublished draft; live traffic stays on published v${typeof p.published_version === "number" ? p.published_version : "?"}.${except} Review ${cavelonCommand("publish")} before putting ${live.length ? "the other" : "these"} edits live. Tenant-wide resources retain their existing behavior.`;
   if (p?.target === "published") return "Editable solution configuration; activation/publication follows the instance's lifecycle.";
   return undefined;
 }

@@ -379,6 +379,8 @@ export interface FakeState {
   personOnly: Record<string, string | false> | null;
   /** Operations ("METHOD /path") the served OpenAPI leaves out, as an instance older than them. */
   openapiWithout: string[];
+  /** The test's edit of the served OpenAPI, after every other one (an instance older or newer than the snapshot). */
+  openapiEdit: ((doc: Record<string, any>) => void) | null;
   /** False serves the OpenAPI's dialect enums without oracle, as an instance older than its Oracle support. */
   oracleDialect: boolean;
   /** The chat turns the instance answered: the solution, the message and the session. */
@@ -803,6 +805,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     chatUserEmailVerified: true,
     personOnly: {},
     openapiWithout: [],
+    openapiEdit: null,
     oracleDialect: true,
     chats: [],
     secretFields: {},
@@ -904,7 +907,11 @@ export async function startFakeServer(): Promise<FakeServer> {
     if (p === "/openapi.json" || (p === "/api/v1/openapi.json" && !state.rootPathsReachApi)) {
       res.writeHead(200, { "content-type": "application/json" });
       const marked = withActivationRoute(withChatReaders(withConfirmations(withMarkers(state.personOnly, state.secretFields), state.confirmations !== null && state.confirmationMarks !== false), state.readerOverrides, state.chatUserEmailVerified), state.activationRouteFields !== false);
-      return res.end(withOracleDialect(withoutOperations(withTenantWideFlag(withUploadReplace(marked, state.uploadReplace), state.tenantWideFlag), state.openapiWithout), state.oracleDialect));
+      const served = withOracleDialect(withoutOperations(withTenantWideFlag(withUploadReplace(marked, state.uploadReplace), state.tenantWideFlag), state.openapiWithout), state.oracleDialect);
+      if (!state.openapiEdit) return res.end(served);
+      const edited = JSON.parse(served) as Record<string, any>;
+      state.openapiEdit(edited);
+      return res.end(JSON.stringify(edited));
     }
 
     // Auth: every API and docs route needs a known bearer token.
@@ -1239,6 +1246,12 @@ export async function startFakeServer(): Promise<FakeServer> {
       if (method === "PUT") state.personas.set(h.id, { ...(body.json as Record<string, unknown>) });
       return send(res, 200, { harness_id: h.id, ...(state.personas.get(h.id) ?? {}) });
     }
+    if (p === "/api/v1/bot-persona/engagement/preview" && method === "POST") {
+      const wanted = url.searchParams.get("harness_id") ?? state.harnesses.find((h) => h.tenant_id === tid && h.is_default)?.id;
+      const h = state.harnesses.find((x) => x.tenant_id === tid && x.id === wanted);
+      if (!h) return send(res, 404, { detail: "Harness not found" });
+      return engagementPreview(res, body.json as Record<string, unknown>, (state.personas.get(h.id) ?? {}) as Record<string, unknown>);
+    }
     m = /^\/api\/v1\/harnesses\/([^/]+)\/clone$/.exec(p);
     if (m && method === "POST") {
       const source = state.harnesses.find((x) => x.tenant_id === tid && x.id === m![1]);
@@ -1455,6 +1468,13 @@ export async function startFakeServer(): Promise<FakeServer> {
       // A recent instance's solution export leaves what the whole tenant shares out unless asked.
       if (state.tenantWideFlag && scope === "agent_graph" && url.searchParams.get("include_tenant_wide") !== "true") {
         for (const section of tenantWideSections(packageSchema() as PackageSchema)) delete pkg[section];
+      }
+      // Asked for some engagement rule kinds, the export carries only those and says so.
+      const kinds = url.searchParams.getAll("engagement_rules_kinds");
+      const persona = pkg.persona as Record<string, unknown> | null | undefined;
+      if (kinds.length && persona && Array.isArray(persona.engagement_rules)) {
+        persona.engagement_rules = (persona.engagement_rules as Array<{ kind?: string }>).filter((rule) => kinds.includes(String(rule.kind)));
+        persona.engagement_rules_kinds = kinds;
       }
       return send(res, 200, pkg);
     }
@@ -2212,6 +2232,57 @@ export async function startFakeServer(): Promise<FakeServer> {
       secrets: needs("secrets", "secret", (name) => values.secrets.has(name)),
       variables: needs("variables", "var", (name) => values.variables.has(name)),
     };
+  }
+
+  /**
+   * POST /bot-persona/engagement/preview, simplified: a rule matches when its
+   * include patterns (prefixes before `*`) cover the path and its host list
+   * names the host or is empty; the highest priority wins, as on the instance.
+   * A calendar's doors are open up to the day `at` (or now) reaches.
+   */
+  function engagementPreview(res: http.ServerResponse, request: Record<string, unknown>, persona: Record<string, unknown>) {
+    const rules = (Array.isArray(request.rules) ? request.rules : Array.isArray(persona.engagement_rules) ? persona.engagement_rules : []) as Array<Record<string, any>>;
+    const unnamed = rules.find((r) => typeof r.id !== "string" || !r.id);
+    if (unnamed) return send(res, 422, { detail: "rule 1: id is required" });
+    const path = typeof request.page_path === "string" ? request.page_path : "/";
+    const host = typeof request.page_host === "string" ? request.page_host : null;
+    const at = typeof request.at === "string" ? new Date(request.at) : new Date();
+    const matches = (r: Record<string, any>) => {
+      const include: string[] = r.pages?.include ?? [];
+      const hosts: string[] = r.pages?.hosts ?? [];
+      const onHost = !hosts.length || (host !== null && hosts.includes(host));
+      const onPath = !include.length || include.some((pattern) => path.startsWith(pattern.split("*")[0]!.replace(/\/$/, "") || "/"));
+      return r.enabled !== false && onHost && onPath;
+    };
+    const winner = (kind: string) => rules.filter((r) => r.kind === kind && matches(r)).sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0))[0];
+    const starters = winner("starters");
+    const calendar = winner("calendar");
+    const decoration = winner("decoration");
+    const today = calendar ? Math.floor((at.getTime() - Date.parse(`${calendar.content.start_date}T00:00:00Z`)) / 86_400_000) + 1 : null;
+    const open = today !== null && today >= 1 ? Math.min(today, calendar!.content.door_count) : 0;
+    return send(res, 200, {
+      teaser_messages: starters ? starters.content.starters : ((persona.teaser_messages as string[] | undefined) ?? []),
+      teaser_keys: [],
+      engagement: {
+        has_rules: rules.length > 0,
+        starters_rule_id: starters?.id ?? null,
+        has_campaigns: rules.some((r) => r.kind !== "starters"),
+        calendar: calendar
+          ? {
+              rule_id: calendar.id,
+              title: calendar.content.title,
+              start_date: calendar.content.start_date,
+              days_total: calendar.content.door_count,
+              today: open || null,
+              doors: ((calendar.content.doors ?? []) as Array<Record<string, any>>).filter((d) => d.day <= open).map((d) => ({ day: d.day, title: d.title ?? "", question: d.question ?? null })),
+            }
+          : null,
+        banners: rules.filter((r) => r.kind === "banner" && matches(r)).map((r) => ({ rule_id: r.id, layout: r.content.layout, display: r.display ?? { trigger: "delay" } })),
+        decoration: decoration ? { rule_id: decoration.id, effect: decoration.content.effect ?? "none", accessory: decoration.content.accessory ?? "none", badge_emoji: decoration.content.badge_emoji ?? null, places: decoration.content.places ?? ["launcher", "header"] } : null,
+        server_now: new Date().toISOString(),
+      },
+      focus: null,
+    });
   }
 
   /** The package schema as the instance serves it, with the test's edit. */
