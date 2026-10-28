@@ -245,7 +245,9 @@ and never refuses it, so `cavelon validate` warns instead
 (`attached_documents_value_ignored`, `attached_documents_wait_clamped`). It is
 not the tenant's `attached_documents` context-source limit, which bounds how
 much of the files reaches the model. On an active solution the change goes to
-the draft; try it with `cavelon chat "<message>" --file <path> --draft`.
+the draft; try it with `cavelon chat "<message>" --file <path> --draft` (a
+personal access token holding `playground.use` reaches the draft; an API key
+gets the published version).
 
 ## Rules that keep a package portable
 

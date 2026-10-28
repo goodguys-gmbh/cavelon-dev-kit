@@ -11,10 +11,16 @@ CLI, the skills and the plugin.
 
 - `cavelon chat --file <path>` attaches a file to the message: it is uploaded
   to the turn's conversation first and named in `file_ids`, so a solution's
-  wait for a file still being read can be tried. `cavelon chat --draft` tries
-  an active solution's unpublished draft (`preview_draft`), as the Playground
-  does, with a personal access token holding `playground.use`. Both are
-  refused before anything is sent on an instance that does not publish them.
+  wait for a file still being read can be tried. `cavelon chat --draft` asks
+  for an active solution's unpublished draft (`preview_draft`). A personal
+  access token holding `playground.use` chats as the Playground does and gets
+  the draft without it too; `--draft` is refused before sending where the
+  draft cannot be had (an API key, a token without `playground.use`). Both
+  options are refused before anything is sent on an instance that does not
+  publish them.
+  A tenant whose document uploads are off refuses the file with
+  `chat_uploads_off`, which names the Admin setting instead of the token's
+  role, and the message is not sent.
 - `cavelon validate` warns about a solution's `settings.attached_documents`
   value the instance would ignore (`attached_documents_value_ignored`) or
   clamp (`attached_documents_wait_clamped`), with the bounds the package

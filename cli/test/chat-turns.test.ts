@@ -230,6 +230,19 @@ describe("chat --file", () => {
     expect(server.state.requests.filter((r) => r.method === "POST")).toEqual([]);
   });
 
+  it("names the tenant's upload setting, not the token, when the tenant has uploads off, and sends no turn", async () => {
+    const dir = await folder();
+    writeFileSync(path.join(dir, "invoice.txt"), "Invoice 42");
+    server.state.failures.push({ method: "POST", path: /^\/api\/v1\/chat\/files$/, status: 403, detail: "Document uploads are not enabled for this tenant." });
+    const result = await cli(sb, ["chat", "Hi", "--file", "invoice.txt", "--json"], { cwd: dir });
+    expect(result.code).toBe(7);
+    const error = result.json<ErrorBody>().error as { code: string; hint: string; details: Record<string, unknown> };
+    expect(error).toMatchObject({ code: "chat_uploads_off", details: { sent: false } });
+    expect(error.hint).toMatch(/Settings › Documents/);
+    expect(error.hint).not.toMatch(/token's role/);
+    expect(chatPosts()).toEqual([]);
+  });
+
   it("says so, and sends nothing, on an instance without the chat file upload", async () => {
     const dir = await folder();
     writeFileSync(path.join(dir, "invoice.txt"), "Invoice 42");

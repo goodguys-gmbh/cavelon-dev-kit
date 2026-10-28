@@ -157,10 +157,29 @@ async function uploadFiles(ctx: Context, files: string[], sessionId: string, cha
       body: { scope: "conversation", session_id: sessionId },
       files: [{ field: "file", path: file }],
       timeoutMs: Math.max(1_000, deadline - Date.now()),
+    }).catch((error: unknown) => {
+      throw uploadsOff(error) ?? error;
     });
     uploaded.push({ file_id: result.file_id, filename: result.filename ?? path.basename(file), processing_status: result.processing_status });
   }
   return uploaded;
+}
+
+/**
+ * The instance refuses a chat file with 403 when the tenant's document
+ * uploads, or their conversation scope, are off ("… not enabled for this
+ * tenant"). That is a tenant setting, not the token's role, so the hint
+ * names the setting instead of the generic permission hint.
+ */
+function uploadsOff(error: unknown): CavelonError | undefined {
+  if (!(error instanceof CavelonError) || error.status !== 403 || !/not enabled for this tenant/i.test(error.message)) return undefined;
+  return new CavelonError(ExitCode.unauthorized, {
+    code: "chat_uploads_off",
+    message: `${error.message} The message was not sent.`,
+    hint: "Files in a chat are a tenant setting: someone who manages the tenant's uploads turns on document uploads and their Chat/Run Context scope in the Admin (Settings › Documents). Leave out --file to send the message without it.",
+    status: 403,
+    details: { sent: false },
+  });
 }
 
 /** The conversation a session belongs to, from the newest the instance lists; undefined when it cannot say in time. */
@@ -232,8 +251,10 @@ export const chat: CommandSpec = {
     "Choose an id with `cavelon api list_chat_users -p tenant_id=<tenant_id>`; email_verified says whether an email-bound\n" +
     "query can bind that address. Without the option, keeps the usual reader.\n" +
     "--file uploads a file to the turn's conversation first (POST /api/v1/chat/files) and names it in file_ids, so the\n" +
-    "solution's wait for a file still being read (settings.attached_documents) can be tried. --draft answers with an\n" +
-    "active solution's draft (preview_draft), as the Playground does; it needs a personal access token with playground.use.\n" +
+    "solution's wait for a file still being read (settings.attached_documents) can be tried. A personal access token whose\n" +
+    "role holds playground.use chats as the Playground does: an active solution answers with its unpublished draft where\n" +
+    "one is pending, with or without --draft. --draft (preview_draft) says so explicitly and is refused before sending where\n" +
+    "the draft cannot be reached. A tenant API key, and a token without playground.use, chat with the published version.\n" +
     "The first turn carries a session_id the kit chose. A turn that is not answered in time goes on on the instance, which\n" +
     "stores its answer: the error says how to read the conversation; sending the message again would run it twice. A\n" +
     "status the instance reports (cancelled, waiting, blocked) is shown. A cancelled turn, and one a recent instance reports\n" +
@@ -249,7 +270,7 @@ export const chat: CommandSpec = {
     session: { type: "string", value: "<session_id>", description: "Continue this conversation (the session_id a previous chat printed)." },
     "as-chat-user": AS_CHAT_USER_OPTION,
     file: { type: "string", multiple: true, value: "<path>", description: "Attach this file to the message (uploaded to the conversation first)." },
-    draft: { type: "boolean", description: "Answer with the active solution's draft, as the Playground does (needs playground.use)." },
+    draft: { type: "boolean", description: "Answer with the active solution's draft, as the Playground does; refused where it cannot (needs playground.use)." },
     timeout: { type: "string", value: "<duration>", description: `Wait at most this long for the answer (90s, 5m; default ${DEFAULT_CHAT_TIMEOUT}).` },
   },
   examples: [
