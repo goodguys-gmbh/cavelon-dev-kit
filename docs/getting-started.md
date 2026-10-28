@@ -684,6 +684,15 @@ the selected reader and solution. Without the option, chat keeps its usual
 reader. A missing, deleted or cross-tenant reader is refused by the instance;
 use a current identity from the acting tenant's list.
 
+`--file <path>` attaches a file to the message (uploaded to the conversation
+first). With a personal access token whose role holds `playground.use`, a chat
+is a Playground run: an active solution answers with its unpublished draft
+where one is pending; `--draft` asks for that explicitly and is refused where
+it cannot be had. An API key chats with the published version. When an answer takes longer than `--timeout`, the turn
+goes on on the instance and its answer is stored: do not send the message
+again, read the conversation the error names instead (see
+[Chat turns](concepts.md#chat-turns-and-the-files-they-carry)).
+
 ### Take it out of service
 
 `cavelon deactivate` takes an active solution out of live traffic: its status
