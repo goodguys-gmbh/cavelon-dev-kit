@@ -6,6 +6,21 @@ and the fake server in `cli/test/` serves them.
 
 ## `cavelon/`
 
+On 2026-10-28 the OpenAPI and the package schema were refreshed whole from a
+deployed instance that publishes the engagement rules, the chat turn's
+`status` and a test suite's `purpose`: the OpenAPI trimmed as below, with its
+version set back to `v0.0.0-dev` and issue references dropped, and the package
+schema scrubbed as below. Besides what the notes below select, this takes in
+what the instance changed since the last refresh: an agent's `fallback_models`
+and `fallback_allows_external`, the guardrail directions `context` and
+`tool_output`, a test suite's schedule (`TestSuiteSchedule`, `run_on`), a
+webhook trigger's `external_refs_path`, a chat start node's `demo_history`, a
+URL source's review word counts, the documents' redaction fields, a
+publication's field and text changes and its rollback readiness, the readiness
+check's `published` parameter, and the secret names of KB order callbacks. The
+error catalog, the capabilities and the docs pages stay as recorded: their
+texts follow an instance's settings and public base URL.
+
 On 2026-10-17 the document-files contracts were selectively refreshed from an
 immutable merged instance build, without running an instance. The checked-in
 output of its OpenAPI generator supplies KB create/detail/update, document
@@ -317,8 +332,8 @@ failed or was refused, and an older one leaves it out), selected from its
 OpenAPI without prose, and the package schema's description of a harness's
 `settings` (an open object describing `attached_documents`:
 `wait_until_readable`, default true, and `wait_seconds`, 0 to 120), selected
-from its package schema. Refresh both from the instance once that build is
-deployed. Existing operations, schemas, capabilities and defaults stay as
+from its package schema. Later that day both were checked against a deployed
+instance, which publishes them as selected (see the refresh above). Existing operations, schemas, capabilities and defaults stay as
 recorded. The fake server also plays an instance without the upload, the
 conversation list, `preview_draft`, `status` or the setting's description.
 

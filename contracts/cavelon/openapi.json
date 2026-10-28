@@ -108,6 +108,31 @@
               "default": false,
               "title": "Include Tenant Wide"
             }
+          },
+          {
+            "name": "engagement_rules_kinds",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "starters",
+                      "calendar",
+                      "banner",
+                      "decoration"
+                    ],
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Engagement Rules Kinds"
+            }
           }
         ],
         "responses": {
@@ -1589,6 +1614,16 @@
               "type": "string",
               "format": "uuid",
               "title": "Harness Id"
+            }
+          },
+          {
+            "name": "published",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Published"
             }
           }
         ],
@@ -3571,7 +3606,7 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 128,
-              "pattern": "^[\\w.\\-]+$",
+              "pattern": "^(?:kb_order_callback:)?[\\w.\\-]+$",
               "title": "Name"
             }
           }
@@ -3612,7 +3647,7 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 128,
-              "pattern": "^[\\w.\\-]+$",
+              "pattern": "^(?:kb_order_callback:)?[\\w.\\-]+$",
               "title": "Name"
             }
           }
@@ -3666,7 +3701,7 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 128,
-              "pattern": "^[\\w.\\-]+$",
+              "pattern": "^(?:kb_order_callback:)?[\\w.\\-]+$",
               "title": "Name"
             }
           }
@@ -7008,6 +7043,17 @@
               }
             ],
             "title": "By"
+          },
+          "by_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "By Label"
           }
         },
         "type": "object",
@@ -9334,6 +9380,37 @@
               }
             ],
             "title": "Metadata"
+          },
+          "engagement_rules": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Engagement Rules"
+          },
+          "engagement_rules_kinds": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "starters",
+                    "calendar",
+                    "banner",
+                    "decoration"
+                  ]
+                },
+                "type": "array",
+                "maxItems": 4,
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engagement Rules Kinds"
           }
         },
         "additionalProperties": false,
@@ -12831,6 +12908,54 @@
             "type": "boolean",
             "title": "Has Original",
             "readOnly": true
+          },
+          "original_availability": {
+            "type": "string",
+            "enum": [
+              "unknown",
+              "unavailable",
+              "restored"
+            ],
+            "title": "Original Availability",
+            "default": "unknown"
+          },
+          "has_redacted_copy": {
+            "type": "boolean",
+            "title": "Has Redacted Copy",
+            "default": false
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "note_updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note Updated At"
+          },
+          "note_updated_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note Updated By"
           }
         },
         "type": "object",
@@ -13167,6 +13292,26 @@
             ],
             "title": "Operation Id",
             "readOnly": true
+          },
+          "original_availability": {
+            "type": "string",
+            "enum": [
+              "unknown",
+              "unavailable",
+              "restored"
+            ],
+            "title": "Original Availability",
+            "default": "unknown"
+          },
+          "has_redacted_copy": {
+            "type": "boolean",
+            "title": "Has Redacted Copy",
+            "default": false
+          },
+          "redaction_not_clean": {
+            "type": "boolean",
+            "title": "Redaction Not Clean",
+            "default": false
           }
         },
         "type": "object",
@@ -20579,6 +20724,12 @@
               }
             ],
             "title": "Database Queries"
+          },
+          "platform_allocation": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Platform Allocation",
+            "default": {}
           }
         },
         "type": "object",
@@ -22206,6 +22357,22 @@
             "type": "string",
             "format": "date-time",
             "title": "Updated At"
+          },
+          "purpose": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purpose"
+          },
+          "counts_for_readiness": {
+            "type": "boolean",
+            "title": "Counts For Readiness",
+            "default": true
           }
         },
         "type": "object",
@@ -23122,6 +23289,22 @@
           "created_at": {
             "type": "string",
             "title": "Created At"
+          },
+          "session_method": {
+            "type": "string",
+            "title": "Session Method",
+            "default": "password"
+          },
+          "session_tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Tenant Id"
           }
         },
         "type": "object",
@@ -24828,6 +25011,42 @@
               "removed"
             ],
             "title": "Action"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Digest"
+          },
+          "text_changes": {
+            "items": {
+              "$ref": "#/components/schemas/PublicationTextChange"
+            },
+            "type": "array",
+            "title": "Text Changes"
+          },
+          "field_changes": {
+            "items": {
+              "$ref": "#/components/schemas/PublicationFieldChange"
+            },
+            "type": "array",
+            "title": "Field Changes"
           }
         },
         "type": "object",
@@ -24996,6 +25215,27 @@
             },
             "type": "array",
             "title": "Warnings"
+          },
+          "rollback_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rollback Version"
+          },
+          "rollback_readiness": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HarnessReadinessResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -25082,6 +25322,27 @@
           "can_rollback": {
             "type": "boolean",
             "title": "Can Rollback"
+          },
+          "rollback_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rollback Version"
+          },
+          "rollback_readiness": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HarnessReadinessResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -25227,6 +25488,13 @@
           "draft_revision": {
             "type": "integer",
             "title": "Draft Revision"
+          },
+          "live_fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Live Fields"
           }
         },
         "type": "object",
@@ -27374,6 +27642,86 @@
           "created_at"
         ],
         "title": "UploadedFileInfo"
+      },
+      "PublicationFieldChange": {
+        "properties": {
+          "field": {
+            "type": "string",
+            "title": "Field"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "before": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before"
+          },
+          "after": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After"
+          }
+        },
+        "type": "object",
+        "required": [
+          "field",
+          "label"
+        ],
+        "title": "PublicationFieldChange"
+      },
+      "PublicationTextChange": {
+        "properties": {
+          "field": {
+            "type": "string",
+            "title": "Field"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "before": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before"
+          },
+          "after": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After"
+          }
+        },
+        "type": "object",
+        "required": [
+          "field",
+          "label"
+        ],
+        "title": "PublicationTextChange"
       }
     }
   }

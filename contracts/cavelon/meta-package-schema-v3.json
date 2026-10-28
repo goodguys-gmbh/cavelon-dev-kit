@@ -334,6 +334,28 @@
           },
           "title": "Handoffs",
           "type": "array"
+        },
+        "fallback_models": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Ordered model ids from the tenant's model registry, tried in turn when the agent's own model is unavailable. Null inherits the tenant default; an empty list turns failover off. At most 3.",
+          "title": "Fallback Models"
+        },
+        "fallback_allows_external": {
+          "default": false,
+          "description": "Lets a fallback take a call from a model inside the deployment to one that is not declared inside it.",
+          "title": "Fallback Allows External",
+          "type": "boolean"
         }
       },
       "required": [
@@ -368,7 +390,14 @@
         "direction_override": {
           "anyOf": [
             {
-              "type": "string"
+              "type": "string",
+              "enum": [
+                "input",
+                "output",
+                "both",
+                "context",
+                "tool_output"
+              ]
             },
             {
               "type": "null"
@@ -765,7 +794,9 @@
           "enum": [
             "input",
             "output",
-            "both"
+            "both",
+            "context",
+            "tool_output"
           ],
           "title": "Direction",
           "type": "string"
@@ -1477,12 +1508,14 @@
             }
           ],
           "default": null,
-          "title": "Greeting Message"
+          "title": "Greeting Message",
+          "x-cavelon-live": true
         },
         "greeting_enabled": {
           "default": true,
           "title": "Greeting Enabled",
-          "type": "boolean"
+          "type": "boolean",
+          "x-cavelon-live": true
         },
         "greeting_personalization_enabled": {
           "default": false,
@@ -1536,12 +1569,14 @@
             }
           ],
           "default": null,
-          "title": "Fallback Message"
+          "title": "Fallback Message",
+          "x-cavelon-live": true
         },
         "fallback_message_enabled": {
           "default": true,
           "title": "Fallback Message Enabled",
-          "type": "boolean"
+          "type": "boolean",
+          "x-cavelon-live": true
         },
         "source_citation_prompt": {
           "anyOf": [
@@ -1614,12 +1649,14 @@
             "type": "string"
           },
           "title": "Teaser Messages",
-          "type": "array"
+          "type": "array",
+          "x-cavelon-live": true
         },
         "teaser_display_count": {
           "default": 3,
           "title": "Teaser Display Count",
-          "type": "integer"
+          "type": "integer",
+          "x-cavelon-live": true
         },
         "widget_title": {
           "anyOf": [
@@ -1631,7 +1668,8 @@
             }
           ],
           "default": null,
-          "title": "Widget Title"
+          "title": "Widget Title",
+          "x-cavelon-live": true
         },
         "floating_button_teaser": {
           "anyOf": [
@@ -1643,7 +1681,8 @@
             }
           ],
           "default": null,
-          "title": "Floating Button Teaser"
+          "title": "Floating Button Teaser",
+          "x-cavelon-live": true
         },
         "disclaimer": {
           "anyOf": [
@@ -1655,37 +1694,44 @@
             }
           ],
           "default": null,
-          "title": "Disclaimer"
+          "title": "Disclaimer",
+          "x-cavelon-live": true
         },
         "image_upload_enabled": {
           "default": false,
           "title": "Image Upload Enabled",
-          "type": "boolean"
+          "type": "boolean",
+          "x-cavelon-live": true
         },
         "realtime_voice_enabled": {
           "default": false,
           "title": "Realtime Voice Enabled",
-          "type": "boolean"
+          "type": "boolean",
+          "x-cavelon-live": true
         },
         "block_notice_enabled": {
           "default": false,
           "title": "Block Notice Enabled",
-          "type": "boolean"
+          "type": "boolean",
+          "x-cavelon-live": true
         },
         "source_citation_widget_enabled": {
           "default": false,
           "title": "Source Citation Widget Enabled",
-          "type": "boolean"
+          "type": "boolean",
+          "x-cavelon-live": true
         },
         "voice_recording_enabled": {
           "default": false,
           "title": "Voice Recording Enabled",
-          "type": "boolean"
+          "type": "boolean",
+          "x-cavelon-live": true
         },
         "voice_answering_enabled": {
           "default": false,
           "title": "Voice Answering Enabled",
-          "type": "boolean"
+          "type": "boolean",
+          "x-cavelon-live": true
         },
         "voice_id": {
           "anyOf": [
@@ -1697,7 +1743,8 @@
             }
           ],
           "default": null,
-          "title": "Voice Id"
+          "title": "Voice Id",
+          "x-cavelon-live": true
         },
         "voice_instructions": {
           "anyOf": [
@@ -1709,7 +1756,8 @@
             }
           ],
           "default": null,
-          "title": "Voice Instructions"
+          "title": "Voice Instructions",
+          "x-cavelon-live": true
         },
         "metadata": {
           "anyOf": [
@@ -1737,6 +1785,70 @@
           "default": null,
           "description": "Ignored.",
           "title": "Translations"
+        },
+        "engagement_rules": {
+          "anyOf": [
+            {
+              "items": {
+                "discriminator": {
+                  "mapping": {
+                    "banner": "#/$defs/EngagementBannerRule",
+                    "calendar": "#/$defs/EngagementCalendarRule",
+                    "decoration": "#/$defs/EngagementDecorationRule",
+                    "starters": "#/$defs/EngagementStartersRule"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/EngagementStartersRule"
+                  },
+                  {
+                    "$ref": "#/$defs/EngagementCalendarRule"
+                  },
+                  {
+                    "$ref": "#/$defs/EngagementBannerRule"
+                  },
+                  {
+                    "$ref": "#/$defs/EngagementDecorationRule"
+                  }
+                ]
+              },
+              "type": "array",
+              "maxItems": 50
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Engagement Rules",
+          "description": "The widget's engagement rules, by kind: 'starters' (page starter questions that replace the teasers on matching pages), 'calendar' (a door calendar), 'banner' (a card next to the launcher) and 'decoration' (seasonal artwork). Each applies where its pages and when its window say; the highest priority among the matching rules wins. Ids are unique in the list; at most 50 rules, 300 starter texts with 20000 characters in all, and per campaign 400 texts with 40000 characters. Omitted, an import keeps the target's rules; [] removes them, or with engagement_rules_kinds only the rules of those kinds.",
+          "x-cavelon-live": true
+        },
+        "engagement_rules_kinds": {
+          "anyOf": [
+            {
+              "items": {
+                "enum": [
+                  "starters",
+                  "calendar",
+                  "banner",
+                  "decoration"
+                ],
+                "type": "string"
+              },
+              "maxItems": 4,
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The rule kinds engagement_rules holds, when the package carries only some. An import then replaces the target's rules of these kinds and keeps its rules of every other kind; a rule in engagement_rules of a kind not listed is refused. Omitted, engagement_rules is the whole list. An export writes it only when asked for some kinds (engagement_rules_kinds on the export).",
+          "title": "Engagement Rules Kinds"
         }
       },
       "title": "PackagePersona",
@@ -2440,6 +2552,30 @@
           ],
           "default": null,
           "title": "Freshness Hours"
+        },
+        "review_old_word_count": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Review Old Word Count"
+        },
+        "review_new_word_count": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Review New Word Count"
         }
       },
       "required": [
@@ -4490,6 +4626,39 @@
           "default": null,
           "description": "Written by the platform on the suite the Harness Architect rehearses with.",
           "title": "Rehearsal"
+        },
+        "schedule": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TestSuiteSchedule"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Run the suite unattended on this schedule, as the person who saved it; null turns it off. A tenant API key cannot turn unattended runs on (403 key_needs_a_person)."
+        },
+        "run_on": {
+          "anyOf": [
+            {
+              "items": {
+                "enum": [
+                  "solution_change",
+                  "knowledge_change"
+                ],
+                "type": "string"
+              },
+              "maxItems": 2,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Run the suite unattended, as the person who saved it, 15 minutes after its solution last changed (instructions, persona, skills, graph, model) or a knowledge base its agents or tools read finished an upload batch, a scheduled sync or a structured push; [] turns it off.",
+          "title": "Run On"
         }
       },
       "title": "TestSuiteSettings",
@@ -5283,6 +5452,24 @@
         "demo_request_context": {
           "type": "object",
           "description": "The editor's test request context; not enforced."
+        },
+        "demo_history": {
+          "type": "array",
+          "description": "Earlier turns the editor's debug run simulates before its test message; not enforced.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "role": {
+                "enum": [
+                  "user",
+                  "assistant"
+                ]
+              },
+              "content": {
+                "type": "string"
+              }
+            }
+          }
         }
       },
       "additionalProperties": false,
@@ -7224,6 +7411,11 @@
               "minLength": 1
             }
           }
+        },
+        "external_refs_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The ordered corpus the run is about, by external_ref. Needs auth_mode secret_header."
         }
       },
       "additionalProperties": true
@@ -7332,6 +7524,1743 @@
           "additionalProperties": false
         }
       ]
+    },
+    "TestSuiteSchedule": {
+      "additionalProperties": false,
+      "description": "When a suite runs unattended, in the tenant's time zone.",
+      "properties": {
+        "frequency": {
+          "enum": [
+            "daily",
+            "weekly"
+          ],
+          "title": "Frequency",
+          "type": "string"
+        },
+        "time": {
+          "description": "HH:MM in the tenant's time zone.",
+          "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+          "title": "Time",
+          "type": "string"
+        },
+        "weekday": {
+          "anyOf": [
+            {
+              "enum": [
+                "mon",
+                "tue",
+                "wed",
+                "thu",
+                "fri",
+                "sat",
+                "sun"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The day of a weekly schedule; only with frequency 'weekly'.",
+          "title": "Weekday"
+        }
+      },
+      "required": [
+        "frequency",
+        "time"
+      ],
+      "title": "TestSuiteSchedule",
+      "type": "object"
+    },
+    "EngagementBannerContent": {
+      "additionalProperties": false,
+      "properties": {
+        "layout": {
+          "$ref": "#/$defs/EngagementCardLayout"
+        }
+      },
+      "required": [
+        "layout"
+      ],
+      "title": "BannerContent",
+      "type": "object"
+    },
+    "EngagementBannerDisplay": {
+      "additionalProperties": false,
+      "description": "When the widget shows a banner it was served; the server decides only where and when it may.",
+      "properties": {
+        "trigger": {
+          "default": "delay",
+          "enum": [
+            "load",
+            "delay",
+            "scroll",
+            "exit_intent"
+          ],
+          "title": "Trigger",
+          "type": "string"
+        },
+        "delay_ms": {
+          "default": 8000,
+          "maximum": 120000,
+          "minimum": 0,
+          "title": "Delay Ms",
+          "type": "integer"
+        },
+        "scroll_percent": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scroll Percent"
+        },
+        "frequency": {
+          "default": "session",
+          "enum": [
+            "every_page",
+            "session",
+            "day",
+            "once"
+          ],
+          "title": "Frequency",
+          "type": "string"
+        },
+        "dismissible": {
+          "default": true,
+          "title": "Dismissible",
+          "type": "boolean"
+        }
+      },
+      "title": "BannerDisplay",
+      "type": "object"
+    },
+    "EngagementBannerRule": {
+      "additionalProperties": false,
+      "description": "A card next to the launcher, on the pages and dates the rule names.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string",
+          "pattern": "^(?:[a-z0-9][a-z0-9-]{0,47})$",
+          "description": "Stable and unique in the list: the rule's key in analytics, translation and the widget's memory."
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean",
+          "description": "Off, the rule never shows."
+        },
+        "name": {
+          "default": "",
+          "maxLength": 120,
+          "title": "Name",
+          "type": "string",
+          "description": "Shown in the Admin only."
+        },
+        "kind": {
+          "const": "banner",
+          "title": "Kind",
+          "type": "string",
+          "description": "Which kind of rule this is; it selects the content shape."
+        },
+        "priority": {
+          "default": 0,
+          "maximum": 1000,
+          "minimum": -1000,
+          "title": "Priority",
+          "type": "integer",
+          "description": "The highest priority among the matching rules wins; a tie goes to list order."
+        },
+        "pages": {
+          "$ref": "#/$defs/EngagementRulePages",
+          "description": "Where the rule applies: the page's host and path."
+        },
+        "window": {
+          "$ref": "#/$defs/EngagementRuleWindow",
+          "description": "When the rule applies; no condition = always."
+        },
+        "template": {
+          "anyOf": [
+            {
+              "maxLength": 48,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Template",
+          "description": "The template the campaign was made from."
+        },
+        "content": {
+          "$ref": "#/$defs/EngagementBannerContent",
+          "description": "What a 'banner' rule shows."
+        },
+        "display": {
+          "$ref": "#/$defs/EngagementBannerDisplay",
+          "description": "When the widget shows the banner it was served: trigger, delay, scroll depth and frequency."
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "content"
+      ],
+      "title": "BannerRule",
+      "type": "object"
+    },
+    "EngagementButtonElement": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string",
+          "pattern": "^(?:[a-z0-9][a-z0-9-]{0,23})$"
+        },
+        "x": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Y",
+          "type": "number"
+        },
+        "w": {
+          "maximum": 100,
+          "minimum": 2,
+          "title": "W",
+          "type": "number"
+        },
+        "h": {
+          "maximum": 100,
+          "minimum": 2,
+          "title": "H",
+          "type": "number"
+        },
+        "z": {
+          "default": 0,
+          "maximum": 20,
+          "minimum": 0,
+          "title": "Z",
+          "type": "integer"
+        },
+        "bind": {
+          "anyOf": [
+            {
+              "enum": [
+                "title",
+                "text",
+                "image",
+                "question",
+                "link",
+                "day"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bind"
+        },
+        "style": {
+          "$ref": "#/$defs/EngagementElementStyle"
+        },
+        "type": {
+          "const": "button",
+          "title": "Type",
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "maxLength": 60,
+          "title": "Label",
+          "type": "string"
+        },
+        "action": {
+          "default": "ask",
+          "enum": [
+            "ask",
+            "open",
+            "link",
+            "open_calendar"
+          ],
+          "title": "Action",
+          "type": "string"
+        },
+        "question": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Question"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^(?:\\s*https://[^\\s/?#]+[^\\s]*\\s*)?$"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Url",
+          "default": null,
+          "description": "An https:// address."
+        },
+        "variant": {
+          "default": "primary",
+          "enum": [
+            "primary",
+            "secondary"
+          ],
+          "title": "Variant",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "x",
+        "y",
+        "w",
+        "h",
+        "type"
+      ],
+      "title": "ButtonElement",
+      "type": "object"
+    },
+    "EngagementCalendarContent": {
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "intro": {
+          "default": "",
+          "maxLength": 500,
+          "title": "Intro",
+          "type": "string"
+        },
+        "teaser": {
+          "default": "",
+          "maxLength": 200,
+          "title": "Teaser",
+          "type": "string"
+        },
+        "start_date": {
+          "format": "date",
+          "title": "Start Date",
+          "type": "string"
+        },
+        "door_count": {
+          "maximum": 31,
+          "minimum": 1,
+          "title": "Door Count",
+          "type": "integer"
+        },
+        "allow_past_doors": {
+          "default": true,
+          "title": "Allow Past Doors",
+          "type": "boolean"
+        },
+        "look": {
+          "$ref": "#/$defs/EngagementCalendarLook"
+        },
+        "door_layout": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EngagementCardLayout"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "doors": {
+          "items": {
+            "$ref": "#/$defs/EngagementDoor"
+          },
+          "maxItems": 31,
+          "title": "Doors",
+          "type": "array"
+        }
+      },
+      "required": [
+        "title",
+        "start_date",
+        "door_count"
+      ],
+      "title": "CalendarContent",
+      "type": "object"
+    },
+    "EngagementCalendarLook": {
+      "additionalProperties": false,
+      "properties": {
+        "style": {
+          "default": "classic",
+          "enum": [
+            "classic",
+            "gift-boxes",
+            "minimal"
+          ],
+          "title": "Style",
+          "type": "string"
+        },
+        "cover": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EngagementCardLayout"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "CalendarLook",
+      "type": "object"
+    },
+    "EngagementCalendarRule": {
+      "additionalProperties": false,
+      "description": "A door calendar: the server opens one door a day, and only open doors leave it.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string",
+          "pattern": "^(?:[a-z0-9][a-z0-9-]{0,47})$",
+          "description": "Stable and unique in the list: the rule's key in analytics, translation and the widget's memory."
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean",
+          "description": "Off, the rule never shows."
+        },
+        "name": {
+          "default": "",
+          "maxLength": 120,
+          "title": "Name",
+          "type": "string",
+          "description": "Shown in the Admin only."
+        },
+        "kind": {
+          "const": "calendar",
+          "title": "Kind",
+          "type": "string",
+          "description": "Which kind of rule this is; it selects the content shape."
+        },
+        "priority": {
+          "default": 0,
+          "maximum": 1000,
+          "minimum": -1000,
+          "title": "Priority",
+          "type": "integer",
+          "description": "The highest priority among the matching rules wins; a tie goes to list order."
+        },
+        "pages": {
+          "$ref": "#/$defs/EngagementRulePages",
+          "description": "Where the rule applies: the page's host and path."
+        },
+        "window": {
+          "$ref": "#/$defs/EngagementRuleWindow",
+          "description": "When the rule applies; no condition = always."
+        },
+        "template": {
+          "anyOf": [
+            {
+              "maxLength": 48,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Template",
+          "description": "The template the campaign was made from."
+        },
+        "content": {
+          "$ref": "#/$defs/EngagementCalendarContent",
+          "description": "What a 'calendar' rule shows."
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "content"
+      ],
+      "title": "CalendarRule",
+      "type": "object"
+    },
+    "EngagementCardLayout": {
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "default": "simple",
+          "enum": [
+            "simple",
+            "design"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "aspect": {
+          "default": "auto",
+          "enum": [
+            "auto",
+            "1:1",
+            "4:3",
+            "16:9",
+            "3:4"
+          ],
+          "title": "Aspect",
+          "type": "string"
+        },
+        "background": {
+          "$ref": "#/$defs/EngagementLayoutBackground"
+        },
+        "elements": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "button": "#/$defs/EngagementButtonElement",
+                "countdown": "#/$defs/EngagementCountdownElement",
+                "emoji": "#/$defs/EngagementEmojiElement",
+                "image": "#/$defs/EngagementImageElement",
+                "shape": "#/$defs/EngagementShapeElement",
+                "text": "#/$defs/EngagementTextElement"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/EngagementTextElement"
+              },
+              {
+                "$ref": "#/$defs/EngagementImageElement"
+              },
+              {
+                "$ref": "#/$defs/EngagementButtonElement"
+              },
+              {
+                "$ref": "#/$defs/EngagementCountdownElement"
+              },
+              {
+                "$ref": "#/$defs/EngagementEmojiElement"
+              },
+              {
+                "$ref": "#/$defs/EngagementShapeElement"
+              }
+            ]
+          },
+          "maxItems": 20,
+          "title": "Elements",
+          "type": "array"
+        },
+        "mobile": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/EngagementMobilePlacement"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mobile"
+        }
+      },
+      "title": "CardLayout",
+      "type": "object"
+    },
+    "EngagementCountdownElement": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string",
+          "pattern": "^(?:[a-z0-9][a-z0-9-]{0,23})$"
+        },
+        "x": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Y",
+          "type": "number"
+        },
+        "w": {
+          "maximum": 100,
+          "minimum": 2,
+          "title": "W",
+          "type": "number"
+        },
+        "h": {
+          "maximum": 100,
+          "minimum": 2,
+          "title": "H",
+          "type": "number"
+        },
+        "z": {
+          "default": 0,
+          "maximum": 20,
+          "minimum": 0,
+          "title": "Z",
+          "type": "integer"
+        },
+        "bind": {
+          "anyOf": [
+            {
+              "enum": [
+                "title",
+                "text",
+                "image",
+                "question",
+                "link",
+                "day"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bind"
+        },
+        "style": {
+          "$ref": "#/$defs/EngagementElementStyle"
+        },
+        "type": {
+          "const": "countdown",
+          "title": "Type",
+          "type": "string"
+        },
+        "target": {
+          "title": "Target",
+          "type": "string",
+          "pattern": "^(?:\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2})$",
+          "description": "Local time in the rule's timezone, to the minute, e.g. 2026-12-24T18:00."
+        },
+        "units": {
+          "default": "dhm",
+          "enum": [
+            "dhms",
+            "dhm",
+            "dh",
+            "d",
+            "hms",
+            "hm",
+            "ms"
+          ],
+          "title": "Units",
+          "type": "string"
+        },
+        "ended_text": {
+          "default": "",
+          "maxLength": 120,
+          "title": "Ended Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "x",
+        "y",
+        "w",
+        "h",
+        "type",
+        "target"
+      ],
+      "title": "CountdownElement",
+      "type": "object"
+    },
+    "EngagementDecorationContent": {
+      "additionalProperties": false,
+      "description": "Seasonal artwork the widget ships itself: never a link, so nothing loads from elsewhere.",
+      "properties": {
+        "effect": {
+          "default": "none",
+          "enum": [
+            "none",
+            "snow",
+            "sparkles"
+          ],
+          "title": "Effect",
+          "type": "string"
+        },
+        "accessory": {
+          "default": "none",
+          "enum": [
+            "none",
+            "santa-hat",
+            "bunny-ears",
+            "pumpkin",
+            "party-hat"
+          ],
+          "title": "Accessory",
+          "type": "string"
+        },
+        "badge_emoji": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Badge Emoji",
+          "description": "One emoji, at most 8 characters, no letters or digits."
+        },
+        "places": {
+          "items": {
+            "enum": [
+              "launcher",
+              "header"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Places",
+          "type": "array"
+        }
+      },
+      "title": "DecorationContent",
+      "type": "object"
+    },
+    "EngagementDecorationRule": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string",
+          "pattern": "^(?:[a-z0-9][a-z0-9-]{0,47})$",
+          "description": "Stable and unique in the list: the rule's key in analytics, translation and the widget's memory."
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean",
+          "description": "Off, the rule never shows."
+        },
+        "name": {
+          "default": "",
+          "maxLength": 120,
+          "title": "Name",
+          "type": "string",
+          "description": "Shown in the Admin only."
+        },
+        "kind": {
+          "const": "decoration",
+          "title": "Kind",
+          "type": "string",
+          "description": "Which kind of rule this is; it selects the content shape."
+        },
+        "priority": {
+          "default": 0,
+          "maximum": 1000,
+          "minimum": -1000,
+          "title": "Priority",
+          "type": "integer",
+          "description": "The highest priority among the matching rules wins; a tie goes to list order."
+        },
+        "pages": {
+          "$ref": "#/$defs/EngagementRulePages",
+          "description": "Where the rule applies: the page's host and path."
+        },
+        "window": {
+          "$ref": "#/$defs/EngagementRuleWindow",
+          "description": "When the rule applies; no condition = always."
+        },
+        "template": {
+          "anyOf": [
+            {
+              "maxLength": 48,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Template",
+          "description": "The template the campaign was made from."
+        },
+        "content": {
+          "$ref": "#/$defs/EngagementDecorationContent",
+          "description": "What a 'decoration' rule shows."
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "content"
+      ],
+      "title": "DecorationRule",
+      "type": "object"
+    },
+    "EngagementDoor": {
+      "additionalProperties": false,
+      "description": "One door: what an opened door shows. A door without content opens empty.",
+      "properties": {
+        "day": {
+          "maximum": 31,
+          "minimum": 1,
+          "title": "Day",
+          "type": "integer"
+        },
+        "title": {
+          "default": "",
+          "maxLength": 120,
+          "title": "Title",
+          "type": "string"
+        },
+        "text": {
+          "default": "",
+          "maxLength": 1000,
+          "title": "Text",
+          "type": "string"
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Icon",
+          "description": "One emoji, at most 8 characters, no letters or digits."
+        },
+        "image_url": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^(?:\\s*https://[^\\s/?#]+[^\\s]*\\s*)?$"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Image Url",
+          "default": null,
+          "description": "An https:// address."
+        },
+        "image_alt": {
+          "anyOf": [
+            {
+              "maxLength": 250,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Image Alt"
+        },
+        "question": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Question"
+        },
+        "link": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EngagementDoorLink"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "day"
+      ],
+      "title": "Door",
+      "type": "object"
+    },
+    "EngagementDoorLink": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "maxLength": 60,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "url": {
+          "type": "string",
+          "pattern": "^\\s*https://[^\\s/?#]+[^\\s]*\\s*$",
+          "title": "Url",
+          "description": "An https:// address."
+        }
+      },
+      "required": [
+        "label",
+        "url"
+      ],
+      "title": "DoorLink",
+      "type": "object"
+    },
+    "EngagementElementStyle": {
+      "additionalProperties": false,
+      "properties": {
+        "size": {
+          "default": "md",
+          "enum": [
+            "xs",
+            "sm",
+            "md",
+            "lg",
+            "xl",
+            "2xl",
+            "3xl"
+          ],
+          "title": "Size",
+          "type": "string"
+        },
+        "weight": {
+          "default": "regular",
+          "enum": [
+            "regular",
+            "bold"
+          ],
+          "title": "Weight",
+          "type": "string"
+        },
+        "color": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^(?:#[0-9a-fA-F]{6}|token:(?:primary|accent|text|background|bubble))$"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Color",
+          "default": null,
+          "description": "A hex colour like #1a2b3c or token:primary, token:accent, token:text, token:background, token:bubble."
+        },
+        "align": {
+          "default": "start",
+          "enum": [
+            "start",
+            "center",
+            "end"
+          ],
+          "title": "Align",
+          "type": "string"
+        },
+        "background": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^(?:#[0-9a-fA-F]{6}|token:(?:primary|accent|text|background|bubble))$"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Background",
+          "default": null,
+          "description": "A hex colour like #1a2b3c or token:primary, token:accent, token:text, token:background, token:bubble."
+        }
+      },
+      "title": "ElementStyle",
+      "type": "object"
+    },
+    "EngagementEmojiElement": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string",
+          "pattern": "^(?:[a-z0-9][a-z0-9-]{0,23})$"
+        },
+        "x": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Y",
+          "type": "number"
+        },
+        "w": {
+          "maximum": 100,
+          "minimum": 2,
+          "title": "W",
+          "type": "number"
+        },
+        "h": {
+          "maximum": 100,
+          "minimum": 2,
+          "title": "H",
+          "type": "number"
+        },
+        "z": {
+          "default": 0,
+          "maximum": 20,
+          "minimum": 0,
+          "title": "Z",
+          "type": "integer"
+        },
+        "bind": {
+          "anyOf": [
+            {
+              "enum": [
+                "title",
+                "text",
+                "image",
+                "question",
+                "link",
+                "day"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bind"
+        },
+        "style": {
+          "$ref": "#/$defs/EngagementElementStyle"
+        },
+        "type": {
+          "const": "emoji",
+          "title": "Type",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string",
+          "description": "One emoji, at most 8 characters, no letters or digits."
+        }
+      },
+      "required": [
+        "id",
+        "x",
+        "y",
+        "w",
+        "h",
+        "type",
+        "text"
+      ],
+      "title": "EmojiElement",
+      "type": "object"
+    },
+    "EngagementImageElement": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string",
+          "pattern": "^(?:[a-z0-9][a-z0-9-]{0,23})$"
+        },
+        "x": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Y",
+          "type": "number"
+        },
+        "w": {
+          "maximum": 100,
+          "minimum": 2,
+          "title": "W",
+          "type": "number"
+        },
+        "h": {
+          "maximum": 100,
+          "minimum": 2,
+          "title": "H",
+          "type": "number"
+        },
+        "z": {
+          "default": 0,
+          "maximum": 20,
+          "minimum": 0,
+          "title": "Z",
+          "type": "integer"
+        },
+        "bind": {
+          "anyOf": [
+            {
+              "enum": [
+                "title",
+                "text",
+                "image",
+                "question",
+                "link",
+                "day"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bind"
+        },
+        "style": {
+          "$ref": "#/$defs/EngagementElementStyle"
+        },
+        "type": {
+          "const": "image",
+          "title": "Type",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^(?:\\s*https://[^\\s/?#]+[^\\s]*\\s*)?$"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Url",
+          "default": null,
+          "description": "An https:// address."
+        },
+        "alt": {
+          "anyOf": [
+            {
+              "maxLength": 250,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Alt"
+        },
+        "decorative": {
+          "default": false,
+          "title": "Decorative",
+          "type": "boolean"
+        },
+        "fit": {
+          "default": "cover",
+          "enum": [
+            "cover",
+            "contain"
+          ],
+          "title": "Fit",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "x",
+        "y",
+        "w",
+        "h",
+        "type"
+      ],
+      "title": "ImageElement",
+      "type": "object"
+    },
+    "EngagementLayoutBackground": {
+      "additionalProperties": false,
+      "properties": {
+        "color": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^(?:#[0-9a-fA-F]{6}|token:(?:primary|accent|text|background|bubble))$"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Color",
+          "default": null,
+          "description": "A hex colour like #1a2b3c or token:primary, token:accent, token:text, token:background, token:bubble."
+        },
+        "image_url": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^(?:\\s*https://[^\\s/?#]+[^\\s]*\\s*)?$"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Image Url",
+          "default": null,
+          "description": "An https:// address."
+        },
+        "image_alt": {
+          "anyOf": [
+            {
+              "maxLength": 250,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Image Alt"
+        },
+        "overlay": {
+          "default": 0,
+          "maximum": 0.8,
+          "minimum": 0,
+          "title": "Overlay",
+          "type": "number"
+        }
+      },
+      "title": "LayoutBackground",
+      "type": "object"
+    },
+    "EngagementMobilePlacement": {
+      "additionalProperties": false,
+      "description": "Where an element sits on a narrow screen, when the author placed it there by hand.",
+      "properties": {
+        "x": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "X"
+        },
+        "y": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Y"
+        },
+        "w": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 2,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "W"
+        },
+        "h": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 2,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "H"
+        },
+        "hidden": {
+          "default": false,
+          "title": "Hidden",
+          "type": "boolean"
+        }
+      },
+      "title": "MobilePlacement",
+      "type": "object"
+    },
+    "EngagementRulePages": {
+      "additionalProperties": false,
+      "description": "Where a rule applies: the page's host and path.",
+      "properties": {
+        "hosts": {
+          "items": {
+            "type": "string",
+            "pattern": "^\\s*(\\*\\.)?[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)*\\.?\\s*$",
+            "maxLength": 257
+          },
+          "maxItems": 20,
+          "title": "Hosts",
+          "type": "array",
+          "description": "Exact host names or *.example.at (any subdomain, not the domain itself), without https://, port or path; empty = every host."
+        },
+        "include": {
+          "items": {
+            "type": "string",
+            "pattern": "^\\s*/[^?#]*$"
+          },
+          "maxItems": 20,
+          "title": "Include",
+          "type": "array",
+          "description": "Path patterns, each starting with / and at most 200 characters: * is one segment or part of one, ** any number of segments; empty = every path."
+        },
+        "exclude": {
+          "items": {
+            "type": "string",
+            "pattern": "^\\s*/[^?#]*$"
+          },
+          "maxItems": 20,
+          "title": "Exclude",
+          "type": "array",
+          "description": "Path patterns as in include; an exclude beats an include."
+        }
+      },
+      "title": "RulePages",
+      "type": "object"
+    },
+    "EngagementRuleWindow": {
+      "additionalProperties": false,
+      "description": "When a rule applies, in the local time of ``timezone``; no field set = always.\n\n``starts_at``/``ends_at`` are local wall-clock times without an offset; the\nwindow is open from ``starts_at`` up to, not including, ``ends_at``. A daily\nwindow whose ``daily_from`` is later than its ``daily_to`` runs across midnight.",
+      "properties": {
+        "timezone": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Timezone",
+          "description": "IANA timezone, e.g. Europe/Vienna. Needed by any time condition, by a calendar and by a countdown."
+        },
+        "starts_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}([T ]\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?)?$"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Starts At",
+          "default": null,
+          "description": "Local wall-clock time in timezone, without an offset, e.g. 2026-12-01T00:00; the window opens here."
+        },
+        "ends_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}([T ]\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?)?$"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Ends At",
+          "default": null,
+          "description": "Local wall-clock time in timezone, without an offset; the window is open up to, not including, it."
+        },
+        "weekdays": {
+          "items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 7
+          },
+          "maxItems": 7,
+          "title": "Weekdays",
+          "type": "array",
+          "description": "ISO weekdays, 1 = Monday ... 7 = Sunday; empty = every day."
+        },
+        "daily_from": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^(([01][0-9]|2[0-3]):[0-5][0-9])?$"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Daily From",
+          "default": null,
+          "description": "Time of day as HH:MM, set together with daily_to; later than daily_to runs across midnight."
+        },
+        "daily_to": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^(([01][0-9]|2[0-3]):[0-5][0-9])?$"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Daily To",
+          "default": null,
+          "description": "Time of day as HH:MM, set together with daily_from."
+        }
+      },
+      "title": "RuleWindow",
+      "type": "object"
+    },
+    "EngagementShapeElement": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string",
+          "pattern": "^(?:[a-z0-9][a-z0-9-]{0,23})$"
+        },
+        "x": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Y",
+          "type": "number"
+        },
+        "w": {
+          "maximum": 100,
+          "minimum": 2,
+          "title": "W",
+          "type": "number"
+        },
+        "h": {
+          "maximum": 100,
+          "minimum": 2,
+          "title": "H",
+          "type": "number"
+        },
+        "z": {
+          "default": 0,
+          "maximum": 20,
+          "minimum": 0,
+          "title": "Z",
+          "type": "integer"
+        },
+        "bind": {
+          "anyOf": [
+            {
+              "enum": [
+                "title",
+                "text",
+                "image",
+                "question",
+                "link",
+                "day"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bind"
+        },
+        "style": {
+          "$ref": "#/$defs/EngagementElementStyle"
+        },
+        "type": {
+          "const": "shape",
+          "title": "Type",
+          "type": "string"
+        },
+        "shape": {
+          "default": "rect",
+          "enum": [
+            "rect",
+            "circle"
+          ],
+          "title": "Shape",
+          "type": "string"
+        },
+        "fill": {
+          "default": "token:accent",
+          "title": "Fill",
+          "type": "string",
+          "pattern": "^(?:#[0-9a-fA-F]{6}|token:(?:primary|accent|text|background|bubble))$"
+        },
+        "radius": {
+          "default": 0,
+          "maximum": 50,
+          "minimum": 0,
+          "title": "Radius",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "x",
+        "y",
+        "w",
+        "h",
+        "type"
+      ],
+      "title": "ShapeElement",
+      "type": "object"
+    },
+    "EngagementStartersContent": {
+      "additionalProperties": false,
+      "properties": {
+        "starters": {
+          "items": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 20,
+          "minItems": 1,
+          "title": "Starters",
+          "type": "array"
+        },
+        "display_count": {
+          "anyOf": [
+            {
+              "maximum": 20,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Display Count"
+        }
+      },
+      "required": [
+        "starters"
+      ],
+      "title": "StartersContent",
+      "type": "object"
+    },
+    "EngagementStartersRule": {
+      "additionalProperties": false,
+      "description": "On a matching page, these starter questions replace the persona's teasers.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string",
+          "pattern": "^(?:[a-z0-9][a-z0-9-]{0,47})$",
+          "description": "Stable and unique in the list: the rule's key in analytics, translation and the widget's memory."
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean",
+          "description": "Off, the rule never shows."
+        },
+        "name": {
+          "default": "",
+          "maxLength": 120,
+          "title": "Name",
+          "type": "string",
+          "description": "Shown in the Admin only."
+        },
+        "kind": {
+          "const": "starters",
+          "title": "Kind",
+          "type": "string",
+          "description": "Which kind of rule this is; it selects the content shape."
+        },
+        "priority": {
+          "default": 0,
+          "maximum": 1000,
+          "minimum": -1000,
+          "title": "Priority",
+          "type": "integer",
+          "description": "The highest priority among the matching rules wins; a tie goes to list order."
+        },
+        "pages": {
+          "$ref": "#/$defs/EngagementRulePages",
+          "description": "Where the rule applies: the page's host and path."
+        },
+        "window": {
+          "$ref": "#/$defs/EngagementRuleWindow",
+          "description": "When the rule applies; no condition = always."
+        },
+        "content": {
+          "$ref": "#/$defs/EngagementStartersContent",
+          "description": "What a 'starters' rule shows."
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "content"
+      ],
+      "title": "StartersRule",
+      "type": "object"
+    },
+    "EngagementTextElement": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string",
+          "pattern": "^(?:[a-z0-9][a-z0-9-]{0,23})$"
+        },
+        "x": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Y",
+          "type": "number"
+        },
+        "w": {
+          "maximum": 100,
+          "minimum": 2,
+          "title": "W",
+          "type": "number"
+        },
+        "h": {
+          "maximum": 100,
+          "minimum": 2,
+          "title": "H",
+          "type": "number"
+        },
+        "z": {
+          "default": 0,
+          "maximum": 20,
+          "minimum": 0,
+          "title": "Z",
+          "type": "integer"
+        },
+        "bind": {
+          "anyOf": [
+            {
+              "enum": [
+                "title",
+                "text",
+                "image",
+                "question",
+                "link",
+                "day"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bind"
+        },
+        "style": {
+          "$ref": "#/$defs/EngagementElementStyle"
+        },
+        "type": {
+          "const": "text",
+          "title": "Type",
+          "type": "string"
+        },
+        "role": {
+          "default": "body",
+          "enum": [
+            "heading",
+            "body"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "text": {
+          "default": "",
+          "maxLength": 500,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "x",
+        "y",
+        "w",
+        "h",
+        "type"
+      ],
+      "title": "TextElement",
+      "type": "object"
     }
   },
   "properties": {
