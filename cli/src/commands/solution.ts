@@ -47,6 +47,8 @@ import { pairOrderHint, pairOrderPointer } from "../pair-order.js";
 import { readPackage, tenantWideSections, writePackage, type Finding, type ItemFiles, type PackageOnDisk, type WriteOptions } from "../package-files.js";
 import { blockerDetails, blockerLines, changeLines, fieldChanges, locateBlockers, notApplied, notAppliedLines, tenantWideReport } from "../preview-report.js";
 import { readPrincipal } from "../principal.js";
+import { hasManagedFields, packageToSend, packageToWrite, type ManagedFields, type SentPackage } from "../managed-fields.js";
+import { liveFields, previewLiveFields, ruleFields, rulesChange, rulesChangeLines, rulesWarning, type RulesChange } from "../engagement.js";
 import type { ProjectConfig } from "../project.js";
 import { CASE_STATUSES, caseStatus, TESTING_PAGE, type CaseStatus } from "../results.js";
 import { KNOWLEDGE_OUTCOME_AREA, KNOWLEDGE_OUTCOME_PAGE, KNOWLEDGE_OUTCOMES, knowledgeOutcome, type KnowledgeOutcome } from "../trace-view.js";
@@ -290,6 +292,25 @@ async function takesTenantWide(ctx: Context, where: "export" | "import"): Promis
   return Boolean(properties?.[INCLUDE_TENANT_WIDE]);
 }
 
+/**
+ * The export's `<list>_kinds` for each list of the persona whose kinds
+ * cavelon.yaml's managed_kinds names, where the export takes it: the instance
+ * then exports only those kinds. An older export carries them all, and pull
+ * keeps only the managed ones itself.
+ */
+async function exportKindsQuery(ctx: Context, managed: ManagedFields): Promise<Record<string, string[]>> {
+  const lists = Object.entries(managed.kinds).filter(([pointer]) => /^\/persona\/[^/]+$/.test(pointer) && !managed.unmanaged.includes(pointer));
+  if (!lists.length) return {};
+  const { doc, op } = await workflowOperation(ctx, "GET", EXPORT_ROUTE, "exporting packages");
+  if (!doc) return {};
+  const query: Record<string, string[]> = {};
+  for (const [pointer, kinds] of lists) {
+    const name = `${pointer.slice("/persona/".length)}_kinds`;
+    if (op.parameters.some((p) => p.name === name)) query[name] = kinds;
+  }
+  return query;
+}
+
 /** The package file each section is read from, relative to the solution folder. */
 function sectionFiles(disk: PackageOnDisk, sections: string[]): string[] {
   return sections.flatMap((section) => {
@@ -350,8 +371,9 @@ export const pull: CommandSpec = {
     if (tenantWide && !harness) ctx.warn("--include-tenant-wide applies to a solution's pull; the tenant's full configuration carries the tenant-wide sections anyway.");
     // A recent instance's export carries a solution's tenant-wide sections only when asked.
     const askTenantWide = Boolean(harness) && tenantWide && (await takesTenantWide(ctx, "export"));
+    const kindsQuery = await exportKindsQuery(ctx, project.managed);
     const exported = await callStable<Record<string, unknown>>(ctx, "GET", EXPORT_ROUTE, "exporting packages", {
-      query: { scope, harness_id: harness?.id, ...(askTenantWide ? { [INCLUDE_TENANT_WIDE]: true } : {}) },
+      query: { scope, harness_id: harness?.id, ...(askTenantWide ? { [INCLUDE_TENANT_WIDE]: true } : {}), ...kindsQuery },
       timeoutMs: 120_000,
     });
     if (!exported || typeof exported !== "object" || Array.isArray(exported)) {
@@ -365,13 +387,15 @@ export const pull: CommandSpec = {
     const skip = harness && !tenantWide ? shared : new Set<string>();
     const placed: ItemFiles = {};
     const options: WriteOptions = { skip, itemFiles: await readItemFiles(project.root), placed };
+    // Fields cavelon.yaml leaves to the Admin stay out of the folder: the next apply then leaves them alone.
+    const folderPackage = packageToWrite(exported, project.managed, schema);
     if (dirty === undefined) {
-      const edited = await editedSincePull(project, exported, schema, options);
+      const edited = await editedSincePull(project, folderPackage, schema, options);
       if (edited.length) {
         throw uncommittedChanges(edited, "This folder is not in a git repository, and pull would overwrite or remove files that changed since the last pull");
       }
     }
-    const report = await writePackage(project.root, project.layout, exported, schema, options);
+    const report = await writePackage(project.root, project.layout, folderPackage, schema, options);
     await writePulledFiles(project.root, [...report.written, ...report.unchanged], placed);
     await rememberQueries(project.root, exported, schema, "pull", ctx.io.now());
 
@@ -411,6 +435,7 @@ export const pull: CommandSpec = {
       ...report.written.map((f) => `written    ${f}`),
       ...report.removed.map((f) => `removed    ${f}`),
       `${report.unchanged.length} file${report.unchanged.length === 1 ? "" : "s"} unchanged.`,
+      ...(hasManagedFields(project.managed) ? [managedPullLine(project.managed)] : []),
       ...(report.tenant_wide.length
         ? [`Left out the tenant-wide section${report.tenant_wide.length === 1 ? "" : "s"} ${report.tenant_wide.join(", ")} (--include-tenant-wide writes them).`]
         : []),
@@ -434,6 +459,15 @@ export const pull: CommandSpec = {
     return { data: { ...record, inventory, ...(pulledShared ? { tenant_wide_pulled: pulledShared } : {}) }, text: lines.join("\n") };
   },
 };
+
+/** What pull left to the Admin, as cavelon.yaml says. */
+function managedPullLine(managed: ManagedFields): string {
+  const parts = [
+    ...(managed.unmanaged.length ? [`${managed.unmanaged.join(", ")} (unmanaged)`] : []),
+    ...Object.entries(managed.kinds).map(([pointer, kinds]) => `${pointer} beyond ${kinds.join(", ")} (managed_kinds)`),
+  ];
+  return `Left to the Admin, as cavelon.yaml says: ${parts.join("; ")}.`;
+}
 
 // ---------------------------------------------------------------------------
 // validate
@@ -504,6 +538,7 @@ export async function validatePackage(
     solution: project.harness,
     queryBaseline: await readQueryBaseline(project.root),
     queryConnections,
+    managed: project.managed,
   });
   return { disk, findings, schema, schemaVersion: schema["x-package-version"] ?? version ?? null, used, skipped };
 }
@@ -723,6 +758,10 @@ interface PreviewContext {
   harness?: string;
   /** What the credential may do, where the instance says: hints suggest only that. */
   access?: CredentialAccess;
+  /** The persona fields this import changes that reach visitors at once, as JSON pointers. */
+  live?: string[];
+  /** What the import does to the persona's engagement rules, rule by rule. */
+  rules?: RulesChange[];
 }
 
 function emptyValue(value: unknown): boolean {
@@ -759,8 +798,9 @@ function changesNothing(p: Preview): boolean {
 
 export function previewText(p: Preview, context: PreviewContext = {}): string {
   const lines: Array<[string, unknown]> = [["ready", p.ready ? "yes" : "no"]];
-  const publication = publicationNotice(p.publication);
+  const publication = publicationNotice(p.publication, context.live);
   if (publication) lines.push(["publication", publication]);
+  else if (context.live?.length) lines.push(["live", liveText(context.live)]);
   const s = p.summary ?? {};
   for (const [label, map] of [["creates", s.creates], ["updates", s.updates], ["deletes", s.deletes]] as const) {
     const text = counts(map);
@@ -769,6 +809,7 @@ export function previewText(p: Preview, context: PreviewContext = {}): string {
   if (lines.length === 1) lines.push(["changes", "none"]);
   const changes = fieldChanges(p.changes);
   if (changes.length) lines.push(["field changes", changeLines(changes)]);
+  for (const rules of context.rules ?? []) lines.push([rules.pointer.split("/").pop()!.replace(/_/g, " "), rulesChangeLines(rules)]);
   const details = blockerDetails(p.blocker_details, context.disk);
   if (details.length) lines.push(["blockers", blockerLines(details)]);
   else if (p.blockers?.length) lines.push(["blockers", p.blockers.map((b) => `\n  - ${clip(b, 300)}`).join("")]);
@@ -801,6 +842,58 @@ function previewReport(p: Preview, context: PreviewContext): Record<string, unkn
   if (changes.length) out.field_changes = changes;
   const skipped = notApplied(p.ignored?.not_applied, context.disk?.package, context.harness, mayActivate(context.access));
   if (skipped.length) out.not_applied = skipped;
+  if (context.rules?.length) out.engagement_rules = context.rules;
+  return out;
+}
+
+/** The live persona fields an import changes, in words. */
+function liveText(live: string[]): string {
+  return `${list(live, 10)} reach${live.length === 1 ? "es" : ""} visitors at once on an active solution, without a publication`;
+}
+
+/** The persona as the solution holds it now, for its engagement rules; undefined when it cannot be read. */
+async function currentPersona(ctx: Context, harness: Harness | undefined): Promise<Record<string, unknown> | undefined> {
+  try {
+    const persona = await callStable<unknown>(ctx, "GET", "/api/v1/bot-persona", "reading the persona", { query: { harness_id: harness?.id } });
+    return persona && typeof persona === "object" && !Array.isArray(persona) ? (persona as Record<string, unknown>) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * What the import does to each list of engagement rules the package sends,
+ * against the rules the solution holds now: one read of the persona, only
+ * when the package carries a list. A solution the import creates has none.
+ */
+async function engagementChanges(ctx: Context, sent: Record<string, unknown>, schema: PackageSchema | null, harness: Harness | undefined): Promise<RulesChange[]> {
+  const persona = sent.persona && typeof sent.persona === "object" && !Array.isArray(sent.persona) ? (sent.persona as Record<string, unknown>) : undefined;
+  if (!persona) return [];
+  const fields = ruleFields(schema).filter((f) => Array.isArray(persona[f.field]));
+  if (!fields.length) return [];
+  const current = await currentPersona(ctx, harness);
+  return fields.map((f) => {
+    const kinds = persona[`${f.field}_kinds`];
+    const held = current?.[f.field];
+    return rulesChange(
+      schema,
+      f,
+      current ? (Array.isArray(held) ? held : []) : undefined,
+      persona[f.field] as unknown[],
+      Array.isArray(kinds) ? kinds.filter((k): k is string => typeof k === "string") : undefined,
+    );
+  });
+}
+
+/** The fields apply left out, as cavelon.yaml says, in warnings. */
+function managedWarnings(sent: SentPackage): string[] {
+  const out: string[] = [];
+  const unmanaged = sent.left_out.filter((pointer) => !sent.kinds.some((k) => k.pointer === pointer));
+  if (unmanaged.length) out.push(`Left out ${unmanaged.join(", ")}: cavelon.yaml lists ${unmanaged.length === 1 ? "it" : "them"} as unmanaged, so the instance keeps its own value.`);
+  for (const k of sent.kinds) {
+    if (!k.sent) out.push(`Left out ${k.pointer}: ${k.reason}; the solution keeps all of its entries. Remove it from managed_kinds in cavelon.yaml to send the whole list.`);
+    else if (k.other_kinds_left_out.length) out.push(`Left out ${k.other_kinds_left_out.join(", ")} from ${k.pointer}: of kinds cavelon.yaml's managed_kinds does not list (${k.kinds.join(", ")}).`);
+  }
   return out;
 }
 
@@ -1038,7 +1131,9 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
     ]);
     await rememberImported(ctx, project, stored, disk, changed);
     // Remember the query definitions only once their import succeeded.
-    await rememberQueries(project.root, stored.request.package, (await schemaFor(ctx, packageVersionOf(stored.request.package), false)).schema, "apply", ctx.io.now());
+    const importedSchema = (await schemaFor(ctx, packageVersionOf(stored.request.package), false)).schema;
+    await rememberQueries(project.root, stored.request.package, importedSchema, "apply", ctx.io.now());
+    const importedLive = previewLiveFields(stored.preview as Preview, liveFields(importedSchema).fields)?.pointers ?? [];
     const summary = (result.summary ?? {}) as Preview["summary"];
     const still = setCommands(stored.preview as Preview, stored.env ?? undefined, secretsInAdminOnly((await accessFor(client))?.principal) === true);
     // The tenant-wide sections this import took along: as its result says on a recent instance, else as its preview reported them.
@@ -1056,7 +1151,7 @@ async function confirmPreview(ctx: Context, project: ProjectConfig, previewId: s
     const text = keyValues([
       ["applied", `preview ${stored.preview_id}${stored.harness ? ` to ${stored.harness.slug}` : ""}${stored.env ? ` (env ${stored.env})` : ""}`],
       ["acted on", targetText(acting)],
-      ["publication", publicationNotice(result.publication)],
+      ["publication", publicationNotice(result.publication, importedLive)],
       ["tenant-wide", sharedText],
       ["created", counts(summary?.creates) || undefined],
       ["updated", counts(summary?.updates) || undefined],
@@ -1214,6 +1309,7 @@ function personReason(
   env: string | undefined,
   shared: string[] = [],
   sharedReaches: string[] = [],
+  live: string[] = [],
 ): string | undefined {
   if (shared.length) {
     const reaching = sharedReaches.length ? `, reaching the active solution${sharedReaches.length === 1 ? "" : "s"} ${list(sharedReaches, 5)}` : "";
@@ -1222,6 +1318,8 @@ function personReason(
   const active = (preview.impact?.active_harnesses ?? []).map((h) => h.harness_slug ?? h.name).filter((n): n is string => Boolean(n));
   if (harness?.status === "active" && !graphDraftTarget(preview, harness) && !active.includes(harness.slug)) active.unshift(harness.slug);
   if (active.length) return `reaches the active solution${active.length === 1 ? "" : "s"} ${list(active, 5)}`;
+  // A graph draft keeps live traffic on the published version; these persona fields do not wait for a publication.
+  if (live.length && harness?.status === "active") return `changes ${list(live, 5)}, which visitors of the active solution ${harness.slug} see at once, without a publication`;
   if (preview.impact?.active_harnesses?.length) return "reaches an active solution";
   if (counts(preview.summary?.deletes) || mode === "replace") return "deletes";
   if (env === "prod") return "goes to env/prod";
@@ -1317,7 +1415,10 @@ export const apply: CommandSpec = {
     const scope = ((disk.package.manifest as Record<string, unknown> | undefined)?.scope as string | undefined) ?? "agent_graph";
     if (harness && scope === "full_config") ctx.warn("The package is a full configuration; the instance imports it tenant-wide, whatever the solution.");
 
-    const request: ImportRequest = { package: disk.package, mode };
+    // What cavelon.yaml leaves to the Admin stays out of the import, so the instance keeps it.
+    const sent = packageToSend(disk.package, project.managed, schema);
+    for (const warning of managedWarnings(sent)) ctx.warn(warning);
+    const request: ImportRequest = { package: sent.package, mode };
     if (harness) request.harness_id = harness.id;
     if (envFile && Object.keys(envFile.runtimeBindings).length) request.runtime_bindings = envFile.runtimeBindings;
 
@@ -1348,6 +1449,18 @@ export const apply: CommandSpec = {
     // Where the import would go, also for a tenant API key, whose tenant only the instance knows.
     const acting = await actingTarget(ctx);
     const data: Record<string, unknown> = { previewed: true, ...preview, env: envFile?.name ?? null, harness: target, target: acting };
+    if (hasManagedFields(project.managed)) data.managed = { left_out: sent.left_out, kinds: sent.kinds };
+    // Persona widget fields reach visitors at once: as the instance reports them, else as its diff names live fields.
+    const live = liveFields(schema);
+    const reportedLive = previewLiveFields(preview, live.fields);
+    const sentPersona = (sent.package.persona && typeof sent.package.persona === "object" ? sent.package.persona : {}) as Record<string, unknown>;
+    const livePointers = reportedLive?.pointers ?? live.fields.filter((f) => f in sentPersona).map((f) => `/persona/${f}`);
+    if (livePointers.length) data.live_fields = { pointers: livePointers, reported_by: reportedLive?.reported_by ?? "kit", marked_by_schema: live.marked };
+    const rules = await engagementChanges(ctx, sent.package, schema, harness);
+    for (const change of rules) {
+      const warning = rulesWarning(change);
+      if (warning) ctx.warn(warning);
+    }
     if (queries.data) {
       const reported = preview.database_queries;
       data.database_queries = { ...queries.data, ...(reported && typeof reported === "object" && !Array.isArray(reported) ? reported : {}) };
@@ -1397,7 +1510,7 @@ export const apply: CommandSpec = {
     if (refusal) data.import_access = { allowed: false, needs_a_person: (refusal.details as { reason: string }).reason, hint: refusal.hint };
     const commands = setCommands(preview, undefined, secretsInAdminOnly(access?.principal) === true);
     if (commands.secrets.length || commands.variables.length) data.set_commands = commands;
-    const context: PreviewContext = { disk, harness: harness?.slug, access };
+    const context: PreviewContext = { disk, harness: harness?.slug, access, live: livePointers, rules };
     Object.assign(data, previewReport(preview, context));
     // A blocked preview has no id on recent instances: its blockers come first, never a call to update the instance.
     if (!preview.ready) {
@@ -1452,7 +1565,7 @@ export const apply: CommandSpec = {
     if (!preview.preview_id) {
       ctx.warn("This instance's preview returns no preview id, so `apply --confirm` cannot import exactly it; update the instance.");
     }
-    const reason = personReason(preview, harness, mode, envFile?.name, sharedImported, reaches);
+    const reason = personReason(preview, harness, mode, envFile?.name, sharedImported, reaches, livePointers);
     if (preview.preview_id) {
       const stored: StoredPreview = {
         preview_id: preview.preview_id,

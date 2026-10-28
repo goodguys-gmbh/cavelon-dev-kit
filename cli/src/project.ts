@@ -6,6 +6,7 @@ import { CavelonError, ExitCode, usageError } from "./errors.js";
 import { layoutFrom, type Layout } from "./package-files.js";
 import { cavelonCommand } from "./printed.js";
 import { solutionPath, solutionPaths } from "./file-boundary.js";
+import { validManagedPointer, type ManagedFields } from "./managed-fields.js";
 
 /**
  * The solution a working directory belongs to: the nearest `cavelon.yaml`
@@ -25,6 +26,8 @@ export interface ProjectConfig {
   /** The package format version the files are written in. */
   packageVersion?: string;
   layout: Layout;
+  /** The package fields the folder leaves to the Admin (`unmanaged`, `managed_kinds`). */
+  managed: ManagedFields;
   raw: Record<string, unknown>;
 }
 
@@ -78,8 +81,43 @@ export function parseProject(file: string, text: string): ProjectConfig {
     harness: stringField(map.harness, "slug", "id"),
     packageVersion: stringField(map.package_version),
     layout: layoutFrom(map),
+    managed: managedFrom(file, map),
     raw: map,
   };
+}
+
+/**
+ * `unmanaged` and `managed_kinds`, refused when malformed: a setting read
+ * wrong would let apply send, and so replace, what the folder means to leave
+ * to the Admin.
+ */
+function managedFrom(file: string, map: Record<string, unknown>): ManagedFields {
+  const invalid = (message: string) =>
+    new CavelonError(ExitCode.validation, {
+      code: "project_file_invalid",
+      message: `${file}: ${message}`,
+      hint: "Name a field inside a section as a JSON pointer, such as /persona/engagement_rules; `managed_kinds` maps such a pointer to a list of kinds.",
+    });
+  const pointer = (value: unknown, where: string): string => {
+    if (typeof value !== "string" || !validManagedPointer(value.trim())) throw invalid(`${where} must be a JSON pointer to a field inside a section, got ${JSON.stringify(value)}.`);
+    return value.trim();
+  };
+  const unmanaged: string[] = [];
+  if (map.unmanaged !== undefined && map.unmanaged !== null) {
+    if (!Array.isArray(map.unmanaged)) throw invalid("unmanaged must be a list of JSON pointers.");
+    for (const entry of map.unmanaged) unmanaged.push(pointer(entry, "each unmanaged entry"));
+  }
+  const kinds: Record<string, string[]> = {};
+  const declared = map.managed_kinds;
+  if (declared !== undefined && declared !== null) {
+    if (typeof declared !== "object" || Array.isArray(declared)) throw invalid("managed_kinds must map a JSON pointer to the list of kinds the folder manages.");
+    for (const [key, value] of Object.entries(declared as Record<string, unknown>)) {
+      const at = pointer(key, "each managed_kinds key");
+      if (!Array.isArray(value) || !value.every((k) => typeof k === "string" && k.trim())) throw invalid(`managed_kinds["${at}"] must be a list of kinds, such as [starters].`);
+      kinds[at] = [...new Set(value.map((k: string) => k.trim()))];
+    }
+  }
+  return { unmanaged: [...new Set(unmanaged)], kinds };
 }
 
 function refuseCredentials(file: string, map: Record<string, unknown>): void {

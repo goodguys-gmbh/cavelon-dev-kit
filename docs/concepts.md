@@ -130,6 +130,56 @@ comment with its default. `cavelon validate` warns when a greeting or fallback
 is on but its text is empty (`persona_message_empty`). The instance's page
 `concepts/personas` (`cavelon docs get concepts/personas`) explains the rest.
 
+#### Engagement rules and fields that take effect at once
+
+The persona's `engagement_rules` hold what a website visitor is offered
+before typing: page starter questions (`starters`) and the campaigns people
+usually edit in the Admin's Engagement tab: door calendars (`calendar`),
+banners (`banner`) and seasonal decorations (`decoration`). Each rule has an
+`id` that stays the same for its whole life, because the instance counts a
+rule's results by `rule_id`. Where the instance's package schema describes the
+kinds, `validate` and `fmt` check and order them like any other field; an
+older schema takes any rule. Left out, an import keeps the solution's rules,
+while `engagement_rules: []` removes them: the two never count as the same.
+
+`cavelon engagement preview --page <url> --at <time>` sends the folder's rules
+to the instance's read-only preview and shows the starters, the calendar's open
+doors, the banners and the decoration a visitor would get there. Nothing is
+stored or counted.
+
+On an active solution, the persona's widget fields reach visitors as soon as
+an import writes them, not with the next publication. The instance marks them
+`x-cavelon-live` in its package schema and lists the ones an import changes in
+the preview's `publication.live_fields`. An instance that publishes neither is
+read as its docs describe it: the engagement rules, the greeting and the
+teasers. The apply preview names these fields instead of saying that live
+traffic stays on the published version. It also asks for a person's review, and
+lists the rules it adds, removes or changes by id, kind and name. It warns when
+rules people made in the Admin would be removed or replaced.
+
+#### Fields the folder does not manage
+
+`cavelon.yaml` can leave fields to the Admin:
+
+```yaml
+unmanaged:                           # pull does not write these, apply does not send them
+  - /persona/widget_title
+managed_kinds:                       # of this list, the folder manages only these kinds
+  /persona/engagement_rules: [starters]
+```
+
+Each entry is a JSON pointer to a field inside a section. With
+`managed_kinds`, `pull` writes only the rules of those kinds, asking the export
+for them where it takes `engagement_rules_kinds`. `apply` sends them with
+`engagement_rules_kinds`, so the import replaces only those kinds and the
+campaigns edited in the Admin stay. An instance that cannot import some kinds
+only would replace the whole list, so there `apply` leaves the list out and
+says so. `validate` warns about a field the folder sets that it does not manage
+(`unmanaged_field_set`), a rule of a kind it does not manage
+(`managed_kinds_left_out`), a list the instance can only replace whole
+(`managed_kinds_unsupported`), and a pointer or kind the schema does not have
+(`managed_setting_unknown`).
+
 ### Default route
 
 A tenant answers where a conversation names no solution (its chat, its widget)
@@ -149,6 +199,42 @@ to trace. `cavelon deactivate` takes an active solution out of live traffic
 (its status becomes `inactive`); it previews first, changes nothing without
 `--confirm`, and refuses the default route until another solution is the
 default.
+
+### Chat turns and the files they carry
+
+`cavelon chat` sends one turn and waits for the whole answer. The first turn
+carries a `session_id` the kit chose. A turn that is not answered within
+`--timeout` (45 s as the MCP tool, which then looks up the conversation within
+its 50 s) is not lost: the instance runs it to the end and stores its answer,
+so sending the message again would run it twice. The `chat_turn_timeout` error
+(exit 6) names the conversation, or the session to find it by, and how to read
+it (`GET /api/v1/conversations/{conversation_id}`, `cavelon api
+get_conversation`). A recent instance reports how a turn ended (`status`):
+`chat` shows `cancelled`, `waiting` or `blocked`, and a turn reported with
+status `null` as not completed (it failed or was refused, by a limit for
+example), with the instance's message and `limit_error`. A cancelled turn,
+stored without an answer, and a `null` one exit 1. An older instance sends no
+status at all, and then the turn was answered: a missing status is not `null`.
+
+`cavelon chat --file <path>` uploads a file to the turn's conversation first
+and names it in the message, as the widget does. A solution sets how long a
+turn waits for such a file while it is still being read in
+`settings.attached_documents` of `package/harnesses.yaml`:
+`wait_until_readable` (only `false` turns the wait off) and `wait_seconds`
+(within the bounds the package schema publishes, 0 to 120). The instance reads
+it leniently, so `cavelon validate` warns about a value it would ignore
+(`attached_documents_value_ignored`) or clamp
+(`attached_documents_wait_clamped`) where the instance's package schema
+describes the setting. This is not the tenant's `attached_documents`
+context-source limit, which bounds how much of the files reaches the model
+(the instance's page `concepts/context-budgets`). On an active solution a
+change goes to the draft: visitors get the published value, the Playground and
+test runs the draft's. `cavelon chat` with a personal access token whose role
+holds `playground.use` is a Playground run, so it already answers with the
+draft where one is pending; `--draft` (`preview_draft`) asks for it explicitly
+and is refused before sending where the draft cannot be reached. A tenant API
+key, and a token without `playground.use`, chat with the published version, as
+visitors get it.
 
 ## Package
 
@@ -688,7 +774,9 @@ manages them in the Admin under their recorded identity. Imports leave them
 off; schedule or automatic runs do not replace the latest manually started
 whole-suite run required for activation. A lost permission can pause a schedule.
 A client-ended streamed chat is recorded as cancelled by recent instances;
-`cavelon chat` itself uses a non-streamed request. Failed or cancelled trigger
+`cavelon chat` itself uses a non-streamed request, which the instance runs to
+the end even when the kit stops waiting (see
+[Chat turns](#chat-turns-and-the-files-they-carry)). Failed or cancelled trigger
 runs retain their documents for diagnosis on instances with that behavior.
 
 ## Readiness and activation

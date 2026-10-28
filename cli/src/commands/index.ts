@@ -13,6 +13,7 @@ import { limitsSet } from "./limits-set.js";
 import { modelsList, modelsSetLimit } from "./models.js";
 import { activate, apply, explain, pull, validate } from "./solution.js";
 import { schema } from "./schema.js";
+import { engagementPreview } from "./engagement.js";
 import { publication, publish, discardDraft, rollback } from "./publication.js";
 import { harnessClone, harnessDefault, harnessList, harnessNew, tenantCreate, tenantList } from "./tenants.js";
 import { kbUpload, testRun, trace } from "./work.js";
@@ -114,6 +115,7 @@ export const COMMANDS: CommandSpec[] = [
   schema,
   apply,
   explain,
+  engagementPreview,
   variablesList,
   variablesGet,
   variablesSet,

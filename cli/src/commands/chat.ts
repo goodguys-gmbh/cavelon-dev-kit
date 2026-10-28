@@ -1,4 +1,7 @@
-import { parseDuration, positional, stringOption, type CommandSpec, type Context, type Input } from "../command.js";
+import { randomUUID } from "node:crypto";
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import { boolOption, listOption, parseDuration, positional, stringOption, type CommandSpec, type Context, type Input } from "../command.js";
 import { confirmation, confirmTokenRequired, PERSON_CONFIRMS_HELP } from "../confirm-token.js";
 import { named, readDefaultRoute } from "../default-route.js";
 import { CavelonError, ExitCode, usageError } from "../errors.js";
@@ -10,6 +13,8 @@ import { cavelonCommand, fill } from "../printed.js";
 import { MCP_MAX_WAIT_MS } from "./async.js";
 import { accessFor, activationStep, mayActivate } from "../access.js";
 import { AS_CHAT_USER_OPTION, chatUserReader, chatUserReaderError } from "../chat-reader.js";
+import { deref, jsonBodySchema } from "../openapi.js";
+import { confinedPath } from "../paths.js";
 
 /**
  * Talking to one solution, and taking one out of service. The tenant's chat
@@ -27,6 +32,26 @@ interface ChatResponse {
   ui_directives?: unknown[] | null;
   retrieval_warning?: string | null;
   limit_error?: Record<string, unknown> | null;
+  /**
+   * How the turn ended. A recent instance always sends it: completed,
+   * cancelled, waiting or blocked, and null for a turn that failed or was
+   * refused (by a limit, say). An older instance leaves it out, and then the
+   * turn was answered: absent is not null.
+   */
+  status?: string | null;
+}
+
+/** The fields of an UploadFileResponse the kit reads. */
+interface UploadedFile {
+  file_id: string;
+  filename: string;
+  processing_status?: string;
+}
+
+/** The conversations the instance lists, as far as finding a session's needs. */
+interface ListedConversation {
+  id: string;
+  session_id?: string | null;
 }
 
 /** The solution a command acts on: --harness, else the env file's, else cavelon.yaml's. */
@@ -51,6 +76,155 @@ const HARNESS_OPTION = {
 };
 const ENV_OPTION = { type: "string" as const, value: "<name>", description: "Use env/<name>.yaml: its tenant and solution." };
 const DEFAULT_CHAT_TIMEOUT = "2m";
+const CHAT_ROUTE = "/api/v1/chat";
+const CHAT_FILES_ROUTE = "/api/v1/chat/files";
+const CONVERSATIONS_ROUTE = "/api/v1/conversations";
+/** How long the kit looks for a timed-out turn's conversation; over MCP it comes out of the tool's wait. */
+const LOOKUP_MS = 5_000;
+
+const unavailable = (message: string, hint: string) =>
+  new CavelonError(ExitCode.failure, { code: "operation_unavailable", message, hint, details: { sent: false } });
+
+/** The fields a request body publishes, or undefined when the instance's OpenAPI cannot say. */
+async function bodyFields(ctx: Context, method: string, route: string, what: string, multipart = false): Promise<Record<string, unknown> | undefined> {
+  const { doc, op } = await workflowOperation(ctx, method, route, what);
+  if (!doc) return undefined;
+  const schema = multipart ? op.requestBody?.content?.["multipart/form-data"]?.schema : jsonBodySchema(op);
+  const body = schema ? (deref(doc, schema) as { properties?: Record<string, unknown> } | undefined) : undefined;
+  return body?.properties ?? {};
+}
+
+/**
+ * --draft: the draft's settings on an active solution, as the Playground runs
+ * them. Refused before anything is sent where the instance does not publish
+ * `preview_draft`, or the credential cannot use it: a tenant API key never
+ * can, and a token whose published permissions lack playground.use cannot.
+ */
+async function checkDraft(ctx: Context, fields: Record<string, unknown> | undefined): Promise<void> {
+  if (fields && !fields.preview_draft) {
+    throw unavailable(
+      "This instance does not publish preview_draft on chat, so --draft cannot try a draft's settings. Nothing was sent.",
+      `The instance may be older than this feature; \`${cavelonCommand("status")}\` shows its version. A solution that is still a draft answers a person's token as a Playground run without --draft.`,
+    );
+  }
+  const access = await accessFor(await ctx.client());
+  if (access?.kind === "api_key" || (await ctx.session()).tokenKind === "api_key") {
+    throw new CavelonError(ExitCode.unauthorized, {
+      code: "forbidden",
+      message: "A tenant API key cannot chat with a solution's draft. Nothing was sent.",
+      hint: "Use a personal access token whose role holds playground.use, or leave out --draft to chat with the published version.",
+      details: { sent: false, credential: "api_key" },
+    });
+  }
+  if (access?.permissions && !access.permissions.includes("playground.use")) {
+    throw new CavelonError(ExitCode.unauthorized, {
+      code: "permission_missing",
+      message: "Chatting with a draft needs playground.use, which this credential does not hold. Nothing was sent.",
+      hint: "A person whose role holds playground.use uses a token with it, or leave out --draft to chat with the published version.",
+      details: { sent: false, missing_permissions: ["playground.use"] },
+    });
+  }
+}
+
+/**
+ * --file: each file uploaded to the turn's conversation (`scope`
+ * conversation, by the session the kit sends the turn with) and named in
+ * `file_ids`. Checked before anything is sent: a form without `scope` or
+ * `session_id` would put the file into a knowledge base instead.
+ */
+async function uploadFiles(ctx: Context, files: string[], sessionId: string, chatFields: Record<string, unknown> | undefined, deadline: number): Promise<UploadedFile[]> {
+  if (!files.length) return [];
+  if (chatFields && !chatFields.file_ids) {
+    throw unavailable("This instance's chat takes no file_ids, so --file cannot attach a file. Nothing was sent.", `The instance may be older than this feature; \`${cavelonCommand("status")}\` shows its version.`);
+  }
+  const resolved: string[] = [];
+  for (const raw of files) {
+    const file = await confinedPath(ctx, raw, "The file");
+    const stat = await fs.stat(file).catch(() => undefined);
+    if (!stat?.isFile()) throw usageError(`${raw} is not a file. Nothing was sent.`, "Name a file to attach with --file <path>.");
+    resolved.push(file);
+  }
+  const form = await bodyFields(ctx, "POST", CHAT_FILES_ROUTE, "attaching a file to a chat message", true);
+  if (form && (!form.scope || !form.session_id)) {
+    throw unavailable(
+      "This instance's chat file upload publishes no conversation scope or session, so --file cannot attach a file to this turn. Nothing was sent.",
+      `The instance may be older than this feature; \`${cavelonCommand("status")}\` shows its version.`,
+    );
+  }
+  const uploaded: UploadedFile[] = [];
+  for (const file of resolved) {
+    const result = await callStable<UploadedFile>(ctx, "POST", CHAT_FILES_ROUTE, "attaching a file to a chat message", {
+      body: { scope: "conversation", session_id: sessionId },
+      files: [{ field: "file", path: file }],
+      timeoutMs: Math.max(1_000, deadline - Date.now()),
+    }).catch((error: unknown) => {
+      throw uploadsOff(error) ?? error;
+    });
+    uploaded.push({ file_id: result.file_id, filename: result.filename ?? path.basename(file), processing_status: result.processing_status });
+  }
+  return uploaded;
+}
+
+/**
+ * The instance refuses a chat file with 403 when the tenant's document
+ * uploads, or their conversation scope, are off ("… not enabled for this
+ * tenant"). That is a tenant setting, not the token's role, so the hint
+ * names the setting instead of the generic permission hint.
+ */
+function uploadsOff(error: unknown): CavelonError | undefined {
+  if (!(error instanceof CavelonError) || error.status !== 403 || !/not enabled for this tenant/i.test(error.message)) return undefined;
+  return new CavelonError(ExitCode.unauthorized, {
+    code: "chat_uploads_off",
+    message: `${error.message} The message was not sent.`,
+    hint: "Files in a chat are a tenant setting: someone who manages the tenant's uploads turns on document uploads and their Chat/Run Context scope in the Admin (Settings › Documents). Leave out --file to send the message without it.",
+    status: 403,
+    details: { sent: false },
+  });
+}
+
+/** The conversation a session belongs to, from the newest the instance lists; undefined when it cannot say in time. */
+async function conversationOf(ctx: Context, sessionId: string, harness: HarnessSummary | undefined): Promise<string | undefined> {
+  try {
+    const list = await callStable<ListedConversation[]>(ctx, "GET", CONVERSATIONS_ROUTE, "listing conversations", {
+      query: { ...(harness ? { harness_id: harness.id } : {}) },
+      timeoutMs: LOOKUP_MS,
+    });
+    return (Array.isArray(list) ? list : []).find((c) => c.session_id === sessionId)?.id;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * A turn the kit stopped waiting for. The instance runs a non-streaming turn
+ * to its end even when the client gives up, and stores its answer: sending
+ * the message again would run it twice. So the hint says where to read it,
+ * never to retry.
+ */
+async function turnTimedOut(ctx: Context, waitedMs: number, sessionId: string, harness: HarnessSummary | undefined): Promise<CavelonError> {
+  const conversationId = await conversationOf(ctx, sessionId, harness);
+  const read = conversationId
+    ? `Read it, with the answer once it is there: \`${cavelonCommand("api", "get_conversation", "--param", `conversation_id=${conversationId}`)}\` (GET ${CONVERSATIONS_ROUTE}/{conversation_id}); \`${cavelonCommand("trace", conversationId, "--kind", "conversation")}\` shows its traces.`
+    : `Find its conversation by session_id ${sessionId} in \`${cavelonCommand("api", "list_conversations", ...(harness ? ["--param", `harness_id=${harness.id}`] : []))}\`, then read it with \`${cavelonCommand("api", "get_conversation", "--param", "conversation_id=<conversation_id>")}\` (GET ${CONVERSATIONS_ROUTE}/{conversation_id}).`;
+  return new CavelonError(ExitCode.timeout, {
+    code: "chat_turn_timeout",
+    message: `No answer within ${Math.round(waitedMs / 1000)} s. The turn goes on on the instance, which stores its answer; sending the message again would run it twice.`,
+    hint: `${read} Continue the conversation with \`${cavelonCommand("chat", fill("message"), "--session", sessionId)}\`; a longer --timeout waits for the next turn's answer.`,
+    details: { sent: true, session_id: sessionId, ...(conversationId ? { conversation_id: conversationId } : {}), ...(harness ? { harness_id: harness.id } : {}) },
+  });
+}
+
+/** What the turn's status says, before the answer; undefined for an answered turn. A missing status (an older instance) is one. */
+function statusLine(answer: ChatResponse, who: string): string | undefined {
+  if (!("status" in answer) || answer.status === undefined) return undefined;
+  const status = answer.status;
+  if (status === null) return `${who} did not complete the turn (status null): it failed or was refused. The instance says:`;
+  if (status === "completed") return undefined;
+  if (status === "cancelled") return `${who} did not answer: the turn was cancelled. The message is stored, without an answer.`;
+  if (status === "waiting") return `${who} is waiting (status waiting): the turn has not finished; its answer so far:`;
+  if (status === "blocked") return `${who} blocked the turn (status blocked):`;
+  return `${who} ended the turn with status ${status}:`;
+}
 
 /** A refusal of the chat route, with what to do about it. */
 function chatError(error: unknown, harness: HarnessSummary | undefined, may: boolean | null = null): unknown {
@@ -71,10 +245,20 @@ export const chat: CommandSpec = {
     "not the default, or a draft, can be tried before it answers anyone. A draft answers a person's token as a Playground run\n" +
     "(counted as testing), never a tenant API key. Without --harness: the env file's or cavelon.yaml's solution, else the\n" +
     "tenant's default route. Each call is one turn; --session continues a conversation. Not streamed: waits for the whole\n" +
-    `answer, at most --timeout (default ${DEFAULT_CHAT_TIMEOUT}; ${MCP_MAX_WAIT_MS / 1000} s as an MCP tool).\n` +
+    `answer, at most --timeout (default ${DEFAULT_CHAT_TIMEOUT}; ${(MCP_MAX_WAIT_MS - LOOKUP_MS) / 1000} s as an MCP tool, which then looks up\n` +
+    `a turn not answered in time within its ${MCP_MAX_WAIT_MS / 1000} s).\n` +
     "--as-chat-user reads knowledge and binds database query identity as that Chat User, with a personal access token.\n" +
     "Choose an id with `cavelon api list_chat_users -p tenant_id=<tenant_id>`; email_verified says whether an email-bound\n" +
-    "query can bind that address. Without the option, keeps the usual reader.",
+    "query can bind that address. Without the option, keeps the usual reader.\n" +
+    "--file uploads a file to the turn's conversation first (POST /api/v1/chat/files) and names it in file_ids, so the\n" +
+    "solution's wait for a file still being read (settings.attached_documents) can be tried. A personal access token whose\n" +
+    "role holds playground.use chats as the Playground does: an active solution answers with its unpublished draft where\n" +
+    "one is pending, with or without --draft. --draft (preview_draft) says so explicitly and is refused before sending where\n" +
+    "the draft cannot be reached. A tenant API key, and a token without playground.use, chat with the published version.\n" +
+    "The first turn carries a session_id the kit chose. A turn that is not answered in time goes on on the instance, which\n" +
+    "stores its answer: the error says how to read the conversation; sending the message again would run it twice. A\n" +
+    "status the instance reports (cancelled, waiting, blocked) is shown. A cancelled turn, and one a recent instance reports\n" +
+    "with status null (failed or refused, such as by a limit), exits 1; an older instance sends no status for an answered turn.",
   readOnly: false,
   mcpEffect: "Starts or continues a conversation with the solution and runs its agents (model usage, its tools' actions); changes no configuration.",
   mcpTool: "chat",
@@ -85,26 +269,44 @@ export const chat: CommandSpec = {
     env: ENV_OPTION,
     session: { type: "string", value: "<session_id>", description: "Continue this conversation (the session_id a previous chat printed)." },
     "as-chat-user": AS_CHAT_USER_OPTION,
+    file: { type: "string", multiple: true, value: "<path>", description: "Attach this file to the message (uploaded to the conversation first)." },
+    draft: { type: "boolean", description: "Answer with the active solution's draft, as the Playground does; refused where it cannot (needs playground.use)." },
     timeout: { type: "string", value: "<duration>", description: `Wait at most this long for the answer (90s, 5m; default ${DEFAULT_CHAT_TIMEOUT}).` },
   },
-  examples: ['cavelon chat "When are you open?" --harness support-faq', 'cavelon chat "And on Saturdays?" --session <session_id>', 'cavelon chat "Hello" --json'],
+  examples: [
+    'cavelon chat "When are you open?" --harness support-faq',
+    'cavelon chat "And on Saturdays?" --session <session_id>',
+    'cavelon chat "What does this invoice say?" --file invoice.pdf --draft',
+    'cavelon chat "Hello" --json',
+  ],
   async run(ctx, input) {
     const message = positional(input, "message")!;
     if (!message.trim()) throw usageError("The message is empty.");
     const raw = stringOption(input, "timeout");
-    const timeout = Math.min(parseDuration(raw ?? DEFAULT_CHAT_TIMEOUT), ctx.mode === "mcp" ? MCP_MAX_WAIT_MS : Number.MAX_SAFE_INTEGER);
+    const started = Date.now();
+    // Over MCP the look for a timed-out turn's conversation comes out of the tool's wait.
+    const timeout = Math.min(parseDuration(raw ?? DEFAULT_CHAT_TIMEOUT), ctx.mode === "mcp" ? MCP_MAX_WAIT_MS - LOOKUP_MS : Number.MAX_SAFE_INTEGER);
+    const deadline = started + timeout;
     const session = await ctx.session();
-    const reader = await chatUserReader(ctx, input, "/api/v1/chat");
+    const reader = await chatUserReader(ctx, input, CHAT_ROUTE);
     const { ref, source } = harnessRef(session, input);
     const harness = ref ? await findHarness(ctx, ref, source, (slug) => cavelonCommand("chat", fill("message"), "--harness", slug)) : undefined;
-    const body: Record<string, unknown> = { message, stream: false, ...reader };
+    const draft = boolOption(input, "draft");
+    const files = listOption(input, "file");
+    const chatFields = draft || files.length ? await bodyFields(ctx, "POST", CHAT_ROUTE, "chatting with a solution") : undefined;
+    if (draft) await checkDraft(ctx, chatFields);
+    // A session the kit chose: a first turn that is not answered in time can still be found by it.
+    const sessionId = stringOption(input, "session") ?? randomUUID();
+    const attached = await uploadFiles(ctx, files, sessionId, chatFields, deadline);
+    const body: Record<string, unknown> = { message, stream: false, ...reader, session_id: sessionId };
     if (harness) body.harness_id = harness.id;
-    const sessionId = stringOption(input, "session");
-    if (sessionId) body.session_id = sessionId;
+    if (attached.length) body.file_ids = attached.map((f) => f.file_id);
+    if (draft) body.preview_draft = true;
     let answer: ChatResponse;
     try {
-      answer = await callStable<ChatResponse>(ctx, "POST", "/api/v1/chat", "chatting with a solution", { body, timeoutMs: timeout });
+      answer = await callStable<ChatResponse>(ctx, "POST", CHAT_ROUTE, "chatting with a solution", { body, timeoutMs: Math.max(1_000, deadline - Date.now()) });
     } catch (error) {
+      if (error instanceof CavelonError && error.code === "request_timeout") throw await turnTimedOut(ctx, Date.now() - started, sessionId, harness);
       throw chatUserReaderError(chatError(error, harness, error instanceof CavelonError && error.status === 409 ? mayActivate(await accessFor(await ctx.client())) : null), reader);
     }
     const target = harness ? { id: harness.id, slug: harness.slug, name: harness.name, status: harness.status } : null;
@@ -116,16 +318,24 @@ export const chat: CommandSpec = {
     const who = harness ? named(harness) : "The default route";
     const directives = answer.ui_directives?.length ? `\n(${answer.ui_directives.length} UI directive${answer.ui_directives.length === 1 ? "" : "s"}, such as a form; --json shows them)` : "";
     const limit = answer.limit_error ? `\nlimit: ${clip(JSON.stringify(answer.limit_error), 300)}` : "";
+    const ended = statusLine(answer, who);
+    const cancelled = answer.status === "cancelled";
+    // Present and null: a recent instance's turn that failed or was refused. Absent: an older instance's answered turn.
+    const incomplete = "status" in answer && answer.status === null;
+    const said = cancelled ? (answer.response ? [answer.response] : []) : [`${answer.response || (incomplete ? "(no message)" : "(no text)")}${directives}${limit}`];
     return {
-      data: { harness: target, ...answer, ...reader, next },
+      data: { harness: target, ...answer, ...reader, ...(attached.length ? { files: attached } : {}), ...(draft ? { draft: true } : {}), next },
       text: [
         ...(reader ? [`Reading as Chat User ${reader.reader_chat_user_id}.`] : []),
-        `${who} answered:`,
-        `${answer.response || "(no text)"}${directives}${limit}`,
+        ...attached.map((f) => `Attached ${f.filename} (${f.file_id}${f.processing_status ? `, ${f.processing_status}` : ""}).`),
+        ...(draft ? ["Answered with the draft (preview_draft), as the Playground does."] : []),
+        ended ?? `${who} answered:`,
+        ...said,
         "",
         `session:          ${answer.session_id}   continue with: ${next.continue}`,
         `conversation_id:  ${answer.conversation_id}   its traces: ${next.trace}`,
       ].join("\n"),
+      ...(cancelled || incomplete ? { exitCode: ExitCode.failure } : {}),
     };
   },
 };

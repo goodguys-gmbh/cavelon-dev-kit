@@ -9,6 +9,15 @@ import { MANIFEST_SECTION, PERSONA_SECTION, sectionFields } from "./package-form
 import { kitErrorEntry } from "./kit-codes.js";
 import { checkWorkflowQueries } from "./workflow-queries.js";
 import { checkWritePaths } from "./database-write-paths.js";
+import { ATTACHED_DOCUMENTS_CODES, checkAttachedDocuments, inAttachedDocuments } from "./attached-documents.js";
+import {
+  checkManagedFields,
+  MANAGED_KINDS_LEFT_OUT_CODE,
+  MANAGED_KINDS_UNSUPPORTED_CODE,
+  MANAGED_SETTING_UNKNOWN_CODE,
+  UNMANAGED_SET_CODE,
+  type ManagedFields,
+} from "./managed-fields.js";
 import { cavelonCommand, fill, folderCommand } from "./printed.js";
 import {
   branches,
@@ -69,6 +78,9 @@ const TENANT_WIDE_CODE = "tenant_wide_section";
 /** A test step's criterion with a `type`, on an instance whose schema does not describe a step's criteria. */
 const ASSERTION_UNCHECKED_CODE = "test_assertion_unchecked";
 const TESTING_DOCS = "/docs/concepts/regression-testing";
+
+/** Where the kit documents cavelon.yaml's unmanaged and managed_kinds. */
+const MANAGED_DOCS = "https://github.com/goodguys-gmbh/cavelon-dev-kit/blob/main/docs/concepts.md#fields-the-folder-does-not-manage";
 
 /** The instance's page on database connections and query tools that a tenant's credential reads. */
 const DATABASE_DOCS = "/docs/administration/database-connectors";
@@ -241,12 +253,45 @@ export const KIT_CODES: CatalogEntry[] = [
     docs: DATABASE_DOCS,
   },
   {
+    code: UNMANAGED_SET_CODE,
+    area: "package",
+    message: "A package file sets a field that cavelon.yaml lists under unmanaged: apply leaves it out, so the instance keeps its own value.",
+    hint:
+      "Remove the field from the package file, or take its pointer out of unmanaged in cavelon.yaml when the folder should manage it again. " +
+      "`cavelon pull` does not write an unmanaged field.",
+    docs: MANAGED_DOCS,
+  },
+  {
+    code: MANAGED_SETTING_UNKNOWN_CODE,
+    area: "package",
+    message: "cavelon.yaml's unmanaged or managed_kinds names a field or a kind this instance's package schema does not have.",
+    hint: "Check the pointer and the kinds for a typo; `cavelon schema persona` lists the persona's fields. A field inside a list cannot be named.",
+    docs: MANAGED_DOCS,
+  },
+  {
+    code: MANAGED_KINDS_LEFT_OUT_CODE,
+    area: "package",
+    message: "A list entry is of a kind that cavelon.yaml's managed_kinds does not list: apply leaves it out, and the instance keeps its own entries of that kind.",
+    hint: "Add the kind to managed_kinds in cavelon.yaml when the folder should manage it, or remove the entry from the package file.",
+    docs: MANAGED_DOCS,
+  },
+  {
+    code: MANAGED_KINDS_UNSUPPORTED_CODE,
+    area: "package",
+    message: "This instance cannot import only some kinds of a list, so apply leaves the list out to keep the entries of the kinds the folder does not manage.",
+    hint:
+      "The instance keeps the whole list as it is. To send the list anyway, replacing every kind, remove its entry from managed_kinds in cavelon.yaml; " +
+      "an instance that publishes <list>_kinds in its package schema imports only the managed kinds.",
+    docs: MANAGED_DOCS,
+  },
+  {
     code: "package_file_duplicate",
     area: "package",
     message: "One section is in two files.",
     hint: "Keep one of them: package/<section>.yaml, or the section's own folder from cavelon.yaml's layout.",
     docs: PACKAGE_DOCS,
   },
+  ...ATTACHED_DOCUMENTS_CODES,
 ];
 
 /**
@@ -283,11 +328,33 @@ export function packageVersionOf(pkg: Record<string, unknown>): string | undefin
   return typeof version === "string" ? version : undefined;
 }
 
+/**
+ * A copy of a schema whose `discriminator`s keep only their property name:
+ * ajv then checks a tagged union (an engagement rule by `kind`) against the
+ * one branch its tag names, reading each branch's constant, and does not
+ * take an OpenAPI `mapping`.
+ */
+function withPlainDiscriminators(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(withPlainDiscriminators);
+  if (!value || typeof value !== "object") return value;
+  const out: Record<string, unknown> = {};
+  for (const [key, inner] of Object.entries(value)) {
+    const name = key === "discriminator" ? (inner as Record<string, unknown> | null)?.propertyName : undefined;
+    out[key] = typeof name === "string" ? { propertyName: name } : withPlainDiscriminators(inner);
+  }
+  return out;
+}
+
 function compile(schema: PackageSchema) {
   // The schema's own $id is a path on the instance; ajv needs none to check.
   const { $id: _id, $schema: _schema, ...body } = schema;
-  const ajv = new Ajv2020({ strict: false, allErrors: true, verbose: true, validateSchema: false, validateFormats: false });
-  return ajv.compile(body);
+  const options = { strict: false, allErrors: true, verbose: true, validateSchema: false, validateFormats: false } as const;
+  try {
+    return new Ajv2020({ ...options, discriminator: true }).compile(withPlainDiscriminators(body) as Record<string, unknown>);
+  } catch {
+    // A discriminator ajv cannot follow (a branch without the tag as a constant): every branch is checked, as before.
+    return new Ajv2020(options).compile(body);
+  }
 }
 
 /**
@@ -330,10 +397,19 @@ function closestBranchErrors(errors: ErrorObject[]): ErrorObject[] {
         const field = e.instancePath.startsWith(`${here}/`) && !e.instancePath.slice(here.length + 1).includes("/");
         return sum + ((e.keyword === "const" || e.keyword === "enum") && field ? 100 : 1);
       }, 0);
-    const ranked = [...byBranch.values()].map((list) => ({ list, distance: distance(list) })).sort((a, b) => a.distance - b.distance);
+    // An error at or below this value that no branch's path claims comes from a branch behind a further $ref, or
+    // from a tagged union checked against its tag's branch only: it counts as a branch of its own. It is never
+    // dropped, as it may belong to the branch that wins, but it can outrank a branch that refuses more (`null`
+    // beside a list, a judge criterion beside an assertion).
+    const claimed = new Set([...byBranch.values()].flat());
+    const unclaimed = errors.slice(0, index).filter(
+      (e) => !dropped.has(e) && !isChoice(e) && !claimed.has(e) && (e.instancePath === here || e.instancePath.startsWith(`${here}/`)),
+    );
+    if (unclaimed.length) byBranch.set(-1, unclaimed);
+    const ranked = [...byBranch.entries()].map(([branch, list]) => ({ branch, list, distance: distance(list) })).sort((a, b) => a.distance - b.distance);
     // A tie says nothing about which branch was meant: all of them stay.
     if (ranked.length < 2 || ranked[0]!.distance === ranked[1]!.distance) return;
-    for (const other of ranked.slice(1)) for (const error of other.list) dropped.add(error);
+    for (const other of ranked.slice(1)) if (other.branch !== -1) for (const error of other.list) dropped.add(error);
     for (const error of ranked[0]!.list) countedAt.set(error, pathOf(choice));
   });
   return errors.filter((e) => !dropped.has(e));
@@ -371,6 +447,8 @@ export interface CheckOptions {
   queryBaseline?: QueryBaseline;
   /** Current connection status when it could be read; omission never means writes are disallowed. */
   queryConnections?: QueryConnection[];
+  /** The fields cavelon.yaml leaves to the Admin. */
+  managed?: ManagedFields;
 }
 
 export function checkPackage(disk: PackageOnDisk, options: CheckOptions): Finding[] {
@@ -421,6 +499,8 @@ export function checkPackage(disk: PackageOnDisk, options: CheckOptions): Findin
       // anyOf reports each branch and then itself; the branches say more.
       if (error.keyword === "anyOf" || error.keyword === "oneOf") continue;
       if (misnamed.some((m) => within(error.instancePath, m.pointer))) continue;
+      // The instance reads this setting leniently and never refuses it: checkAttachedDocuments says what it does with the value.
+      if (inAttachedDocuments(options.schema, error.instancePath)) continue;
       // A section whose file could not be read is missing here; its file's finding says why.
       if (error.keyword === "required" && error.instancePath === "" && unreadable.has(String((error.params as Record<string, unknown>).missingProperty))) continue;
       const { pointer, message } = describe(error);
@@ -436,6 +516,7 @@ export function checkPackage(disk: PackageOnDisk, options: CheckOptions): Findin
   findings.push(...checkEndpointLimits(disk, options.schema));
   findings.push(...checkBranchConcurrency(disk, options.limits));
   findings.push(...checkKnowledgeSearch(disk));
+  findings.push(...checkAttachedDocuments(disk, options.schema));
   findings.push(...checkUnknownFields(disk, options.schema, findings));
   findings.push(...checkReferences(disk, options.inventory));
   findings.push(...checkModels(disk, options.inventory));
@@ -446,6 +527,7 @@ export function checkPackage(disk: PackageOnDisk, options: CheckOptions): Findin
   findings.push(...checkQueryTools(disk, options.schema, options.queryBaseline, options.queryConnections));
   findings.push(...checkWorkflowQueries(disk, options.schema, options.inventory, options.queryBaseline));
   findings.push(...checkWritePaths(disk, options.schema, options.catalog, options.queryBaseline));
+  findings.push(...checkManagedFields(disk, options.managed, options.schema));
   noteTenantWide(findings, options.schema, options.solution);
 
   for (const finding of findings) {

@@ -7,6 +7,39 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Added
+
+- `cavelon chat --file <path>` attaches a file to the message: it is uploaded
+  to the turn's conversation first and named in `file_ids`, so a solution's
+  wait for a file still being read can be tried. `cavelon chat --draft` asks
+  for an active solution's unpublished draft (`preview_draft`). A personal
+  access token holding `playground.use` chats as the Playground does and gets
+  the draft without it too; `--draft` is refused before sending where the
+  draft cannot be had (an API key, a token without `playground.use`). Both
+  options are refused before anything is sent on an instance that does not
+  publish them.
+  A tenant whose document uploads are off refuses the file with
+  `chat_uploads_off`, which names the Admin setting instead of the token's
+  role, and the message is not sent.
+- `cavelon validate` warns about a solution's `settings.attached_documents`
+  value the instance would ignore (`attached_documents_value_ignored`) or
+  clamp (`attached_documents_wait_clamped`), with the bounds the package
+  schema publishes. An instance whose schema does not describe the setting is
+  not checked.
+- `cavelon engagement preview` (MCP `engagement_preview`) shows what a visitor
+  gets on a page at a moment: the starter questions, the calendar's open doors,
+  the banners and the decoration. It uses the folder's engagement rules, or
+  the solution's with `--stored`. The instance's read-only preview stores and
+  counts nothing; an instance that does not mark it read-only is refused
+  before anything is sent.
+- `cavelon.yaml` can leave fields to the Admin. `unmanaged` lists JSON
+  pointers that `pull` does not write and `apply` does not send.
+  `managed_kinds` names the engagement rule kinds the folder manages, such as
+  `starters`. `pull` then writes only those, and `apply` imports them with
+  `engagement_rules_kinds`, so campaigns edited in the Admin survive. On an
+  instance that can only replace the whole list, `apply` leaves it out.
+  `validate` warns about fields and rules these settings leave out.
+
 ### Changed
 
 - `cavelon test run` without `--suite` no longer runs suites that never vote
@@ -14,6 +47,41 @@ CLI, the skills and the plugin.
   `skipped` and never change the exit code. `--suite` still runs one. The
   instance's `counts_for_readiness` mark decides where it publishes one; on an
   older instance, the `engagement` and `rule:<id>` tags identify the check.
+
+- The first chat turn carries a `session_id` the kit chose. A turn that is
+  not answered within `--timeout` now ends with `chat_turn_timeout` (exit 6):
+  the turn goes on on the instance and its answer is stored, so the error
+  names the conversation, or the session to find it by, and how to read it,
+  instead of suggesting a retry that would run the turn twice. As an MCP tool,
+  `chat` waits 45 s and looks the conversation up within its 50 s.
+- `cavelon chat` shows the turn's `status` where the instance reports one: a
+  cancelled turn reads "cancelled" instead of "(no text)" and exits 1;
+  `waiting` and `blocked` are named with the answer; a turn reported with
+  status `null` (failed or refused, by a limit for example) reads "did not
+  complete" with the instance's message and `limit_error`, and exits 1. An
+  older instance sends no status, and its turn is answered, as before.
+- `pull` and `fmt` no longer add a key the package schema describes to an
+  open map that does not hold it, such as `attached_documents` to a
+  solution's `settings`: the instance stores such a map as it comes.
+- `validate` and `fmt` check and order `persona.engagement_rules` from the
+  instance's package schema: all four kinds, their pages, time windows,
+  priority and card layouts. A union tagged by a discriminator (a rule's
+  `kind`) is checked against the branch its tag names, so a mistake gives one
+  finding, not one per kind.
+- The apply preview lists the engagement rules an import adds, removes or
+  changes, by id, kind and name, and warns when rules would be removed or
+  replaced. On an active solution, persona fields that reach visitors at once
+  are named instead of "live traffic stays on the published version", and the
+  preview asks for a person. The fields come from the instance's
+  `x-cavelon-live` marks and `publication.live_fields`. An older instance is
+  read as its docs describe it: the engagement rules, the greeting and the
+  teasers.
+
+### Fixed
+
+- `engagement_rules: []` and a left-out `engagement_rules` no longer count as
+  the same value. An empty list removes the solution's rules, while a left-out
+  list keeps them. The same holds for every list field whose default is null.
 
 ## [0.2.11] - 2026-10-22
 

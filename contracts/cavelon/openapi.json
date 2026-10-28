@@ -108,6 +108,31 @@
               "default": false,
               "title": "Include Tenant Wide"
             }
+          },
+          {
+            "name": "engagement_rules_kinds",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "starters",
+                      "calendar",
+                      "banner",
+                      "decoration"
+                    ],
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Engagement Rules Kinds"
+            }
           }
         ],
         "responses": {
@@ -1589,6 +1614,16 @@
               "type": "string",
               "format": "uuid",
               "title": "Harness Id"
+            }
+          },
+          {
+            "name": "published",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Published"
             }
           }
         ],
@@ -3571,7 +3606,7 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 128,
-              "pattern": "^[\\w.\\-]+$",
+              "pattern": "^(?:kb_order_callback:)?[\\w.\\-]+$",
               "title": "Name"
             }
           }
@@ -3612,7 +3647,7 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 128,
-              "pattern": "^[\\w.\\-]+$",
+              "pattern": "^(?:kb_order_callback:)?[\\w.\\-]+$",
               "title": "Name"
             }
           }
@@ -3666,7 +3701,7 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 128,
-              "pattern": "^[\\w.\\-]+$",
+              "pattern": "^(?:kb_order_callback:)?[\\w.\\-]+$",
               "title": "Name"
             }
           }
@@ -6627,6 +6662,256 @@
         "x-cavelon-confirmation": "required",
         "x-cavelon-confirmation-when": "Always: discarding removes the unpublished edits; the published graph keeps serving live traffic."
       }
+    },
+    "/api/v1/chat/files": {
+      "post": {
+        "tags": [
+          "chat-files"
+        ],
+        "summary": "Upload File",
+        "operationId": "upload_file_api_v1_chat_files_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_file_api_v1_chat_files_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadFileResponse"
+                }
+              }
+            }
+          },
+          "400": {},
+          "401": {},
+          "404": {},
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/conversations": {
+      "get": {
+        "tags": [
+          "conversations"
+        ],
+        "summary": "List Conversations",
+        "operationId": "list_conversations_api_v1_conversations_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "harness_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Harness Id"
+            }
+          },
+          {
+            "name": "cited_document_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cited Document Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ConversationResponse"
+                  },
+                  "title": "Response List Conversations Api V1 Conversations Get"
+                }
+              }
+            }
+          },
+          "404": {},
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/conversations/{conversation_id}": {
+      "get": {
+        "tags": [
+          "conversations"
+        ],
+        "summary": "Get Conversation",
+        "operationId": "get_conversation_api_v1_conversations__conversation_id__get",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "message_limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Message Limit"
+            }
+          },
+          {
+            "name": "message_offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Message Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationDetailResponse"
+                }
+              }
+            }
+          },
+          "404": {},
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/bot-persona/engagement/preview": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Preview Engagement",
+        "operationId": "preview_engagement_api_v1_bot_persona_engagement_preview_post",
+        "parameters": [
+          {
+            "name": "harness_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Harness Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EngagementPreviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EngagementPreviewResponse"
+                }
+              }
+            }
+          },
+          "404": {},
+          "422": {}
+        },
+        "x-cavelon-read-only": true
+      }
     }
   },
   "components": {
@@ -6809,6 +7094,17 @@
               }
             ],
             "title": "By"
+          },
+          "by_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "By Label"
           }
         },
         "type": "object",
@@ -9135,6 +9431,37 @@
               }
             ],
             "title": "Metadata"
+          },
+          "engagement_rules": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Engagement Rules"
+          },
+          "engagement_rules_kinds": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "starters",
+                    "calendar",
+                    "banner",
+                    "decoration"
+                  ]
+                },
+                "type": "array",
+                "maxItems": 4,
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engagement Rules Kinds"
           }
         },
         "additionalProperties": false,
@@ -9703,6 +10030,11 @@
               }
             ],
             "title": "Reader Binds Identity"
+          },
+          "preview_draft": {
+            "type": "boolean",
+            "title": "Preview Draft",
+            "default": false
           }
         },
         "type": "object",
@@ -9839,6 +10171,23 @@
               }
             ],
             "title": "Limit Error"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "completed",
+                  "cancelled",
+                  "waiting",
+                  "blocked"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
           }
         },
         "type": "object",
@@ -12610,6 +12959,54 @@
             "type": "boolean",
             "title": "Has Original",
             "readOnly": true
+          },
+          "original_availability": {
+            "type": "string",
+            "enum": [
+              "unknown",
+              "unavailable",
+              "restored"
+            ],
+            "title": "Original Availability",
+            "default": "unknown"
+          },
+          "has_redacted_copy": {
+            "type": "boolean",
+            "title": "Has Redacted Copy",
+            "default": false
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "note_updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note Updated At"
+          },
+          "note_updated_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note Updated By"
           }
         },
         "type": "object",
@@ -12946,6 +13343,26 @@
             ],
             "title": "Operation Id",
             "readOnly": true
+          },
+          "original_availability": {
+            "type": "string",
+            "enum": [
+              "unknown",
+              "unavailable",
+              "restored"
+            ],
+            "title": "Original Availability",
+            "default": "unknown"
+          },
+          "has_redacted_copy": {
+            "type": "boolean",
+            "title": "Has Redacted Copy",
+            "default": false
+          },
+          "redaction_not_clean": {
+            "type": "boolean",
+            "title": "Redaction Not Clean",
+            "default": false
           }
         },
         "type": "object",
@@ -20358,6 +20775,12 @@
               }
             ],
             "title": "Database Queries"
+          },
+          "platform_allocation": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Platform Allocation",
+            "default": {}
           }
         },
         "type": "object",
@@ -22001,6 +22424,22 @@
             "type": "string",
             "format": "date-time",
             "title": "Updated At"
+          },
+          "purpose": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purpose"
+          },
+          "counts_for_readiness": {
+            "type": "boolean",
+            "title": "Counts For Readiness",
+            "default": true
           }
         },
         "type": "object",
@@ -22917,6 +23356,22 @@
           "created_at": {
             "type": "string",
             "title": "Created At"
+          },
+          "session_method": {
+            "type": "string",
+            "title": "Session Method",
+            "default": "password"
+          },
+          "session_tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Tenant Id"
           }
         },
         "type": "object",
@@ -24623,6 +25078,42 @@
               "removed"
             ],
             "title": "Action"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Digest"
+          },
+          "text_changes": {
+            "items": {
+              "$ref": "#/components/schemas/PublicationTextChange"
+            },
+            "type": "array",
+            "title": "Text Changes"
+          },
+          "field_changes": {
+            "items": {
+              "$ref": "#/components/schemas/PublicationFieldChange"
+            },
+            "type": "array",
+            "title": "Field Changes"
           }
         },
         "type": "object",
@@ -24791,6 +25282,27 @@
             },
             "type": "array",
             "title": "Warnings"
+          },
+          "rollback_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rollback Version"
+          },
+          "rollback_readiness": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HarnessReadinessResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -24877,6 +25389,27 @@
           "can_rollback": {
             "type": "boolean",
             "title": "Can Rollback"
+          },
+          "rollback_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rollback Version"
+          },
+          "rollback_readiness": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HarnessReadinessResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -25022,6 +25555,13 @@
           "draft_revision": {
             "type": "integer",
             "title": "Draft Revision"
+          },
+          "live_fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Live Fields"
           }
         },
         "type": "object",
@@ -25032,6 +25572,2666 @@
           "draft_revision"
         ],
         "title": "GraphPublicationMetadata"
+      },
+      "Body_upload_file_api_v1_chat_files_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          },
+          "knowledge_base_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Knowledge Base Id"
+          },
+          "scope": {
+            "type": "string",
+            "title": "Scope",
+            "default": "tenant_kb"
+          },
+          "contact_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Id"
+          },
+          "contact_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Name"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_file_api_v1_chat_files_post"
+      },
+      "ConversationDetailResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "harness_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness Id"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "retired_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retired Session Id"
+          },
+          "retired_session_reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "rollover",
+                  "new_owner"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retired Session Reason"
+          },
+          "contact_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Id"
+          },
+          "contact_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Name"
+          },
+          "end_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End User Id"
+          },
+          "end_user": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EndUserSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "platform_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Platform User Id"
+          },
+          "platform_user": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlatformUserConversationSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "knowledge_base_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Knowledge Base Id"
+          },
+          "current_agent_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Agent Slug"
+          },
+          "last_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Model"
+          },
+          "message_count": {
+            "type": "integer",
+            "title": "Message Count",
+            "default": 0
+          },
+          "total_token_count": {
+            "type": "integer",
+            "title": "Total Token Count",
+            "default": 0
+          },
+          "total_input_tokens": {
+            "type": "integer",
+            "title": "Total Input Tokens",
+            "default": 0
+          },
+          "total_output_tokens": {
+            "type": "integer",
+            "title": "Total Output Tokens",
+            "default": 0
+          },
+          "total_cached_tokens": {
+            "type": "integer",
+            "title": "Total Cached Tokens",
+            "default": 0
+          },
+          "total_reasoning_tokens": {
+            "type": "integer",
+            "title": "Total Reasoning Tokens",
+            "default": 0
+          },
+          "total_tool_calls": {
+            "type": "integer",
+            "title": "Total Tool Calls",
+            "default": 0
+          },
+          "has_errors": {
+            "type": "boolean",
+            "title": "Has Errors",
+            "default": false
+          },
+          "terminal_error": {
+            "type": "boolean",
+            "title": "Terminal Error",
+            "default": false
+          },
+          "recovered_error": {
+            "type": "boolean",
+            "title": "Recovered Error",
+            "default": false
+          },
+          "error_outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Outcome"
+          },
+          "has_retrieval": {
+            "type": "boolean",
+            "title": "Has Retrieval",
+            "default": false
+          },
+          "has_context_pressure": {
+            "type": "boolean",
+            "title": "Has Context Pressure",
+            "default": false
+          },
+          "has_web_search": {
+            "type": "boolean",
+            "title": "Has Web Search",
+            "default": false
+          },
+          "has_mcp_usage": {
+            "type": "boolean",
+            "title": "Has Mcp Usage",
+            "default": false
+          },
+          "has_file_uploads": {
+            "type": "boolean",
+            "title": "Has File Uploads",
+            "default": false
+          },
+          "upload_file_count": {
+            "type": "integer",
+            "title": "Upload File Count",
+            "default": 0
+          },
+          "upload_total_bytes": {
+            "type": "integer",
+            "title": "Upload Total Bytes",
+            "default": 0
+          },
+          "has_images": {
+            "type": "boolean",
+            "title": "Has Images",
+            "default": false
+          },
+          "agent_path": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Agent Path",
+            "default": []
+          },
+          "first_user_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First User Message"
+          },
+          "user_messages_preview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Messages Preview"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "is_starred": {
+            "type": "boolean",
+            "title": "Is Starred",
+            "default": false
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags",
+            "default": []
+          },
+          "estimated_cost": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Cost"
+          },
+          "auxiliary_input_tokens": {
+            "type": "integer",
+            "title": "Auxiliary Input Tokens",
+            "default": 0
+          },
+          "auxiliary_output_tokens": {
+            "type": "integer",
+            "title": "Auxiliary Output Tokens",
+            "default": 0
+          },
+          "auxiliary_token_count": {
+            "type": "integer",
+            "title": "Auxiliary Token Count",
+            "default": 0
+          },
+          "auxiliary_estimated_cost": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auxiliary Estimated Cost"
+          },
+          "detected_language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detected Language"
+          },
+          "client_metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Metadata"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "has_trigger_runs": {
+            "type": "boolean",
+            "title": "Has Trigger Runs",
+            "default": false
+          },
+          "latest_trigger_run_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Trigger Run Type"
+          },
+          "latest_trigger_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Trigger Status"
+          },
+          "user_feedback_positive": {
+            "type": "integer",
+            "title": "User Feedback Positive",
+            "default": 0
+          },
+          "user_feedback_negative": {
+            "type": "integer",
+            "title": "User Feedback Negative",
+            "default": 0
+          },
+          "user_feedback_has_comments": {
+            "type": "boolean",
+            "title": "User Feedback Has Comments",
+            "default": false
+          },
+          "admin_rating_avg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admin Rating Avg"
+          },
+          "erased_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Erased At"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "last_activity_at": {
+            "type": "string",
+            "title": "Last Activity At"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          },
+          "admin_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admin Notes"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/MessageResponse"
+            },
+            "type": "array",
+            "title": "Messages"
+          },
+          "message_total": {
+            "type": "integer",
+            "title": "Message Total",
+            "default": 0
+          },
+          "model_usage_breakdown": {
+            "items": {
+              "$ref": "#/components/schemas/ModelUsageBreakdownEntry"
+            },
+            "type": "array",
+            "title": "Model Usage Breakdown"
+          },
+          "uploaded_files": {
+            "items": {
+              "$ref": "#/components/schemas/UploadedFileInfo"
+            },
+            "type": "array",
+            "title": "Uploaded Files"
+          },
+          "trigger_runs": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationTriggerRunResponse"
+            },
+            "type": "array",
+            "title": "Trigger Runs"
+          },
+          "continued_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Continued From"
+          },
+          "continued_in": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Continued In"
+          },
+          "processing_steps": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationProcessingSteps"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "created_at",
+          "last_activity_at",
+          "updated_at",
+          "messages"
+        ],
+        "title": "ConversationDetailResponse"
+      },
+      "ConversationProcessingSteps": {
+        "properties": {
+          "scope": {
+            "type": "string",
+            "const": "conversation_lifetime",
+            "title": "Scope",
+            "default": "conversation_lifetime"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "final",
+              "active",
+              "waiting"
+            ],
+            "title": "Status"
+          },
+          "gross_processing_steps": {
+            "type": "integer",
+            "minimum": 0,
+            "title": "Gross Processing Steps"
+          },
+          "credit_processing_steps": {
+            "type": "integer",
+            "minimum": 0,
+            "title": "Credit Processing Steps"
+          },
+          "net_processing_steps": {
+            "type": "integer",
+            "title": "Net Processing Steps"
+          },
+          "non_charged_event_count": {
+            "type": "integer",
+            "minimum": 0,
+            "title": "Non Charged Event Count"
+          },
+          "question_net_processing_steps": {
+            "type": "integer",
+            "title": "Question Net Processing Steps"
+          },
+          "other_net_processing_steps": {
+            "type": "integer",
+            "title": "Other Net Processing Steps"
+          },
+          "question_count": {
+            "type": "integer",
+            "minimum": 0,
+            "title": "Question Count"
+          },
+          "questions_with_unavailable_attribution": {
+            "type": "integer",
+            "minimum": 0,
+            "title": "Questions With Unavailable Attribution"
+          },
+          "first_event_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Event At"
+          },
+          "last_event_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Event At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "gross_processing_steps",
+          "credit_processing_steps",
+          "net_processing_steps",
+          "non_charged_event_count",
+          "question_net_processing_steps",
+          "other_net_processing_steps",
+          "question_count",
+          "questions_with_unavailable_attribution",
+          "first_event_at",
+          "last_event_at"
+        ],
+        "title": "ConversationProcessingSteps"
+      },
+      "ConversationResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "harness_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness Id"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "retired_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retired Session Id"
+          },
+          "retired_session_reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "rollover",
+                  "new_owner"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retired Session Reason"
+          },
+          "contact_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Id"
+          },
+          "contact_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Name"
+          },
+          "end_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End User Id"
+          },
+          "end_user": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EndUserSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "platform_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Platform User Id"
+          },
+          "platform_user": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlatformUserConversationSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "knowledge_base_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Knowledge Base Id"
+          },
+          "current_agent_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Agent Slug"
+          },
+          "last_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Model"
+          },
+          "message_count": {
+            "type": "integer",
+            "title": "Message Count",
+            "default": 0
+          },
+          "total_token_count": {
+            "type": "integer",
+            "title": "Total Token Count",
+            "default": 0
+          },
+          "total_input_tokens": {
+            "type": "integer",
+            "title": "Total Input Tokens",
+            "default": 0
+          },
+          "total_output_tokens": {
+            "type": "integer",
+            "title": "Total Output Tokens",
+            "default": 0
+          },
+          "total_cached_tokens": {
+            "type": "integer",
+            "title": "Total Cached Tokens",
+            "default": 0
+          },
+          "total_reasoning_tokens": {
+            "type": "integer",
+            "title": "Total Reasoning Tokens",
+            "default": 0
+          },
+          "total_tool_calls": {
+            "type": "integer",
+            "title": "Total Tool Calls",
+            "default": 0
+          },
+          "has_errors": {
+            "type": "boolean",
+            "title": "Has Errors",
+            "default": false
+          },
+          "terminal_error": {
+            "type": "boolean",
+            "title": "Terminal Error",
+            "default": false
+          },
+          "recovered_error": {
+            "type": "boolean",
+            "title": "Recovered Error",
+            "default": false
+          },
+          "error_outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Outcome"
+          },
+          "has_retrieval": {
+            "type": "boolean",
+            "title": "Has Retrieval",
+            "default": false
+          },
+          "has_context_pressure": {
+            "type": "boolean",
+            "title": "Has Context Pressure",
+            "default": false
+          },
+          "has_web_search": {
+            "type": "boolean",
+            "title": "Has Web Search",
+            "default": false
+          },
+          "has_mcp_usage": {
+            "type": "boolean",
+            "title": "Has Mcp Usage",
+            "default": false
+          },
+          "has_file_uploads": {
+            "type": "boolean",
+            "title": "Has File Uploads",
+            "default": false
+          },
+          "upload_file_count": {
+            "type": "integer",
+            "title": "Upload File Count",
+            "default": 0
+          },
+          "upload_total_bytes": {
+            "type": "integer",
+            "title": "Upload Total Bytes",
+            "default": 0
+          },
+          "has_images": {
+            "type": "boolean",
+            "title": "Has Images",
+            "default": false
+          },
+          "agent_path": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Agent Path",
+            "default": []
+          },
+          "first_user_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First User Message"
+          },
+          "user_messages_preview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Messages Preview"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "is_starred": {
+            "type": "boolean",
+            "title": "Is Starred",
+            "default": false
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags",
+            "default": []
+          },
+          "estimated_cost": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Cost"
+          },
+          "auxiliary_input_tokens": {
+            "type": "integer",
+            "title": "Auxiliary Input Tokens",
+            "default": 0
+          },
+          "auxiliary_output_tokens": {
+            "type": "integer",
+            "title": "Auxiliary Output Tokens",
+            "default": 0
+          },
+          "auxiliary_token_count": {
+            "type": "integer",
+            "title": "Auxiliary Token Count",
+            "default": 0
+          },
+          "auxiliary_estimated_cost": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auxiliary Estimated Cost"
+          },
+          "detected_language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detected Language"
+          },
+          "client_metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Metadata"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "has_trigger_runs": {
+            "type": "boolean",
+            "title": "Has Trigger Runs",
+            "default": false
+          },
+          "latest_trigger_run_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Trigger Run Type"
+          },
+          "latest_trigger_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Trigger Status"
+          },
+          "user_feedback_positive": {
+            "type": "integer",
+            "title": "User Feedback Positive",
+            "default": 0
+          },
+          "user_feedback_negative": {
+            "type": "integer",
+            "title": "User Feedback Negative",
+            "default": 0
+          },
+          "user_feedback_has_comments": {
+            "type": "boolean",
+            "title": "User Feedback Has Comments",
+            "default": false
+          },
+          "admin_rating_avg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admin Rating Avg"
+          },
+          "erased_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Erased At"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "last_activity_at": {
+            "type": "string",
+            "title": "Last Activity At"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "created_at",
+          "last_activity_at",
+          "updated_at"
+        ],
+        "title": "ConversationResponse"
+      },
+      "ConversationTriggerRunResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "agent_run_id": {
+            "type": "string",
+            "title": "Agent Run Id"
+          },
+          "message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Id"
+          },
+          "trigger_definition_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Definition Id"
+          },
+          "trigger_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Name"
+          },
+          "task_prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Prompt"
+          },
+          "run_type": {
+            "type": "string",
+            "title": "Run Type"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "output_mode": {
+            "type": "string",
+            "title": "Output Mode"
+          },
+          "workflow_name": {
+            "type": "string",
+            "title": "Workflow Name"
+          },
+          "parent_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Run Id"
+          },
+          "root_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Root Run Id"
+          },
+          "waiting_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Waiting Reason"
+          },
+          "resumed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resumed At"
+          },
+          "resume_cause_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume Cause Type"
+          },
+          "resume_cause_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume Cause Summary"
+          },
+          "entrypoint_agent_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entrypoint Agent Slug"
+          },
+          "external_idempotency_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Idempotency Key"
+          },
+          "result_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Summary"
+          },
+          "error_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Summary"
+          },
+          "openai_trace_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openai Trace Url"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "agent_run_id",
+          "run_type",
+          "status",
+          "output_mode",
+          "workflow_name",
+          "created_at"
+        ],
+        "title": "ConversationTriggerRunResponse"
+      },
+      "EndUserSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "groups": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Groups"
+          },
+          "auth_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auth Method"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "title": "EndUserSummary"
+      },
+      "MessageAttachment": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filename"
+          },
+          "mime_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mime Type"
+          },
+          "uploaded_document_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uploaded Document Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "title": "MessageAttachment"
+      },
+      "MessageCitationResponse": {
+        "properties": {
+          "document_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Document Id"
+          },
+          "knowledge_base_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Knowledge Base Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "download",
+              "upload",
+              "web"
+            ],
+            "title": "Kind"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id",
+          "knowledge_base_id",
+          "kind",
+          "label"
+        ],
+        "title": "MessageCitationResponse"
+      },
+      "MessageResponse": {
+        "properties": {
+          "citations": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/MessageCitationResponse"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Citations"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "retrieval_warning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retrieval Warning"
+          },
+          "agent_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Slug"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "token_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token Count"
+          },
+          "response_latency_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response Latency Ms"
+          },
+          "time_to_first_token_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time To First Token Ms"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "attachments": {
+            "items": {
+              "$ref": "#/components/schemas/MessageAttachment"
+            },
+            "type": "array",
+            "title": "Attachments",
+            "default": []
+          },
+          "ui_directives": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ui Directives"
+          },
+          "form_submission": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Form Submission"
+          },
+          "sources": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sources"
+          },
+          "contact_request": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Request"
+          },
+          "processing_steps": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QuestionProcessingSteps"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "role",
+          "content",
+          "created_at"
+        ],
+        "title": "MessageResponse"
+      },
+      "ModelUsageBreakdownEntry": {
+        "properties": {
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "tokens": {
+            "type": "integer",
+            "title": "Tokens"
+          },
+          "cost": {
+            "type": "number",
+            "title": "Cost"
+          }
+        },
+        "type": "object",
+        "required": [
+          "model",
+          "tokens",
+          "cost"
+        ],
+        "title": "ModelUsageBreakdownEntry"
+      },
+      "PlatformUserConversationSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "email"
+        ],
+        "title": "PlatformUserConversationSummary"
+      },
+      "QuestionProcessingStepType": {
+        "properties": {
+          "step_type": {
+            "type": "string",
+            "enum": [
+              "model_round",
+              "knowledge_retrieval",
+              "rerank",
+              "external_action",
+              "document_operation",
+              "code_execution",
+              "transform_operation",
+              "structured_storage_operation",
+              "hitl_create",
+              "hitl_resume"
+            ],
+            "title": "Step Type"
+          },
+          "gross_processing_steps": {
+            "type": "integer",
+            "minimum": 0,
+            "title": "Gross Processing Steps"
+          },
+          "credit_processing_steps": {
+            "type": "integer",
+            "minimum": 0,
+            "title": "Credit Processing Steps"
+          },
+          "net_processing_steps": {
+            "type": "integer",
+            "title": "Net Processing Steps"
+          }
+        },
+        "type": "object",
+        "required": [
+          "step_type",
+          "gross_processing_steps",
+          "credit_processing_steps",
+          "net_processing_steps"
+        ],
+        "title": "QuestionProcessingStepType"
+      },
+      "QuestionProcessingSteps": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "final",
+              "active",
+              "waiting",
+              "unavailable"
+            ],
+            "title": "Status"
+          },
+          "gross_processing_steps": {
+            "type": "integer",
+            "minimum": 0,
+            "title": "Gross Processing Steps"
+          },
+          "credit_processing_steps": {
+            "type": "integer",
+            "minimum": 0,
+            "title": "Credit Processing Steps"
+          },
+          "net_processing_steps": {
+            "type": "integer",
+            "title": "Net Processing Steps"
+          },
+          "non_charged_event_count": {
+            "type": "integer",
+            "minimum": 0,
+            "title": "Non Charged Event Count"
+          },
+          "categories": {
+            "items": {
+              "$ref": "#/components/schemas/QuestionProcessingStepType"
+            },
+            "type": "array",
+            "title": "Categories"
+          },
+          "run_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Run Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "gross_processing_steps",
+          "credit_processing_steps",
+          "net_processing_steps",
+          "non_charged_event_count",
+          "categories",
+          "run_ids"
+        ],
+        "title": "QuestionProcessingSteps"
+      },
+      "UploadFileResponse": {
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "title": "File Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "processing_status": {
+            "type": "string",
+            "title": "Processing Status"
+          },
+          "scope": {
+            "type": "string",
+            "title": "Scope"
+          },
+          "queue_position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Queue Position"
+          },
+          "estimated_wait": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Wait"
+          },
+          "estimated_wait_seconds": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Wait Seconds"
+          },
+          "queue_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "convert",
+                  "convert_interactive",
+                  "process"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Queue Name"
+          },
+          "estimate_status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "measured",
+                  "cold",
+                  "invalid",
+                  "unavailable",
+                  "not_queued"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimate Status"
+          },
+          "is_archive": {
+            "type": "boolean",
+            "title": "Is Archive",
+            "default": false
+          },
+          "child_file_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Child File Ids"
+          },
+          "expanded_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expanded Count"
+          },
+          "skipped_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skipped Count"
+          },
+          "archive_errors": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archive Errors"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_id",
+          "filename",
+          "size_bytes",
+          "processing_status",
+          "scope"
+        ],
+        "title": "UploadFileResponse"
+      },
+      "UploadedFileInfo": {
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "title": "File Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "mime_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mime Type"
+          },
+          "processing_status": {
+            "type": "string",
+            "title": "Processing Status"
+          },
+          "scope": {
+            "type": "string",
+            "title": "Scope",
+            "default": "tenant_kb"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "uploaded_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uploaded By"
+          },
+          "uploaded_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uploaded By Name"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_id",
+          "filename",
+          "size_bytes",
+          "processing_status",
+          "created_at"
+        ],
+        "title": "UploadedFileInfo"
+      },
+      "PublicationFieldChange": {
+        "properties": {
+          "field": {
+            "type": "string",
+            "title": "Field"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "before": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before"
+          },
+          "after": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After"
+          }
+        },
+        "type": "object",
+        "required": [
+          "field",
+          "label"
+        ],
+        "title": "PublicationFieldChange"
+      },
+      "PublicationTextChange": {
+        "properties": {
+          "field": {
+            "type": "string",
+            "title": "Field"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "before": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before"
+          },
+          "after": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After"
+          }
+        },
+        "type": "object",
+        "required": [
+          "field",
+          "label"
+        ],
+        "title": "PublicationTextChange"
+      },
+      "EngagementPreviewFocus": {
+        "properties": {
+          "shown": {
+            "type": "boolean",
+            "title": "Shown"
+          },
+          "instead_rule_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instead Rule Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "shown"
+        ],
+        "title": "EngagementPreviewFocus"
+      },
+      "EngagementPreviewRequest": {
+        "properties": {
+          "rules": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array",
+                "maxItems": 50
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rules"
+          },
+          "page_host": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 253
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Host"
+          },
+          "page_path": {
+            "type": "string",
+            "maxLength": 512,
+            "title": "Page Path",
+            "default": "/"
+          },
+          "at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At"
+          },
+          "focus_rule_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 48
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Focus Rule Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "EngagementPreviewRequest"
+      },
+      "EngagementPreviewResponse": {
+        "properties": {
+          "teaser_messages": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Teaser Messages",
+            "default": []
+          },
+          "teaser_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Teaser Keys",
+            "default": []
+          },
+          "engagement": {
+            "$ref": "#/components/schemas/WidgetEngagement"
+          },
+          "focus": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EngagementPreviewFocus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "EngagementPreviewResponse"
+      },
+      "WidgetEngagement": {
+        "properties": {
+          "has_rules": {
+            "type": "boolean",
+            "title": "Has Rules",
+            "default": false
+          },
+          "starters_rule_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Starters Rule Id"
+          },
+          "has_campaigns": {
+            "type": "boolean",
+            "title": "Has Campaigns",
+            "default": false
+          },
+          "calendar": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WidgetEngagementCalendar"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "banners": {
+            "items": {
+              "$ref": "#/components/schemas/WidgetEngagementBanner"
+            },
+            "type": "array",
+            "title": "Banners",
+            "default": []
+          },
+          "decoration": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WidgetEngagementDecoration"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "server_now": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Server Now"
+          }
+        },
+        "type": "object",
+        "title": "WidgetEngagement"
+      },
+      "WidgetEngagementBanner": {
+        "properties": {
+          "rule_id": {
+            "type": "string",
+            "title": "Rule Id"
+          },
+          "layout": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Layout"
+          },
+          "display": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Display"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rule_id",
+          "layout",
+          "display"
+        ],
+        "title": "WidgetEngagementBanner"
+      },
+      "WidgetEngagementCalendar": {
+        "properties": {
+          "rule_id": {
+            "type": "string",
+            "title": "Rule Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "intro": {
+            "type": "string",
+            "title": "Intro",
+            "default": ""
+          },
+          "teaser": {
+            "type": "string",
+            "title": "Teaser",
+            "default": ""
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Start Date"
+          },
+          "days_total": {
+            "type": "integer",
+            "title": "Days Total"
+          },
+          "today": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Today"
+          },
+          "allow_past_doors": {
+            "type": "boolean",
+            "title": "Allow Past Doors",
+            "default": true
+          },
+          "doors": {
+            "items": {
+              "$ref": "#/components/schemas/WidgetEngagementDoor"
+            },
+            "type": "array",
+            "title": "Doors",
+            "default": []
+          },
+          "next_unlock_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Unlock At"
+          },
+          "look": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Look",
+            "default": {}
+          },
+          "door_layout": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Door Layout"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rule_id",
+          "title",
+          "start_date",
+          "days_total"
+        ],
+        "title": "WidgetEngagementCalendar"
+      },
+      "WidgetEngagementDecoration": {
+        "properties": {
+          "rule_id": {
+            "type": "string",
+            "title": "Rule Id"
+          },
+          "effect": {
+            "type": "string",
+            "title": "Effect"
+          },
+          "accessory": {
+            "type": "string",
+            "title": "Accessory"
+          },
+          "badge_emoji": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Badge Emoji"
+          },
+          "places": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Places",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "rule_id",
+          "effect",
+          "accessory"
+        ],
+        "title": "WidgetEngagementDecoration"
+      },
+      "WidgetEngagementDoor": {
+        "properties": {
+          "day": {
+            "type": "integer",
+            "title": "Day"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "default": ""
+          },
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "default": ""
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon"
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Url"
+          },
+          "image_alt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Alt"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question"
+          },
+          "question_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Key"
+          },
+          "link": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link"
+          }
+        },
+        "type": "object",
+        "required": [
+          "day"
+        ],
+        "title": "WidgetEngagementDoor"
       }
     }
   }

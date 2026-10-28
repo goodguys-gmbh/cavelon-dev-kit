@@ -204,6 +204,10 @@ who may decide before you test, read the node's `approvers` in
 | `project_file_has_secret` | 3 | `cavelon.yaml` contains something that looks like a token. Remove it, revoke the token, and use `cavelon login` or `CAVELON_TOKEN`. |
 | `no_solution` | 2 | The command needs a solution folder: run it in a folder with `cavelon.yaml`, or `cavelon init` first. |
 | `persona_message_empty` | 0 (a warning) | The persona turns a greeting or fallback on (`greeting_enabled`, `fallback_message_enabled`; on by default) but its text is empty. Write `greeting_message` or `fallback_message` in `package/persona.yaml`, in the language the assistant answers in, or turn it off. |
+| `unmanaged_field_set` | 0 (a warning) | A package file sets a field that `cavelon.yaml` lists under `unmanaged`. `apply` leaves it out, so the instance keeps its own value. Remove it from the file, or from `unmanaged`. |
+| `managed_kinds_left_out` | 0 (a warning) | A rule in a list named by `managed_kinds` is of a kind the folder does not manage. `apply` leaves it out, and the solution keeps its own rules of that kind. |
+| `managed_kinds_unsupported` | 0 (a warning) | The instance does not take `<list>_kinds`, so an import would replace the whole list. `apply` leaves the list out to keep the rules of the other kinds. Remove the entry from `managed_kinds` to send the whole list. |
+| `managed_setting_unknown` | 0 (a warning) | `unmanaged` or `managed_kinds` in `cavelon.yaml` names a field or a kind the instance's package schema does not have, or a field inside a list. |
 | `test_assertion_unchecked` | 0 (a warning) | A test step has assertions (criteria with a `type`, such as `handoff_to`), and the instance's package schema does not describe a step's criteria, so `validate` cannot check them. An instance that knows the type checks it in code; one that does not grades it as a judge criterion. A newer instance publishes the criterion shapes, and `validate` then checks each assertion like any other field. Said once per suite file. |
 | `solution_not_found` | 1 | The solution named by `--harness`, `cavelon.yaml` or an env file does not exist in this tenant, by name, slug or id. The error names the closest solutions (`details.candidates` with `--json`); `cavelon harness list` shows those that do, with name, slug and id. |
 
@@ -368,6 +372,8 @@ Returning to the original bound scope may use that scope's allowance again.
 |---|---|---|
 | `network_error` | 8 | The instance could not be reached, or its answer broke off. Check the URL, your VPN and proxy. |
 | `request_timeout` | 8 | A request, or reading its answer, took longer than 30 seconds. Retry; `CAVELON_HTTP_TIMEOUT_MS` raises the limit. |
+| `chat_turn_timeout` | 6 | `cavelon chat` got no answer within `--timeout`. The turn goes on on the instance, which stores its answer; do not send the message again, as it would run twice. Read the conversation the error names (`cavelon api get_conversation --param conversation_id=<id>`), or find it by the session the error names in `cavelon api list_conversations`; continue with `--session`. |
+| `chat_uploads_off` (403) | 7 | `cavelon chat --file` was refused because the tenant's document uploads, or their Chat/Run Context scope, are off; nothing was sent. Someone who manages the tenant's uploads turns them on in the Admin (Settings › Documents), or leave out `--file`. |
 | `rate_limited` (429) | 8 | Too many requests; wait a moment and retry. |
 | `server_error` (5xx) | 8 | The instance failed. Retry; if it persists, tell its operator. |
 | `unexpected_redirect` | 8 | The instance answered with a redirect, often a sign-in page in front of it or a wrong URL. Check the URL `cavelon whoami` uses. |

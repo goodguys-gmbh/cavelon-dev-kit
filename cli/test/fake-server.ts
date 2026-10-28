@@ -77,6 +77,14 @@ function withUploadReplace(text: string, kind: FakeState["uploadReplace"]): stri
   if (kind === "none") delete form.properties.replace_doc_ids;
   return JSON.stringify(doc);
 }
+/** The OpenAPI without chat's preview_draft and the turn's status, as an instance older than them publishes it. */
+function withChatTurnFields(text: string, on: boolean): string {
+  if (on) return text;
+  const doc = JSON.parse(text) as { components: { schemas: Record<string, { properties: Record<string, unknown> }> } };
+  delete doc.components.schemas.ChatRequest!.properties.preview_draft;
+  delete doc.components.schemas.ChatResponse!.properties.status;
+  return JSON.stringify(doc);
+}
 /** The OpenAPI's database dialect enums without oracle, as an instance older than its Oracle support publishes them. */
 function withOracleDialect(text: string, on: boolean): string {
   if (on) return text;
@@ -393,10 +401,26 @@ export interface FakeState {
   personOnly: Record<string, string | false> | null;
   /** Operations ("METHOD /path") the served OpenAPI leaves out, as an instance older than them. */
   openapiWithout: string[];
+  /** The test's edit of the served OpenAPI, after every other one (an instance older or newer than the snapshot). */
+  openapiEdit: ((doc: Record<string, any>) => void) | null;
   /** False serves the OpenAPI's dialect enums without oracle, as an instance older than its Oracle support. */
   oracleDialect: boolean;
   /** The chat turns the instance answered: the solution, the message and the session. */
   chats: Array<{ harness_id: string; message: string; session_id: string }>;
+  /** The conversations chat turns started, by session: a turn's conversation exists before it is answered. */
+  chatConversations: Array<{ id: string; session_id: string; harness_id: string; created_at: string }>;
+  /** The files uploaded through the chat's file upload, with the form's scope and session. */
+  chatFiles: Array<{ file_id: string; filename: string; scope: string | null; session_id: string | null; size_bytes: number }>;
+  /** How long a chat turn takes before it answers; the turn is kept even when the client stops waiting. */
+  chatDelayMs: number;
+  /**
+   * The status a chat turn's response carries where the instance publishes it
+   * (chatTurnFields): "completed" by default, null for a failed or refused
+   * turn. An older instance (chatTurnFields false) leaves it out.
+   */
+  chatStatus: string | null;
+  /** False serves the OpenAPI without chat's preview_draft and status, as an instance older than them. */
+  chatTurnFields: boolean;
   /**
    * Body fields marked `x-cavelon-secret` beside the snapshot's own, by
    * component schema; `null` serves the OpenAPI without any, as an instance
@@ -817,8 +841,14 @@ export async function startFakeServer(): Promise<FakeServer> {
     chatUserEmailVerified: true,
     personOnly: {},
     openapiWithout: [],
+    openapiEdit: null,
     oracleDialect: true,
     chats: [],
+    chatConversations: [],
+    chatFiles: [],
+    chatDelayMs: 0,
+    chatStatus: "completed",
+    chatTurnFields: true,
     secretFields: {},
     interruptions: [],
     failures: [],
@@ -918,7 +948,11 @@ export async function startFakeServer(): Promise<FakeServer> {
     if (p === "/openapi.json" || (p === "/api/v1/openapi.json" && !state.rootPathsReachApi)) {
       res.writeHead(200, { "content-type": "application/json" });
       const marked = withActivationRoute(withChatReaders(withConfirmations(withMarkers(state.personOnly, state.secretFields), state.confirmations !== null && state.confirmationMarks !== false), state.readerOverrides, state.chatUserEmailVerified), state.activationRouteFields !== false);
-      return res.end(withOracleDialect(withoutOperations(withTenantWideFlag(withUploadReplace(marked, state.uploadReplace), state.tenantWideFlag), state.openapiWithout), state.oracleDialect));
+      const served = withChatTurnFields(withOracleDialect(withoutOperations(withTenantWideFlag(withUploadReplace(marked, state.uploadReplace), state.tenantWideFlag), state.openapiWithout), state.oracleDialect), state.chatTurnFields);
+      if (!state.openapiEdit) return res.end(served);
+      const edited = JSON.parse(served) as Record<string, any>;
+      state.openapiEdit(edited);
+      return res.end(JSON.stringify(edited));
     }
 
     // Auth: every API and docs route needs a known bearer token.
@@ -1227,8 +1261,54 @@ export async function startFakeServer(): Promise<FakeServer> {
       // A draft answers a person as a Playground run, never an API key.
       if (h.status !== "active" && info.kind !== "pat") return send(res, 409, { detail: "The selected solution is not active." });
       const session = b.session_id ?? randomUUID();
+      // As the instance: the conversation exists from the turn's start, so a turn the client stopped waiting for is found by its session.
+      let conversation = state.chatConversations.find((c) => c.session_id === session);
+      if (!conversation) {
+        conversation = { id: randomUUID(), session_id: session, harness_id: h.id, created_at: new Date().toISOString() };
+        state.chatConversations.push(conversation);
+      }
+      if (state.chatDelayMs) await new Promise((r) => setTimeout(r, state.chatDelayMs));
       state.chats.push({ harness_id: h.id, message: b.message, session_id: session });
-      return send(res, 200, { response: `${h.name} answers: ${b.message}`, session_id: session, conversation_id: randomUUID(), agent_run_id: null, ui_directives: null });
+      const cancelled = state.chatStatus === "cancelled";
+      // A turn a recent instance reports with status null: refused here by the tenant's chat limit.
+      const refused = state.chatTurnFields && state.chatStatus === null;
+      return send(res, 200, {
+        response: cancelled ? "" : refused ? "Too many messages; try again in a minute." : `${h.name} answers: ${b.message}`,
+        session_id: session,
+        conversation_id: conversation.id,
+        agent_run_id: null,
+        ui_directives: null,
+        ...(state.chatTurnFields ? { status: state.chatStatus } : {}),
+        ...(refused
+          ? { limit_error: { code: "RATE_LIMIT_EXCEEDED", error: "rate_limit_exceeded", message: "Too many messages.", scope: "tenant", group: "chat", limit: 10, remaining: 0, reset_at: 0, retry_after_seconds: 60 } }
+          : {}),
+      });
+    }
+    if (p === "/api/v1/chat/files" && method === "POST") {
+      const file = body.form?.get("file");
+      if (!(file instanceof Blob)) return send(res, 422, { detail: [{ loc: ["body", "file"], msg: "Field required", type: "missing" }] });
+      const scope = (body.form!.get("scope") as string | null) ?? "tenant_kb";
+      const sessionField = body.form!.get("session_id") as string | null;
+      if (scope === "tenant_kb" && !body.form!.get("knowledge_base_id")) return send(res, 400, { detail: "knowledge_base_id is required for KB uploads." });
+      if (scope === "conversation" && !sessionField && !body.form!.get("conversation_id")) return send(res, 400, { detail: "conversation_id or session_id is required for conversation uploads." });
+      const uploaded = { file_id: randomUUID(), filename: (file as File).name || "unnamed", scope, session_id: sessionField, size_bytes: file.size };
+      state.chatFiles.push(uploaded);
+      return send(res, 201, { file_id: uploaded.file_id, filename: uploaded.filename, size_bytes: uploaded.size_bytes, processing_status: "processing", scope });
+    }
+    if (p === "/api/v1/conversations" && method === "GET") {
+      const harnessId = url.searchParams.get("harness_id");
+      const listed = state.chatConversations.filter((c) => !harnessId || c.harness_id === harnessId).toReversed();
+      return send(res, 200, listed.map((c) => ({ id: c.id, harness_id: c.harness_id, session_id: c.session_id, created_at: c.created_at, last_activity_at: c.created_at, updated_at: c.created_at })));
+    }
+    m = /^\/api\/v1\/conversations\/([^/]+)$/.exec(p);
+    if (m && method === "GET") {
+      const c = state.chatConversations.find((x) => x.id === m![1]);
+      if (!c) return send(res, 404, { detail: "Conversation not found" });
+      const said = state.chats.filter((x) => x.session_id === c.session_id);
+      return send(res, 200, {
+        id: c.id, harness_id: c.harness_id, session_id: c.session_id, created_at: c.created_at, last_activity_at: c.created_at, updated_at: c.created_at,
+        messages: said.map((x, i) => ({ id: `m${i}`, role: "user", content: x.message, created_at: c.created_at })),
+      });
     }
     m = /^\/api\/v1\/harnesses\/by-slug\/([^/]+)$/.exec(p);
     if (m) {
@@ -1252,6 +1332,12 @@ export async function startFakeServer(): Promise<FakeServer> {
       if (!h) return send(res, 404, { detail: "Harness not found." });
       if (method === "PUT") state.personas.set(h.id, { ...(body.json as Record<string, unknown>) });
       return send(res, 200, { harness_id: h.id, ...(state.personas.get(h.id) ?? {}) });
+    }
+    if (p === "/api/v1/bot-persona/engagement/preview" && method === "POST") {
+      const wanted = url.searchParams.get("harness_id") ?? state.harnesses.find((h) => h.tenant_id === tid && h.is_default)?.id;
+      const h = state.harnesses.find((x) => x.tenant_id === tid && x.id === wanted);
+      if (!h) return send(res, 404, { detail: "Harness not found" });
+      return engagementPreview(res, body.json as Record<string, unknown>, (state.personas.get(h.id) ?? {}) as Record<string, unknown>);
     }
     m = /^\/api\/v1\/harnesses\/([^/]+)\/clone$/.exec(p);
     if (m && method === "POST") {
@@ -1469,6 +1555,13 @@ export async function startFakeServer(): Promise<FakeServer> {
       // A recent instance's solution export leaves what the whole tenant shares out unless asked.
       if (state.tenantWideFlag && scope === "agent_graph" && url.searchParams.get("include_tenant_wide") !== "true") {
         for (const section of tenantWideSections(packageSchema() as PackageSchema)) delete pkg[section];
+      }
+      // Asked for some engagement rule kinds, the export carries only those and says so.
+      const kinds = url.searchParams.getAll("engagement_rules_kinds");
+      const persona = pkg.persona as Record<string, unknown> | null | undefined;
+      if (kinds.length && persona && Array.isArray(persona.engagement_rules)) {
+        persona.engagement_rules = (persona.engagement_rules as Array<{ kind?: string }>).filter((rule) => kinds.includes(String(rule.kind)));
+        persona.engagement_rules_kinds = kinds;
       }
       return send(res, 200, pkg);
     }
@@ -2226,6 +2319,57 @@ export async function startFakeServer(): Promise<FakeServer> {
       secrets: needs("secrets", "secret", (name) => values.secrets.has(name)),
       variables: needs("variables", "var", (name) => values.variables.has(name)),
     };
+  }
+
+  /**
+   * POST /bot-persona/engagement/preview, simplified: a rule matches when its
+   * include patterns (prefixes before `*`) cover the path and its host list
+   * names the host or is empty; the highest priority wins, as on the instance.
+   * A calendar's doors are open up to the day `at` (or now) reaches.
+   */
+  function engagementPreview(res: http.ServerResponse, request: Record<string, unknown>, persona: Record<string, unknown>) {
+    const rules = (Array.isArray(request.rules) ? request.rules : Array.isArray(persona.engagement_rules) ? persona.engagement_rules : []) as Array<Record<string, any>>;
+    const unnamed = rules.find((r) => typeof r.id !== "string" || !r.id);
+    if (unnamed) return send(res, 422, { detail: "rule 1: id is required" });
+    const path = typeof request.page_path === "string" ? request.page_path : "/";
+    const host = typeof request.page_host === "string" ? request.page_host : null;
+    const at = typeof request.at === "string" ? new Date(request.at) : new Date();
+    const matches = (r: Record<string, any>) => {
+      const include: string[] = r.pages?.include ?? [];
+      const hosts: string[] = r.pages?.hosts ?? [];
+      const onHost = !hosts.length || (host !== null && hosts.includes(host));
+      const onPath = !include.length || include.some((pattern) => path.startsWith(pattern.split("*")[0]!.replace(/\/$/, "") || "/"));
+      return r.enabled !== false && onHost && onPath;
+    };
+    const winner = (kind: string) => rules.filter((r) => r.kind === kind && matches(r)).sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0))[0];
+    const starters = winner("starters");
+    const calendar = winner("calendar");
+    const decoration = winner("decoration");
+    const today = calendar ? Math.floor((at.getTime() - Date.parse(`${calendar.content.start_date}T00:00:00Z`)) / 86_400_000) + 1 : null;
+    const open = today !== null && today >= 1 ? Math.min(today, calendar!.content.door_count) : 0;
+    return send(res, 200, {
+      teaser_messages: starters ? starters.content.starters : ((persona.teaser_messages as string[] | undefined) ?? []),
+      teaser_keys: [],
+      engagement: {
+        has_rules: rules.length > 0,
+        starters_rule_id: starters?.id ?? null,
+        has_campaigns: rules.some((r) => r.kind !== "starters"),
+        calendar: calendar
+          ? {
+              rule_id: calendar.id,
+              title: calendar.content.title,
+              start_date: calendar.content.start_date,
+              days_total: calendar.content.door_count,
+              today: open || null,
+              doors: ((calendar.content.doors ?? []) as Array<Record<string, any>>).filter((d) => d.day <= open).map((d) => ({ day: d.day, title: d.title ?? "", question: d.question ?? null })),
+            }
+          : null,
+        banners: rules.filter((r) => r.kind === "banner" && matches(r)).map((r) => ({ rule_id: r.id, layout: r.content.layout, display: r.display ?? { trigger: "delay" } })),
+        decoration: decoration ? { rule_id: decoration.id, effect: decoration.content.effect ?? "none", accessory: decoration.content.accessory ?? "none", badge_emoji: decoration.content.badge_emoji ?? null, places: decoration.content.places ?? ["launcher", "header"] } : null,
+        server_now: new Date().toISOString(),
+      },
+      focus: null,
+    });
   }
 
   /** The package schema as the instance serves it, with the test's edit. */

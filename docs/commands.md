@@ -41,7 +41,7 @@ the environment over the files. The exit codes are listed in [Troubleshooting](t
 - **Sandboxes:** [`sandbox list`](#cavelon-sandbox-list), [`sandbox validate`](#cavelon-sandbox-validate), [`sandbox files`](#cavelon-sandbox-files), [`sandbox cat`](#cavelon-sandbox-cat), [`sandbox activity`](#cavelon-sandbox-activity), [`sandbox logs`](#cavelon-sandbox-logs), [`sandbox receipt`](#cavelon-sandbox-receipt), [`sandbox seed`](#cavelon-sandbox-seed), [`sandbox refresh`](#cavelon-sandbox-refresh), [`artifacts export`](#cavelon-artifacts-export)
 - **API and docs:** [`api list`](#cavelon-api-list), [`api describe`](#cavelon-api-describe), [`api`](#cavelon-api), [`docs search`](#cavelon-docs-search), [`docs get`](#cavelon-docs-get)
 - **For agents:** [`commands`](#cavelon-commands), [`mcp`](#cavelon-mcp)
-- **Other commands:** [`deactivate`](#cavelon-deactivate), [`chat`](#cavelon-chat)
+- **Other commands:** [`deactivate`](#cavelon-deactivate), [`chat`](#cavelon-chat), [`engagement preview`](#cavelon-engagement-preview)
 
 ## Session
 
@@ -2284,7 +2284,7 @@ Send one message to a solution and print its answer, with the session to continu
 cavelon chat <message> [options]
 ```
 
-The tenant's chat and widget answer only with the default route; this names the solution, so an active solution that is not the default, or a draft, can be tried before it answers anyone. A draft answers a person's token as a Playground run (counted as testing), never a tenant API key. Without --harness: the env file's or cavelon.yaml's solution, else the tenant's default route. Each call is one turn; --session continues a conversation. Not streamed: waits for the whole answer, at most --timeout (default 2m; 50 s as an MCP tool). --as-chat-user reads knowledge and binds database query identity as that Chat User, with a personal access token. Choose an id with `cavelon api list_chat_users -p tenant_id=<tenant_id>`; email_verified says whether an email-bound query can bind that address. Without the option, keeps the usual reader.
+The tenant's chat and widget answer only with the default route; this names the solution, so an active solution that is not the default, or a draft, can be tried before it answers anyone. A draft answers a person's token as a Playground run (counted as testing), never a tenant API key. Without --harness: the env file's or cavelon.yaml's solution, else the tenant's default route. Each call is one turn; --session continues a conversation. Not streamed: waits for the whole answer, at most --timeout (default 2m; 45 s as an MCP tool, which then looks up a turn not answered in time within its 50 s). --as-chat-user reads knowledge and binds database query identity as that Chat User, with a personal access token. Choose an id with `cavelon api list_chat_users -p tenant_id=<tenant_id>`; email_verified says whether an email-bound query can bind that address. Without the option, keeps the usual reader. --file uploads a file to the turn's conversation first (POST /api/v1/chat/files) and names it in file_ids, so the solution's wait for a file still being read (settings.attached_documents) can be tried. A personal access token whose role holds playground.use chats as the Playground does: an active solution answers with its unpublished draft where one is pending, with or without --draft. --draft (preview_draft) says so explicitly and is refused before sending where the draft cannot be reached. A tenant API key, and a token without playground.use, chat with the published version. The first turn carries a session_id the kit chose. A turn that is not answered in time goes on on the instance, which stores its answer: the error says how to read the conversation; sending the message again would run it twice. A status the instance reports (cancelled, waiting, blocked) is shown. A cancelled turn, and one a recent instance reports with status null (failed or refused, such as by a limit), exits 1; an older instance sends no status for an answered turn.
 
 | Argument | Description |
 |---|---|
@@ -2296,6 +2296,8 @@ The tenant's chat and widget answer only with the default route; this names the 
 | `--env <name>` | Use env/&lt;name&gt;.yaml: its tenant and solution. | yes |
 | `--session <session_id>` | Continue this conversation (the session_id a previous chat printed). | yes |
 | `--as-chat-user <id>` | Read knowledge and identity-bound queries as this tenant's Chat User; needs knowledge_bases.view and end_users.read. | yes |
+| `--file <path>` | Attach this file to the message (uploaded to the conversation first). Repeatable. | yes |
+| `--draft` | Answer with the active solution's draft, as the Playground does; refused where it cannot (needs playground.use). | yes |
 | `--timeout <duration>` | Wait at most this long for the answer (90s, 5m; default 2m). | yes |
 
 Examples:
@@ -2303,5 +2305,33 @@ Examples:
 ```bash
 cavelon chat "When are you open?" --harness support-faq
 cavelon chat "And on Saturdays?" --session <session_id>
+cavelon chat "What does this invoice say?" --file invoice.pdf --draft
 cavelon chat "Hello" --json
+```
+
+### cavelon engagement preview
+
+Show what a visitor gets on a page at a moment: starters, open doors, banners, decoration. Stores and counts nothing.
+
+**read-only** · MCP tool: `engagement_preview`
+
+```text
+cavelon engagement preview [options]
+```
+
+Sends the solution folder's engagement rules (persona.engagement_rules) to the instance's preview for one page and one moment, and shows what the widget would offer there: the starter questions, the door calendar's open doors, the banners and the decoration. The instance matches the rules on its clock as it does for a visitor and checks them as a save would; nothing is stored, translated or counted. With managed_kinds in cavelon.yaml, the solution's rules of the other kinds join the folder's, as an import keeps them. Without a solution folder, or with --stored, the rules the solution holds are previewed. The instance must mark the preview read-only (x-cavelon-read-only); an older one is refused before anything is sent.
+
+| Option | Description | MCP |
+|---|---|---|
+| `--harness <harness>` | The solution: its name, slug or id; default: env file, then cavelon.yaml. | yes |
+| `--env <name>` | Use env/&lt;name&gt;.yaml: its tenant and solution. | yes |
+| `--page <url|path>` | The page: its URL (https://www.example.at/tarife/winter) or a path (/tarife/winter); default /, on any host. | yes |
+| `--at <time>` | The moment, as ISO 8601 with an offset (2026-12-14T09:00:00+01:00); without one, UTC. Default: now. | yes |
+| `--stored` | Preview the rules the solution holds on the instance, not the folder's. | yes |
+
+Examples:
+
+```bash
+cavelon engagement preview --page https://www.example.at/tarife/winter --at 2026-12-14T09:00:00+01:00
+cavelon engagement preview --page /kontakt --stored --json
 ```

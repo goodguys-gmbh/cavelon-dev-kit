@@ -6,6 +6,36 @@ and the fake server in `cli/test/` serves them.
 
 ## `cavelon/`
 
+On 2026-10-28 the OpenAPI and the package schema were refreshed whole from a
+deployed instance that publishes the engagement rules, the chat turn's
+`status` and a test suite's `purpose`: the OpenAPI trimmed as below, with its
+version set back to `v0.0.0-dev` and issue references dropped, and the package
+schema scrubbed as below. Besides what the notes below select, this takes in
+what the instance changed since the last refresh: an agent's `fallback_models`
+and `fallback_allows_external`, the guardrail directions `context` and
+`tool_output`, a test suite's schedule (`TestSuiteSchedule`, `run_on`), a
+webhook trigger's `external_refs_path`, a chat start node's `demo_history`, a
+URL source's review word counts, the documents' redaction fields, a
+publication's field and text changes and its rollback readiness, the readiness
+check's `published` parameter, and the secret names of KB order callbacks. The
+error catalog, the capabilities and the docs pages stay as recorded: their
+texts follow an instance's settings and public base URL.
+
+On 2026-10-28 the engagement-rule contracts were selected from an unreleased
+instance build's own generators (the function behind `/meta/package-schema`
+and the OpenAPI generator), without running an instance. In the package
+schema, the persona takes the typed `engagement_rules` (four kinds tagged by
+`kind`, under `$defs/Engagement*`), `engagement_rules_kinds`, and the
+`x-cavelon-live` marks on its live fields. In the OpenAPI it takes
+`GraphPublicationMetadata.live_fields`, the export's `engagement_rules_kinds`
+parameter, and `POST /api/v1/bot-persona/engagement/preview` with its
+`x-cavelon-read-only` mark and its schemas, without prose. Everything else
+stays as recorded. Later that day they were checked against a deployed
+instance, which publishes them as selected; its OpenAPI also gives the persona
+(`BotPersonaSchema`) `engagement_rules` and `engagement_rules_kinds` (see the
+refresh above). The fake server also plays an instance without them (open
+rule objects, no live marks, no `engagement_rules_kinds`, no read-only mark).
+
 On 2026-10-17 the document-files contracts were selectively refreshed from an
 immutable merged instance build, without running an instance. The checked-in
 output of its OpenAPI generator supplies KB create/detail/update, document
@@ -312,6 +342,24 @@ Setup and Database Connectors pages take the build's Oracle changes, nothing
 else. Capabilities and every other entry stay as recorded; the default
 capabilities still list no dialect, as the connector is off. The fake server
 also plays an instance whose OpenAPI does not name `oracle`.
+
+On 2026-10-28 the chat turn contracts were selected from an immutable merged
+instance build's checked-in OpenAPI, without running an instance: the chat file
+upload (`POST /api/v1/chat/files`), the conversation list and detail
+(`GET /api/v1/conversations`, `GET /api/v1/conversations/{conversation_id}`)
+with their referenced schemas, and `ChatRequest.preview_draft`. The three
+operations are listed in `kit-operations.json`. Two parts come from the
+instance's generators in an unreleased build, also without running it: the
+optional `ChatResponse.status` (`completed`, `cancelled`, `waiting`,
+`blocked` or null; a recent instance always sends it, null for a turn that
+failed or was refused, and an older one leaves it out), selected from its
+OpenAPI without prose, and the package schema's description of a harness's
+`settings` (an open object describing `attached_documents`:
+`wait_until_readable`, default true, and `wait_seconds`, 0 to 120), selected
+from its package schema. Later that day both were checked against a deployed
+instance, which publishes them as selected (see the refresh above). Existing operations, schemas, capabilities and defaults stay as
+recorded. The fake server also plays an instance without the upload, the
+conversation list, `preview_draft`, `status` or the setting's description.
 
 | File | Source |
 |---|---|
