@@ -204,6 +204,15 @@ setting and the section on testing as a Chat User. The published API endpoints
 page supplies the distinction between unconditional and conditional principal
 restrictions. The fake server also plays an instance that omits the new list.
 
+On 2026-10-28 `TestSuiteResponse` took `purpose` (a string or null) and
+`counts_for_readiness` (a boolean, true by default) by hand, ahead of the
+instance release that publishes them in `GET /api/v1/test-suites`: a campaign's
+question check is listed with `purpose: engagement_check` and
+`counts_for_readiness: false`. Nothing else changed. Refresh this schema from
+the instance's published OpenAPI once that release is out. The fake server
+also plays an instance that lists neither field, where the kit falls back to
+the `engagement` and `rule:<id>` tags.
+
 The tests switch features on in the fake server where a command needs them
 (personal access tokens, the operations API, Sandboxes, Masterloop, archive
 uploads, the database connector); the snapshot keeps the defaults.

@@ -220,6 +220,83 @@ describe("test run", () => {
     expect(start.body).toEqual({ harness_id: harnessId });
   });
 
+  describe("suites that never vote in readiness (a campaign's question checks)", () => {
+    const ids = {
+      faq: "5a17e000-0000-4000-8000-0000000000a1",
+      tagged: "5a17e000-0000-4000-8000-0000000000a2",
+      marked: "5a17e000-0000-4000-8000-0000000000a3",
+      votes: "5a17e000-0000-4000-8000-0000000000a4",
+    };
+    let harnessId: string;
+    const startedFor = (since: number) =>
+      server.state.requests.slice(since).filter((r) => r.method === "POST" && r.path.endsWith("/runs")).map((r) => r.path.split("/")[4]);
+
+    beforeAll(async () => {
+      harnessId = (await cli(sb, ["harness", "new", "campaigns", "--json"])).json<{ id: string }>().id;
+      server.state.suites.push(
+        { id: ids.faq, tenant_id: tenant, name: "faq", harness_id: harnessId, archived_at: null },
+        // An older instance: only the tags say it is a campaign's question check.
+        { id: ids.tagged, tenant_id: tenant, name: "Advent questions", harness_id: harnessId, archived_at: null, tags: ["engagement", "rule:advent-2026"] },
+        // A recent instance: its own mark decides, whatever the tags say.
+        { id: ids.marked, tenant_id: tenant, name: "Spring banner questions", harness_id: harnessId, archived_at: null, purpose: "engagement_check", counts_for_readiness: false },
+        { id: ids.votes, tenant_id: tenant, name: "tagged but voting", harness_id: harnessId, archived_at: null, tags: ["engagement", "rule:x"], purpose: null, counts_for_readiness: true },
+      );
+    });
+
+    it("skips them without --suite and lists them as skipped, by the instance's mark or, without one, by their tags", async () => {
+      const since = server.state.requests.length;
+      const result = await cli(sb, ["test", "run", "--harness", "campaigns", "--json"]);
+      expect(result.code, result.stderr).toBe(0);
+      const data = result.json<{ runs: Array<{ suite: string }>; skipped: Array<Record<string, unknown>> }>();
+      expect(data.runs.map((r) => r.suite)).toEqual(["faq", "tagged but voting"]);
+      expect(data.skipped).toEqual([
+        { suite: "Advent questions", suite_id: ids.tagged, reason: "not_in_readiness" },
+        { suite: "Spring banner questions", suite_id: ids.marked, purpose: "engagement_check", reason: "not_in_readiness" },
+      ]);
+      expect(startedFor(since)).toEqual([ids.faq, ids.votes]);
+
+      const text = await cli(sb, ["test", "run", "--harness", "campaigns"], { env: { SHELL: "/bin/sh" } });
+      expect(text.stdout).toMatch(/Skipped 2 suites that do not vote in readiness \(campaign question checks\): "Advent questions", "Spring banner questions"\. Run one with: cavelon test run --suite 'Advent questions'/);
+    });
+
+    it("leaves the whole run's exit code to the suites it ran", async () => {
+      const since = server.state.requests.length;
+      const result = await cli(sb, ["test", "run", "--harness", "campaigns", "--wait", "--json"]);
+      expect(result.code, result.stdout).toBe(0);
+      const data = result.json<{ runs: Array<{ suite: string }>; skipped: unknown[]; failed_cases: number }>();
+      expect(data.failed_cases).toBe(0);
+      expect(data.runs.map((r) => r.suite)).toEqual(["faq", "tagged but voting"]);
+      expect(data.skipped).toHaveLength(2);
+      expect(startedFor(since)).not.toContain(ids.tagged);
+      expect(startedFor(since)).not.toContain(ids.marked);
+    });
+
+    it("runs one with --suite, and exits 1 on its failed case as for any suite", async () => {
+      server.state.runSummary = { passed: 1, failed: 1, pass_rate: 0.5 };
+      try {
+        const since = server.state.requests.length;
+        const result = await cli(sb, ["test", "run", "--suite", ids.marked, "--wait", "--json"]);
+        expect(result.code, result.stdout).toBe(1);
+        expect(result.json<{ skipped?: unknown }>().skipped).toBeUndefined();
+        expect(startedFor(since)).toEqual([ids.marked]);
+      } finally {
+        server.state.runSummary = { passed: 2, failed: 0, pass_rate: 1 };
+      }
+    });
+
+    it("says so when a solution has only such suites", async () => {
+      const only = (await cli(sb, ["harness", "new", "only-campaigns", "--json"])).json<{ id: string }>().id;
+      server.state.suites.push({ id: "5a17e000-0000-4000-8000-0000000000a5", tenant_id: tenant, name: "Door questions", harness_id: only, archived_at: null, tags: ["engagement", "rule:doors"] });
+      const since = server.state.requests.length;
+      const result = await cli(sb, ["test", "run", "--harness", "only-campaigns", "--json"]);
+      expect(result.code).toBe(1);
+      const error = result.json<{ error: { code: string; message: string } }>().error;
+      expect(error.code).toBe("no_suites");
+      expect(error.message).toMatch(/no test suites that vote in readiness\. Skipped 1 suite that does not vote in readiness .*"Door questions"/);
+      expect(startedFor(since)).toEqual([]);
+    });
+  });
+
   it("runs one suite and waits for its result", async () => {
     const result = await cli(sb, ["test", "run", "--suite", "smoke", "--wait", "--json"]);
     expect(result.code, result.stderr + result.stdout).toBe(0);

@@ -328,7 +328,21 @@ export interface FakeState {
    * naming what changed when the list is not empty.
    */
   staleChanged: string[] | null;
-  suites: Array<{ id: string; tenant_id: string; name: string; harness_id: string | null; archived_at: string | null; settings?: Record<string, unknown> }>;
+  /**
+   * `purpose` and `counts_for_readiness` are listed only where a suite sets
+   * them, as a recent instance does; left out, the listing plays an older one.
+   */
+  suites: Array<{
+    id: string;
+    tenant_id: string;
+    name: string;
+    harness_id: string | null;
+    archived_at: string | null;
+    settings?: Record<string, unknown>;
+    tags?: string[];
+    purpose?: string | null;
+    counts_for_readiness?: boolean;
+  }>;
   chatUsers: FakeChatUser[];
   readerOverrides: boolean;
   chatUserEmailVerified: boolean;
@@ -2451,14 +2465,16 @@ function documentView(id: string, filename: string, size: number, operationId: s
   };
 }
 
-function suiteView(s: { id: string; name: string; harness_id: string | null; archived_at: string | null }) {
+function suiteView(s: FakeState["suites"][number]) {
   return {
     id: s.id,
     harness_id: s.harness_id,
     archived_at: s.archived_at,
     name: s.name,
     description: null,
-    tags: [],
+    tags: s.tags ?? [],
+    ...("purpose" in s ? { purpose: s.purpose } : {}),
+    ...("counts_for_readiness" in s ? { counts_for_readiness: s.counts_for_readiness } : {}),
     case_count: 2,
     created_at: now(),
     updated_at: now(),

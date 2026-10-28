@@ -213,6 +213,14 @@ again to resume.
 The run finished, but some cases did not pass. The output names them;
 `cavelon trace <run>` shows why.
 
+### `test run` skips a suite.
+
+Without `--suite`, `test run` leaves out suites that never vote in the
+solution's readiness, such as a campaign's question check from the Admin's
+Engagement editor (tagged `engagement` and `rule:<id>`). The output lists them
+as skipped, and they never change the exit code. `cavelon test run --suite
+<name>` runs one.
+
 ### Where are the error codes explained?
 
 In [Troubleshooting](troubleshooting.md), and for any code your instance uses,

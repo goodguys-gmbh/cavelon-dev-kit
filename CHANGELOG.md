@@ -5,6 +5,16 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 project uses [semantic versioning](https://semver.org/): one version for the
 CLI, the skills and the plugin.
 
+## [Unreleased]
+
+### Changed
+
+- `cavelon test run` without `--suite` no longer runs suites that never vote
+  in readiness, such as a campaign's question check: they are listed as
+  `skipped` and never change the exit code. `--suite` still runs one. The
+  instance's `counts_for_readiness` mark decides where it publishes one; on an
+  older instance, the `engagement` and `rule:<id>` tags identify the check.
+
 ## [0.2.11] - 2026-10-22
 
 ### Changed

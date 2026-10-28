@@ -833,6 +833,43 @@ interface Suite {
   name: string;
   harness_id?: string | null;
   archived_at?: string | null;
+  tags?: string[] | null;
+  /** What the suite is for, where the instance publishes it (a campaign's question check: "engagement_check"). */
+  purpose?: string | null;
+  /** Whether the suite's runs vote in the solution's readiness, where the instance publishes it. */
+  counts_for_readiness?: boolean | null;
+}
+
+/** The tags that mark a campaign's question check on an instance that publishes neither purpose nor readiness vote. */
+const ENGAGEMENT_TAG = "engagement";
+const RULE_TAG_PREFIX = "rule:";
+
+/**
+ * A suite that never votes in readiness, such as a campaign's question check:
+ * a content check for its author, not evidence of the solution's behaviour, so
+ * a whole-solution run leaves it out. The instance's own mark decides where it
+ * publishes one; an older instance's campaign checks carry the `engagement` tag
+ * and a `rule:<id>` tag.
+ */
+function votesNot(suite: Suite): boolean {
+  if (typeof suite.counts_for_readiness === "boolean") return !suite.counts_for_readiness;
+  const tags = Array.isArray(suite.tags) ? suite.tags : [];
+  return tags.includes(ENGAGEMENT_TAG) && tags.some((t) => typeof t === "string" && t.startsWith(RULE_TAG_PREFIX) && t.length > RULE_TAG_PREFIX.length);
+}
+
+/** A skipped suite as `test run` reports it. */
+function skippedView(suite: Suite) {
+  return { suite: suite.name, suite_id: suite.id, ...(suite.purpose ? { purpose: suite.purpose } : {}), reason: "not_in_readiness" };
+}
+
+/** The line that names the suites a whole-solution run left out, and how to run one. */
+function skippedText(skipped: Suite[]): string {
+  if (!skipped.length) return "";
+  const names = skipped.map((s) => `"${s.name}"`).join(", ");
+  return (
+    `Skipped ${skipped.length === 1 ? "1 suite that does" : `${skipped.length} suites that do`} not vote in readiness (campaign question checks): ${names}. ` +
+    `Run one with: ${cavelonCommand("test", "run", "--suite", skipped[0]!.name)}`
+  );
 }
 
 interface TestRun {
@@ -866,7 +903,8 @@ export const testRun: CommandSpec = {
   name: "test run",
   summary: "Start test-suite runs; returns operation ids.",
   description:
-    "Without --suite, runs every suite of the solution (--harness, or cavelon.yaml's harness).\n" +
+    "Without --suite, runs every suite of the solution (--harness, or cavelon.yaml's harness), except suites that never\n" +
+    "vote in readiness, such as a campaign's question checks: they are listed as skipped, and --suite runs one.\n" +
     "With --wait, exits 1 when a case failed or a run measured nothing comparable (cases not run, technical errors),\n" +
     "5 when answers wait for a manual verdict or a value a case needs.\n" +
     "--as-chat-user chooses a Chat User reader for these runs only, for knowledge and identity-bound database queries;\n" +
@@ -897,6 +935,7 @@ export const testRun: CommandSpec = {
     });
     const wanted = listOption(input, "suite");
     let chosen: Suite[];
+    let skipped: Suite[] = [];
     if (wanted.length) {
       chosen = wanted.map((ref) => {
         const hit = suites.find((s) => s.id === ref) ?? suites.filter((s) => s.name.toLowerCase() === ref.toLowerCase());
@@ -911,11 +950,15 @@ export const testRun: CommandSpec = {
         return hit;
       });
     } else {
-      chosen = suites.filter((s) => !s.archived_at);
+      const current = suites.filter((s) => !s.archived_at);
+      skipped = current.filter(votesNot);
+      chosen = current.filter((s) => !votesNot(s));
       if (chosen.length === 0) {
         throw new CavelonError(ExitCode.failure, {
           code: "no_suites",
-          message: harnessRef ? `${harnessRef} has no test suites.` : "This tenant has no test suites.",
+          message:
+            (harnessRef ? `${harnessRef} has no test suites` : "This tenant has no test suites") +
+            (skipped.length ? ` that vote in readiness. ${skippedText(skipped)}` : "."),
         });
       }
     }
@@ -960,15 +1003,21 @@ export const testRun: CommandSpec = {
         waited.body,
         "",
         ...results.map((r) => `${r.suite}: ${r.status}  ${summaryText(r.summary)}`),
+        ...(skipped.length ? ["", skippedText(skipped)] : []),
         ...(resume ? ["", `${waited.why} after the timeout; the runs go on. Resume: ${resume}`] : []),
       ].join("\n");
-      return { data: { runs: results, failed_cases: failedCases, ...waited.data, ...reader, ...(resume ? { resume } : {}) }, text: reader ? `Reading as Chat User ${reader.reader_chat_user_id} for these runs only.\n${text}` : text, exitCode };
+      return {
+        data: { runs: results, failed_cases: failedCases, ...waited.data, ...reader, ...(skipped.length ? { skipped: skipped.map(skippedView) } : {}), ...(resume ? { resume } : {}) },
+        text: reader ? `Reading as Chat User ${reader.reader_chat_user_id} for these runs only.\n${text}` : text,
+        exitCode,
+      };
     }
     return {
-      data: { runs: started, operation_ids: operationIds, ...reader },
+      data: { runs: started, operation_ids: operationIds, ...reader, ...(skipped.length ? { skipped: skipped.map(skippedView) } : {}) },
       text:
         (reader ? `Reading as Chat User ${reader.reader_chat_user_id} for these runs only.\n` : "") +
         table(started, ["suite", "run_id", "status", "operation_id"]) +
+        (skipped.length ? `\n\n${skippedText(skipped)}` : "") +
         (operationIds.length ? `\n\nWait with: ${cavelonCommand("wait", ...operationIds)}` : ""),
     };
   },
