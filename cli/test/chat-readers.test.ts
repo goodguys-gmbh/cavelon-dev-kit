@@ -54,6 +54,8 @@ describe("chosen Chat User readers", () => {
     expect(result.code, result.stderr + result.stdout).toBe(0);
     expect(server.state.requests.find((r) => r.path === "/api/v1/chat")!.body).toEqual({
       message: "My orders", stream: false, harness_id: harness, reader_mode: "as_chat_user", reader_chat_user_id: reader,
+      // The first turn's session, chosen by the kit.
+      session_id: expect.any(String),
     });
     const data = result.json<{ session_id: string; next: { continue: string } }>();
     expect(data.next.continue).toContain(`--as-chat-user ${reader}`);
@@ -127,7 +129,7 @@ describe("chosen Chat User readers", () => {
     expect(server.state.requests.filter((r) => r.path === "/api/v1/chat")).toEqual([]);
     const ordinary = await cli(sb, ["chat", "Hello", "--json"]);
     expect(ordinary.code, ordinary.stderr).toBe(0);
-    expect(server.state.requests.filter((r) => r.path === "/api/v1/chat").pop()!.body).toEqual({ message: "Hello", stream: false });
+    expect(server.state.requests.filter((r) => r.path === "/api/v1/chat").pop()!.body).toEqual({ message: "Hello", stream: false, session_id: expect.any(String) });
   });
 
   it("uses the published test-run permissions for an API key too", async () => {

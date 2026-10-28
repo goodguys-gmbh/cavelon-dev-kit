@@ -2284,7 +2284,7 @@ Send one message to a solution and print its answer, with the session to continu
 cavelon chat <message> [options]
 ```
 
-The tenant's chat and widget answer only with the default route; this names the solution, so an active solution that is not the default, or a draft, can be tried before it answers anyone. A draft answers a person's token as a Playground run (counted as testing), never a tenant API key. Without --harness: the env file's or cavelon.yaml's solution, else the tenant's default route. Each call is one turn; --session continues a conversation. Not streamed: waits for the whole answer, at most --timeout (default 2m; 50 s as an MCP tool). --as-chat-user reads knowledge and binds database query identity as that Chat User, with a personal access token. Choose an id with `cavelon api list_chat_users -p tenant_id=<tenant_id>`; email_verified says whether an email-bound query can bind that address. Without the option, keeps the usual reader.
+The tenant's chat and widget answer only with the default route; this names the solution, so an active solution that is not the default, or a draft, can be tried before it answers anyone. A draft answers a person's token as a Playground run (counted as testing), never a tenant API key. Without --harness: the env file's or cavelon.yaml's solution, else the tenant's default route. Each call is one turn; --session continues a conversation. Not streamed: waits for the whole answer, at most --timeout (default 2m; 45 s as an MCP tool, which then looks up a turn not answered in time within its 50 s). --as-chat-user reads knowledge and binds database query identity as that Chat User, with a personal access token. Choose an id with `cavelon api list_chat_users -p tenant_id=<tenant_id>`; email_verified says whether an email-bound query can bind that address. Without the option, keeps the usual reader. --file uploads a file to the turn's conversation first (POST /api/v1/chat/files) and names it in file_ids, so the solution's wait for a file still being read (settings.attached_documents) can be tried. A personal access token whose role holds playground.use chats as the Playground does: an active solution answers with its unpublished draft where one is pending, with or without --draft. --draft (preview_draft) says so explicitly and is refused before sending where the draft cannot be reached. A tenant API key, and a token without playground.use, chat with the published version. The first turn carries a session_id the kit chose. A turn that is not answered in time goes on on the instance, which stores its answer: the error says how to read the conversation; sending the message again would run it twice. A status the instance reports (cancelled, waiting, blocked) is shown. A cancelled turn, and one a recent instance reports with status null (failed or refused, such as by a limit), exits 1; an older instance sends no status for an answered turn.
 
 | Argument | Description |
 |---|---|
@@ -2296,6 +2296,8 @@ The tenant's chat and widget answer only with the default route; this names the 
 | `--env <name>` | Use env/&lt;name&gt;.yaml: its tenant and solution. | yes |
 | `--session <session_id>` | Continue this conversation (the session_id a previous chat printed). | yes |
 | `--as-chat-user <id>` | Read knowledge and identity-bound queries as this tenant's Chat User; needs knowledge_bases.view and end_users.read. | yes |
+| `--file <path>` | Attach this file to the message (uploaded to the conversation first). Repeatable. | yes |
+| `--draft` | Answer with the active solution's draft, as the Playground does; refused where it cannot (needs playground.use). | yes |
 | `--timeout <duration>` | Wait at most this long for the answer (90s, 5m; default 2m). | yes |
 
 Examples:
@@ -2303,6 +2305,7 @@ Examples:
 ```bash
 cavelon chat "When are you open?" --harness support-faq
 cavelon chat "And on Saturdays?" --session <session_id>
+cavelon chat "What does this invoice say?" --file invoice.pdf --draft
 cavelon chat "Hello" --json
 ```
 

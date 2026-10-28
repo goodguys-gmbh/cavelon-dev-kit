@@ -9,6 +9,7 @@ import { MANIFEST_SECTION, PERSONA_SECTION, sectionFields } from "./package-form
 import { kitErrorEntry } from "./kit-codes.js";
 import { checkWorkflowQueries } from "./workflow-queries.js";
 import { checkWritePaths } from "./database-write-paths.js";
+import { ATTACHED_DOCUMENTS_CODES, checkAttachedDocuments, inAttachedDocuments } from "./attached-documents.js";
 import {
   checkManagedFields,
   MANAGED_KINDS_LEFT_OUT_CODE,
@@ -290,6 +291,7 @@ export const KIT_CODES: CatalogEntry[] = [
     hint: "Keep one of them: package/<section>.yaml, or the section's own folder from cavelon.yaml's layout.",
     docs: PACKAGE_DOCS,
   },
+  ...ATTACHED_DOCUMENTS_CODES,
 ];
 
 /**
@@ -497,6 +499,8 @@ export function checkPackage(disk: PackageOnDisk, options: CheckOptions): Findin
       // anyOf reports each branch and then itself; the branches say more.
       if (error.keyword === "anyOf" || error.keyword === "oneOf") continue;
       if (misnamed.some((m) => within(error.instancePath, m.pointer))) continue;
+      // The instance reads this setting leniently and never refuses it: checkAttachedDocuments says what it does with the value.
+      if (inAttachedDocuments(options.schema, error.instancePath)) continue;
       // A section whose file could not be read is missing here; its file's finding says why.
       if (error.keyword === "required" && error.instancePath === "" && unreadable.has(String((error.params as Record<string, unknown>).missingProperty))) continue;
       const { pointer, message } = describe(error);
@@ -512,6 +516,7 @@ export function checkPackage(disk: PackageOnDisk, options: CheckOptions): Findin
   findings.push(...checkEndpointLimits(disk, options.schema));
   findings.push(...checkBranchConcurrency(disk, options.limits));
   findings.push(...checkKnowledgeSearch(disk));
+  findings.push(...checkAttachedDocuments(disk, options.schema));
   findings.push(...checkUnknownFields(disk, options.schema, findings));
   findings.push(...checkReferences(disk, options.inventory));
   findings.push(...checkModels(disk, options.inventory));

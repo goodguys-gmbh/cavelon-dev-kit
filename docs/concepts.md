@@ -200,6 +200,42 @@ to trace. `cavelon deactivate` takes an active solution out of live traffic
 `--confirm`, and refuses the default route until another solution is the
 default.
 
+### Chat turns and the files they carry
+
+`cavelon chat` sends one turn and waits for the whole answer. The first turn
+carries a `session_id` the kit chose. A turn that is not answered within
+`--timeout` (45 s as the MCP tool, which then looks up the conversation within
+its 50 s) is not lost: the instance runs it to the end and stores its answer,
+so sending the message again would run it twice. The `chat_turn_timeout` error
+(exit 6) names the conversation, or the session to find it by, and how to read
+it (`GET /api/v1/conversations/{conversation_id}`, `cavelon api
+get_conversation`). A recent instance reports how a turn ended (`status`):
+`chat` shows `cancelled`, `waiting` or `blocked`, and a turn reported with
+status `null` as not completed (it failed or was refused, by a limit for
+example), with the instance's message and `limit_error`. A cancelled turn,
+stored without an answer, and a `null` one exit 1. An older instance sends no
+status at all, and then the turn was answered: a missing status is not `null`.
+
+`cavelon chat --file <path>` uploads a file to the turn's conversation first
+and names it in the message, as the widget does. A solution sets how long a
+turn waits for such a file while it is still being read in
+`settings.attached_documents` of `package/harnesses.yaml`:
+`wait_until_readable` (only `false` turns the wait off) and `wait_seconds`
+(within the bounds the package schema publishes, 0 to 120). The instance reads
+it leniently, so `cavelon validate` warns about a value it would ignore
+(`attached_documents_value_ignored`) or clamp
+(`attached_documents_wait_clamped`) where the instance's package schema
+describes the setting. This is not the tenant's `attached_documents`
+context-source limit, which bounds how much of the files reaches the model
+(the instance's page `concepts/context-budgets`). On an active solution a
+change goes to the draft: visitors get the published value, the Playground and
+test runs the draft's. `cavelon chat` with a personal access token whose role
+holds `playground.use` is a Playground run, so it already answers with the
+draft where one is pending; `--draft` (`preview_draft`) asks for it explicitly
+and is refused before sending where the draft cannot be reached. A tenant API
+key, and a token without `playground.use`, chat with the published version, as
+visitors get it.
+
 ## Package
 
 A **package** is a solution, or a whole tenant's configuration, as one
@@ -738,7 +774,9 @@ manages them in the Admin under their recorded identity. Imports leave them
 off; schedule or automatic runs do not replace the latest manually started
 whole-suite run required for activation. A lost permission can pause a schedule.
 A client-ended streamed chat is recorded as cancelled by recent instances;
-`cavelon chat` itself uses a non-streamed request. Failed or cancelled trigger
+`cavelon chat` itself uses a non-streamed request, which the instance runs to
+the end even when the kit stops waiting (see
+[Chat turns](#chat-turns-and-the-files-they-carry)). Failed or cancelled trigger
 runs retain their documents for diagnosis on instances with that behavior.
 
 ## Readiness and activation

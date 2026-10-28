@@ -77,6 +77,14 @@ function withUploadReplace(text: string, kind: FakeState["uploadReplace"]): stri
   if (kind === "none") delete form.properties.replace_doc_ids;
   return JSON.stringify(doc);
 }
+/** The OpenAPI without chat's preview_draft and the turn's status, as an instance older than them publishes it. */
+function withChatTurnFields(text: string, on: boolean): string {
+  if (on) return text;
+  const doc = JSON.parse(text) as { components: { schemas: Record<string, { properties: Record<string, unknown> }> } };
+  delete doc.components.schemas.ChatRequest!.properties.preview_draft;
+  delete doc.components.schemas.ChatResponse!.properties.status;
+  return JSON.stringify(doc);
+}
 /** The OpenAPI's database dialect enums without oracle, as an instance older than its Oracle support publishes them. */
 function withOracleDialect(text: string, on: boolean): string {
   if (on) return text;
@@ -385,6 +393,20 @@ export interface FakeState {
   oracleDialect: boolean;
   /** The chat turns the instance answered: the solution, the message and the session. */
   chats: Array<{ harness_id: string; message: string; session_id: string }>;
+  /** The conversations chat turns started, by session: a turn's conversation exists before it is answered. */
+  chatConversations: Array<{ id: string; session_id: string; harness_id: string; created_at: string }>;
+  /** The files uploaded through the chat's file upload, with the form's scope and session. */
+  chatFiles: Array<{ file_id: string; filename: string; scope: string | null; session_id: string | null; size_bytes: number }>;
+  /** How long a chat turn takes before it answers; the turn is kept even when the client stops waiting. */
+  chatDelayMs: number;
+  /**
+   * The status a chat turn's response carries where the instance publishes it
+   * (chatTurnFields): "completed" by default, null for a failed or refused
+   * turn. An older instance (chatTurnFields false) leaves it out.
+   */
+  chatStatus: string | null;
+  /** False serves the OpenAPI without chat's preview_draft and status, as an instance older than them. */
+  chatTurnFields: boolean;
   /**
    * Body fields marked `x-cavelon-secret` beside the snapshot's own, by
    * component schema; `null` serves the OpenAPI without any, as an instance
@@ -808,6 +830,11 @@ export async function startFakeServer(): Promise<FakeServer> {
     openapiEdit: null,
     oracleDialect: true,
     chats: [],
+    chatConversations: [],
+    chatFiles: [],
+    chatDelayMs: 0,
+    chatStatus: "completed",
+    chatTurnFields: true,
     secretFields: {},
     interruptions: [],
     failures: [],
@@ -907,7 +934,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     if (p === "/openapi.json" || (p === "/api/v1/openapi.json" && !state.rootPathsReachApi)) {
       res.writeHead(200, { "content-type": "application/json" });
       const marked = withActivationRoute(withChatReaders(withConfirmations(withMarkers(state.personOnly, state.secretFields), state.confirmations !== null && state.confirmationMarks !== false), state.readerOverrides, state.chatUserEmailVerified), state.activationRouteFields !== false);
-      const served = withOracleDialect(withoutOperations(withTenantWideFlag(withUploadReplace(marked, state.uploadReplace), state.tenantWideFlag), state.openapiWithout), state.oracleDialect);
+      const served = withChatTurnFields(withOracleDialect(withoutOperations(withTenantWideFlag(withUploadReplace(marked, state.uploadReplace), state.tenantWideFlag), state.openapiWithout), state.oracleDialect), state.chatTurnFields);
       if (!state.openapiEdit) return res.end(served);
       const edited = JSON.parse(served) as Record<string, any>;
       state.openapiEdit(edited);
@@ -1220,8 +1247,54 @@ export async function startFakeServer(): Promise<FakeServer> {
       // A draft answers a person as a Playground run, never an API key.
       if (h.status !== "active" && info.kind !== "pat") return send(res, 409, { detail: "The selected solution is not active." });
       const session = b.session_id ?? randomUUID();
+      // As the instance: the conversation exists from the turn's start, so a turn the client stopped waiting for is found by its session.
+      let conversation = state.chatConversations.find((c) => c.session_id === session);
+      if (!conversation) {
+        conversation = { id: randomUUID(), session_id: session, harness_id: h.id, created_at: new Date().toISOString() };
+        state.chatConversations.push(conversation);
+      }
+      if (state.chatDelayMs) await new Promise((r) => setTimeout(r, state.chatDelayMs));
       state.chats.push({ harness_id: h.id, message: b.message, session_id: session });
-      return send(res, 200, { response: `${h.name} answers: ${b.message}`, session_id: session, conversation_id: randomUUID(), agent_run_id: null, ui_directives: null });
+      const cancelled = state.chatStatus === "cancelled";
+      // A turn a recent instance reports with status null: refused here by the tenant's chat limit.
+      const refused = state.chatTurnFields && state.chatStatus === null;
+      return send(res, 200, {
+        response: cancelled ? "" : refused ? "Too many messages; try again in a minute." : `${h.name} answers: ${b.message}`,
+        session_id: session,
+        conversation_id: conversation.id,
+        agent_run_id: null,
+        ui_directives: null,
+        ...(state.chatTurnFields ? { status: state.chatStatus } : {}),
+        ...(refused
+          ? { limit_error: { code: "RATE_LIMIT_EXCEEDED", error: "rate_limit_exceeded", message: "Too many messages.", scope: "tenant", group: "chat", limit: 10, remaining: 0, reset_at: 0, retry_after_seconds: 60 } }
+          : {}),
+      });
+    }
+    if (p === "/api/v1/chat/files" && method === "POST") {
+      const file = body.form?.get("file");
+      if (!(file instanceof Blob)) return send(res, 422, { detail: [{ loc: ["body", "file"], msg: "Field required", type: "missing" }] });
+      const scope = (body.form!.get("scope") as string | null) ?? "tenant_kb";
+      const sessionField = body.form!.get("session_id") as string | null;
+      if (scope === "tenant_kb" && !body.form!.get("knowledge_base_id")) return send(res, 400, { detail: "knowledge_base_id is required for KB uploads." });
+      if (scope === "conversation" && !sessionField && !body.form!.get("conversation_id")) return send(res, 400, { detail: "conversation_id or session_id is required for conversation uploads." });
+      const uploaded = { file_id: randomUUID(), filename: (file as File).name || "unnamed", scope, session_id: sessionField, size_bytes: file.size };
+      state.chatFiles.push(uploaded);
+      return send(res, 201, { file_id: uploaded.file_id, filename: uploaded.filename, size_bytes: uploaded.size_bytes, processing_status: "processing", scope });
+    }
+    if (p === "/api/v1/conversations" && method === "GET") {
+      const harnessId = url.searchParams.get("harness_id");
+      const listed = state.chatConversations.filter((c) => !harnessId || c.harness_id === harnessId).toReversed();
+      return send(res, 200, listed.map((c) => ({ id: c.id, harness_id: c.harness_id, session_id: c.session_id, created_at: c.created_at, last_activity_at: c.created_at, updated_at: c.created_at })));
+    }
+    m = /^\/api\/v1\/conversations\/([^/]+)$/.exec(p);
+    if (m && method === "GET") {
+      const c = state.chatConversations.find((x) => x.id === m![1]);
+      if (!c) return send(res, 404, { detail: "Conversation not found" });
+      const said = state.chats.filter((x) => x.session_id === c.session_id);
+      return send(res, 200, {
+        id: c.id, harness_id: c.harness_id, session_id: c.session_id, created_at: c.created_at, last_activity_at: c.created_at, updated_at: c.created_at,
+        messages: said.map((x, i) => ({ id: `m${i}`, role: "user", content: x.message, created_at: c.created_at })),
+      });
     }
     m = /^\/api\/v1\/harnesses\/by-slug\/([^/]+)$/.exec(p);
     if (m) {

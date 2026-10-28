@@ -334,6 +334,28 @@
           },
           "title": "Handoffs",
           "type": "array"
+        },
+        "fallback_models": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Ordered model ids from the tenant's model registry, tried in turn when the agent's own model is unavailable. Null inherits the tenant default; an empty list turns failover off. At most 3.",
+          "title": "Fallback Models"
+        },
+        "fallback_allows_external": {
+          "default": false,
+          "description": "Lets a fallback take a call from a model inside the deployment to one that is not declared inside it.",
+          "title": "Fallback Allows External",
+          "type": "boolean"
         }
       },
       "required": [
@@ -368,7 +390,14 @@
         "direction_override": {
           "anyOf": [
             {
-              "type": "string"
+              "type": "string",
+              "enum": [
+                "input",
+                "output",
+                "both",
+                "context",
+                "tool_output"
+              ]
             },
             {
               "type": "null"
@@ -765,7 +794,9 @@
           "enum": [
             "input",
             "output",
-            "both"
+            "both",
+            "context",
+            "tool_output"
           ],
           "title": "Direction",
           "type": "string"
@@ -900,9 +931,31 @@
           "type": "object"
         },
         "settings": {
-          "additionalProperties": true,
+          "type": "object",
           "title": "Settings",
-          "type": "object"
+          "description": "The solution's settings. Keys not described here are kept as they are.",
+          "properties": {
+            "attached_documents": {
+              "type": "object",
+              "title": "Attached Documents",
+              "description": "How a chat turn waits for a file it carries that is still being read. Left out, the platform default applies (CHAT_ATTACHMENT_WAIT_SECONDS).",
+              "properties": {
+                "wait_until_readable": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "false: a turn never waits; its card says the file is still being read."
+                },
+                "wait_seconds": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 120,
+                  "description": "The longest wait in seconds, 0 to 120; left out, the platform default."
+                }
+              }
+            }
+          },
+          "additionalProperties": true,
+          "default": {}
         },
         "run_state_model_slug": {
           "anyOf": [
@@ -1605,70 +1658,6 @@
           "type": "integer",
           "x-cavelon-live": true
         },
-        "engagement_rules": {
-          "anyOf": [
-            {
-              "items": {
-                "discriminator": {
-                  "mapping": {
-                    "banner": "#/$defs/EngagementBannerRule",
-                    "calendar": "#/$defs/EngagementCalendarRule",
-                    "decoration": "#/$defs/EngagementDecorationRule",
-                    "starters": "#/$defs/EngagementStartersRule"
-                  },
-                  "propertyName": "kind"
-                },
-                "oneOf": [
-                  {
-                    "$ref": "#/$defs/EngagementStartersRule"
-                  },
-                  {
-                    "$ref": "#/$defs/EngagementCalendarRule"
-                  },
-                  {
-                    "$ref": "#/$defs/EngagementBannerRule"
-                  },
-                  {
-                    "$ref": "#/$defs/EngagementDecorationRule"
-                  }
-                ]
-              },
-              "type": "array",
-              "maxItems": 50
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Engagement Rules",
-          "description": "The widget's engagement rules, by kind: 'starters' (page starter questions that replace the teasers on matching pages), 'calendar' (a door calendar), 'banner' (a card next to the launcher) and 'decoration' (seasonal artwork). Each applies where its pages and when its window say; the highest priority among the matching rules wins. Ids are unique in the list; at most 50 rules, 300 starter texts with 20000 characters in all, and per campaign 400 texts with 40000 characters. Omitted, an import keeps the target's rules; [] removes them, or with engagement_rules_kinds only the rules of those kinds.",
-          "x-cavelon-live": true
-        },
-        "engagement_rules_kinds": {
-          "anyOf": [
-            {
-              "items": {
-                "enum": [
-                  "starters",
-                  "calendar",
-                  "banner",
-                  "decoration"
-                ],
-                "type": "string"
-              },
-              "maxItems": 4,
-              "minItems": 1,
-              "type": "array"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "The rule kinds engagement_rules holds, when the package carries only some. An import then replaces the target's rules of these kinds and keeps its rules of every other kind; a rule in engagement_rules of a kind not listed is refused. Omitted, engagement_rules is the whole list. An export writes it only when asked for some kinds (engagement_rules_kinds on the export).",
-          "title": "Engagement Rules Kinds"
-        },
         "widget_title": {
           "anyOf": [
             {
@@ -1796,6 +1785,70 @@
           "default": null,
           "description": "Ignored.",
           "title": "Translations"
+        },
+        "engagement_rules": {
+          "anyOf": [
+            {
+              "items": {
+                "discriminator": {
+                  "mapping": {
+                    "banner": "#/$defs/EngagementBannerRule",
+                    "calendar": "#/$defs/EngagementCalendarRule",
+                    "decoration": "#/$defs/EngagementDecorationRule",
+                    "starters": "#/$defs/EngagementStartersRule"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/EngagementStartersRule"
+                  },
+                  {
+                    "$ref": "#/$defs/EngagementCalendarRule"
+                  },
+                  {
+                    "$ref": "#/$defs/EngagementBannerRule"
+                  },
+                  {
+                    "$ref": "#/$defs/EngagementDecorationRule"
+                  }
+                ]
+              },
+              "type": "array",
+              "maxItems": 50
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Engagement Rules",
+          "description": "The widget's engagement rules, by kind: 'starters' (page starter questions that replace the teasers on matching pages), 'calendar' (a door calendar), 'banner' (a card next to the launcher) and 'decoration' (seasonal artwork). Each applies where its pages and when its window say; the highest priority among the matching rules wins. Ids are unique in the list; at most 50 rules, 300 starter texts with 20000 characters in all, and per campaign 400 texts with 40000 characters. Omitted, an import keeps the target's rules; [] removes them, or with engagement_rules_kinds only the rules of those kinds.",
+          "x-cavelon-live": true
+        },
+        "engagement_rules_kinds": {
+          "anyOf": [
+            {
+              "items": {
+                "enum": [
+                  "starters",
+                  "calendar",
+                  "banner",
+                  "decoration"
+                ],
+                "type": "string"
+              },
+              "maxItems": 4,
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The rule kinds engagement_rules holds, when the package carries only some. An import then replaces the target's rules of these kinds and keeps its rules of every other kind; a rule in engagement_rules of a kind not listed is refused. Omitted, engagement_rules is the whole list. An export writes it only when asked for some kinds (engagement_rules_kinds on the export).",
+          "title": "Engagement Rules Kinds"
         }
       },
       "title": "PackagePersona",
@@ -2499,6 +2552,30 @@
           ],
           "default": null,
           "title": "Freshness Hours"
+        },
+        "review_old_word_count": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Review Old Word Count"
+        },
+        "review_new_word_count": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Review New Word Count"
         }
       },
       "required": [
@@ -4549,6 +4626,39 @@
           "default": null,
           "description": "Written by the platform on the suite the Harness Architect rehearses with.",
           "title": "Rehearsal"
+        },
+        "schedule": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TestSuiteSchedule"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Run the suite unattended on this schedule, as the person who saved it; null turns it off. A tenant API key cannot turn unattended runs on (403 key_needs_a_person)."
+        },
+        "run_on": {
+          "anyOf": [
+            {
+              "items": {
+                "enum": [
+                  "solution_change",
+                  "knowledge_change"
+                ],
+                "type": "string"
+              },
+              "maxItems": 2,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Run the suite unattended, as the person who saved it, 15 minutes after its solution last changed (instructions, persona, skills, graph, model) or a knowledge base its agents or tools read finished an upload batch, a scheduled sync or a structured push; [] turns it off.",
+          "title": "Run On"
         }
       },
       "title": "TestSuiteSettings",
@@ -5342,6 +5452,24 @@
         "demo_request_context": {
           "type": "object",
           "description": "The editor's test request context; not enforced."
+        },
+        "demo_history": {
+          "type": "array",
+          "description": "Earlier turns the editor's debug run simulates before its test message; not enforced.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "role": {
+                "enum": [
+                  "user",
+                  "assistant"
+                ]
+              },
+              "content": {
+                "type": "string"
+              }
+            }
+          }
         }
       },
       "additionalProperties": false,
@@ -7283,6 +7411,11 @@
               "minLength": 1
             }
           }
+        },
+        "external_refs_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The ordered corpus the run is about, by external_ref. Needs auth_mode secret_header."
         }
       },
       "additionalProperties": true
@@ -7391,6 +7524,54 @@
           "additionalProperties": false
         }
       ]
+    },
+    "TestSuiteSchedule": {
+      "additionalProperties": false,
+      "description": "When a suite runs unattended, in the tenant's time zone.",
+      "properties": {
+        "frequency": {
+          "enum": [
+            "daily",
+            "weekly"
+          ],
+          "title": "Frequency",
+          "type": "string"
+        },
+        "time": {
+          "description": "HH:MM in the tenant's time zone.",
+          "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+          "title": "Time",
+          "type": "string"
+        },
+        "weekday": {
+          "anyOf": [
+            {
+              "enum": [
+                "mon",
+                "tue",
+                "wed",
+                "thu",
+                "fri",
+                "sat",
+                "sun"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The day of a weekly schedule; only with frequency 'weekly'.",
+          "title": "Weekday"
+        }
+      },
+      "required": [
+        "frequency",
+        "time"
+      ],
+      "title": "TestSuiteSchedule",
+      "type": "object"
     },
     "EngagementBannerContent": {
       "additionalProperties": false,

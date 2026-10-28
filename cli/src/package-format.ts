@@ -159,10 +159,12 @@ export function exportForm(schema: PackageSchema, node: unknown, value: unknown,
   const props = propertiesOf(object);
   if (!props) return value;
   const required = requiredOf(object);
+  // An open map that describes some of its keys (a solution's settings) is stored as it comes: the export fills in none of them.
+  const openMap = object!.additionalProperties === true;
   const out: Record<string, unknown> = {};
   for (const [key, sub] of Object.entries(props)) {
     if (key in value) out[key] = exportForm(schema, sub, value[key], depth + 1);
-    else {
+    else if (!openMap) {
       const fallback = implicitDefault(schema, key, sub, required, position);
       if (fallback !== undefined) out[key] = structuredClone(fallback);
     }

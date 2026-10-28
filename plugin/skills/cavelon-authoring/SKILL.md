@@ -261,6 +261,20 @@ and fill the field in to set it. A file of comments only sets nothing.
   in a solution folder, `cavelon api` sends the folder's solution, and says
   so. Prefer the package file and `apply` over those operations.
 
+## A chat turn's wait for attached files
+
+A solution sets how long a chat turn waits for a file it carries that is still
+being read in `harnesses.yaml`: `settings.attached_documents` with
+`wait_until_readable` (only `false` turns the wait off) and `wait_seconds`
+(0 to 120, as the package schema publishes). The instance reads it leniently
+and never refuses it, so `cavelon validate` warns instead
+(`attached_documents_value_ignored`, `attached_documents_wait_clamped`). It is
+not the tenant's `attached_documents` context-source limit, which bounds how
+much of the files reaches the model. On an active solution the change goes to
+the draft; try it with `cavelon chat "<message>" --file <path> --draft` (a
+personal access token holding `playground.use` reaches the draft; an API key
+gets the published version).
+
 ## Rules that keep a package portable
 
 - **Slugs are identities.** An entry is matched by its slug on import; renaming
