@@ -22399,6 +22399,22 @@
               }
             ]
           },
+          "purpose": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purpose"
+          },
+          "counts_for_readiness": {
+            "type": "boolean",
+            "title": "Counts For Readiness",
+            "default": true
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",

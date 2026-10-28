@@ -171,6 +171,13 @@ no verdict; `cavelon explain <status>` says what it means and what to do next:
 The case's own reason (which knowledge base, which value) is in the output of
 `test run --wait`, `wait` and `cavelon trace <run>`.
 
+Without `--suite`, `test run` runs every suite of the solution except those
+that never vote in readiness: a campaign's question check (tagged `engagement`
+and `rule:<id>`, made by the Admin's Engagement editor, and never part of the
+package). They are listed under `skipped` and never change the exit code; a
+failed question there is a content gap for the campaign's author.
+`--suite <name>` runs one when asked.
+
 ## Database query tools
 
 Test edited package SQL before apply with `cavelon db test-run <slug> --draft

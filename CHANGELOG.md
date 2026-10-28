@@ -42,6 +42,12 @@ CLI, the skills and the plugin.
 
 ### Changed
 
+- `cavelon test run` without `--suite` no longer runs suites that never vote
+  in readiness, such as a campaign's question check: they are listed as
+  `skipped` and never change the exit code. `--suite` still runs one. The
+  instance's `counts_for_readiness` mark decides where it publishes one; on an
+  older instance, the `engagement` and `rule:<id>` tags identify the check.
+
 - The first chat turn carries a `session_id` the kit chose. A turn that is
   not answered within `--timeout` now ends with `chat_turn_timeout` (exit 6):
   the turn goes on on the instance and its answer is stored, so the error
