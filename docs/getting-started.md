@@ -685,10 +685,14 @@ reader. A missing, deleted or cross-tenant reader is refused by the instance;
 use a current identity from the acting tenant's list.
 
 `--file <path>` attaches a file to the message (uploaded to the conversation
-first). With a personal access token whose role holds `playground.use`, a chat
-is a Playground run: an active solution answers with its unpublished draft
-where one is pending; `--draft` asks for that explicitly and is refused where
-it cannot be had. An API key chats with the published version. When an answer takes longer than `--timeout`, the turn
+first). An active solution answers with its published version, as visitors
+get it, whichever credential you use: `chat` sends the turn as API traffic
+(`source: "api"`), so the tenant's API limits and its processing-step cap
+apply to it. `--draft` answers with the active solution's pending draft as a
+Playground run instead, counted as testing; it needs a personal access token
+whose role holds `playground.use` and is refused before sending where the
+draft cannot be had. A solution that is not active yet has no published
+version, so it answers a person's token as a Playground run. When an answer takes longer than `--timeout`, the turn
 goes on on the instance and its answer is stored: do not send the message
 again, read the conversation the error names instead (see
 [Chat turns](concepts.md#chat-turns-and-the-files-they-carry)).

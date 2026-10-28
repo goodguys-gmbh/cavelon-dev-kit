@@ -129,7 +129,7 @@ describe("chosen Chat User readers", () => {
     expect(server.state.requests.filter((r) => r.path === "/api/v1/chat")).toEqual([]);
     const ordinary = await cli(sb, ["chat", "Hello", "--json"]);
     expect(ordinary.code, ordinary.stderr).toBe(0);
-    expect(server.state.requests.filter((r) => r.path === "/api/v1/chat").pop()!.body).toEqual({ message: "Hello", stream: false, session_id: expect.any(String) });
+    expect(server.state.requests.filter((r) => r.path === "/api/v1/chat").pop()!.body).toEqual({ message: "Hello", stream: false, session_id: expect.any(String), source: "api" });
   });
 
   it("uses the published test-run permissions for an API key too", async () => {
