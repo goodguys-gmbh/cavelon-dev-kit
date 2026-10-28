@@ -7,6 +7,8 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+## [0.2.13] - 2026-10-28
+
 ### Changed
 
 - `cavelon chat` (MCP `chat`) answers with an active solution's published
