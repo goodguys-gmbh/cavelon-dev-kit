@@ -8,6 +8,7 @@
     "GET /api/v1/auth/me",
     "GET /api/v1/bot-persona",
     "PUT /api/v1/bot-persona",
+    "POST /api/v1/bot-persona/engagement/preview",
     "POST /api/v1/chat",
     "POST /api/v1/confirmations",
     "POST /api/v1/chat/files",

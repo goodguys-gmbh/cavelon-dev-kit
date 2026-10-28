@@ -205,6 +205,17 @@ function isEmpty(value: unknown): boolean {
 const isUnset = (value: unknown) => isEmpty(value) || (Array.isArray(value) && value.length === 0);
 
 /**
+ * Whether `[]` and a left-out field say different things: a list field the
+ * schema lets be null and whose default is null. Left out (or null), the
+ * import keeps the target's value, as it does for the persona's engagement
+ * rules; `[]` sets it to none.
+ */
+function emptyListIsAValue(schema: PackageSchema, node: unknown): boolean {
+  const field = resolve(schema, node);
+  return Boolean(field) && field!.default === null && nullable(schema, field!) && arrayBranch(schema, field!) !== undefined;
+}
+
+/**
  * A value with every field the instance reads as unset taken out, so two
  * spellings of one value compare equal: a field that is null, empty (`[]`,
  * `{}`) or holds the value the instance gives it when it is left out
@@ -231,6 +242,11 @@ export function settledForm(schema: PackageSchema, node: unknown, value: unknown
       continue;
     }
     const settled = settledForm(schema, props[key], inner, depth + 1);
+    // An empty list where leaving the field out means "keep what the target has" is a value of its own: it empties the list.
+    if (Array.isArray(inner) && emptyListIsAValue(schema, props[key])) {
+      out[key] = settled;
+      continue;
+    }
     if (!required.has(key)) {
       // An order field left out imports as its default, not as the position fmt writes.
       const fallback = implicitDefault(schema, key, props[key], required, undefined);

@@ -21,6 +21,21 @@ check's `published` parameter, and the secret names of KB order callbacks. The
 error catalog, the capabilities and the docs pages stay as recorded: their
 texts follow an instance's settings and public base URL.
 
+On 2026-10-28 the engagement-rule contracts were selected from an unreleased
+instance build's own generators (the function behind `/meta/package-schema`
+and the OpenAPI generator), without running an instance. In the package
+schema, the persona takes the typed `engagement_rules` (four kinds tagged by
+`kind`, under `$defs/Engagement*`), `engagement_rules_kinds`, and the
+`x-cavelon-live` marks on its live fields. In the OpenAPI it takes
+`GraphPublicationMetadata.live_fields`, the export's `engagement_rules_kinds`
+parameter, and `POST /api/v1/bot-persona/engagement/preview` with its
+`x-cavelon-read-only` mark and its schemas, without prose. Everything else
+stays as recorded. Later that day they were checked against a deployed
+instance, which publishes them as selected; its OpenAPI also gives the persona
+(`BotPersonaSchema`) `engagement_rules` and `engagement_rules_kinds` (see the
+refresh above). The fake server also plays an instance without them (open
+rule objects, no live marks, no `engagement_rules_kinds`, no read-only mark).
+
 On 2026-10-17 the document-files contracts were selectively refreshed from an
 immutable merged instance build, without running an instance. The checked-in
 output of its OpenAPI generator supplies KB create/detail/update, document

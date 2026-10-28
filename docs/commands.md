@@ -41,7 +41,7 @@ the environment over the files. The exit codes are listed in [Troubleshooting](t
 - **Sandboxes:** [`sandbox list`](#cavelon-sandbox-list), [`sandbox validate`](#cavelon-sandbox-validate), [`sandbox files`](#cavelon-sandbox-files), [`sandbox cat`](#cavelon-sandbox-cat), [`sandbox activity`](#cavelon-sandbox-activity), [`sandbox logs`](#cavelon-sandbox-logs), [`sandbox receipt`](#cavelon-sandbox-receipt), [`sandbox seed`](#cavelon-sandbox-seed), [`sandbox refresh`](#cavelon-sandbox-refresh), [`artifacts export`](#cavelon-artifacts-export)
 - **API and docs:** [`api list`](#cavelon-api-list), [`api describe`](#cavelon-api-describe), [`api`](#cavelon-api), [`docs search`](#cavelon-docs-search), [`docs get`](#cavelon-docs-get)
 - **For agents:** [`commands`](#cavelon-commands), [`mcp`](#cavelon-mcp)
-- **Other commands:** [`deactivate`](#cavelon-deactivate), [`chat`](#cavelon-chat)
+- **Other commands:** [`deactivate`](#cavelon-deactivate), [`chat`](#cavelon-chat), [`engagement preview`](#cavelon-engagement-preview)
 
 ## Session
 
@@ -2307,4 +2307,31 @@ cavelon chat "When are you open?" --harness support-faq
 cavelon chat "And on Saturdays?" --session <session_id>
 cavelon chat "What does this invoice say?" --file invoice.pdf --draft
 cavelon chat "Hello" --json
+```
+
+### cavelon engagement preview
+
+Show what a visitor gets on a page at a moment: starters, open doors, banners, decoration. Stores and counts nothing.
+
+**read-only** · MCP tool: `engagement_preview`
+
+```text
+cavelon engagement preview [options]
+```
+
+Sends the solution folder's engagement rules (persona.engagement_rules) to the instance's preview for one page and one moment, and shows what the widget would offer there: the starter questions, the door calendar's open doors, the banners and the decoration. The instance matches the rules on its clock as it does for a visitor and checks them as a save would; nothing is stored, translated or counted. With managed_kinds in cavelon.yaml, the solution's rules of the other kinds join the folder's, as an import keeps them. Without a solution folder, or with --stored, the rules the solution holds are previewed. The instance must mark the preview read-only (x-cavelon-read-only); an older one is refused before anything is sent.
+
+| Option | Description | MCP |
+|---|---|---|
+| `--harness <harness>` | The solution: its name, slug or id; default: env file, then cavelon.yaml. | yes |
+| `--env <name>` | Use env/&lt;name&gt;.yaml: its tenant and solution. | yes |
+| `--page <url|path>` | The page: its URL (https://www.example.at/tarife/winter) or a path (/tarife/winter); default /, on any host. | yes |
+| `--at <time>` | The moment, as ISO 8601 with an offset (2026-12-14T09:00:00+01:00); without one, UTC. Default: now. | yes |
+| `--stored` | Preview the rules the solution holds on the instance, not the folder's. | yes |
+
+Examples:
+
+```bash
+cavelon engagement preview --page https://www.example.at/tarife/winter --at 2026-12-14T09:00:00+01:00
+cavelon engagement preview --page /kontakt --stored --json
 ```
