@@ -470,8 +470,20 @@ jobs:
           NAME: ${{ steps.bundle.outputs.name }}
         run: |
           cd packaging-out/bundle
+          # Only GitHub's OIDC token: without --oidc-provider a failed token fetch
+          # falls back to a browser device flow nobody can answer here, which
+          # waits out five minutes and fails the release (#344). A failed
+          # attempt is retried instead.
+          sign() {
+            for attempt in 1 2 3; do
+              timeout 120 cosign sign-blob --yes --oidc-provider github-actions --bundle "$1.sigstore.json" "$1" && return 0
+              echo "::warning::Signing $1 failed (attempt $attempt of 3)"
+              sleep "$((attempt * ${SIGN_RETRY_SECONDS:-10}))"
+            done
+            return 1
+          }
           for file in "$NAME.tar.gz" "$NAME.manifest.json"; do
-            cosign sign-blob --yes --bundle "$file.sigstore.json" "$file"
+            sign "$file"
             cosign verify-blob --bundle "$file.sigstore.json" \
               --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@${GITHUB_REF}" \
               --certificate-oidc-issuer https://token.actions.githubusercontent.com "$file"
