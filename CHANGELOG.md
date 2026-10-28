@@ -5,6 +5,38 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 project uses [semantic versioning](https://semver.org/): one version for the
 CLI, the skills and the plugin.
 
+## [Unreleased]
+
+### Added
+
+- `cavelon chat --file <path>` attaches a file to the message: it is uploaded
+  to the turn's conversation first and named in `file_ids`, so a solution's
+  wait for a file still being read can be tried. `cavelon chat --draft` tries
+  an active solution's unpublished draft (`preview_draft`), as the Playground
+  does, with a personal access token holding `playground.use`. Both are
+  refused before anything is sent on an instance that does not publish them.
+- `cavelon validate` warns about a solution's `settings.attached_documents`
+  value the instance would ignore (`attached_documents_value_ignored`) or
+  clamp (`attached_documents_wait_clamped`), with the bounds the package
+  schema publishes. An instance whose schema does not describe the setting is
+  not checked.
+
+### Changed
+
+- The first chat turn carries a `session_id` the kit chose. A turn that is
+  not answered within `--timeout` now ends with `chat_turn_timeout` (exit 6):
+  the turn goes on on the instance and its answer is stored, so the error
+  names the conversation, or the session to find it by, and how to read it,
+  instead of suggesting a retry that would run the turn twice. As an MCP tool,
+  `chat` waits 45 s and looks the conversation up within its 50 s.
+- `cavelon chat` shows the turn's `status` where the instance reports one: a
+  cancelled turn reads "cancelled" instead of "(no text)" and exits 1;
+  `waiting` and `blocked` are named with the answer. A response without a
+  status is an answered turn, as before.
+- `pull` and `fmt` no longer add a key the package schema describes to an
+  open map that does not hold it, such as `attached_documents` to a
+  solution's `settings`: the instance stores such a map as it comes.
+
 ## [0.2.11] - 2026-10-22
 
 ### Changed

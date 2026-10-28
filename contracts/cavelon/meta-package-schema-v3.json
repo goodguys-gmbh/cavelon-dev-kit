@@ -900,9 +900,31 @@
           "type": "object"
         },
         "settings": {
-          "additionalProperties": true,
+          "type": "object",
           "title": "Settings",
-          "type": "object"
+          "description": "The solution's settings. Keys not described here are kept as they are.",
+          "properties": {
+            "attached_documents": {
+              "type": "object",
+              "title": "Attached Documents",
+              "description": "How a chat turn waits for a file it carries that is still being read. Left out, the platform default applies (CHAT_ATTACHMENT_WAIT_SECONDS).",
+              "properties": {
+                "wait_until_readable": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "false: a turn never waits; its card says the file is still being read."
+                },
+                "wait_seconds": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 120,
+                  "description": "The longest wait in seconds, 0 to 120; left out, the platform default."
+                }
+              }
+            }
+          },
+          "additionalProperties": true,
+          "default": {}
         },
         "run_state_model_slug": {
           "anyOf": [

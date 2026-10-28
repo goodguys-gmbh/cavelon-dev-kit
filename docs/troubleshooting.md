@@ -368,6 +368,7 @@ Returning to the original bound scope may use that scope's allowance again.
 |---|---|---|
 | `network_error` | 8 | The instance could not be reached, or its answer broke off. Check the URL, your VPN and proxy. |
 | `request_timeout` | 8 | A request, or reading its answer, took longer than 30 seconds. Retry; `CAVELON_HTTP_TIMEOUT_MS` raises the limit. |
+| `chat_turn_timeout` | 6 | `cavelon chat` got no answer within `--timeout`. The turn goes on on the instance, which stores its answer; do not send the message again, as it would run twice. Read the conversation the error names (`cavelon api get_conversation --param conversation_id=<id>`), or find it by the session the error names in `cavelon api list_conversations`; continue with `--session`. |
 | `rate_limited` (429) | 8 | Too many requests; wait a moment and retry. |
 | `server_error` (5xx) | 8 | The instance failed. Retry; if it persists, tell its operator. |
 | `unexpected_redirect` | 8 | The instance answered with a redirect, often a sign-in page in front of it or a wrong URL. Check the URL `cavelon whoami` uses. |

@@ -304,6 +304,21 @@ else. Capabilities and every other entry stay as recorded; the default
 capabilities still list no dialect, as the connector is off. The fake server
 also plays an instance whose OpenAPI does not name `oracle`.
 
+On 2026-10-28 the chat turn contracts were selected from an immutable merged
+instance build's checked-in OpenAPI, without running an instance: the chat file
+upload (`POST /api/v1/chat/files`), the conversation list and detail
+(`GET /api/v1/conversations`, `GET /api/v1/conversations/{conversation_id}`)
+with their referenced schemas, and `ChatRequest.preview_draft`. The three
+operations are listed in `kit-operations.json`. Two parts were added by hand
+ahead of the instance's release and must be refreshed from the instance once it
+publishes them: the optional `ChatResponse.status` (`completed`, `cancelled`,
+`waiting`, `blocked`), and the package schema's description of a harness's
+`settings.attached_documents` (`wait_until_readable`, `wait_seconds` with its
+0 to 120 bounds; `settings` stays open). Existing operations, schemas,
+capabilities and defaults stay as recorded. The fake server also plays an
+instance without the upload, the conversation list, `preview_draft`, `status`
+or the setting's description.
+
 | File | Source |
 |---|---|
 | `openapi.json` | `GET /openapi.json`, trimmed by `cli/scripts/trim-openapi.mjs` to the operations listed in [`kit-operations.json`](kit-operations.json) and the components they reference, without prose descriptions |
