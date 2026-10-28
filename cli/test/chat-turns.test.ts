@@ -86,8 +86,10 @@ afterAll(async () => {
 
 beforeEach(() => {
   solution("support").status = "active";
-  Object.assign(server.state, { chatDelayMs: 0, chatStatus: "completed", chatTurnFields: true, openapiWithout: [], packageSchemaEdit: null });
+  solution("support").is_default = false;
+  Object.assign(server.state, { chatDelayMs: 0, chatStatus: "completed", chatTurnFields: true, openapiWithout: [], openapiEdit: null, packageSchemaEdit: null });
   server.state.chats.length = 0;
+  server.state.chatDrafts.length = 0;
   server.state.chatFiles.length = 0;
   server.state.requests.length = 0;
 });
@@ -281,6 +283,87 @@ describe("chat --draft", () => {
       keyed.cleanup();
     }
     expect(chatPosts()).toEqual([]);
+  });
+});
+
+describe("the published version and the draft", () => {
+  it("answers a personal access token with the published version (source api), and --draft with the pending draft", async () => {
+    server.state.chatDrafts.push(solution("support").id);
+    const published = await cli(sb, ["chat", "Hi", "--harness", "support", "--json"]);
+    expect(published.code, published.stderr + published.stdout).toBe(0);
+    expect(chatPosts()[0]!.body).toMatchObject({ source: "api", harness_id: solution("support").id });
+    expect(chatPosts()[0]!.body).not.toHaveProperty("preview_draft");
+    expect(published.json<{ response: string; source: string }>()).toMatchObject({ response: "Support answers: Hi", source: "api" });
+    const draft = await cli(sb, ["chat", "Hi", "--harness", "support", "--draft", "--json"]);
+    expect(draft.code, draft.stderr + draft.stdout).toBe(0);
+    expect(chatPosts()[1]!.body).toMatchObject({ preview_draft: true });
+    expect(chatPosts()[1]!.body).not.toHaveProperty("source");
+    expect(draft.json<{ response: string; source?: string }>()).toMatchObject({ response: "Support (draft) answers: Hi" });
+    expect(draft.json<{ source?: string }>().source).toBeUndefined();
+  });
+
+  it("sends source api to the default route when it is active, and leaves a solution that is not active a Playground run", async () => {
+    solution("support").is_default = true;
+    const routed = await cli(sb, ["chat", "Hi", "--json"]);
+    expect(routed.code, routed.stderr + routed.stdout).toBe(0);
+    expect(chatPosts()[0]!.body).toMatchObject({ source: "api" });
+    expect(chatPosts()[0]!.body).not.toHaveProperty("harness_id");
+    solution("support").is_default = false;
+    solution("support").status = "draft";
+    const drafted = await cli(sb, ["chat", "Hi", "--harness", "support", "--json"]);
+    expect(drafted.code, drafted.stderr + drafted.stdout).toBe(0);
+    expect(chatPosts()[1]!.body).not.toHaveProperty("source");
+    expect(drafted.json<{ response: string }>().response).toBe("Support answers: Hi");
+  });
+
+  it("sends source api with a tenant API key too", async () => {
+    const keyed = await fresh("key");
+    try {
+      const result = await cli(keyed, ["chat", "Hi", "--harness", "support", "--json"]);
+      expect(result.code, result.stderr + result.stdout).toBe(0);
+      expect(chatPosts()[0]!.body).toMatchObject({ source: "api" });
+    } finally {
+      keyed.cleanup();
+    }
+  });
+
+  it("sends no source where the instance does not publish it, and warns a personal access token that the draft may answer", async () => {
+    server.state.openapiEdit = (doc) => {
+      delete doc.components.schemas.ChatRequest.properties.source;
+    };
+    server.state.chatDrafts.push(solution("support").id);
+    const box = await fresh();
+    const keyed = await fresh("key");
+    try {
+      const person = await cli(box, ["chat", "Hi", "--harness", "support", "--json"]);
+      expect(person.code, person.stderr + person.stdout).toBe(0);
+      expect(chatPosts()[0]!.body).not.toHaveProperty("source");
+      expect(person.stderr).toMatch(/does not publish source on chat/);
+      expect(person.json<{ response: string }>().response).toBe("Support (draft) answers: Hi");
+      const key = await cli(keyed, ["chat", "Hi", "--harness", "support", "--json"]);
+      expect(key.code, key.stderr + key.stdout).toBe(0);
+      expect(chatPosts()[1]!.body).not.toHaveProperty("source");
+      expect(key.stderr).not.toMatch(/does not publish source/);
+    } finally {
+      box.cleanup();
+      keyed.cleanup();
+    }
+  });
+
+  it("over MCP, the chat tool answers with the published version, and with the draft given draft", async () => {
+    server.state.chatDrafts.push(solution("support").id);
+    const mcp = mcpClient(sb.home);
+    try {
+      const published = await mcp.call("chat", { message: "Hi", harness: "support" });
+      expect(published.isError).toBe(false);
+      expect(published.body).toMatchObject({ response: "Support answers: Hi", source: "api" });
+      const draft = await mcp.call("chat", { message: "Hi", harness: "support", draft: true });
+      expect(draft.isError).toBe(false);
+      expect(draft.body).toMatchObject({ response: "Support (draft) answers: Hi", draft: true });
+      expect(chatPosts().map((r) => (r.body as Record<string, unknown>).source)).toEqual(["api", undefined]);
+    } finally {
+      await mcp.close();
+    }
   });
 });
 

@@ -5,6 +5,21 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 project uses [semantic versioning](https://semver.org/): one version for the
 CLI, the skills and the plugin.
 
+## [Unreleased]
+
+### Changed
+
+- `cavelon chat` (MCP `chat`) answers with an active solution's published
+  version, as visitors get it, with a personal access token too: it sends
+  `source: "api"`, so the turn counts as API traffic on the instance (the
+  tenant's API limits and processing-step cap apply). Before, a token whose
+  role holds `playground.use` was a Playground run and got a pending draft
+  with or without `--draft`. `--draft` keeps answering with the draft as a
+  Playground run. A solution that is not active has no published version and
+  still answers a person's token as a Playground run. On an instance that does
+  not publish `source` on chat nothing changes, and a personal access token is
+  warned that a pending draft may answer.
+
 ## [0.2.12] - 2026-10-28
 
 ### Added

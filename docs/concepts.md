@@ -229,12 +229,15 @@ describes the setting. This is not the tenant's `attached_documents`
 context-source limit, which bounds how much of the files reaches the model
 (the instance's page `concepts/context-budgets`). On an active solution a
 change goes to the draft: visitors get the published value, the Playground and
-test runs the draft's. `cavelon chat` with a personal access token whose role
-holds `playground.use` is a Playground run, so it already answers with the
-draft where one is pending; `--draft` (`preview_draft`) asks for it explicitly
-and is refused before sending where the draft cannot be reached. A tenant API
-key, and a token without `playground.use`, chat with the published version, as
-visitors get it.
+test runs the draft's. `cavelon chat` answers with the published version, as
+visitors get it: it sends `source: "api"`, so the turn counts as API traffic
+(the tenant's API limits and processing-step cap apply) with a personal access
+token too. `--draft` (`preview_draft`) answers with the pending draft as a
+Playground run instead; it needs a personal access token whose role holds
+`playground.use` and is refused before sending where the draft cannot be
+reached. An instance that does not publish `source` on chat takes a person's
+chat as a Playground run, which answers with the draft; `cavelon chat` warns
+there.
 
 ## Package
 

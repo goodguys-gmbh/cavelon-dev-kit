@@ -407,6 +407,8 @@ export interface FakeState {
   oracleDialect: boolean;
   /** The chat turns the instance answered: the solution, the message and the session. */
   chats: Array<{ harness_id: string; message: string; session_id: string }>;
+  /** Solutions (ids) with a pending draft: a Playground run answers with it, the published version without. */
+  chatDrafts: string[];
   /** The conversations chat turns started, by session: a turn's conversation exists before it is answered. */
   chatConversations: Array<{ id: string; session_id: string; harness_id: string; created_at: string }>;
   /** The files uploaded through the chat's file upload, with the form's scope and session. */
@@ -844,6 +846,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     openapiEdit: null,
     oracleDialect: true,
     chats: [],
+    chatDrafts: [],
     chatConversations: [],
     chatFiles: [],
     chatDelayMs: 0,
@@ -1248,9 +1251,14 @@ export async function startFakeServer(): Promise<FakeServer> {
       return send(res, 200, h);
     }
     if (p === "/api/v1/chat" && method === "POST") {
-      const b = (body.json ?? {}) as { message?: string; harness_id?: string | null; session_id?: string | null };
+      const b = (body.json ?? {}) as { message?: string; harness_id?: string | null; session_id?: string | null; source?: string | null; preview_draft?: boolean };
       if (!admitReader(res, info, tid, body.json, true)) return;
       if (!b.message) return send(res, 422, { detail: [{ loc: ["body", "message"], msg: "Field required", type: "missing" }] });
+      if (b.source != null && !/^(playground|api|widget|test)$/.test(b.source)) {
+        return send(res, 422, { detail: [{ loc: ["body", "source"], msg: "String should match pattern '^(playground|api|widget|test)$'", type: "string_pattern_mismatch" }] });
+      }
+      // As the instance: a person's chat without a source is a Playground run, and preview_draft always is one.
+      const playground = info.kind === "pat" && (b.preview_draft === true || (b.source ?? "playground") === "playground");
       const h = b.harness_id
         ? state.harnesses.find((x) => x.tenant_id === tid && x.id === b.harness_id)
         : state.harnesses.find((x) => x.tenant_id === tid && x.is_default);
@@ -1258,8 +1266,9 @@ export async function startFakeServer(): Promise<FakeServer> {
       if (!b.harness_id && h.status !== "active") {
         return send(res, 409, { detail: "Nothing in this tenant is live to answer yet.", code: "chat_route_not_live" });
       }
-      // A draft answers a person as a Playground run, never an API key.
-      if (h.status !== "active" && info.kind !== "pat") return send(res, 409, { detail: "The selected solution is not active." });
+      // A draft answers a person as a Playground run, never an API key or a chat with source api.
+      if (h.status !== "active" && !playground) return send(res, 409, { detail: "The selected solution is not active." });
+      const fromDraft = playground && state.chatDrafts.includes(h.id);
       const session = b.session_id ?? randomUUID();
       // As the instance: the conversation exists from the turn's start, so a turn the client stopped waiting for is found by its session.
       let conversation = state.chatConversations.find((c) => c.session_id === session);
@@ -1273,7 +1282,7 @@ export async function startFakeServer(): Promise<FakeServer> {
       // A turn a recent instance reports with status null: refused here by the tenant's chat limit.
       const refused = state.chatTurnFields && state.chatStatus === null;
       return send(res, 200, {
-        response: cancelled ? "" : refused ? "Too many messages; try again in a minute." : `${h.name} answers: ${b.message}`,
+        response: cancelled ? "" : refused ? "Too many messages; try again in a minute." : `${h.name}${fromDraft ? " (draft)" : ""} answers: ${b.message}`,
         session_id: session,
         conversation_id: conversation.id,
         agent_run_id: null,

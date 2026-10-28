@@ -399,10 +399,11 @@ trace. It reaches an active solution that is not the tenant's default route,
 which the tenant's chat and widget never answer with; a draft answers only a
 person's token, as a Playground run. `--file <path>` attaches a file (the
 solution's wait for a file still being read is `settings.attached_documents`
-in `harnesses.yaml`). With a personal access token holding `playground.use`
-the chat is a Playground run, so an active solution answers with its pending
-draft; `--draft` asks for it explicitly, and an API key gets the published
-version. A `chat_turn_timeout` means the turn goes on and its answer is stored:
+in `harnesses.yaml`). An active solution answers with its published version,
+as visitors get it, and the turn counts as API traffic (its limits and the
+processing-step cap apply); `--draft` answers with its pending draft as a
+Playground run instead (a personal access token holding `playground.use`;
+never an API key). A `chat_turn_timeout` means the turn goes on and its answer is stored:
 never send the message again (it would run twice); read the conversation the
 error names. A `cancelled` status is a turn stored without an answer. `cavelon api chat` with `harness_id` in
 the body does the same, but needs the id and a confirm. `cavelon deactivate

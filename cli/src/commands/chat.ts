@@ -13,14 +13,18 @@ import { cavelonCommand, fill } from "../printed.js";
 import { MCP_MAX_WAIT_MS } from "./async.js";
 import { accessFor, activationStep, mayActivate } from "../access.js";
 import { AS_CHAT_USER_OPTION, chatUserReader, chatUserReaderError } from "../chat-reader.js";
-import { deref, jsonBodySchema } from "../openapi.js";
+import type { OpenApiDoc } from "../contracts.js";
+import { deref, jsonBodySchema, schemaErrors } from "../openapi.js";
 import { confinedPath } from "../paths.js";
 
 /**
  * Talking to one solution, and taking one out of service. The tenant's chat
  * and widget answer only with the default route, so a solution that is not
  * the default is tried by naming it; a draft answers a person as a Playground
- * run (the API endpoints reference, "Try a draft solution").
+ * run (the API endpoints reference, "Try a draft solution"). The instance
+ * takes a person's chat without a `source` as a Playground run, which answers
+ * an active solution with its pending draft, so the kit names `source: "api"`
+ * to get the published version, as visitors do.
  */
 
 /** The fields of a ChatResponse the kit reads. */
@@ -85,13 +89,39 @@ const LOOKUP_MS = 5_000;
 const unavailable = (message: string, hint: string) =>
   new CavelonError(ExitCode.failure, { code: "operation_unavailable", message, hint, details: { sent: false } });
 
-/** The fields a request body publishes, or undefined when the instance's OpenAPI cannot say. */
-async function bodyFields(ctx: Context, method: string, route: string, what: string, multipart = false): Promise<Record<string, unknown> | undefined> {
+/** A request body's published fields, or undefined when the instance's OpenAPI cannot say. */
+async function bodySchema(ctx: Context, method: string, route: string, what: string, multipart = false): Promise<{ doc: OpenApiDoc; fields: Record<string, unknown> } | undefined> {
   const { doc, op } = await workflowOperation(ctx, method, route, what);
   if (!doc) return undefined;
   const schema = multipart ? op.requestBody?.content?.["multipart/form-data"]?.schema : jsonBodySchema(op);
   const body = schema ? (deref(doc, schema) as { properties?: Record<string, unknown> } | undefined) : undefined;
-  return body?.properties ?? {};
+  return { doc, fields: body?.properties ?? {} };
+}
+
+async function bodyFields(ctx: Context, method: string, route: string, what: string, multipart = false): Promise<Record<string, unknown> | undefined> {
+  return (await bodySchema(ctx, method, route, what, multipart))?.fields;
+}
+
+/**
+ * Whether chat takes `source: "api"`. An instance that does not publish the
+ * field, or does not allow the value, is not sent it; one whose OpenAPI
+ * cannot be read is, since every instance that publishes the field allows it.
+ */
+function takesApiSource(body: { doc: OpenApiDoc; fields: Record<string, unknown> } | undefined): boolean {
+  if (!body) return true;
+  const field = body.fields.source;
+  if (!field || typeof field !== "object") return false;
+  return schemaErrors(body.doc, field as Record<string, unknown>, "api").length === 0;
+}
+
+/**
+ * The status of the solution that will answer: the named one's, else the
+ * default route's where the instance says which it is; undefined when unknown.
+ */
+async function answeringStatus(ctx: Context, harness: HarnessSummary | undefined): Promise<string | undefined> {
+  if (harness) return harness.status;
+  const route = await readDefaultRoute(ctx).catch(() => undefined);
+  return route?.current?.status;
 }
 
 /**
@@ -251,10 +281,13 @@ export const chat: CommandSpec = {
     "Choose an id with `cavelon api list_chat_users -p tenant_id=<tenant_id>`; email_verified says whether an email-bound\n" +
     "query can bind that address. Without the option, keeps the usual reader.\n" +
     "--file uploads a file to the turn's conversation first (POST /api/v1/chat/files) and names it in file_ids, so the\n" +
-    "solution's wait for a file still being read (settings.attached_documents) can be tried. A personal access token whose\n" +
-    "role holds playground.use chats as the Playground does: an active solution answers with its unpublished draft where\n" +
-    "one is pending, with or without --draft. --draft (preview_draft) says so explicitly and is refused before sending where\n" +
-    "the draft cannot be reached. A tenant API key, and a token without playground.use, chat with the published version.\n" +
+    "solution's wait for a file still being read (settings.attached_documents) can be tried. An active solution answers\n" +
+    "with its published version, as visitors get it: the kit sends source api, so the turn counts as API traffic (the\n" +
+    "tenant's API limits and processing-step cap apply), with a personal access token too. --draft (preview_draft) answers\n" +
+    "with the active solution's pending draft as a Playground run instead (counted as testing; needs playground.use, never\n" +
+    "a tenant API key) and is refused before sending where the draft cannot be reached. A solution that is not active has no\n" +
+    "published version and answers a person's token as a Playground run. An instance that does not publish source on chat\n" +
+    "takes a person's chat as a Playground run, which answers with a pending draft; the kit warns about that.\n" +
     "The first turn carries a session_id the kit chose. A turn that is not answered in time goes on on the instance, which\n" +
     "stores its answer: the error says how to read the conversation; sending the message again would run it twice. A\n" +
     "status the instance reports (cancelled, waiting, blocked) is shown. A cancelled turn, and one a recent instance reports\n" +
@@ -270,7 +303,7 @@ export const chat: CommandSpec = {
     session: { type: "string", value: "<session_id>", description: "Continue this conversation (the session_id a previous chat printed)." },
     "as-chat-user": AS_CHAT_USER_OPTION,
     file: { type: "string", multiple: true, value: "<path>", description: "Attach this file to the message (uploaded to the conversation first)." },
-    draft: { type: "boolean", description: "Answer with the active solution's draft, as the Playground does; refused where it cannot (needs playground.use)." },
+    draft: { type: "boolean", description: "Answer with the active solution's pending draft as a Playground run, not the published version; needs playground.use." },
     timeout: { type: "string", value: "<duration>", description: `Wait at most this long for the answer (90s, 5m; default ${DEFAULT_CHAT_TIMEOUT}).` },
   },
   examples: [
@@ -293,8 +326,19 @@ export const chat: CommandSpec = {
     const harness = ref ? await findHarness(ctx, ref, source, (slug) => cavelonCommand("chat", fill("message"), "--harness", slug)) : undefined;
     const draft = boolOption(input, "draft");
     const files = listOption(input, "file");
-    const chatFields = draft || files.length ? await bodyFields(ctx, "POST", CHAT_ROUTE, "chatting with a solution") : undefined;
+    const chatBody = await bodySchema(ctx, "POST", CHAT_ROUTE, "chatting with a solution");
+    const chatFields = chatBody?.fields;
     if (draft) await checkDraft(ctx, chatFields);
+    // The published version exists only for an active solution: one that is not
+    // active is left to the instance, which answers a person as a Playground run.
+    const status = draft ? undefined : await answeringStatus(ctx, harness);
+    const published = !draft && (status === undefined || status === "active");
+    const apiSource = published && takesApiSource(chatBody);
+    if (published && !apiSource && session.tokenKind !== "api_key" && (await accessFor(await ctx.client()))?.kind !== "api_key") {
+      ctx.warn(
+        "This instance does not publish source on chat, so it takes a personal access token's chat as a Playground run: an active solution answers with its pending draft where there is one. A tenant API key chats with the published version.",
+      );
+    }
     // A session the kit chose: a first turn that is not answered in time can still be found by it.
     const sessionId = stringOption(input, "session") ?? randomUUID();
     const attached = await uploadFiles(ctx, files, sessionId, chatFields, deadline);
@@ -302,6 +346,7 @@ export const chat: CommandSpec = {
     if (harness) body.harness_id = harness.id;
     if (attached.length) body.file_ids = attached.map((f) => f.file_id);
     if (draft) body.preview_draft = true;
+    if (apiSource) body.source = "api";
     let answer: ChatResponse;
     try {
       answer = await callStable<ChatResponse>(ctx, "POST", CHAT_ROUTE, "chatting with a solution", { body, timeoutMs: Math.max(1_000, deadline - Date.now()) });
@@ -324,7 +369,7 @@ export const chat: CommandSpec = {
     const incomplete = "status" in answer && answer.status === null;
     const said = cancelled ? (answer.response ? [answer.response] : []) : [`${answer.response || (incomplete ? "(no message)" : "(no text)")}${directives}${limit}`];
     return {
-      data: { harness: target, ...answer, ...reader, ...(attached.length ? { files: attached } : {}), ...(draft ? { draft: true } : {}), next },
+      data: { harness: target, ...answer, ...reader, ...(attached.length ? { files: attached } : {}), ...(draft ? { draft: true } : {}), ...(apiSource ? { source: "api" } : {}), next },
       text: [
         ...(reader ? [`Reading as Chat User ${reader.reader_chat_user_id}.`] : []),
         ...attached.map((f) => `Attached ${f.filename} (${f.file_id}${f.processing_status ? `, ${f.processing_status}` : ""}).`),

@@ -334,7 +334,8 @@ preview too.
   `cavelon chat "<message>" --harness <solution>` (the `chat` tool over MCP)
   prints its answer, the session to continue with `--session`, and the
   conversation to trace. A draft answers only a person's token, as a
-  Playground run; `--draft` tries an active solution's unpublished draft. On
+  Playground run. An active solution answers with its published version, as
+  visitors get it; `--draft` tries its unpublished draft instead. On
   `chat_turn_timeout` the turn goes on and its answer is stored: read the
   conversation the error names instead of sending the message again.
 - `cavelon deactivate --harness <solution>` takes an active solution out of
