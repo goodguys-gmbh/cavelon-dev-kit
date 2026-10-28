@@ -86,7 +86,7 @@ afterAll(async () => {
 
 beforeEach(() => {
   solution("support").status = "active";
-  Object.assign(server.state, { chatDelayMs: 0, chatStatus: undefined, chatTurnFields: true, openapiWithout: [], packageSchemaEdit: null });
+  Object.assign(server.state, { chatDelayMs: 0, chatStatus: "completed", chatTurnFields: true, openapiWithout: [], packageSchemaEdit: null });
   server.state.chats.length = 0;
   server.state.chatFiles.length = 0;
   server.state.requests.length = 0;
@@ -170,10 +170,34 @@ describe("the turn's status", () => {
     server.state.chatStatus = "completed";
     expect((await cli(sb, ["chat", "Hi", "--harness", "support"])).stdout).toMatch(/^Support \(support\) answered:\nSupport answers: Hi\n/);
     // An older instance sends no status: an answered turn.
-    server.state.chatStatus = undefined;
     server.state.chatTurnFields = false;
     const older = await fresh();
     expect((await cli(older, ["chat", "Hi", "--harness", "support"])).stdout).toMatch(/^Support \(support\) answered:\nSupport answers: Hi\n/);
+  });
+});
+
+describe("a turn a recent instance reports with status null", () => {
+  it("says the turn did not complete, shows the instance's message and the limit, and exits 1", async () => {
+    server.state.chatStatus = null;
+    const result = await cli(sb, ["chat", "Hi", "--harness", "support"]);
+    expect(result.code).toBe(1);
+    expect(result.stdout).toMatch(/^Support \(support\) did not complete the turn \(status null\): it failed or was refused\. The instance says:\nToo many messages; try again in a minute\.\nlimit: \{"code":"RATE_LIMIT_EXCEEDED"/);
+    const json = await cli(sb, ["chat", "Hi", "--harness", "support", "--json"]);
+    expect(json.code).toBe(1);
+    expect(json.json<Record<string, unknown>>()).toHaveProperty("status", null);
+  });
+
+  it("is told apart from an older instance, which sends no status for an answered turn", async () => {
+    server.state.chatStatus = null;
+    server.state.chatTurnFields = false;
+    const older = await fresh();
+    try {
+      const result = await cli(older, ["chat", "Hi", "--harness", "support", "--json"]);
+      expect(result.code, result.stdout).toBe(0);
+      expect(result.json<Record<string, unknown>>()).not.toHaveProperty("status");
+    } finally {
+      older.cleanup();
+    }
   });
 });
 

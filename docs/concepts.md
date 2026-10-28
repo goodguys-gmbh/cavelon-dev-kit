@@ -159,10 +159,12 @@ its 50 s) is not lost: the instance runs it to the end and stores its answer,
 so sending the message again would run it twice. The `chat_turn_timeout` error
 (exit 6) names the conversation, or the session to find it by, and how to read
 it (`GET /api/v1/conversations/{conversation_id}`, `cavelon api
-get_conversation`). Where the instance reports how a turn ended (`status`),
-`chat` shows `cancelled`, `waiting` or `blocked`; a cancelled turn, stored
-without an answer, exits 1. An instance that reports no status answered the
-turn.
+get_conversation`). A recent instance reports how a turn ended (`status`):
+`chat` shows `cancelled`, `waiting` or `blocked`, and a turn reported with
+status `null` as not completed (it failed or was refused, by a limit for
+example), with the instance's message and `limit_error`. A cancelled turn,
+stored without an answer, and a `null` one exit 1. An older instance sends no
+status at all, and then the turn was answered: a missing status is not `null`.
 
 `cavelon chat --file <path>` uploads a file to the turn's conversation first
 and names it in the message, as the widget does. A solution sets how long a

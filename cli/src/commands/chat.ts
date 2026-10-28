@@ -32,7 +32,12 @@ interface ChatResponse {
   ui_directives?: unknown[] | null;
   retrieval_warning?: string | null;
   limit_error?: Record<string, unknown> | null;
-  /** How the turn ended, where the instance says: completed, cancelled, waiting or blocked. Absent is an answered turn. */
+  /**
+   * How the turn ended. A recent instance always sends it: completed,
+   * cancelled, waiting or blocked, and null for a turn that failed or was
+   * refused (by a limit, say). An older instance leaves it out, and then the
+   * turn was answered: absent is not null.
+   */
   status?: string | null;
 }
 
@@ -190,9 +195,12 @@ async function turnTimedOut(ctx: Context, waitedMs: number, sessionId: string, h
   });
 }
 
-/** What the turn's status says, before the answer; undefined for an answered turn. */
-function statusLine(status: string | null | undefined, who: string): string | undefined {
-  if (!status || status === "completed") return undefined;
+/** What the turn's status says, before the answer; undefined for an answered turn. A missing status (an older instance) is one. */
+function statusLine(answer: ChatResponse, who: string): string | undefined {
+  if (!("status" in answer) || answer.status === undefined) return undefined;
+  const status = answer.status;
+  if (status === null) return `${who} did not complete the turn (status null): it failed or was refused. The instance says:`;
+  if (status === "completed") return undefined;
   if (status === "cancelled") return `${who} did not answer: the turn was cancelled. The message is stored, without an answer.`;
   if (status === "waiting") return `${who} is waiting (status waiting): the turn has not finished; its answer so far:`;
   if (status === "blocked") return `${who} blocked the turn (status blocked):`;
@@ -228,7 +236,8 @@ export const chat: CommandSpec = {
     "active solution's draft (preview_draft), as the Playground does; it needs a personal access token with playground.use.\n" +
     "The first turn carries a session_id the kit chose. A turn that is not answered in time goes on on the instance, which\n" +
     "stores its answer: the error says how to read the conversation; sending the message again would run it twice. A\n" +
-    "status the instance reports (cancelled, waiting, blocked) is shown; a cancelled turn exits 1.",
+    "status the instance reports (cancelled, waiting, blocked) is shown. A cancelled turn, and one a recent instance reports\n" +
+    "with status null (failed or refused, such as by a limit), exits 1; an older instance sends no status for an answered turn.",
   readOnly: false,
   mcpEffect: "Starts or continues a conversation with the solution and runs its agents (model usage, its tools' actions); changes no configuration.",
   mcpTool: "chat",
@@ -288,9 +297,11 @@ export const chat: CommandSpec = {
     const who = harness ? named(harness) : "The default route";
     const directives = answer.ui_directives?.length ? `\n(${answer.ui_directives.length} UI directive${answer.ui_directives.length === 1 ? "" : "s"}, such as a form; --json shows them)` : "";
     const limit = answer.limit_error ? `\nlimit: ${clip(JSON.stringify(answer.limit_error), 300)}` : "";
-    const ended = statusLine(answer.status, who);
+    const ended = statusLine(answer, who);
     const cancelled = answer.status === "cancelled";
-    const said = cancelled ? (answer.response ? [answer.response] : []) : [`${answer.response || "(no text)"}${directives}${limit}`];
+    // Present and null: a recent instance's turn that failed or was refused. Absent: an older instance's answered turn.
+    const incomplete = "status" in answer && answer.status === null;
+    const said = cancelled ? (answer.response ? [answer.response] : []) : [`${answer.response || (incomplete ? "(no message)" : "(no text)")}${directives}${limit}`];
     return {
       data: { harness: target, ...answer, ...reader, ...(attached.length ? { files: attached } : {}), ...(draft ? { draft: true } : {}), next },
       text: [
@@ -303,7 +314,7 @@ export const chat: CommandSpec = {
         `session:          ${answer.session_id}   continue with: ${next.continue}`,
         `conversation_id:  ${answer.conversation_id}   its traces: ${next.trace}`,
       ].join("\n"),
-      ...(cancelled ? { exitCode: ExitCode.failure } : {}),
+      ...(cancelled || incomplete ? { exitCode: ExitCode.failure } : {}),
     };
   },
 };

@@ -309,15 +309,18 @@ instance build's checked-in OpenAPI, without running an instance: the chat file
 upload (`POST /api/v1/chat/files`), the conversation list and detail
 (`GET /api/v1/conversations`, `GET /api/v1/conversations/{conversation_id}`)
 with their referenced schemas, and `ChatRequest.preview_draft`. The three
-operations are listed in `kit-operations.json`. Two parts were added by hand
-ahead of the instance's release and must be refreshed from the instance once it
-publishes them: the optional `ChatResponse.status` (`completed`, `cancelled`,
-`waiting`, `blocked`), and the package schema's description of a harness's
-`settings.attached_documents` (`wait_until_readable`, `wait_seconds` with its
-0 to 120 bounds; `settings` stays open). Existing operations, schemas,
-capabilities and defaults stay as recorded. The fake server also plays an
-instance without the upload, the conversation list, `preview_draft`, `status`
-or the setting's description.
+operations are listed in `kit-operations.json`. Two parts come from the
+instance's generators in an unreleased build, also without running it: the
+optional `ChatResponse.status` (`completed`, `cancelled`, `waiting`,
+`blocked` or null; a recent instance always sends it, null for a turn that
+failed or was refused, and an older one leaves it out), selected from its
+OpenAPI without prose, and the package schema's description of a harness's
+`settings` (an open object describing `attached_documents`:
+`wait_until_readable`, default true, and `wait_seconds`, 0 to 120), selected
+from its package schema. Refresh both from the instance once that build is
+deployed. Existing operations, schemas, capabilities and defaults stay as
+recorded. The fake server also plays an instance without the upload, the
+conversation list, `preview_draft`, `status` or the setting's description.
 
 | File | Source |
 |---|---|

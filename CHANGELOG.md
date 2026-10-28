@@ -31,8 +31,10 @@ CLI, the skills and the plugin.
   `chat` waits 45 s and looks the conversation up within its 50 s.
 - `cavelon chat` shows the turn's `status` where the instance reports one: a
   cancelled turn reads "cancelled" instead of "(no text)" and exits 1;
-  `waiting` and `blocked` are named with the answer. A response without a
-  status is an answered turn, as before.
+  `waiting` and `blocked` are named with the answer; a turn reported with
+  status `null` (failed or refused, by a limit for example) reads "did not
+  complete" with the instance's message and `limit_error`, and exits 1. An
+  older instance sends no status, and its turn is answered, as before.
 - `pull` and `fmt` no longer add a key the package schema describes to an
   open map that does not hold it, such as `attached_documents` to a
   solution's `settings`: the instance stores such a map as it comes.

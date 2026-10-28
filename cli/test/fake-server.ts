@@ -397,8 +397,12 @@ export interface FakeState {
   chatFiles: Array<{ file_id: string; filename: string; scope: string | null; session_id: string | null; size_bytes: number }>;
   /** How long a chat turn takes before it answers; the turn is kept even when the client stops waiting. */
   chatDelayMs: number;
-  /** The status a chat turn's response carries; undefined leaves it out, as an older instance does. */
-  chatStatus: string | undefined;
+  /**
+   * The status a chat turn's response carries where the instance publishes it
+   * (chatTurnFields): "completed" by default, null for a failed or refused
+   * turn. An older instance (chatTurnFields false) leaves it out.
+   */
+  chatStatus: string | null;
   /** False serves the OpenAPI without chat's preview_draft and status, as an instance older than them. */
   chatTurnFields: boolean;
   /**
@@ -826,7 +830,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     chatConversations: [],
     chatFiles: [],
     chatDelayMs: 0,
-    chatStatus: undefined,
+    chatStatus: "completed",
     chatTurnFields: true,
     secretFields: {},
     interruptions: [],
@@ -1245,13 +1249,18 @@ export async function startFakeServer(): Promise<FakeServer> {
       if (state.chatDelayMs) await new Promise((r) => setTimeout(r, state.chatDelayMs));
       state.chats.push({ harness_id: h.id, message: b.message, session_id: session });
       const cancelled = state.chatStatus === "cancelled";
+      // A turn a recent instance reports with status null: refused here by the tenant's chat limit.
+      const refused = state.chatTurnFields && state.chatStatus === null;
       return send(res, 200, {
-        response: cancelled ? "" : `${h.name} answers: ${b.message}`,
+        response: cancelled ? "" : refused ? "Too many messages; try again in a minute." : `${h.name} answers: ${b.message}`,
         session_id: session,
         conversation_id: conversation.id,
         agent_run_id: null,
         ui_directives: null,
-        ...(state.chatStatus ? { status: state.chatStatus } : {}),
+        ...(state.chatTurnFields ? { status: state.chatStatus } : {}),
+        ...(refused
+          ? { limit_error: { code: "RATE_LIMIT_EXCEEDED", error: "rate_limit_exceeded", message: "Too many messages.", scope: "tenant", group: "chat", limit: 10, remaining: 0, reset_at: 0, retry_after_seconds: 60 } }
+          : {}),
       });
     }
     if (p === "/api/v1/chat/files" && method === "POST") {
