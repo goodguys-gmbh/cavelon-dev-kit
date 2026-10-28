@@ -7,6 +7,8 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+## [0.2.14] - 2026-10-28
+
 ### Added
 
 - `cavelon chat` (MCP `chat`) warns when an active solution's published
