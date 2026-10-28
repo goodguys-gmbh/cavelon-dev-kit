@@ -7,6 +7,15 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Added
+
+- `cavelon chat` (MCP `chat`) warns when an active solution's published
+  version answers while the solution has unpublished draft changes: a change
+  applied since publishing is not what answered. The warning names the draft's
+  revision, the published version and the `--draft` command that tries the
+  draft. Nothing is said with `--draft`, for a solution without a draft, or
+  where the instance does not report `has_draft`.
+
 ## [0.2.13] - 2026-10-28
 
 ### Changed
