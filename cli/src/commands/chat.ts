@@ -114,14 +114,24 @@ function takesApiSource(body: { doc: OpenApiDoc; fields: Record<string, unknown>
   return schemaErrors(body.doc, field as Record<string, unknown>, "api").length === 0;
 }
 
+/** A solution as the instance lists it, with its publication where the instance reports it. */
+type AnsweringSolution = HarnessSummary & { has_draft?: unknown; published_version?: unknown; draft_revision?: unknown };
+
 /**
- * The status of the solution that will answer: the named one's, else the
- * default route's where the instance says which it is; undefined when unknown.
+ * The solution that will answer: the named one, else the default route where
+ * the instance says which it is; undefined when unknown.
  */
-async function answeringStatus(ctx: Context, harness: HarnessSummary | undefined): Promise<string | undefined> {
-  if (harness) return harness.status;
+async function answeringSolution(ctx: Context, harness: HarnessSummary | undefined): Promise<AnsweringSolution | undefined> {
+  if (harness) return harness;
   const route = await readDefaultRoute(ctx).catch(() => undefined);
-  return route?.current?.status;
+  return route?.current;
+}
+
+/** Said when the published version answers a solution that has a pending draft: a change applied since publishing is not what answered. */
+function pendingDraftWarning(solution: AnsweringSolution): string {
+  const revision = typeof solution.draft_revision === "number" ? ` (revision ${solution.draft_revision})` : "";
+  const version = typeof solution.published_version === "number" ? ` ${solution.published_version}` : "";
+  return `${named(solution)} has unpublished draft changes${revision}; this answer comes from its published version${version}, as visitors get it, not from those changes. Try the draft with \`${cavelonCommand("chat", fill("message"), "--harness", solution.slug, "--draft")}\`.`;
 }
 
 /**
@@ -331,9 +341,11 @@ export const chat: CommandSpec = {
     if (draft) await checkDraft(ctx, chatFields);
     // The published version exists only for an active solution: one that is not
     // active is left to the instance, which answers a person as a Playground run.
-    const status = draft ? undefined : await answeringStatus(ctx, harness);
+    const answering = draft ? undefined : await answeringSolution(ctx, harness);
+    const status = answering?.status;
     const published = !draft && (status === undefined || status === "active");
     const apiSource = published && takesApiSource(chatBody);
+    if (apiSource && answering?.has_draft === true) ctx.warn(pendingDraftWarning(answering));
     if (published && !apiSource && session.tokenKind !== "api_key" && (await accessFor(await ctx.client()))?.kind !== "api_key") {
       ctx.warn(
         "This instance does not publish source on chat, so it takes a personal access token's chat as a Playground run: an active solution answers with its pending draft where there is one. A tenant API key chats with the published version.",

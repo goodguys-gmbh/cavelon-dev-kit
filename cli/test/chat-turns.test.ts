@@ -87,6 +87,7 @@ afterAll(async () => {
 beforeEach(() => {
   solution("support").status = "active";
   solution("support").is_default = false;
+  delete solution("support").has_draft;
   Object.assign(server.state, { chatDelayMs: 0, chatStatus: "completed", chatTurnFields: true, openapiWithout: [], openapiEdit: null, packageSchemaEdit: null });
   server.state.chats.length = 0;
   server.state.chatDrafts.length = 0;
@@ -350,6 +351,23 @@ describe("the published version and the draft", () => {
     }
   });
 
+  it("warns that the published version answered a solution with a pending draft, and not with --draft or without a draft", async () => {
+    Object.assign(solution("support"), { has_draft: true, draft_revision: 3, published_version: 2 });
+    const published = await cli(sb, ["chat", "Hi", "--harness", "support", "--json"]);
+    expect(published.code, published.stderr + published.stdout).toBe(0);
+    expect(published.stderr).toMatch(/has unpublished draft changes \(revision 3\); this answer comes from its published version 2/);
+    expect(published.stderr).toMatch(/cavelon chat .* --harness support --draft/);
+    solution("support").is_default = true;
+    const routed = await cli(sb, ["chat", "Hi", "--json"]);
+    expect(routed.stderr).toMatch(/has unpublished draft changes/);
+    const draft = await cli(sb, ["chat", "Hi", "--harness", "support", "--draft", "--json"]);
+    expect(draft.code, draft.stderr + draft.stdout).toBe(0);
+    expect(draft.stderr).not.toMatch(/unpublished draft changes/);
+    solution("support").has_draft = false;
+    const clean = await cli(sb, ["chat", "Hi", "--harness", "support", "--json"]);
+    expect(clean.stderr).not.toMatch(/unpublished draft changes/);
+  });
+
   it("over MCP, the chat tool answers with the published version, and with the draft given draft", async () => {
     server.state.chatDrafts.push(solution("support").id);
     const mcp = mcpClient(sb.home);
@@ -357,10 +375,14 @@ describe("the published version and the draft", () => {
       const published = await mcp.call("chat", { message: "Hi", harness: "support" });
       expect(published.isError).toBe(false);
       expect(published.body).toMatchObject({ response: "Support answers: Hi", source: "api" });
+      expect(JSON.stringify(published.body.warnings ?? [])).not.toMatch(/unpublished draft changes/);
+      solution("support").has_draft = true;
+      const warned = await mcp.call("chat", { message: "Hi", harness: "support" });
+      expect(JSON.stringify(warned.body.warnings)).toMatch(/has unpublished draft changes/);
       const draft = await mcp.call("chat", { message: "Hi", harness: "support", draft: true });
       expect(draft.isError).toBe(false);
       expect(draft.body).toMatchObject({ response: "Support (draft) answers: Hi", draft: true });
-      expect(chatPosts().map((r) => (r.body as Record<string, unknown>).source)).toEqual(["api", undefined]);
+      expect(chatPosts().map((r) => (r.body as Record<string, unknown>).source)).toEqual(["api", "api", undefined]);
     } finally {
       await mcp.close();
     }
