@@ -7,6 +7,16 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+## [0.2.15] - 2026-10-29
+
+### Fixed
+
+- The release signs the offline bundle with GitHub's OIDC token only and
+  retries a failed attempt, instead of waiting for an interactive sign-in no
+  one can complete. The CLI, skills and plugin are unchanged from 0.2.14; this
+  version also makes them npm's `latest` again, which 0.2.13 had become when it
+  was published after 0.2.14.
+
 ## [0.2.14] - 2026-10-28
 
 ### Added
