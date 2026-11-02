@@ -217,9 +217,17 @@ The run finished, but some cases did not pass. The output names them;
 
 Without `--suite`, `test run` leaves out suites that never vote in the
 solution's readiness, such as a campaign's question check from the Admin's
-Engagement editor (tagged `engagement` and `rule:<id>`). The output lists them
-as skipped, and they never change the exit code. `cavelon test run --suite
-<name>` runs one.
+Engagement editor (tagged `engagement` and `rule:<id>`), or a suite a person
+switched out of the vote. The output lists them as skipped, and they never
+change the exit code. `cavelon test run --suite <name>` runs one. With
+`--profile <key>`, the suites without that run profile are skipped too
+(`no_profile`).
+
+### `test run` passed, but readiness still asks for a run.
+
+Where a suite's gate names a run profile, only a run of that profile votes:
+`cavelon test run --profile <key>`. `cavelon api list_suites` shows each
+suite's `profiles` and `gate_profile`.
 
 ### Where are the error codes explained?
 

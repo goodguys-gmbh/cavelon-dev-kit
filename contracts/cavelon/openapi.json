@@ -21913,6 +21913,36 @@
       },
       "TestRunCreate": {
         "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9_-]{0,31}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "maxLength": 100,
+                  "minLength": 1
+                },
+                "type": "array",
+                "maxItems": 20,
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags"
+          },
           "notes": {
             "anyOf": [
               {
@@ -22468,6 +22498,24 @@
       },
       "TestSuiteResponse": {
         "properties": {
+          "profiles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Profiles"
+          },
+          "gate_profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gate Profile"
+          },
           "id": {
             "type": "string",
             "format": "uuid",

@@ -174,9 +174,16 @@ The case's own reason (which knowledge base, which value) is in the output of
 Without `--suite`, `test run` runs every suite of the solution except those
 that never vote in readiness: a campaign's question check (tagged `engagement`
 and `rule:<id>`, made by the Admin's Engagement editor, and never part of the
-package). They are listed under `skipped` and never change the exit code; a
-failed question there is a content gap for the campaign's author.
-`--suite <name>` runs one when asked.
+package), or a suite a person switched out of the vote. They are listed under
+`skipped` and never change the exit code; a failed question there is a content
+gap for the campaign's author. `--suite <name>` runs one when asked.
+
+`--profile <key>` runs a suite's run profile (its `settings.profiles`, chosen
+by tags) instead of the whole suite, for example a smoke profile before a
+deploy; without `--suite`, every suite that has it, the others skipped as
+`no_profile`. Where a suite's `gate.profile` names a profile, only a run of it
+counts for publishing: run that one before asking for activation. `--tags`
+runs the cases carrying one of the tags and never counts for publishing.
 
 ## Database query tools
 
