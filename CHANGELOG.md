@@ -7,6 +7,14 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Added
+
+- Authoring guidance for per-agent response rules and the persona's
+  `plain_language` levels, with role-specific examples and a test suite that
+  combines a style judge criterion with a report-only long-sentence check.
+  Contract snapshots now describe these settings where the instance publishes
+  them; older instances still warn `package_field_unknown` and ignore them.
+
 ## [0.2.15] - 2026-10-29
 
 ### Fixed

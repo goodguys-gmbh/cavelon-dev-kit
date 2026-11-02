@@ -6,6 +6,19 @@ and the fake server in `cli/test/` serves them.
 
 ## `cavelon/`
 
+On 2026-11-02 the response-rule contracts were selectively refreshed from a
+running instance: `PackageAgent.response_rules`, `PackagePersona.plain_language`
+and the `TextMatchCriterion` shape used by the report-only sentence check.
+The OpenAPI takes `GET`/`PUT /api/v1/bot-persona` and the agent list, create,
+get and update operations, with their referenced components, trimmed as below;
+the four agent operations are added to `kit-operations.json`. Other operations,
+package fields, capabilities and catalog entries stay as recorded. The map is
+open in the published package schema, so its values are checked by the
+instance's import preview, not by a field list in the CLI. The fake server
+also plays an older instance without either field, which warns and ignores
+them, and models the instance preserving either saved value on omission.
+These tests check contracts and transport, not a model's wording.
+
 On 2026-10-28 the OpenAPI and the package schema were refreshed whole from a
 deployed instance that publishes the engagement rules, the chat turn's
 `status` and a test suite's `purpose`: the OpenAPI trimmed as below, with its

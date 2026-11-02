@@ -263,9 +263,40 @@ seeds/faq/               three FAQ pages to upload
 Each file under `package/` is one section of the instance's package schema
 (copying `package/` replaces the `persona.yaml` and `manifest.yaml` that `init`
 wrote).
-The persona says who the assistant is for every agent of the solution; an
-agent's `system_prompt` says what that agent does. See
+The persona says who the assistant is. Every agent inherits its response
+rules unless `response_rules` disables individual rules or `skip_persona`
+disables them all; an agent's `system_prompt` says what it does. See
 [Persona](concepts.md#persona).
+
+The example sets `plain_language: on_request` in `package/persona.yaml`, so
+the answering agent simplifies when a person asks. Choose `lay` to explain
+for general readers, `expert` for clear specialist prose, `auto` to judge the
+reader from the first messages or `off` for ordinary wording. Check
+`cavelon schema persona` first: an older instance warns
+`package_field_unknown` and ignores this setting until it is supported.
+
+If you add a consulted researcher, give its entry in `package/agents.yaml`
+these overrides so its evidence keeps citations without applying the other
+persona rules:
+
+```yaml
+response_rules:
+  identity: off
+  citations: inherit
+  images: off
+  action_buttons: off
+  response_style: off
+  language_hint: off
+  plain_language: off
+```
+
+The answering agent inherits everything; a structured or internal agent
+instead uses `skip_persona: true`. The
+[optional researcher example](../examples/support-faq/README.md#optional-add-a-consulted-researcher)
+shows the complete extra agent and consult link. A suite should check clarity
+with a style judge criterion; a report-only long-sentence assertion can flag
+answers to review. See [the authoring guide](../plugin/skills/cavelon-authoring/references/response-rules.md#check-the-wording-with-a-suite).
+
 A knowledge base reaches the agent only through a tool that reads it: the
 skill carries the built-in `search_documents` in its `tool_assignments`, and
 names the knowledge base it searches (`list_documents` lists a knowledge base's

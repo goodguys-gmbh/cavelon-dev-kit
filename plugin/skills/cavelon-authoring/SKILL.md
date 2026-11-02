@@ -205,7 +205,7 @@ with `cavelon harness default`).
 Every solution has a persona in `package/persona.yaml`. It is not an agent's
 instructions:
 
-- **The persona says who** the assistant is, for every agent of the solution:
+- **The persona says who** the assistant is; agents inherit its rules by default:
   its name (`bot_name`), its voice and its boundaries (`persona_prompt`), the
   greeting a conversation opens with and the fallback it gives when it has no
   answer, its language (`language_hint`), response style, disclaimer and the
@@ -260,6 +260,22 @@ and fill the field in to set it. A file of comments only sets nothing.
   (`get_bot_persona`, `upsert_bot_persona`) reach the tenant's default route;
   in a solution folder, `cavelon api` sends the folder's solution, and says
   so. Prefer the package file and `apply` over those operations.
+
+## Response rules by role
+
+Check `cavelon schema persona` and `cavelon schema agents` first: older
+instances do not publish these settings. An answering agent inherits all
+persona rules by leaving `response_rules` unset. A consulted agent keeps
+`citations: inherit` and turns every other response rule off. A structured or
+internal agent uses `skip_persona: true`, which wins over individual overrides.
+Do not simplify intermediate results that another agent or node consumes.
+
+For `persona.plain_language`, choose `off` for ordinary wording, `on_request`
+for simplification when asked, `auto` for a mixed audience, `lay` for general
+readers or `expert` for specialists who still need clear language. Read
+[Response rules and plain language](references/response-rules.md) when
+setting them: it has the consulted-agent map, override semantics and a test
+suite with a style judge criterion and a report-only long-sentence assertion.
 
 ## A chat turn's wait for attached files
 

@@ -300,6 +300,20 @@
           "title": "Skip Persona",
           "type": "boolean"
         },
+        "response_rules": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Per-rule overrides of the persona's response rules while skip_persona is false. Keys: identity, citations, images, action_buttons (inherit | off), response_style (inherit | off | {\"preset\": ...}), language_hint (inherit | off | language code), plain_language (inherit | off | on_request | auto | lay | expert). An absent key inherits. Omitted, an import keeps the target's rules.",
+          "title": "Response Rules"
+        },
         "trigger_inject_paths": {
           "items": {
             "type": "string"
@@ -1558,6 +1572,26 @@
           ],
           "default": null,
           "title": "Response Style"
+        },
+        "plain_language": {
+          "anyOf": [
+            {
+              "enum": [
+                "off",
+                "on_request",
+                "auto",
+                "lay",
+                "expert"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Plain language for every agent that inherits it: off, on_request (simplify when the person asks), auto (judge the reader once), lay or expert. DIN 8581 plain language, with ASD-STE100 rules for technical content. Omitted, an import keeps the target's setting.",
+          "title": "Plain Language"
         },
         "fallback_message": {
           "anyOf": [
@@ -4229,6 +4263,12 @@
           "default": null,
           "title": "Label"
         },
+        "gate": {
+          "default": true,
+          "description": "False makes the assertion report-only: it is evaluated and shown, but a failure does not fail the step.",
+          "title": "Gate",
+          "type": "boolean"
+        },
         "type": {
           "enum": [
             "must_contain",
@@ -4238,16 +4278,33 @@
           "type": "string"
         },
         "value": {
-          "maxLength": 2000,
-          "minLength": 1,
-          "title": "Value",
-          "type": "string"
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "items": {
+                "maxLength": 2000,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 20,
+              "minItems": 1,
+              "type": "array"
+            }
+          ],
+          "description": "A text, or a list of texts: must_contain then passes when one of them is found, must_not_contain when none is.",
+          "title": "Value"
         },
         "match": {
           "default": "literal",
+          "description": "'literal' finds the text as written, 'regex' a pattern, 'tolerant' a passage the way the answer post-check finds a quotation: spacing, punctuation and line breaks ignored, an OCR typo or a German ending tolerated, a negation added or dropped not. 'tolerant' ignores case_sensitive.",
           "enum": [
             "literal",
-            "regex"
+            "regex",
+            "tolerant"
           ],
           "title": "Match",
           "type": "string"
@@ -4256,6 +4313,38 @@
           "default": false,
           "title": "Case Sensitive",
           "type": "boolean"
+        },
+        "scope": {
+          "default": "answer",
+          "description": "Which text is checked: 'answer', the answer as delivered with anything the platform appended (a sources list, the answer-grounding line naming opened documents, post-check notices); 'model_answer', what the assistant itself wrote; 'tool_outputs', the output of every tool the step's agents called, or of the tools named in 'tools'; 'model_input', what the answering agent's latest model call was given: its instructions, the conversation and the tool results.",
+          "enum": [
+            "answer",
+            "model_answer",
+            "tool_outputs",
+            "model_input"
+          ],
+          "title": "Scope",
+          "type": "string"
+        },
+        "tools": {
+          "anyOf": [
+            {
+              "items": {
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 20,
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "With scope 'tool_outputs': only the outputs of these tools are read. Omitted, every tool's.",
+          "title": "Tools"
         }
       },
       "required": [
