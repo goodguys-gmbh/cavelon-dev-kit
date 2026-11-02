@@ -7,6 +7,8 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+## [0.2.16] - 2026-11-02
+
 ### Added
 
 - Authoring guidance for per-agent response rules and the persona's
