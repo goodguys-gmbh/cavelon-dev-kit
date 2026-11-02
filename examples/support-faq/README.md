@@ -76,6 +76,62 @@ From here, change the prompt, the FAQ or the tests, and run the loop again:
 agent, open this folder and ask it, for example, to "add a question about
 shipping costs to the smoke tests and make it pass".
 
+## Optional: add a consulted researcher
+
+The example's `package/persona.yaml` sets `plain_language: on_request`: the
+answering agent simplifies when a customer asks. Use `lay` for general
+readers, `expert` for specialists, `auto` for a varying audience or `off`
+for ordinary wording. First check `cavelon schema persona` and
+`cavelon schema agents`: an older instance warns `package_field_unknown`
+and lists these fields as ignored in the apply preview.
+
+To split evidence gathering from the answer, append this agent to
+`package/agents.yaml`. Pick a model the tenant offers, as above:
+
+```yaml
+- slug: faq-researcher
+  harness_slug: support-faq
+  name: FAQ researcher
+  description: Finds the support policy and returns evidence to the answering agent.
+  llm_model: gpt-5.4-mini
+  llm_provider: openai
+  temperature: 0.4
+  parallel_tool_calls: false
+  is_entrypoint: false
+  system_prompt: Find the relevant FAQ facts and return them with their source citations. Say when the FAQ has no answer.
+  response_rules:
+    identity: off
+    citations: inherit
+    images: off
+    action_buttons: off
+    response_style: off
+    language_hint: off
+    plain_language: off
+  skill_assignments:
+    - skill_slug: answer-from-faq
+```
+
+Add this link inside the existing `faq-agent` entry, and update its
+`system_prompt` to consult `faq-researcher` for FAQ facts before answering:
+
+```yaml
+handoffs:
+  - to_agent_slug: faq-researcher
+    edge_type: consult
+```
+
+The researcher keeps citations and turns the other persona rules off. The
+answering agent leaves `response_rules` unset and inherits everything,
+including plain language. For a structured or internal pipeline agent use
+`skip_persona: true`, which turns all rules off and wins over overrides.
+Omitting either new setting on import preserves its saved value; use
+`plain_language: off` or `response_rules: {}` to explicitly disable
+simplification or reset overrides. Validate, preview and apply, then run the
+suite and read its trace. The [plain-language authoring guide](../../plugin/skills/cavelon-authoring/references/response-rules.md#check-the-wording-with-a-suite)
+shows a style criterion and a report-only long-sentence assertion to add to
+the suite. That heuristic flags answers to review, without failing a step
+only because it found a long sentence.
+
 The Canvas also has a Chat Start connected to the FAQ agent. Its saved demo
 message asks about support hours, one of the smoke cases. After the import
 and FAQ upload, open the draft in the Canvas to inspect or change that input

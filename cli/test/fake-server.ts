@@ -77,6 +77,14 @@ function withUploadReplace(text: string, kind: FakeState["uploadReplace"]): stri
   if (kind === "none") delete form.properties.replace_doc_ids;
   return JSON.stringify(doc);
 }
+/** An older instance publishes neither per-agent response rules nor persona plain language. */
+function withResponseRules(text: string, on: boolean): string {
+  if (on) return text;
+  const doc = JSON.parse(text) as { components: { schemas: Record<string, { properties?: Record<string, unknown> }> } };
+  delete doc.components.schemas.BotPersonaSchema!.properties!.plain_language;
+  for (const name of ["AgentDefinitionCreate", "AgentDefinitionUpdate"]) delete doc.components.schemas[name]!.properties!.response_rules;
+  return JSON.stringify(doc);
+}
 /** The OpenAPI without chat's preview_draft and the turn's status, as an instance older than them publishes it. */
 function withChatTurnFields(text: string, on: boolean): string {
   if (on) return text;
@@ -423,6 +431,8 @@ export interface FakeState {
   chatStatus: string | null;
   /** False serves the OpenAPI without chat's preview_draft and status, as an instance older than them. */
   chatTurnFields: boolean;
+  /** False serves both contracts and package imports/exports without the response-rule fields. */
+  responseRules: boolean;
   /**
    * Body fields marked `x-cavelon-secret` beside the snapshot's own, by
    * component schema; `null` serves the OpenAPI without any, as an instance
@@ -852,6 +862,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     chatDelayMs: 0,
     chatStatus: "completed",
     chatTurnFields: true,
+    responseRules: true,
     secretFields: {},
     interruptions: [],
     failures: [],
@@ -951,7 +962,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     if (p === "/openapi.json" || (p === "/api/v1/openapi.json" && !state.rootPathsReachApi)) {
       res.writeHead(200, { "content-type": "application/json" });
       const marked = withActivationRoute(withChatReaders(withConfirmations(withMarkers(state.personOnly, state.secretFields), state.confirmations !== null && state.confirmationMarks !== false), state.readerOverrides, state.chatUserEmailVerified), state.activationRouteFields !== false);
-      const served = withChatTurnFields(withOracleDialect(withoutOperations(withTenantWideFlag(withUploadReplace(marked, state.uploadReplace), state.tenantWideFlag), state.openapiWithout), state.oracleDialect), state.chatTurnFields);
+      const served = withResponseRules(withChatTurnFields(withOracleDialect(withoutOperations(withTenantWideFlag(withUploadReplace(marked, state.uploadReplace), state.tenantWideFlag), state.openapiWithout), state.oracleDialect), state.chatTurnFields), state.responseRules);
       if (!state.openapiEdit) return res.end(served);
       const edited = JSON.parse(served) as Record<string, any>;
       state.openapiEdit(edited);
@@ -1572,6 +1583,7 @@ export async function startFakeServer(): Promise<FakeServer> {
         persona.engagement_rules = (persona.engagement_rules as Array<{ kind?: string }>).filter((rule) => kinds.includes(String(rule.kind)));
         persona.engagement_rules_kinds = kinds;
       }
+      if (!state.responseRules) omitResponseRules(pkg);
       return send(res, 200, pkg);
     }
     if ((p === "/api/v1/agent-graph/import/preview" || p === "/api/v1/agent-graph/import") && method === "POST") {
@@ -1611,6 +1623,13 @@ export async function startFakeServer(): Promise<FakeServer> {
           : {};
       const previewId = `pv_${createHash("sha256").update(`${tid}:${config.version}:${canonical(request)}`).digest("hex").slice(0, 32)}`;
       const ignored = Object.keys(b.package).filter((k) => !(k in schema.properties));
+      const ignoredFields: string[] = [];
+      if (!state.responseRules) {
+        if ("plain_language" in ((b.package.persona ?? {}) as Record<string, unknown>)) ignoredFields.push("persona.plain_language");
+        ((b.package.agents ?? []) as Array<Record<string, unknown>>).forEach((agent, index) => {
+          if ("response_rules" in agent) ignoredFields.push(`agents[${index}].response_rules`);
+        });
+      }
       // The query gate: what a credential that may not write queries cannot import, coded as the instance codes it.
       const catalogHint = (code: string) =>
         (JSON.parse(readContract("meta-error-catalog.json")) as { api_error_codes: Array<{ code: string; hint: string }> }).api_error_codes.find((e) => e.code === code)?.hint ?? "";
@@ -1632,7 +1651,7 @@ export async function startFakeServer(): Promise<FakeServer> {
         ],
         blockers,
         ...(queryBlocked.length ? { blocker_details: queryBlocked } : {}),
-        ignored: { sections: ignored, fields: [], count: ignored.length },
+        ignored: { sections: ignored, fields: ignoredFields, count: ignored.length + ignoredFields.length },
         impact: { changed_tools: [], changed_knowledge_bases: [], active_harnesses: [], sandbox_writers: [] },
         loop_budgets: [],
         target_needs: { ...valueNeeds(tid, b.package), oauth_grants: [], runtime_bindings: [], trigger_identities: [] },
@@ -1683,8 +1702,21 @@ export async function startFakeServer(): Promise<FakeServer> {
         });
       }
       const leftOut = state.tenantWideLists && sharedApplied ? state.tenantWideKept : [];
-      const kept = Object.fromEntries(Object.entries(b.package).filter(([k]) => k in schema.properties && !sharedKept.includes(k) && !leftOut.includes(k)));
+      const kept = structuredClone(Object.fromEntries(Object.entries(b.package).filter(([k]) => k in schema.properties && !sharedKept.includes(k) && !leftOut.includes(k))));
       for (const section of sharedKept) if (section in config.pkg) kept[section] = config.pkg[section];
+      if (state.responseRules) {
+        const persona = kept.persona as Record<string, unknown> | undefined;
+        const previousPersona = config.pkg.persona as Record<string, unknown> | undefined;
+        if (previousPersona && previousPersona.plain_language !== undefined && persona?.plain_language === undefined) {
+          kept.persona = { ...persona, plain_language: previousPersona.plain_language };
+        }
+        for (const agent of (kept.agents ?? []) as Array<Record<string, unknown>>) {
+          const previous = ((config.pkg.agents ?? []) as Array<Record<string, unknown>>).find((row) => row.slug === agent.slug);
+          if (agent.response_rules === undefined && previous?.response_rules !== undefined) agent.response_rules = structuredClone(previous.response_rules);
+        }
+      } else {
+        omitResponseRules(kept);
+      }
       state.configs.set(tid, { pkg: kept, version: config.version + 1 });
       adminImport(state.db, tid, b.package);
       // Like the instance: an import adds the names a package declares, and never forgets one.
@@ -2381,9 +2413,19 @@ export async function startFakeServer(): Promise<FakeServer> {
     });
   }
 
+  function omitResponseRules(pkg: Record<string, unknown>): void {
+    delete (pkg.persona as Record<string, unknown> | undefined)?.plain_language;
+    for (const agent of (pkg.agents ?? []) as Array<Record<string, unknown>>) delete agent.response_rules;
+  }
+
   /** The package schema as the instance serves it, with the test's edit. */
   function packageSchema(): { properties: Record<string, unknown> } {
     const schema = JSON.parse(readContract("meta-package-schema-v3.json")) as { properties: Record<string, unknown> };
+    if (!state.responseRules) {
+      const defs = (schema as unknown as { $defs: Record<string, { properties: Record<string, unknown> }> }).$defs;
+      delete defs.PackageAgent!.properties.response_rules;
+      delete defs.PackagePersona!.properties.plain_language;
+    }
     state.packageSchemaEdit?.(schema);
     return schema;
   }

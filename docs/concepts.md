@@ -130,6 +130,60 @@ comment with its default. `cavelon validate` warns when a greeting or fallback
 is on but its text is empty (`persona_message_empty`). The instance's page
 `concepts/personas` (`cavelon docs get concepts/personas`) explains the rest.
 
+#### Response rules by role and plain language
+
+Every agent inherits the persona's response rules. An agent's optional
+`response_rules` map overrides individual rules; an absent key or `inherit`
+takes the persona's rule, and `off` disables it. `{}` inherits everything.
+`skip_persona: true` turns every rule off and wins over the map: use it for
+structured JSON and internal pipeline agents. Leave these settings unset
+for the agent answering the person.
+
+For a consulted agent that supplies evidence to that answering agent, keep
+citations and turn the other response rules off:
+
+```yaml
+# Inside the consulted agent's entry in package/agents.yaml
+response_rules:
+  identity: off
+  citations: inherit
+  images: off
+  action_buttons: off
+  response_style: off
+  language_hint: off
+  plain_language: off
+```
+
+The persona's `plain_language` sets the level for agents inheriting it:
+
+```yaml
+# package/persona.yaml
+plain_language: on_request
+```
+
+`off` (the default) keeps ordinary wording; `on_request` simplifies when
+asked; `auto` judges the reader once from the first messages; `lay` explains
+for general readers; `expert` keeps specialist terms in clear prose. The
+instance supplies DIN 8581 plain-language instructions, ASD-STE100 guidance
+for technical content and email layout guidance for emails. Simplify the
+person's answer, keeping intermediate evidence and structured output intact.
+An agent can also override `plain_language` with a level, `language_hint`
+with a language code, or `response_style` with `{preset: concise}` (also
+`balanced`, `detailed`, `conversational`, `formal`).
+
+Check `cavelon schema persona` and `cavelon schema agents` first. On an older
+instance, `validate` warns `package_field_unknown` and the apply preview
+lists the fields as ignored. Omitting either field on import preserves the
+instance's saved value; explicitly set `plain_language: off` to disable it
+or `response_rules: {}` to reset overrides. The map's values are checked by
+the instance's import preview; `config_invalid` names the agent's field.
+The [support FAQ example](../examples/support-faq/README.md#optional-add-a-consulted-researcher)
+shows a connected consultant. Check wording with a suite: use a style judge
+criterion for clarity and a report-only (`gate: false`) long-sentence
+assertion on `scope: model_answer`, as the
+[authoring guide](../plugin/skills/cavelon-authoring/references/response-rules.md#check-the-wording-with-a-suite)
+shows, then inspect the answer and reasoning in the trace.
+
 #### Engagement rules and fields that take effect at once
 
 The persona's `engagement_rules` hold what a website visitor is offered

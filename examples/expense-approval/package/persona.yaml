@@ -1,6 +1,7 @@
-# The persona: who the assistant is, shared by every agent of this solution (an agent's
-# system_prompt says what that agent does). A commented field is not set; remove its #
-# to set it. Write the greeting and fallback texts in the language the assistant answers in.
+# The persona: who the assistant is. Every agent takes these rules unless its
+# response_rules turn individual rules off or skip_persona turns them all off.
+# An agent's system_prompt says what it does. A commented field is not set; remove
+# its # to set it. Write greeting and fallback texts in the language the assistant answers in.
 bot_name: Brightpeak Expenses
 # persona_prompt: null
 greeting_message: Hello! Ask me about the travel and expense policy, or tell me about an expense you want to submit.

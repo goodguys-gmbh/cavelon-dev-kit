@@ -281,9 +281,10 @@ function placeholder(key: string, field: SchemaNode): string {
 }
 
 const PERSONA_HEADER = [
-  "# The persona: who the assistant is, shared by every agent of this solution (an agent's",
-  "# system_prompt says what that agent does). A commented field is not set; remove its #",
-  "# to set it. Write the greeting and fallback texts in the language the assistant answers in.",
+  "# The persona: who the assistant is. Every agent takes these rules unless its",
+  "# response_rules turn individual rules off or skip_persona turns them all off.",
+  "# An agent's system_prompt says what it does. A commented field is not set; remove",
+  "# its # to set it. Write greeting and fallback texts in the language the assistant answers in.",
 ];
 
 /**
