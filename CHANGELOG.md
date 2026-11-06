@@ -16,6 +16,8 @@ CLI, the skills and the plugin.
   a profile, only a run of that profile counts for publishing. `--tags` runs
   the cases carrying one of the tags. An instance older than run profiles
   refuses both before anything is sent (`operation_unavailable`).
+  Missing OpenAPI or a missing run request schema also refuses the selection;
+  ordinary whole-suite runs retain their older-instance fallback.
 
 ### Changed
 

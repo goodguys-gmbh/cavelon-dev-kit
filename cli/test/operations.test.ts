@@ -359,15 +359,50 @@ describe("test run", () => {
       expect(both.stderr).toContain("Give --profile or --tags, not both.");
     });
 
-    it("refuses --profile on an instance older than run profiles, before anything is sent", async () => {
+    it.each([["profile", "s0"], ["tags", "cat:a"]])("refuses --%s when the run request schema is missing", async (field, value) => {
       server.state.openapiEdit = (doc) => {
-        delete doc.components.schemas.TestRunCreate.properties.profile;
+        delete doc.paths["/api/v1/test-suites/{suite_id}/runs"].post.requestBody;
+      };
+      try {
+        const since = server.state.requests.length;
+        const result = await cli(sb, ["test", "run", "--suite", ids.smoke, `--${field}`, value, "--json"], {
+          env: { CAVELON_CACHE_DIR: path.join(sb.home, `cache-missing-run-schema-${field}`) },
+        });
+        expect(result.code).toBe(1);
+        expect(result.json()).toMatchObject({ error: { code: "operation_unavailable", details: { sent: false } } });
+        expect(starts(since)).toEqual([]);
+      } finally {
+        server.state.openapiEdit = null;
+      }
+    });
+
+    it.each([["profile", "s0"], ["tags", "cat:a"]])("refuses --%s without OpenAPI while preserving whole-suite fallback", async (field, value) => {
+      server.state.serveOpenapi = false;
+      try {
+        const since = server.state.requests.length;
+        const options = { env: { CAVELON_CACHE_DIR: path.join(sb.home, `cache-no-run-contract-${field}`) } };
+        const result = await cli(sb, ["test", "run", "--suite", ids.smoke, `--${field}`, value, "--json"], options);
+        expect(result.code).toBe(1);
+        expect(result.json()).toMatchObject({ error: { code: "operation_unavailable", details: { sent: false } } });
+        expect(starts(since)).toEqual([]);
+        const ordinary = await cli(sb, ["test", "run", "--suite", ids.smoke, "--json"], options);
+        expect(ordinary.code, ordinary.stderr).toBe(0);
+        expect(starts(since)).toHaveLength(1);
+        expect(starts(since)[0]!.body).toEqual({});
+      } finally {
+        server.state.serveOpenapi = true;
+      }
+    });
+
+    it.each([["profile", "s0"], ["tags", "cat:a"]])("refuses --%s on an instance older than run profiles, before anything is sent", async (field, value) => {
+      server.state.openapiEdit = (doc) => {
+        delete doc.components.schemas.TestRunCreate.properties[field];
       };
       try {
         const since = server.state.requests.length;
         // A fresh cache: the kit keeps an instance's OpenAPI, and this one is played older.
-        const result = await cli(sb, ["test", "run", "--suite", ids.smoke, "--profile", "s0", "--json"], {
-          env: { CAVELON_CACHE_DIR: path.join(sb.home, "cache-older-than-profiles") },
+        const result = await cli(sb, ["test", "run", "--suite", ids.smoke, `--${field}`, value, "--json"], {
+          env: { CAVELON_CACHE_DIR: path.join(sb.home, `cache-older-than-profiles-${field}`) },
         });
         expect(result.code).toBe(1);
         const error = result.json<{ error: { code: string; details: { sent: boolean } } }>().error;

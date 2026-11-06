@@ -901,13 +901,12 @@ function hasProfile(suite: Suite, profile: string): boolean | undefined {
 async function requireRunField(ctx: Context, field: "profile" | "tags"): Promise<void> {
   const { doc, op } = await workflowOperation(ctx, "POST", "/api/v1/test-suites/{suite_id}/runs", "test runs");
   const schema = doc ? jsonBodySchema(op) : undefined;
-  if (!doc || !schema) return;
-  const properties = (deref(doc, schema) as { properties?: Record<string, unknown> } | undefined)?.properties;
+  const properties = doc && schema ? (deref(doc, schema) as { properties?: Record<string, unknown> } | undefined)?.properties : undefined;
   if (properties && field in properties) return;
   throw new CavelonError(ExitCode.failure, {
     code: "operation_unavailable",
-    message: `This instance's test runs take no ${field} (POST /api/v1/test-suites/{suite_id}/runs does not publish it), so nothing was sent.`,
-    hint: `The instance is older than run profiles; \`${cavelonCommand("status")}\` shows its version. Run the whole suite instead.`,
+    message: `This instance's OpenAPI does not establish support for ${field} in test runs (POST /api/v1/test-suites/{suite_id}/runs), so nothing was sent.`,
+    hint: `The instance may be older than run profiles or its request schema unavailable. Restore its published contract, or run the whole suite instead. \`${cavelonCommand("status")}\` shows its version.`,
     details: { sent: false },
   });
 }
@@ -954,7 +953,7 @@ export const testRun: CommandSpec = {
     "--profile runs one of each suite's run profiles, by its key, in place of the whole suite: without --suite, every\n" +
     "suite that has it, the others listed as skipped. Where a suite's gate names a profile, only a run of that profile\n" +
     "counts for publishing. --tags runs the cases carrying one of the tags. An instance older than run profiles refuses\n" +
-    "both before anything is sent.\n" +
+    "both before anything is sent. An unavailable request schema also refuses both; whole-suite runs keep their fallback.\n" +
     "With --wait, exits 1 when a case failed or a run measured nothing comparable (cases not run, technical errors),\n" +
     "5 when answers wait for a manual verdict or a value a case needs.\n" +
     "--as-chat-user chooses a Chat User reader for these runs only, for knowledge and identity-bound database queries;\n" +

@@ -229,6 +229,12 @@ Where a suite's gate names a run profile, only a run of that profile votes:
 `cavelon test run --profile <key>`. `cavelon api list_suites` shows each
 suite's `profiles` and `gate_profile`.
 
+Profile/tag selection requires the instance's OpenAPI request schema to
+publish the requested field. If OpenAPI or the run request schema is
+unavailable, the kit refuses with `operation_unavailable` and `sent: false`
+instead of risking an unfiltered run. Restore the contract or run the whole
+suite without either selection option.
+
 ### Where are the error codes explained?
 
 In [Troubleshooting](troubleshooting.md), and for any code your instance uses,
