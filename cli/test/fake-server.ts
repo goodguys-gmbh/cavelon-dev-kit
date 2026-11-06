@@ -358,6 +358,8 @@ export interface FakeState {
     tags?: string[];
     purpose?: string | null;
     counts_for_readiness?: boolean;
+    /** Its run profiles' keys; left out, the listing plays an instance older than run profiles. */
+    profiles?: string[];
   }>;
   chatUsers: FakeChatUser[];
   readerOverrides: boolean;
@@ -2670,6 +2672,7 @@ function suiteView(s: FakeState["suites"][number]) {
     tags: s.tags ?? [],
     ...("purpose" in s ? { purpose: s.purpose } : {}),
     ...("counts_for_readiness" in s ? { counts_for_readiness: s.counts_for_readiness } : {}),
+    ...("profiles" in s ? { profiles: s.profiles, gate_profile: null } : {}),
     case_count: 2,
     created_at: now(),
     updated_at: now(),

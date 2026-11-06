@@ -104,6 +104,7 @@ export const KIT_ERROR_CODES: CatalogEntry[] = [
   { code: "variable_not_set", area: "cli", message: "The tenant has no variable by that name.", hint: "`cavelon variables list` shows them; `cavelon variables set <name> <value>` sets one." },
   // Tests, traces, loops and Sandboxes.
   { code: "no_suites", area: "cli", message: "The solution (or tenant) has no test suites.", hint: "Write one in tests/ and apply it; the cavelon-testing skill shows how." },
+  { code: "profile_unknown", area: "cli", message: "A suite named with --suite has no run profile of that key; nothing was sent.", hint: "`cavelon api list_suites` lists each suite's profiles; a suite defines them under settings.profiles." },
   { code: "no_result", area: "cli", message: "The operation has no result yet.", hint: "`cavelon wait <op_id>` waits for it." },
   { code: "no_trace", area: "cli", message: "The operation's result has no trace.", hint: "Trace a run, test run or conversation id instead." },
   { code: "run_not_found", area: "cli", message: "No run, test run or conversation with that id in this tenant.", hint: "Check the id and the tenant (`cavelon whoami`); --kind names what the id is." },
