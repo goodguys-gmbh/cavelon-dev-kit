@@ -7,6 +7,8 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+## [0.2.17] - 2026-11-06
+
 ### Added
 
 - `cavelon test run --profile <key>` (MCP `test_run` `profile`) runs one of a
@@ -20,6 +22,8 @@ CLI, the skills and the plugin.
   ordinary whole-suite runs retain their older-instance fallback.
 
 ### Changed
+
+- Update CLI dependencies and the release workflow's publishing dependencies.
 
 - `test run` says "campaign question checks" about skipped suites only when
   they are; a suite a person keeps out of the vote is listed as not voting.
