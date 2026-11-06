@@ -560,7 +560,7 @@ function schemaUsedLine(used: SchemaUsed, ttlSeconds: (version: string) => numbe
 
 export const validate: CommandSpec = {
   name: "validate",
-  summary: "Check the package files against the instance's package schema, offline.",
+  summary: "Check the package files against the instance's published package schema.",
   description:
     "Uses the schema and error catalog cached by init, pull or apply; fetches them only when none is cached or a development\n" +
     "build's copy is past its time-to-live, and never with --offline. A development build keeps one version while its schema\n" +
@@ -1340,8 +1340,8 @@ export const apply: CommandSpec = {
     "secrets (`cavelon secrets set <name>`, or in the Admin where the instance lets no token set one), never the agent.\n" +
     "Where the instance says this credential cannot import (needs_a_person), it still previews but prints no confirm\n" +
     "command: a person imports in the Admin or with their own personal access token. --confirm refuses before sending (exit 5).\n" +
-    "Show a preview that reaches an active solution or env/prod to a person before confirming. Such a preview (show_to_person:\n" +
-    "tenant-wide sections, an active solution, deletions, env/prod, or database query writes) a coding agent cannot confirm.\n" +
+    "Follow the preview's show_to_person and needs_person requirements. Routine isolated-draft previews may be confirmed within the requested work.\n" +
+    "Tenant-wide changes, active effects without explicit draft isolation, deletions, env/prod and database query writes need a person.\n" +
     "Over MCP the client asks the person; from an agent's shell the person runs the confirm in their own terminal. A stale preview exits 4 and\n" +
     "imports nothing: one whose target changed on the instance since, one whose package files changed since (what they\n" +
     "hold, not their formatting; --allow-stale imports what the preview showed anyway), and one older than a day. So does\n" +

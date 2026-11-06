@@ -26,6 +26,11 @@ CLI, the skills and the plugin.
 
 ### Fixed
 
+- Align skills and agent prompts with the existing authentication,
+  preview/YOLO and readiness rules: permission refusals have their own repair
+  steps, `validate --offline` explicitly avoids instance reads, report-only
+  assertions keep their meaning, and gate profiles determine the readiness run.
+
 - Claude Code's plugin now shows a connection-check notice at session start
   in Cavelon workspaces, with an immediate warning if neither `cavelon` nor
   `npx` can launch. All four skills and generated solution instructions require

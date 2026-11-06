@@ -47,8 +47,8 @@ const INSTRUCTIONS =
   "kb_upload names files that match an active document of the knowledge base; with replace it replaces them, and where the " +
   "instance's upload cannot, it returns what it would deactivate and uploads nothing without its confirm_token. " +
   "init, pull and fmt change nothing on the instance (pull only reads it); they write files in the solution folder without confirm " +
-  "(pull refuses to replace a package file that changed since the last pull or apply and is not committed, unless force), " +
-  "and the other changing tools act at once. api refuses, even with confirm, an operation the instance marks for a person " +
+  "(pull refuses to replace a package file that changed since the last pull or apply and is not committed, unless force). " +
+  "Other changing tools follow their declared preview and confirmation rules. api refuses, even with confirm, an operation the instance marks for a person " +
   "(x-cavelon-person-only; its reason is in the error), or on an instance that marks none, one that changes a secret, " +
   "creates or revokes a credential (tokens, API keys, sign-in) or decides an approval; it also refuses a body that sets a field " +
   "the instance marks as a secret value (x-cavelon-secret): leave the field out and let a person enter the value. " +

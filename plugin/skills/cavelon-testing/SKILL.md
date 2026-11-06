@@ -6,8 +6,8 @@ license: Apache-2.0
 
 # Testing and optimizing a Cavelon solution
 
-A solution is ready when its test suites pass on the instance, not when the
-package validates. Test against a draft solution or a test tenant
+Readiness comes from the instance's published test gate and other checks;
+package validation alone does not establish it. Test against a draft solution or a test tenant
 (`--env test`), never by trying things on an active solution.
 
 Before instance tests, follow cavelon-loop's connection readiness check:
@@ -57,8 +57,11 @@ Write cases for:
 
 A step's `evaluation_criteria` can hold, besides the judge's criteria (plain
 sentences), **assertions**: objects with a `type` and a `value`, checked in
-code before the judge runs. A failed assertion fails the step whatever the
-judge says, so use them for facts with one right answer:
+code before the judge runs. A failed gating assertion fails the step whatever
+the judge says, so use them for facts with one right answer. Where the schema
+offers `gate: false`, a report-only assertion is evaluated and shown without
+failing the step; the plain-language reference in cavelon-authoring has an
+example. Check the criterion schema before using that field.
 
 | Type | Value | Passes when |
 |---|---|---|
@@ -158,7 +161,9 @@ each call under your shell's time limit). `test run --wait --timeout 5m` does
 both in one call where your client allows long commands; when its wait ends
 first, its last line is the command that resumes, with the same timeout. Exit 1 after a run
 means a case failed, even though the run itself finished; the output names the
-cases that did not pass and why, and `cavelon trace <run>` shows each one. Exit
+cases that did not pass and why, and `cavelon trace <run>` shows each one.
+This case-result exit code is separate from the instance's readiness verdict,
+which can use a configured pass threshold, tag minimums and gate profile. Exit
 1 also means the run measured nothing comparable (steps not run, technical
 errors, no pass rate): it is no evidence the solution works, so do not go on to
 `activate`; find the cause and run again. Exit 5 means answers wait for a
@@ -293,8 +298,10 @@ the Admin. Then:
   says how to fix it.
 
 Unattended schedules, where offered by the instance, are enabled by a person in
-the Admin. A schedule or automatic run is useful regression evidence but does
-not replace the latest manually started whole-suite run required for activation.
+the Admin. A schedule or automatic run is useful regression evidence. Before
+activation/publication, run the manual selection required by the instance's
+published readiness policy: its gate profile when configured, otherwise the
+whole suite. A whole-suite run does not substitute for a required gate profile.
 Read the instance's current Graph Check errors and published catalog; fix the
 named node/configuration before trying activation again.
 
@@ -426,7 +433,8 @@ previews first and is the person's decision: show the preview; over MCP the
 client asks them when you confirm with its token, and from your shell they run
 the confirm command in their own terminal. Do not add a separate chat approval
 before that native dialog; an explicitly enabled YOLO mode still asks for this
-critical change. When every suite passes,
+critical change. Review test failures and run the readiness selection required
+by the instance; when its published readiness checks pass,
 `cavelon activate --harness <name or slug>` goes through the readiness gate; if the
 token may not activate, a person activates in the Admin. A solution that a
 channel or an active trigger reaches goes live for them at once, so its
@@ -436,6 +444,5 @@ whose reach or route effect is unknown. It needs no confirm only when no
 channel or active trigger reaches it and readiness explicitly says
 `takes_default_route: false`. The preview reserves no route state; the
 successful result's `took_default_route` fields report the actual effect.
-Show it; over MCP the
-client asks them when you confirm with its token, and from your shell they run
-the confirm command in their own terminal.
+Where the preview requires a person, show it and use that single native
+approval or the person's own-terminal command.

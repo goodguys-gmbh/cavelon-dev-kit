@@ -20,10 +20,10 @@ Codex with the Cavelon plugin; any agent `cavelon setup` or
 - writes the package files in `package/` (agents, skills, tools, knowledge
   bases, triggers) and the test suites in `tests/`;
 - runs `cavelon validate` and fixes what it reports;
-- previews the import with `cavelon apply --env test`, and confirms it on its
-  own when the preview reaches no active solution, nothing tenant-wide, deletes
-  nothing, writes no saved database queries and does not go to `env/prod`
-  (a draft in a test environment), without asking again in chat;
+- previews the import with `cavelon apply --env test`, reviews routine previews
+  and confirms them within your request when `show_to_person` is false and no
+  `needs_person` requirement is present. An active solution qualifies only
+  where the instance explicitly reports an isolated graph draft;
 - uploads the knowledge with `cavelon kb upload`;
 - runs the suites with `cavelon test run`, reads the results and traces with
   `cavelon trace`, changes the files and runs them again;
@@ -37,8 +37,8 @@ confirmations happen inside one call. Critical approvals stay the same.
 agent gives you the command for your own terminal. It does not ask for a chat
 yes before a native dialog. These include:
 
-- imports that reach an active solution, go to production (`--env prod`),
-  delete anything (`--mode replace`), write saved database queries, or need
+- imports with live or unknown active effects, or those that go to production
+  (`--env prod`), delete anything (`--mode replace`), write saved database queries, or need
   secrets, grants or identities;
 - activation with live or unknown effects, and changes to the tenant's default
   route (the solution the tenant's chat and widget answer with);
@@ -199,14 +199,16 @@ runs.
    yet. In the preview, check:
    - what it **creates, updates and deletes**, and that this matches what you
      asked for;
-   - **reaches active**: any active solution it would change. If there is one,
-     the agent stops and asks you;
+   - **show to person / needs person**: effects that require your decision.
+     An active solution's explicitly isolated graph draft can be routine;
+     live effects, production, shared/deleting imports and unknown effects
+     still need one personal approval;
    - **needs**: variables, secrets, grants, runtime bindings and trigger
      identities the target is missing. Run the `cavelon secrets set` commands
      it prints yourself, or set the secrets in the Admin where it names it;
    - **ignored**: sections the instance does not know, which a newer package
      format or a typo can cause.
-5. **Apply.** For a draft solution in test, the agent confirms with
+5. **Apply.** For a routine preview that needs no person, the agent confirms with
    `cavelon apply --env test --confirm <preview-id>`, which imports exactly
    what was previewed. If the solution or the package files changed in the
    meantime, or the preview is more than a day old, the confirm is refused
@@ -228,27 +230,21 @@ runs.
 9. **Fix.** It changes one thing (the documents, a tool's description, the
    agent's instructions, the test case), then validates, applies and tests
    again. It commits when a step works.
-10. **Activate.** When every suite passes, the agent tells you and waits.
-    `cavelon activate` reads the solution's readiness checks and activates only
-    when they pass; it prints each check and every warning. With a token that
-    may activate, the agent runs it after you agree; otherwise you activate in
-    the Admin, and the kit's hints and the MCP tool list say so instead of
-    suggesting the command. A solution that a channel or an active trigger already reaches
-    goes live for them at once, so there `activate` previews what reaches it
-    and needs your confirmation. So does an activation that takes the default
-    route (including assigning an unassigned route), or whose reach or route
-    effect is unknown. Only known zero channels, no active triggers and
-    readiness's explicit `takes_default_route: false` allow activation without
-    confirmation. The preview reserves no state; success reports the actual
-    route effect with `took_default_route` and its from/name fields. `status`
-    shows the preview too. When the solution is not the tenant's default route,
-    `activate` says so, and the agent asks you whether it should become the
-    default; `cavelon activate --make-default` shows the change, and only
-    the confirm command it prints makes it, with your yes: your agent client
-    asks you, or you run the command in your own terminal. Until then, `cavelon chat
-    "<message>" --harness <solution>` talks to the solution by name, and
-    `cavelon deactivate` (previewed, then confirmed by you) takes it out of
-    service again: its status becomes `inactive`.
+10. **Activate.** Review the results and run the readiness selection required
+    by the instance, including its gate profile where configured. The CLI's
+    case-result exit code and the published readiness verdict are separate.
+    `cavelon activate` prints the readiness checks and warnings and activates
+    only when the checks pass and the token may activate; otherwise a person
+    uses the Admin. Known zero channels, no active triggers and explicit
+    `takes_default_route: false` allow activation within your request without
+    personal approval. Live or unknown effects and a default-route takeover
+    (including an unassigned route) require one native approval or your own
+    terminal command, without a preliminary chat yes. The preview reserves no
+    state; success reports the actual route effect with `took_default_route`.
+    Change the default route only when requested, using the same approval
+    policy. Until then, `cavelon chat "<message>" --harness <solution>` tries it
+    by name. `cavelon deactivate` also needs personal approval and makes the
+    solution `inactive`.
 
 To go to production, the agent prepares `env/prod.yaml` and previews with
 `cavelon apply --env prod`, then shows you the preview and waits. You confirm,
@@ -264,9 +260,9 @@ show you what it did:
   skills: they are the solution's behaviour in plain language. Check that tools
   reach only what they should, and that secrets and variables appear only as
   `{{secret:…}}` and `{{var:…}}` references.
-- **The preview.** Before anything reaches an active solution or production,
-  read the preview yourself (see step 4 above). `cavelon status` lists the open
-  previews of the folder.
+- **The preview.** Read previews requiring your decision, including live,
+  shared, deleting and production changes (see step 4 above). `cavelon status`
+  lists the folder's open previews.
 - **The suite and its cases.** Read `tests/*.yaml`. Each rule from your brief
   should have a case, reference answers should come from your documents rather
   than from the agent's own knowledge, and evaluation criteria should be
@@ -282,8 +278,9 @@ show you what it did:
 
 ## Testing well with an agent
 
-A solution is ready when its suites pass on the instance, not when its package
-validates. Agents write tests readily; ask for the right ones.
+Use the instance's published test gate and readiness checks to judge the
+evidence; package validation alone is insufficient. Agents write tests
+readily; ask for the right ones.
 
 **Ask for cases that cover:**
 
