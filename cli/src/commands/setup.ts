@@ -454,6 +454,7 @@ async function runCheck(ctx: Context, input: Input) {
   for (const probe of probes) {
     lines.push(`${mark(probe.ok)}The Cavelon tools start: ${probe.command}${probe.ok ? (probe.server ? ` (${probe.server})` : "") : ` (${probe.error})`}`);
   }
+  lines.push("This checks a separately started server, not the current coding-agent session. In Claude Code, open /mcp and call Cavelon's whoami tool to verify that session.");
   lines.push(
     loginCheck.ok
       ? `${mark(true)}Logged in to ${loginCheck.instance}${loginCheck.who ? ` as ${loginCheck.who}` : ""}${loginCheck.tenant ? `, tenant ${loginCheck.tenant}` : ""}`
@@ -463,6 +464,7 @@ async function runCheck(ctx: Context, input: Input) {
   return {
     data: {
       ok,
+      session_connection: "not_checked",
       agents: checks.map(({ servers: _servers, ...c }) => c),
       server: probes,
       login: loginCheck,
@@ -542,7 +544,8 @@ export const setup: CommandSpec = {
     "and the skills in their user skills folder. It touches nothing else in those files and\n" +
     "records what it did, so --remove undoes exactly that. Then it logs in if needed, choosing the tenant by name as `login` does.\n" +
     "The server starts as `cavelon mcp` when cavelon is installed, otherwise through npx. --check reports what is set up and\n" +
-    "working: each agent's entry, the MCP server starting, and the login. An agent found but never set up for Cavelon is\n" +
+    "working: each agent's entry, a separately started MCP server, and the login. It does not verify the current agent session's connection.\n" +
+    "An agent found but never set up for Cavelon is\n" +
     "reported and skipped (exit 0 when the rest works); --strict, or naming it with --agents, counts it.\n" +
     "--update refreshes plugins and owned skills, including the current solution's generated setup, and keeps your login.\n" +
     "--mcp-mode saves a personal startup choice; restart your coding agent to apply it. Critical changes still need approval.\n" +

@@ -608,6 +608,7 @@ describe("login and --check", () => {
     expect(report.agents.find((a: any) => a.name === "codex")).toMatchObject({ method: "files", ok: true });
     // The plugin and the files both start the installed cavelon, which answers.
     expect(report.server).toEqual([{ command: "cavelon mcp", ok: true, server: "cavelon 9.9.9" }]);
+    expect(report.session_connection).toBe("not_checked");
     expect(report.login).toMatchObject({ ok: false, problem: expect.stringMatching(/not logged in/) });
 
     await login(sb, server.url, token);

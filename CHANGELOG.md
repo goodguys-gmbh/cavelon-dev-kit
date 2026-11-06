@@ -7,6 +7,15 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Fixed
+
+- Claude Code's plugin now shows a connection-check notice at session start
+  in Cavelon workspaces, with an immediate warning if neither `cavelon` nor
+  `npx` can launch. All four skills and generated solution instructions require
+  an actual session `whoami` check before instance work, a clear failure/repair
+  message and an announced CLI fallback. `setup --check` now explicitly reports
+  that it checks a separate server, not the running agent session.
+
 ## [0.2.16] - 2026-11-02
 
 ### Added

@@ -126,6 +126,9 @@ describe("the plugin packages", () => {
       expect(files.get(name)!.equals(readFileSync(path.join(ROOT, ...name.split("/")))), name).toBe(true);
     }
     expectSkills(files, "plugin/skills/");
+    for (const name of ["plugin/hooks/hooks.json", "plugin/scripts/session-start.sh"]) {
+      expect(files.get(name)?.equals(readFileSync(path.join(ROOT, name))), name).toBe(true);
+    }
   });
 
   it("--server installed starts the cavelon on the PATH in every package, for machines without the npm registry", () => {
@@ -134,6 +137,9 @@ describe("the plugin packages", () => {
     expect(jsonOf<any>(unpack(path.join(out, "installed", "cavelon-agent-plugin-windows.tar.gz")), "mcp.json").mcpServers.cavelon).toEqual({ type: "stdio", ...installed });
     expect(jsonOf<any>(unpack(path.join(out, "installed", "linux.cavelon-gemini-extension.tar.gz")), "gemini-extension.json").mcpServers.cavelon).toEqual(installed);
     expect(jsonOf<any>(unpack(path.join(out, "installed", "cavelon-marketplace.tar.gz")), "plugin/.mcp.json").mcpServers.cavelon).toEqual(installed);
+    const offline = unpack(path.join(out, "installed", "cavelon-marketplace.tar.gz"));
+    expect(offline.has("plugin/hooks/hooks.json")).toBe(true);
+    expect(offline.has("plugin/scripts/session-start.sh")).toBe(true);
   });
 
   it("refuses an unknown --server", () => {

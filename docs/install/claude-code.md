@@ -53,6 +53,23 @@ cavelon setup --check --agents claude            # the plugin, the server starti
 
 In a session, `/mcp` lists the server and its tools.
 
+`setup --check` starts a separate MCP process and checks the login. Its JSON
+reports `session_connection: "not_checked"`: it cannot verify the connection
+of an already running Claude session. Ask Claude to discover Cavelon's tools
+and call its MCP `whoami` for the solution you will work on. This checks both
+the actual session connection and instance authentication.
+
+The plugin also shows a startup notice in a Cavelon workspace (a solution or
+a repository with solutions up to two folders below it). It says the connection
+is not yet verified and tells the agent to check it before instance work. If
+neither `cavelon` nor `npx` is on that session's PATH, it shows that problem
+immediately. The hook runs no package download, second server, login or instance
+request, and stays silent in unrelated projects. It uses `sh`, as the plugin's
+MCP launcher does: on native Windows without Git Bash, use the shared skill's
+first-use check and `/mcp`; this hook does not provide native Windows UI
+qualification. [Connection troubleshooting](../troubleshooting.md#the-skills-load-but-cavelon-tools-do-not-work)
+explains missing tools, login failures and instance outages.
+
 ## Update
 
 ```bash

@@ -13,6 +13,16 @@ use it when you parse the result.
 
 ## Before anything
 
+- **Verify the connection before instance work.** Discover this session's
+  Cavelon tools (use the client's tool search if deferred), then call
+  `whoami` for the selected solution folder. Loaded skills do not establish
+  connectivity. Tell the person immediately if the tools are unavailable,
+  login is missing or the instance cannot be reached, with a repair step.
+  Announce CLI fallback explicitly and check its `whoami` too. See
+  [connection readiness](references/connection-readiness.md) for diagnosis,
+  recovery and when to repeat the check. An intentionally CLI-only client
+  starts with `cavelon whoami --json` instead, without a missing-MCP warning.
+  Local authoring may continue.
 - **Select the local solution folder.** In a repository with several solutions,
   pass `solution_dir`, such as `solutions/review`, on MCP calls. It resolves
   inside the server's startup workspace and selects that folder's
