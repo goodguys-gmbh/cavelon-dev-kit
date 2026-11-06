@@ -10,6 +10,13 @@ A solution is ready when its test suites pass on the instance, not when the
 package validates. Test against a draft solution or a test tenant
 (`--env test`), never by trying things on an active solution.
 
+Before instance tests, follow cavelon-loop's connection readiness check:
+discover the actual session's Cavelon tools and call `whoami`. Tell the
+person immediately if discovery, login or instance access fails. Announce
+CLI fallback and check its `whoami` too; never claim tests ran without their
+successful instance results. Loaded skills alone do not prove connectivity.
+An intentionally CLI-only setup checks `cavelon whoami --json` directly.
+
 ## Canvas debug readiness
 
 For a newly authored ordinary chat/trigger solution, check its connected
@@ -174,9 +181,16 @@ The case's own reason (which knowledge base, which value) is in the output of
 Without `--suite`, `test run` runs every suite of the solution except those
 that never vote in readiness: a campaign's question check (tagged `engagement`
 and `rule:<id>`, made by the Admin's Engagement editor, and never part of the
-package). They are listed under `skipped` and never change the exit code; a
-failed question there is a content gap for the campaign's author.
-`--suite <name>` runs one when asked.
+package), or a suite a person switched out of the vote. They are listed under
+`skipped` and never change the exit code; a failed question there is a content
+gap for the campaign's author. `--suite <name>` runs one when asked.
+
+`--profile <key>` runs a suite's run profile (its `settings.profiles`, chosen
+by tags) instead of the whole suite, for example a smoke profile before a
+deploy; without `--suite`, every suite that has it, the others skipped as
+`no_profile`. Where a suite's `gate.profile` names a profile, only a run of it
+counts for publishing: run that one before asking for activation. `--tags`
+runs the cases carrying one of the tags and never counts for publishing.
 
 ## Database query tools
 

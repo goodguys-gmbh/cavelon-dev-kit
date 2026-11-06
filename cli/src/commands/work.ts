@@ -21,7 +21,7 @@ import { confinedPath } from "../paths.js";
 import { clip, keyValues, moreHint, table } from "../format.js";
 import type { OpenApiDoc } from "../contracts.js";
 import { callOperation, callStable, workflowOperation } from "../invoke.js";
-import { deref, type Operation } from "../openapi.js";
+import { deref, jsonBodySchema, type Operation } from "../openapi.js";
 import { bindsNow, changedBy, limitError, limitsOrWarn, readLimits, type Limit, type PublishedLimits } from "../limits.js";
 import { getOperation } from "../operations.js";
 import { caseCounts, caseLabel, countsText, failedCase, caseKnowledgeOutcomes, NOT_PASSED, runVerdict, type TestResultState } from "../results.js";
@@ -838,6 +838,8 @@ interface Suite {
   purpose?: string | null;
   /** Whether the suite's runs vote in the solution's readiness, where the instance publishes it. */
   counts_for_readiness?: boolean | null;
+  /** The keys of the suite's run profiles, where the instance publishes them. */
+  profiles?: string[] | null;
 }
 
 /** The tags that mark a campaign's question check on an instance that publishes neither purpose nor readiness vote. */
@@ -857,19 +859,56 @@ function votesNot(suite: Suite): boolean {
   return tags.includes(ENGAGEMENT_TAG) && tags.some((t) => typeof t === "string" && t.startsWith(RULE_TAG_PREFIX) && t.length > RULE_TAG_PREFIX.length);
 }
 
+/** A campaign's question check, by the instance's mark or, on an older instance, by its tags. */
+function isQuestionCheck(suite: Suite): boolean {
+  if (suite.purpose) return suite.purpose === "engagement_check";
+  const tags = Array.isArray(suite.tags) ? suite.tags : [];
+  return tags.includes(ENGAGEMENT_TAG);
+}
+
+type SkipReason = "not_in_readiness" | "no_profile";
+
 /** A skipped suite as `test run` reports it. */
-function skippedView(suite: Suite) {
-  return { suite: suite.name, suite_id: suite.id, ...(suite.purpose ? { purpose: suite.purpose } : {}), reason: "not_in_readiness" };
+function skippedView(suite: Suite, reason: SkipReason = "not_in_readiness") {
+  return { suite: suite.name, suite_id: suite.id, ...(suite.purpose ? { purpose: suite.purpose } : {}), reason };
 }
 
 /** The line that names the suites a whole-solution run left out, and how to run one. */
 function skippedText(skipped: Suite[]): string {
   if (!skipped.length) return "";
   const names = skipped.map((s) => `"${s.name}"`).join(", ");
+  // A suite a person keeps out of the vote is no question check; the line says why only when it knows.
+  const why = skipped.every(isQuestionCheck) ? " (campaign question checks)" : "";
   return (
-    `Skipped ${skipped.length === 1 ? "1 suite that does" : `${skipped.length} suites that do`} not vote in readiness (campaign question checks): ${names}. ` +
+    `Skipped ${skipped.length === 1 ? "1 suite that does" : `${skipped.length} suites that do`} not vote in readiness${why}: ${names}. ` +
     `Run one with: ${cavelonCommand("test", "run", "--suite", skipped[0]!.name)}`
   );
+}
+
+/** The line that names the suites without the run profile asked for. */
+function withoutProfileText(skipped: Suite[], profile: string): string {
+  if (!skipped.length) return "";
+  const names = skipped.map((s) => `"${s.name}"`).join(", ");
+  return `Skipped ${skipped.length === 1 ? "1 suite" : `${skipped.length} suites`} without the run profile "${profile}": ${names}.`;
+}
+
+/** Whether a suite has the run profile, or undefined when the instance's listing does not say. */
+function hasProfile(suite: Suite, profile: string): boolean | undefined {
+  return Array.isArray(suite.profiles) ? suite.profiles.includes(profile) : undefined;
+}
+
+/** An instance whose run route does not take the field is older than run profiles; nothing is sent then. */
+async function requireRunField(ctx: Context, field: "profile" | "tags"): Promise<void> {
+  const { doc, op } = await workflowOperation(ctx, "POST", "/api/v1/test-suites/{suite_id}/runs", "test runs");
+  const schema = doc ? jsonBodySchema(op) : undefined;
+  const properties = doc && schema ? (deref(doc, schema) as { properties?: Record<string, unknown> } | undefined)?.properties : undefined;
+  if (properties && field in properties) return;
+  throw new CavelonError(ExitCode.failure, {
+    code: "operation_unavailable",
+    message: `This instance's OpenAPI does not establish support for ${field} in test runs (POST /api/v1/test-suites/{suite_id}/runs), so nothing was sent.`,
+    hint: `The instance may be older than run profiles or its request schema unavailable. Restore its published contract, or run the whole suite instead. \`${cavelonCommand("status")}\` shows its version.`,
+    details: { sent: false },
+  });
 }
 
 interface TestRun {
@@ -894,6 +933,12 @@ function summaryText(summary: Record<string, unknown>): string {
   return shown.join("  ");
 }
 
+/** The `skipped` entry of `test run`'s data: suites that do not vote, then suites without the profile. */
+function skippedData(skipped: Suite[], withoutProfile: Suite[]) {
+  const all = [...skipped.map((s) => skippedView(s)), ...withoutProfile.map((s) => skippedView(s, "no_profile"))];
+  return all.length ? { skipped: all } : {};
+}
+
 /** `cavelon wait` for the runs still going, with the caller's timeout so each call fits the same shell limit. */
 function resumeCommand(pending: string[], timeout: string | undefined): string {
   return cavelonCommand("wait", ...pending, ...(timeout ? ["--timeout", timeout] : []));
@@ -905,6 +950,10 @@ export const testRun: CommandSpec = {
   description:
     "Without --suite, runs every suite of the solution (--harness, or cavelon.yaml's harness), except suites that never\n" +
     "vote in readiness, such as a campaign's question checks: they are listed as skipped, and --suite runs one.\n" +
+    "--profile runs one of each suite's run profiles, by its key, in place of the whole suite: without --suite, every\n" +
+    "suite that has it, the others listed as skipped. Where a suite's gate names a profile, only a run of that profile\n" +
+    "counts for publishing. --tags runs the cases carrying one of the tags. An instance older than run profiles refuses\n" +
+    "both before anything is sent. An unavailable request schema also refuses both; whole-suite runs keep their fallback.\n" +
     "With --wait, exits 1 when a case failed or a run measured nothing comparable (cases not run, technical errors),\n" +
     "5 when answers wait for a manual verdict or a value a case needs.\n" +
     "--as-chat-user chooses a Chat User reader for these runs only, for knowledge and identity-bound database queries;\n" +
@@ -920,13 +969,24 @@ export const testRun: CommandSpec = {
     suite: { type: "string", multiple: true, value: "<suite>", description: "Suite name or id." },
     harness: { type: "string", value: "<harness>", description: "The solution to run against: its name, slug or id." },
     "as-chat-user": AS_CHAT_USER_OPTION,
+    profile: { type: "string", value: "<profile>", description: "Run this run profile of each suite (its key), in place of the whole suite." },
+    tags: { type: "string", multiple: true, value: "<tag>", description: "Run only the cases carrying one of these tags." },
     wait: WAIT_OPTION,
     timeout: TIMEOUT_OPTION,
     "idempotency-key": { type: "string", value: "<key>", description: "Send an Idempotency-Key with each start." },
   },
-  examples: ["cavelon test run --suite smoke --wait --timeout 10m", "cavelon test run --harness support --json"],
+  examples: [
+    "cavelon test run --suite smoke --wait --timeout 10m",
+    "cavelon test run --harness support --json",
+    "cavelon test run --profile s0 --wait",
+  ],
   async run(ctx, input) {
     const session = await ctx.session();
+    const profile = stringOption(input, "profile");
+    const tags = listOption(input, "tags");
+    if (profile !== undefined && tags.length) throw usageError("Give --profile or --tags, not both.");
+    if (profile !== undefined) await requireRunField(ctx, "profile");
+    if (tags.length) await requireRunField(ctx, "tags");
     const reader = await chatUserReader(ctx, input, "/api/v1/test-suites/{suite_id}/runs");
     const harnessRef = stringOption(input, "harness") ?? session.project?.harness;
     const harnessId = harnessRef ? await resolveHarnessId(ctx, harnessRef) : undefined;
@@ -936,6 +996,7 @@ export const testRun: CommandSpec = {
     const wanted = listOption(input, "suite");
     let chosen: Suite[];
     let skipped: Suite[] = [];
+    let withoutProfile: Suite[] = [];
     if (wanted.length) {
       chosen = wanted.map((ref) => {
         const hit = suites.find((s) => s.id === ref) ?? suites.filter((s) => s.name.toLowerCase() === ref.toLowerCase());
@@ -949,10 +1010,29 @@ export const testRun: CommandSpec = {
         }
         return hit;
       });
+      const lacking = profile === undefined ? undefined : chosen.find((s) => hasProfile(s, profile) === false);
+      if (lacking) {
+        throw new CavelonError(ExitCode.failure, {
+          code: "profile_unknown",
+          message: `The suite "${lacking.name}" has no run profile "${profile}", so nothing was sent.`,
+          hint: `\`${cavelonCommand("api", "list_suites")}\` lists each suite's profiles.`,
+          details: { sent: false },
+        });
+      }
     } else {
       const current = suites.filter((s) => !s.archived_at);
       skipped = current.filter(votesNot);
       chosen = current.filter((s) => !votesNot(s));
+      if (profile !== undefined) {
+        withoutProfile = chosen.filter((s) => hasProfile(s, profile) === false);
+        chosen = chosen.filter((s) => hasProfile(s, profile) !== false);
+      }
+      if (chosen.length === 0 && withoutProfile.length) {
+        throw new CavelonError(ExitCode.failure, {
+          code: "no_suites",
+          message: `${harnessRef ? `${harnessRef} has no test suites` : "This tenant has no test suites"} with the run profile "${profile}". ${withoutProfileText(withoutProfile, profile!)}`,
+        });
+      }
       if (chosen.length === 0) {
         throw new CavelonError(ExitCode.failure, {
           code: "no_suites",
@@ -967,6 +1047,8 @@ export const testRun: CommandSpec = {
     for (const suite of chosen) {
       const body: Record<string, unknown> = { ...reader };
       if (harnessId) body.harness_id = harnessId;
+      if (profile !== undefined) body.profile = profile;
+      if (tags.length) body.tags = tags;
       runs.push(
         await callStable<TestRun>(ctx, "POST", "/api/v1/test-suites/{suite_id}/runs", "test runs", {
           params: { suite_id: [suite.id] },
@@ -1004,20 +1086,22 @@ export const testRun: CommandSpec = {
         "",
         ...results.map((r) => `${r.suite}: ${r.status}  ${summaryText(r.summary)}`),
         ...(skipped.length ? ["", skippedText(skipped)] : []),
+        ...(withoutProfile.length ? ["", withoutProfileText(withoutProfile, profile!)] : []),
         ...(resume ? ["", `${waited.why} after the timeout; the runs go on. Resume: ${resume}`] : []),
       ].join("\n");
       return {
-        data: { runs: results, failed_cases: failedCases, ...waited.data, ...reader, ...(skipped.length ? { skipped: skipped.map(skippedView) } : {}), ...(resume ? { resume } : {}) },
+        data: { runs: results, failed_cases: failedCases, ...waited.data, ...reader, ...skippedData(skipped, withoutProfile), ...(resume ? { resume } : {}) },
         text: reader ? `Reading as Chat User ${reader.reader_chat_user_id} for these runs only.\n${text}` : text,
         exitCode,
       };
     }
     return {
-      data: { runs: started, operation_ids: operationIds, ...reader, ...(skipped.length ? { skipped: skipped.map(skippedView) } : {}) },
+      data: { runs: started, operation_ids: operationIds, ...reader, ...skippedData(skipped, withoutProfile) },
       text:
         (reader ? `Reading as Chat User ${reader.reader_chat_user_id} for these runs only.\n` : "") +
         table(started, ["suite", "run_id", "status", "operation_id"]) +
         (skipped.length ? `\n\n${skippedText(skipped)}` : "") +
+        (withoutProfile.length ? `\n\n${withoutProfileText(withoutProfile, profile!)}` : "") +
         (operationIds.length ? `\n\nWait with: ${cavelonCommand("wait", ...operationIds)}` : ""),
     };
   },

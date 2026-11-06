@@ -11,6 +11,13 @@ format as a JSON Schema; `cavelon` splits it along that schema's top-level
 sections, so the files follow whatever the instance version defines. Do not
 assume a section or field exists: check the schema or the docs first.
 
+Before reading from or changing the instance, follow cavelon-loop's connection
+readiness check: discover the actual session's tools and call `whoami`.
+Tell the person if tools, login or instance access fail; announce any CLI
+fallback and check its `whoami`. Local authoring can continue without live
+verification. Loaded skills alone do not establish a working connection.
+An intentionally CLI-only setup checks `cavelon whoami --json` directly.
+
 ## New solutions: make the Canvas useful
 
 For a new ordinary chat or trigger solution, include its connected **Chat

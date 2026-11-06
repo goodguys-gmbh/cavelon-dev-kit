@@ -11,7 +11,10 @@ same checks, against the instance and tenant you logged in to.
 **With `cavelon setup`**, there is nothing to do: it installs the Cavelon
 plugin for Claude Code and Codex, which starts the server, and adds the server
 to the user settings of Cursor, VS Code with GitHub Copilot, Gemini CLI and
-Kiro. `cavelon setup --check` starts it once to show that it works. See
+Kiro. `cavelon setup --check` starts a separate server once and checks login;
+it does not verify an existing coding-agent session (`session_connection` is
+`not_checked`). Discover Cavelon's tools and call MCP `whoami` in that
+session before instance work. See
 [Set up your coding agents](installation.md#set-up-your-coding-agents).
 
 Since 0.1.16, setup installs dependency-bundled native adapters for

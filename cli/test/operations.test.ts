@@ -297,6 +297,124 @@ describe("test run", () => {
     });
   });
 
+  describe("run profiles", () => {
+    const ids = {
+      smoke: "5a17e000-0000-4000-8000-0000000000b1",
+      other: "5a17e000-0000-4000-8000-0000000000b2",
+      older: "5a17e000-0000-4000-8000-0000000000b3",
+      probe: "5a17e000-0000-4000-8000-0000000000b4",
+    };
+    let harnessId: string;
+    const starts = (since: number) =>
+      server.state.requests.slice(since).filter((r) => r.method === "POST" && r.path.endsWith("/runs"));
+
+    beforeAll(async () => {
+      harnessId = (await cli(sb, ["harness", "new", "profiled", "--json"])).json<{ id: string }>().id;
+      server.state.suites.push(
+        { id: ids.smoke, tenant_id: tenant, name: "orders", harness_id: harnessId, archived_at: null, profiles: ["s0", "s2"] },
+        { id: ids.other, tenant_id: tenant, name: "returns", harness_id: harnessId, archived_at: null, profiles: ["s2"] },
+        // A listing that does not say: the instance decides.
+        { id: ids.older, tenant_id: tenant, name: "legacy", harness_id: harnessId, archived_at: null },
+        // A suite a person keeps out of the vote is no campaign question check.
+        { id: ids.probe, tenant_id: tenant, name: "probes", harness_id: harnessId, archived_at: null, purpose: null, counts_for_readiness: false, profiles: [] },
+      );
+    });
+
+    it("runs the profile on each suite that has it and lists the others as skipped", async () => {
+      const since = server.state.requests.length;
+      const result = await cli(sb, ["test", "run", "--harness", "profiled", "--profile", "s0", "--json"]);
+      expect(result.code, result.stderr).toBe(0);
+      const data = result.json<{ runs: Array<{ suite: string }>; skipped: Array<Record<string, unknown>> }>();
+      expect(data.runs.map((r) => r.suite)).toEqual(["orders", "legacy"]);
+      expect(starts(since).map((r) => r.body)).toEqual([
+        { harness_id: harnessId, profile: "s0" },
+        { harness_id: harnessId, profile: "s0" },
+      ]);
+      expect(data.skipped).toEqual([
+        { suite: "probes", suite_id: ids.probe, reason: "not_in_readiness" },
+        { suite: "returns", suite_id: ids.other, reason: "no_profile" },
+      ]);
+
+      const text = await cli(sb, ["test", "run", "--harness", "profiled", "--profile", "s0"]);
+      expect(text.stdout).toContain('Skipped 1 suite without the run profile "s0": "returns".');
+      expect(text.stdout).toMatch(/Skipped 1 suite that does not vote in readiness: "probes"\./);
+    });
+
+    it("refuses a profile a named suite does not have, before anything is sent", async () => {
+      const since = server.state.requests.length;
+      const result = await cli(sb, ["test", "run", "--suite", ids.other, "--profile", "s0", "--json"]);
+      expect(result.code).toBe(1);
+      expect(result.json<{ error: { code: string } }>().error.code).toBe("profile_unknown");
+      expect(starts(since)).toEqual([]);
+    });
+
+    it("sends the tags of --tags, and refuses them with --profile", async () => {
+      const since = server.state.requests.length;
+      const result = await cli(sb, ["test", "run", "--suite", ids.smoke, "--tags", "cat:a", "--tags", "cat:b", "--json"]);
+      expect(result.code, result.stderr).toBe(0);
+      expect(starts(since).map((r) => r.body)).toEqual([{ tags: ["cat:a", "cat:b"] }]);
+
+      const both = await cli(sb, ["test", "run", "--suite", ids.smoke, "--tags", "cat:a", "--profile", "s0"]);
+      expect(both.code).toBe(2);
+      expect(both.stderr).toContain("Give --profile or --tags, not both.");
+    });
+
+    it.each([["profile", "s0"], ["tags", "cat:a"]])("refuses --%s when the run request schema is missing", async (field, value) => {
+      server.state.openapiEdit = (doc) => {
+        delete doc.paths["/api/v1/test-suites/{suite_id}/runs"].post.requestBody;
+      };
+      try {
+        const since = server.state.requests.length;
+        const result = await cli(sb, ["test", "run", "--suite", ids.smoke, `--${field}`, value, "--json"], {
+          env: { CAVELON_CACHE_DIR: path.join(sb.home, `cache-missing-run-schema-${field}`) },
+        });
+        expect(result.code).toBe(1);
+        expect(result.json()).toMatchObject({ error: { code: "operation_unavailable", details: { sent: false } } });
+        expect(starts(since)).toEqual([]);
+      } finally {
+        server.state.openapiEdit = null;
+      }
+    });
+
+    it.each([["profile", "s0"], ["tags", "cat:a"]])("refuses --%s without OpenAPI while preserving whole-suite fallback", async (field, value) => {
+      server.state.serveOpenapi = false;
+      try {
+        const since = server.state.requests.length;
+        const options = { env: { CAVELON_CACHE_DIR: path.join(sb.home, `cache-no-run-contract-${field}`) } };
+        const result = await cli(sb, ["test", "run", "--suite", ids.smoke, `--${field}`, value, "--json"], options);
+        expect(result.code).toBe(1);
+        expect(result.json()).toMatchObject({ error: { code: "operation_unavailable", details: { sent: false } } });
+        expect(starts(since)).toEqual([]);
+        const ordinary = await cli(sb, ["test", "run", "--suite", ids.smoke, "--json"], options);
+        expect(ordinary.code, ordinary.stderr).toBe(0);
+        expect(starts(since)).toHaveLength(1);
+        expect(starts(since)[0]!.body).toEqual({});
+      } finally {
+        server.state.serveOpenapi = true;
+      }
+    });
+
+    it.each([["profile", "s0"], ["tags", "cat:a"]])("refuses --%s on an instance older than run profiles, before anything is sent", async (field, value) => {
+      server.state.openapiEdit = (doc) => {
+        delete doc.components.schemas.TestRunCreate.properties[field];
+      };
+      try {
+        const since = server.state.requests.length;
+        // A fresh cache: the kit keeps an instance's OpenAPI, and this one is played older.
+        const result = await cli(sb, ["test", "run", "--suite", ids.smoke, `--${field}`, value, "--json"], {
+          env: { CAVELON_CACHE_DIR: path.join(sb.home, `cache-older-than-profiles-${field}`) },
+        });
+        expect(result.code).toBe(1);
+        const error = result.json<{ error: { code: string; details: { sent: boolean } } }>().error;
+        expect(error.code).toBe("operation_unavailable");
+        expect(error.details.sent).toBe(false);
+        expect(starts(since)).toEqual([]);
+      } finally {
+        server.state.openapiEdit = null;
+      }
+    });
+  });
+
   it("runs one suite and waits for its result", async () => {
     const result = await cli(sb, ["test", "run", "--suite", "smoke", "--wait", "--json"]);
     expect(result.code, result.stderr + result.stdout).toBe(0);
