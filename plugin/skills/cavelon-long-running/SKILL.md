@@ -6,6 +6,13 @@ license: Apache-2.0
 
 # Long-running work: loops and Sandboxes
 
+Before instance work, follow cavelon-loop's connection readiness check:
+discover this session's Cavelon tools and call `whoami`. Report unavailable
+tools, login or instance access with a repair step; announce CLI fallback and
+check its `whoami` too. A disconnected session is not evidence that a loop is
+stopped or a job failed. Loaded skills do not establish a working connection.
+An intentionally CLI-only setup checks `cavelon whoami --json` directly.
+
 A **Masterloop** node runs one solution again and again in bounded iterations
 until its check passes, its budget or deadline runs out, or a person stops it.
 Each iteration returns `continue`, `wait`, `done` or `blocked`. A loop starts

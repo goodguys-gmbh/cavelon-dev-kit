@@ -396,6 +396,39 @@ Behind a proxy or a TLS-inspecting firewall, see
 | `loop_not_resumable` | 4 | The loop cannot be resumed; the message says what to do instead (cancel, start again). |
 | `loop_state_conflict` | 4 | The loop changed between reading and acting. Read it again and repeat. |
 
+## The skills load but Cavelon tools do not work
+
+Skills are instructions; loading them does not establish an MCP connection.
+Even a connected MCP server may have no instance or valid login. The agent
+should discover its session's tools and call Cavelon's MCP `whoami` before
+instance work, report a failure immediately, and announce any CLI fallback.
+Local authoring remains possible without a connection.
+
+In Claude Code:
+
+1. Open `/mcp`, select the Cavelon server and inspect its status/error. If it
+   failed, reconnect it after fixing the cause, or start a new session.
+2. In your terminal, run `cavelon setup --check --agents claude`. It checks
+   registration, starts a separate MCP server and checks login. A successful
+   check does not certify the session you already have open; its JSON says
+   `session_connection: "not_checked"`.
+3. Ask Claude to call the MCP `whoami` again for your selected solution.
+   Missing tools/transport errors need client setup or reconnection. A
+   `no_instance` error needs the correct solution/environment or initial
+   `cavelon login --instance <url>`. A missing, expired or revoked token needs
+   that login in your own terminal. DNS, TLS and network failures need the
+   connection or instance repaired; another token does not fix them. A
+   permission refusal means the connection works but the requested action is
+   not allowed for this credential/tenant.
+
+The Claude plugin's startup notice checks local launch prerequisites only;
+MCP initialization may not have finished when it runs. When it finds a
+`cavelon` executable it does not try npx instead if that executable is old or
+broken. Check `cavelon --version` and update through the method it prints.
+After updating, restart/reconnect the agent so its existing MCP process uses
+the new executable. Keep a single intended server entry instead of adding
+duplicate MCP servers to work around a failure.
+
 ## After upgrading to 0.2, an agent still runs 0.1
 
 The session warns that the plugin or a solution's skills are behind, or

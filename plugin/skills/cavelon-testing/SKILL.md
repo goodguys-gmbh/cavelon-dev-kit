@@ -10,6 +10,13 @@ A solution is ready when its test suites pass on the instance, not when the
 package validates. Test against a draft solution or a test tenant
 (`--env test`), never by trying things on an active solution.
 
+Before instance tests, follow cavelon-loop's connection readiness check:
+discover the actual session's Cavelon tools and call `whoami`. Tell the
+person immediately if discovery, login or instance access fails. Announce
+CLI fallback and check its `whoami` too; never claim tests ran without their
+successful instance results. Loaded skills alone do not prove connectivity.
+An intentionally CLI-only setup checks `cavelon whoami --json` directly.
+
 ## Canvas debug readiness
 
 For a newly authored ordinary chat/trigger solution, check its connected
