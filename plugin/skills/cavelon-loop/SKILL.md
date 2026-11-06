@@ -49,10 +49,12 @@ use it when you parse the result.
   person who does it (the description says who), as for a secret. Where the
   instance does not say (an older one), try, and a refusal names what the
   credential lacks.
-- **Never handle a token.** If a command exits 7 (not authorised) or says no
-  token, ask the person to run `cavelon login --instance <url>` themselves (in a
-  terminal, or with a `!` prefix where your client offers one). Never ask them
-  to paste a token to you, and never put one in a file or an argument.
+- **Never handle a token.** A missing, expired or revoked credential needs
+  `cavelon login --instance <url>`, run by the person in their own terminal
+  (or with a `!` prefix where the client offers one). Exit 7 can also mean a
+  permission or tenant refusal: follow its role/target guidance rather than
+  requesting another login. Never ask for a token or put one in a file or
+  an argument.
 - **Secrets are set by a person.** When a preview or `cavelon secrets list`
   names a secret that is not set, tell the person the exact command to run in
   their terminal, `cavelon secrets set <name>` (as `apply` prints it, with its
@@ -210,7 +212,9 @@ in a pinned recovery snapshot and clears the draft; report its warnings.
    agent alone leaves the Canvas debug entry incomplete. Follow the
    authoring skill's Canvas entrypoints reference, including its Masterloop
    iteration exceptions. This does not activate a trigger or run its demo.
-3. **Validate** offline: `cavelon validate`. Fix every error; `cavelon explain
+3. **Validate** the package: `cavelon validate`. Use `--offline` when the
+   instance must not be contacted; it uses cached metadata and reports checks
+   it cannot make. Fix every error; `cavelon explain
    <code>` says what a code means and how to fix it. Besides the schema it
    finds duplicate slugs, handoffs and test assertions naming an agent the
    package lacks, fields the schema does not have (with "did you mean"), and

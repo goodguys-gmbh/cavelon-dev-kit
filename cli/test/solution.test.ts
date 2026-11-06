@@ -524,7 +524,8 @@ describe("init --from", () => {
       "tests/counter-loop.yaml",
     ]);
     expect(data.imported).toMatchObject({ ignored: [], package_version: "v3", files: { removed: [] } });
-    expect(data.next.slice(0, 2)).toEqual(["Check it offline: cavelon validate", "Preview it on the instance: cavelon apply --env test"]);
+    const nextCommands = data.next.slice(0, 2).map((hint: string) => hint.slice(hint.indexOf(": ") + 2));
+    expect(nextCommands).toEqual(["cavelon validate", "cavelon apply --env test"]);
 
     // Each section holds the export's value, the suite one file of its own.
     const pkg = blueprint();

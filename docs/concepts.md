@@ -833,8 +833,10 @@ decision are not reached by a test. The
 
 On an instance offering unattended regression schedules, a person enables and
 manages them in the Admin under their recorded identity. Imports leave them
-off; schedule or automatic runs do not replace the latest manually started
-whole-suite run required for activation. A lost permission can pause a schedule.
+off. Before activation/publication, use the manual selection required by the
+published readiness policy: its gate profile when configured, otherwise the
+whole suite. Scheduled runs do not automatically replace that evidence. A
+lost permission can pause a schedule.
 A client-ended streamed chat is recorded as cancelled by recent instances;
 `cavelon chat` itself uses a non-streamed request, which the instance runs to
 the end even when the kit stops waiting (see

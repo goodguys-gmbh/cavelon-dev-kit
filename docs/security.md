@@ -116,7 +116,7 @@ Over MCP, `cavelon` limits it further:
   `confirm_token` their preview returned. The token is a hash of the change the preview showed, the tool,
   the tenant and the instance, so it binds the confirmation to that request;
   it is not proof of human consent. `confirm: true` is refused.
-  The other changing tools act at once; the
+  Each changing tool follows its declared preview and confirmation policy; the
   [table below](#every-changing-command-and-its-guard) lists every changing
   command and its guard.
 - A preview token binds the exact change; the agent holds it and could
