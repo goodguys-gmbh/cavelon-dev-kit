@@ -413,7 +413,7 @@ jobs:
         run: |
           python3 -I packaging/pypi/build_wheels.py release "${TAG#v}" dist
           ls -l dist
-      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
         with:
           packages-dir: dist/
           attestations: true
@@ -475,9 +475,10 @@ jobs:
           # waits out five minutes and fails the release (#344). A failed
           # attempt is retried instead.
           sign() {
+            local artifact_file="$1"
             for attempt in 1 2 3; do
-              timeout 120 cosign sign-blob --yes --oidc-provider github-actions --bundle "$1.sigstore.json" "$1" && return 0
-              echo "::warning::Signing $1 failed (attempt $attempt of 3)"
+              timeout 120 cosign sign-blob --yes --oidc-provider github-actions --bundle "$artifact_file.sigstore.json" "$artifact_file" && return 0
+              echo "::warning::Signing $artifact_file failed (attempt $attempt of 3)"
               sleep "$((attempt * ${SIGN_RETRY_SECONDS:-10}))"
             done
             return 1
