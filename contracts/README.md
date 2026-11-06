@@ -19,6 +19,13 @@ also plays an older instance without either field, which warns and ignores
 them, and models the instance preserving either saved value on omission.
 These tests check contracts and transport, not a model's wording.
 
+On 2026-11-02 the run-profile contracts were selected from an unreleased
+instance build's own OpenAPI generator, without running an instance:
+`TestRunCreate.profile` and `.tags`, and `TestSuiteResponse.profiles` and
+`.gate_profile`, without prose. Everything else stays as recorded. The fake
+server plays an instance without them (a listing without `profiles`, and an
+OpenAPI edited to drop `profile`).
+
 On 2026-10-28 the OpenAPI and the package schema were refreshed whole from a
 deployed instance that publishes the engagement rules, the chat turn's
 `status` and a test suite's `purpose`: the OpenAPI trimmed as below, with its

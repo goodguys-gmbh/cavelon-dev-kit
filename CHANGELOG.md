@@ -7,6 +7,23 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Added
+
+- `cavelon test run --profile <key>` (MCP `test_run` `profile`) runs one of a
+  suite's run profiles in place of the whole suite, so a deploy can run its
+  smoke profile. Without `--suite` it runs the profile on every suite that has
+  it and lists the others as skipped (`no_profile`). Where a suite's gate names
+  a profile, only a run of that profile counts for publishing. `--tags` runs
+  the cases carrying one of the tags. An instance older than run profiles
+  refuses both before anything is sent (`operation_unavailable`).
+  Missing OpenAPI or a missing run request schema also refuses the selection;
+  ordinary whole-suite runs retain their older-instance fallback.
+
+### Changed
+
+- `test run` says "campaign question checks" about skipped suites only when
+  they are; a suite a person keeps out of the vote is listed as not voting.
+
 ## [0.2.16] - 2026-11-02
 
 ### Added

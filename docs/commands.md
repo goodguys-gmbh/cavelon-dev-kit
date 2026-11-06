@@ -732,13 +732,15 @@ Start test-suite runs; returns operation ids.
 cavelon test run [options]
 ```
 
-Without --suite, runs every suite of the solution (--harness, or cavelon.yaml's harness), except suites that never vote in readiness, such as a campaign's question checks: they are listed as skipped, and --suite runs one. With --wait, exits 1 when a case failed or a run measured nothing comparable (cases not run, technical errors), 5 when answers wait for a manual verdict or a value a case needs. --as-chat-user chooses a Chat User reader for these runs only, for knowledge and identity-bound database queries; it never edits a saved suite. Without the option, uses each suite's saved reader. Choose an id with `cavelon api list_chat_users -p tenant_id=<tenant_id>`; check email_verified for email-bound queries. Where the instance publishes the matching needs_a_person_when restriction, an API key cannot choose this reader (exit 5, nothing sent): a person chooses it in the Admin or with their personal access token. A key can still run a suite whose reader a person saved. Older instances that omit the restriction leave the decision to the server.
+Without --suite, runs every suite of the solution (--harness, or cavelon.yaml's harness), except suites that never vote in readiness, such as a campaign's question checks: they are listed as skipped, and --suite runs one. --profile runs one of each suite's run profiles, by its key, in place of the whole suite: without --suite, every suite that has it, the others listed as skipped. Where a suite's gate names a profile, only a run of that profile counts for publishing. --tags runs the cases carrying one of the tags. An instance older than run profiles refuses both before anything is sent. An unavailable request schema also refuses both; whole-suite runs keep their fallback. With --wait, exits 1 when a case failed or a run measured nothing comparable (cases not run, technical errors), 5 when answers wait for a manual verdict or a value a case needs. --as-chat-user chooses a Chat User reader for these runs only, for knowledge and identity-bound database queries; it never edits a saved suite. Without the option, uses each suite's saved reader. Choose an id with `cavelon api list_chat_users -p tenant_id=<tenant_id>`; check email_verified for email-bound queries. Where the instance publishes the matching needs_a_person_when restriction, an API key cannot choose this reader (exit 5, nothing sent): a person chooses it in the Admin or with their personal access token. A key can still run a suite whose reader a person saved. Older instances that omit the restriction leave the decision to the server.
 
 | Option | Description | MCP |
 |---|---|---|
 | `--suite <suite>` | Suite name or id. Repeatable. | yes |
 | `--harness <harness>` | The solution to run against: its name, slug or id. | yes |
 | `--as-chat-user <id>` | Read knowledge and identity-bound queries as this tenant's Chat User; needs knowledge_bases.view and end_users.read. | yes |
+| `--profile <profile>` | Run this run profile of each suite (its key), in place of the whole suite. | yes |
+| `--tags <tag>` | Run only the cases carrying one of these tags. Repeatable. | yes |
 | `--wait` | Wait for the work to finish (see `cavelon wait`). | CLI only |
 | `--timeout <duration>` | Stop waiting after this long (90s, 5m; default 90s). The work goes on; run wait again to resume. | yes |
 | `--idempotency-key <key>` | Send an Idempotency-Key with each start. | yes |
@@ -748,6 +750,7 @@ Examples:
 ```bash
 cavelon test run --suite smoke --wait --timeout 10m
 cavelon test run --harness support --json
+cavelon test run --profile s0 --wait
 ```
 
 ### cavelon wait

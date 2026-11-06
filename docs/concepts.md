@@ -786,7 +786,12 @@ warns that it cannot (`test_assertion_unchecked`), and an instance that does
 not know a type grades it as a judge criterion.
 
 `apply` sends the suites with the rest of the package. `cavelon test run`
-starts them on the instance, where a judge scores each answer. With `--wait`,
+starts them on the instance, where a judge scores each answer. A suite can
+define run profiles, named parts chosen by tags (a smoke run, a short set, the
+full regression); `--profile <key>` runs one, and `--tags` the cases carrying
+a tag. Where the suite's gate names a profile, only a run of that profile
+counts for publishing, and the gate may ask less than 100 % or a minimum per
+tag. With `--wait`,
 a run whose cases failed exits 1 and names them. So does a run that measured
 nothing comparable (steps not run, technical errors, no pass rate): it says
 nothing about the solution. A run whose answers wait for a manual verdict
