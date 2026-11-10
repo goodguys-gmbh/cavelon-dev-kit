@@ -100,6 +100,7 @@
     "GET /api/v1/test-runs/{run_id}/results",
     "GET /api/v1/test-suites",
     "POST /api/v1/test-suites/{suite_id}/runs",
+    "GET /api/v1/test-suites/{suite_id}/batches/{batch_id}",
     "GET /api/v1/tools",
     "GET /api/v1/triggers",
     "GET /api/v1/triggers/runs",

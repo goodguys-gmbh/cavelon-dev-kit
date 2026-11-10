@@ -7,6 +7,16 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Changed
+
+- `cavelon test run --wait` waits for every pass of a profile that repeats its
+  cases as separate runs, not only the first. Such a profile starts a run
+  batch; the run the instance returns names it (`batch_id`,
+  `batch_operation_id`), the operation id `test run` prints is the batch's, and
+  `--wait` judges each pass, so a case that failed in one of them exits 1. An
+  instance older than batches publishes neither field, and the run is waited
+  for as before.
+
 ## [0.2.17] - 2026-11-06
 
 ### Added

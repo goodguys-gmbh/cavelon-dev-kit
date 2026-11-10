@@ -364,7 +364,17 @@ export interface FakeState {
   chatUsers: FakeChatUser[];
   readerOverrides: boolean;
   chatUserEmailVerified: boolean;
-  runs: Array<{ id: string; tenant_id: string; suite_id: string; summary: Record<string, unknown>; harness_id?: string | null }>;
+  runs: Array<{
+    id: string;
+    tenant_id: string;
+    suite_id: string;
+    summary: Record<string, unknown>;
+    harness_id?: string | null;
+    batch_id?: string | null;
+  }>;
+  /** A new run starts a batch with one pass per summary, as a profile that repeats as separate runs; null starts one run. */
+  batchPasses: Array<Record<string, unknown>> | null;
+  batches: Array<{ id: string; tenant_id: string; suite_id: string; runs: string[] }>;
   operations: Map<string, FakeOperation>;
   /** By "trigger:<run id>" or "conversation:<conversation id>". */
   traces: Map<string, Array<Record<string, unknown>>>;
@@ -848,6 +858,8 @@ export async function startFakeServer(): Promise<FakeServer> {
     quotaUsage: defaultQuotaUsage(),
     runSummary: { passed: 2, failed: 0, pass_rate: 1 },
     runResults: null,
+    batchPasses: null,
+    batches: [],
     rootPathsReachApi: true,
     serveOpenapi: true,
     chatUsers: [],
@@ -1500,13 +1512,39 @@ export async function startFakeServer(): Promise<FakeServer> {
       if (!admitReader(res, info, tid, readerRequest?.reader_mode ? body.json : suite.settings)) return;
       const id = randomUUID();
       const asked = (body.json as { harness_id?: unknown } | undefined)?.harness_id;
-      const run = { id, tenant_id: tid, suite_id: suite.id, summary: { ...state.runSummary }, harness_id: typeof asked === "string" ? asked : suite.harness_id };
+      const harnessId = typeof asked === "string" ? asked : suite.harness_id;
+      const passes = state.batchPasses;
+      const batchId = passes ? randomUUID() : null;
+      const run = { id, tenant_id: tid, suite_id: suite.id, summary: { ...(passes ? passes[0] : state.runSummary) }, harness_id: harnessId, batch_id: batchId };
       state.runs.push(run);
       const op = addOperation("test_run", tid, [...state.defaultSteps], {
         id: opId("test_run", id),
         resultRef: { type: "test_run", id, href: `/api/v1/test-runs/${id}/results` },
       });
+      if (passes && batchId) {
+        // Like the instance: the later passes start one after another; here they are there when the batch ends.
+        const later = passes.slice(1).map((summary) => ({ id: randomUUID(), tenant_id: tid, suite_id: suite.id, summary: { ...summary }, harness_id: harnessId, batch_id: batchId }));
+        state.runs.push(...later);
+        state.batches.push({ id: batchId, tenant_id: tid, suite_id: suite.id, runs: [id, ...later.map((pass) => pass.id)] });
+        addOperation("test_run_batch", tid, [...state.defaultSteps], {
+          id: opId("test_run_batch", batchId),
+          resultRef: { type: "test_run_batch", id: batchId, href: `/api/v1/test-suites/${suite.id}/batches/${batchId}` },
+        });
+      }
       return send(res, 201, runView(run, suite.name, "pending", state.serveOperations ? op.id : null));
+    }
+    m = /^\/api\/v1\/test-suites\/([^/]+)\/batches\/([^/]+)$/.exec(p);
+    if (m && method === "GET") {
+      const batch = state.batches.find((b) => b.tenant_id === tid && b.suite_id === m![1] && b.id === m![2]);
+      if (!batch) return send(res, 404, { detail: "Run batch not found" });
+      return send(res, 200, {
+        id: batch.id,
+        suite_id: batch.suite_id,
+        repetitions: batch.runs.length,
+        status: "completed",
+        runs: batch.runs.map((id) => ({ id, status: "completed" })),
+        summary: {},
+      });
     }
     m = /^\/api\/v1\/test-runs\/([^/]+)$/.exec(p);
     if (m) {
@@ -2679,7 +2717,12 @@ function suiteView(s: FakeState["suites"][number]) {
   };
 }
 
-function runView(run: { id: string; suite_id: string; summary: Record<string, unknown>; harness_id?: string | null }, suiteName: string | null, status: string, operationId: string | null) {
+function runView(
+  run: { id: string; suite_id: string; summary: Record<string, unknown>; harness_id?: string | null; batch_id?: string | null },
+  suiteName: string | null,
+  status: string,
+  operationId: string | null,
+) {
   return {
     id: run.id,
     suite_id: run.suite_id,
@@ -2698,6 +2741,9 @@ function runView(run: { id: string; suite_id: string; summary: Record<string, un
     created_at: now(),
     covers_suite: true,
     operation_id: operationId,
+    // Like the instance: both always there, null for a run that is no pass of a batch.
+    batch_id: run.batch_id ?? null,
+    batch_operation_id: run.batch_id ? opId("test_run_batch", run.batch_id) : null,
   };
 }
 

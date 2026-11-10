@@ -918,6 +918,35 @@ interface TestRun {
   status: string;
   summary?: Record<string, unknown>;
   operation_id?: string | null;
+  /** The batch whose first pass this run is, for a profile that repeats its cases as separate runs. */
+  batch_id?: string | null;
+  /** Runs until the batch's last pass ended. Unset on an instance older than batches. */
+  batch_operation_id?: string | null;
+}
+
+interface TestRunBatch {
+  id: string;
+  repetitions?: number;
+  runs?: { id: string }[];
+}
+
+/** What a run is waited for by: its batch when it is a pass of one, so --wait covers every pass. */
+function waitIdOf(run: TestRun): string | null {
+  return run.batch_operation_id ?? run.operation_id ?? null;
+}
+
+/** A started run's passes, the run alone when it is no pass of a batch. */
+async function passesOf(ctx: Context, run: TestRun): Promise<{ ids: string[]; planned: number | null }> {
+  if (!run.batch_id || !run.batch_operation_id) return { ids: [run.id], planned: null };
+  const batch = await callStable<TestRunBatch>(
+    ctx,
+    "GET",
+    "/api/v1/test-suites/{suite_id}/batches/{batch_id}",
+    "test runs",
+    { params: { suite_id: [run.suite_id], batch_id: [run.batch_id] } },
+  );
+  const ids = (batch.runs ?? []).map((pass) => pass.id);
+  return { ids: ids.length ? ids : [run.id], planned: typeof batch.repetitions === "number" ? batch.repetitions : null };
 }
 
 /** The counts of a test run's summary that it carries, and what kept it from passing. */
@@ -955,7 +984,8 @@ export const testRun: CommandSpec = {
     "counts for publishing. --tags runs the cases carrying one of the tags. An instance older than run profiles refuses\n" +
     "both before anything is sent. An unavailable request schema also refuses both; whole-suite runs keep their fallback.\n" +
     "With --wait, exits 1 when a case failed or a run measured nothing comparable (cases not run, technical errors),\n" +
-    "5 when answers wait for a manual verdict or a value a case needs.\n" +
+    "5 when answers wait for a manual verdict or a value a case needs. A profile that repeats its cases as separate runs\n" +
+    "starts a batch: --wait waits for every pass of it and judges each, and its operation id is the batch's.\n" +
     "--as-chat-user chooses a Chat User reader for these runs only, for knowledge and identity-bound database queries;\n" +
     "it never edits a saved suite. Without the option, uses each suite's saved reader. Choose an id with\n" +
     "`cavelon api list_chat_users -p tenant_id=<tenant_id>`; check email_verified for email-bound queries.\n" +
@@ -1057,8 +1087,14 @@ export const testRun: CommandSpec = {
         }).catch((error: unknown) => { throw chatUserReaderError(error, reader); }),
       );
     }
-    const operationIds = runs.map((r) => r.operation_id).filter((id): id is string => Boolean(id));
-    const started = runs.map((r) => ({ run_id: r.id, suite: r.suite_name ?? r.suite_id, status: r.status, operation_id: r.operation_id ?? null }));
+    const operationIds = runs.map(waitIdOf).filter((id): id is string => Boolean(id));
+    const started = runs.map((r) => ({
+      run_id: r.id,
+      suite: r.suite_name ?? r.suite_id,
+      status: r.status,
+      operation_id: waitIdOf(r),
+      ...(r.batch_id ? { batch_id: r.batch_id } : {}),
+    }));
     if (boolOption(input, "wait") && ctx.mode === "cli" && operationIds.length) {
       const rawTimeout = stringOption(input, "timeout");
       const waited = await waitAndReport(ctx, operationIds, timeoutMs(ctx, rawTimeout));
@@ -1067,15 +1103,26 @@ export const testRun: CommandSpec = {
       let failedCases = 0;
       let verdictCode: ExitCodeValue = ExitCode.ok;
       for (const run of runs) {
-        const latest = await callStable<TestRun>(ctx, "GET", "/api/v1/test-runs/{run_id}", "test runs", { params: { run_id: [run.id] } });
-        const { failed, errors } = caseCounts(latest.summary);
-        failedCases += failed + errors;
-        // A run that is still going has no verdict yet; the wait's own exit code says so.
-        if (!waited.pending.includes(run.operation_id ?? "")) {
-          const code = runVerdict(latest.summary).exit_code;
-          if (code === ExitCode.failure || (code === ExitCode.needsAction && verdictCode === ExitCode.ok)) verdictCode = code;
+        // A batch's passes are judged each; a case that failed in one failed the batch.
+        const passes = await passesOf(ctx, run);
+        for (const [index, passId] of passes.ids.entries()) {
+          const latest = await callStable<TestRun>(ctx, "GET", "/api/v1/test-runs/{run_id}", "test runs", { params: { run_id: [passId] } });
+          const { failed, errors } = caseCounts(latest.summary);
+          failedCases += failed + errors;
+          // A run that is still going has no verdict yet; the wait's own exit code says so.
+          if (!waited.pending.includes(waitIdOf(run) ?? "")) {
+            const code = runVerdict(latest.summary).exit_code;
+            if (code === ExitCode.failure || (code === ExitCode.needsAction && verdictCode === ExitCode.ok)) verdictCode = code;
+          }
+          const suite = latest.suite_name ?? latest.suite_id;
+          results.push({
+            run_id: latest.id,
+            suite: run.batch_id ? `${suite} (pass ${index + 1} of ${passes.planned ?? passes.ids.length})` : suite,
+            status: latest.status,
+            summary: latest.summary ?? {},
+            ...(run.batch_id ? { batch_id: run.batch_id } : {}),
+          });
         }
-        results.push({ run_id: latest.id, suite: latest.suite_name ?? latest.suite_id, status: latest.status, summary: latest.summary ?? {} });
       }
       let exitCode = waited.exitCode;
       if (exitCode === ExitCode.ok) exitCode = verdictCode;

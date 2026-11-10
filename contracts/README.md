@@ -6,6 +6,16 @@ and the fake server in `cli/test/` serves them.
 
 ## `cavelon/`
 
+On 2026-11-10 the run-batch contracts were selected from an unreleased
+instance build's own OpenAPI generator, without running an instance:
+`GET /api/v1/test-suites/{suite_id}/batches/{batch_id}` with
+`TestRunBatchResponse` and `TestRunBatchPass`, `TestRunResponse.batch_id` and
+`.batch_operation_id`, and `TestRunSummary` with the counts it references
+(`TestRunCaseCounts`, `TestRunTagResult`, `TestRunRepetition`,
+`TestRunScoreSpread`). Everything else stays as recorded. The fake server
+plays a run without a batch, whose two fields are null, as the instance sends
+them.
+
 On 2026-11-02 the response-rule contracts were selectively refreshed from a
 running instance: `PackageAgent.response_rules`, `PackagePersona.plain_language`
 and the `TextMatchCriterion` shape used by the report-only sentence check.
