@@ -7,6 +7,8 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+## [0.2.18] - 2026-11-11
+
 ### Added
 
 - `cavelon limits set` changes a tenant's capacity limits (`max_agents`,
