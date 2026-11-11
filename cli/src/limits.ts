@@ -79,6 +79,11 @@ export interface LimitChange {
   requires_role?: string[];
   /** `platform`: sent in Platform mode, without `X-Tenant-Id`. */
   mode?: string;
+  /**
+   * What an explicit `null` stores where it is not a reset: `no_limit` on a
+   * capacity limit, which `null` lifts while 0 allows none. Absent on an older instance.
+   */
+  null_means?: string;
 }
 
 /**
@@ -136,6 +141,11 @@ export interface Quota {
    * `tenant_quotas.changes`, and the field of this row that holds the current value.
    */
   change?: { key: string; field: string };
+  /**
+   * A capacity row's limit of 0 allows none (`zero_means: none_allowed`); a
+   * monthly row's 0 caps nothing. An older instance does not say, and its 0 reads as no limit.
+   */
+  none_allowed_at_zero: boolean;
 }
 
 export interface TenantQuotas {
@@ -149,6 +159,18 @@ export interface TenantQuotas {
 }
 
 const NEAR = 0.8;
+
+/** A quota row's `zero_means` on a capacity limit: a limit of 0 allows none. */
+const NONE_ALLOWED = "none_allowed";
+
+/** A capacity change's `null_means`: an explicit null lifts the limit. */
+export const NO_LIMIT = "no_limit";
+
+/** A quota row's limit in words: "no limit", "none allowed" for a capacity row's 0, or the number. */
+export function quotaLimitText(limit: unknown, noneAllowedAtZero: boolean): string {
+  if (limit === null || (typeof limit === "number" && limit <= 0 && !(noneAllowedAtZero && limit === 0))) return "no limit";
+  return limit === 0 ? "0 (none allowed)" : String(limit);
+}
 
 /** Who may change a limit, in words. */
 export function changedBy(limit: Pick<Limit, "changeable_by" | "source">): string {
@@ -283,6 +305,7 @@ export function parseChange(raw: unknown): LimitChange | undefined {
   const maximumSetting = text(entry.maximum_setting);
   const roles = Array.isArray(entry.requires_role) ? entry.requires_role.filter((r): r is string => typeof r === "string" && r !== "") : [];
   const mode = text(entry.mode);
+  const nullMeans = text(entry.null_means);
   return {
     operation,
     method,
@@ -294,6 +317,7 @@ export function parseChange(raw: unknown): LimitChange | undefined {
     ...(maximumSetting ? { maximum_setting: maximumSetting } : {}),
     ...(roles.length ? { requires_role: roles } : {}),
     ...(mode ? { mode } : {}),
+    ...(nullMeans ? { null_means: nullMeans } : {}),
   };
 }
 
@@ -419,13 +443,26 @@ export async function limitsOrWarn(ctx: Context): Promise<PublishedLimits | unde
 
 function quotaOf(key: string, raw: Record<string, unknown>): Quota {
   const current = typeof raw.current === "number" ? raw.current : null;
-  // A limit of 0 or none caps nothing.
+  // A limit of none caps nothing, and so does 0 unless the row says 0 allows none.
   const limit = typeof raw.limit === "number" ? raw.limit : null;
-  const ratio = current !== null && limit !== null && limit > 0 ? current / limit : null;
+  const noneAllowedAtZero = raw.zero_means === NONE_ALLOWED;
+  // Nothing more may be created under a limit of 0 that allows none: the quota is full.
+  const full = noneAllowedAtZero && limit === 0 && current !== null;
+  const ratio = full ? 1 : current !== null && limit !== null && limit > 0 ? current / limit : null;
   const warning = typeof raw.warning_ratio === "number" && raw.warning_ratio > 0 ? raw.warning_ratio : NEAR;
   const link = raw.change as { key?: unknown; field?: unknown } | undefined;
   const change = link && typeof link.key === "string" && typeof link.field === "string" ? { key: link.key, field: link.field } : undefined;
-  return { key, current, limit, ratio, warning_ratio: warning, near: ratio !== null && ratio >= warning, details: raw, ...(change ? { change } : {}) };
+  return {
+    key,
+    current,
+    limit,
+    ratio,
+    warning_ratio: warning,
+    near: ratio !== null && ratio >= warning,
+    details: raw,
+    ...(change ? { change } : {}),
+    none_allowed_at_zero: noneAllowedAtZero,
+  };
 }
 
 /**
@@ -495,6 +532,7 @@ export function formatQuotaValue(quota: QuotaValue): string {
 export function formatQuota(quota: Quota): string {
   if (quota.current === null && quota.limit === null) return "-";
   const used = quota.current === null ? "?" : String(quota.current);
+  if (quota.limit === 0 && quota.none_allowed_at_zero) return `${used} of 0 (none allowed)`;
   if (quota.limit === null || quota.limit <= 0) return `${used} (no limit)`;
   return `${used} of ${quota.limit}${quota.ratio === null ? "" : ` (${Math.round(quota.ratio * 100)}%)`}`;
 }

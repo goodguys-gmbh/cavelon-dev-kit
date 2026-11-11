@@ -12,6 +12,8 @@ import {
   formatQuotaValue,
   formatValue,
   isOperatorChange,
+  NO_LIMIT,
+  quotaLimitText,
   readLimits,
   readQuotas,
   type Limit,
@@ -56,11 +58,19 @@ function periodText(quota: QuotaValue): string {
   return quota.period ? ` in ${quota.period.key}` : "";
 }
 
-/** A quota's use in words; one the instance shapes differently shows its numbers. */
+/**
+ * A quota's use in words; one the instance shapes differently shows its
+ * numbers, and its limits (`limit_per_kb`) with no limit and none allowed in words.
+ */
 function quotaUse(quota: Quota): string {
   if (quota.current !== null || quota.limit !== null) return formatQuota(quota);
-  const numbers = Object.entries(quota.details).filter(([, v]) => typeof v === "number");
-  return numbers.length ? numbers.map(([k, v]) => `${k} ${String(v)}`).join(", ") : "-";
+  const isLimit = (k: string) => k.startsWith("limit");
+  const shown = Object.entries(quota.details).filter(([k, v]) => typeof v === "number" || (v === null && isLimit(k)));
+  const text = (k: string, v: unknown) => {
+    if (!isLimit(k) || (typeof v === "number" && !(v === 0 && quota.none_allowed_at_zero))) return String(v);
+    return quotaLimitText(v, quota.none_allowed_at_zero);
+  };
+  return shown.length ? shown.map(([k, v]) => `${k} ${text(k, v)}`).join(", ") : "-";
 }
 
 export const limits: CommandSpec = {
@@ -158,7 +168,11 @@ export const limits: CommandSpec = {
     if (near.length) text += `\n\nClose to a quota: ${near.map((q) => q.text).join("; ")}`;
     const quotaChanges = keys.length || source ? [] : (published.tenantQuotas?.changes ?? []);
     const tenantChangeable = [...values.filter((v) => v.change && !isOperatorChange(v.change)).map((v) => v.key), ...quotaChanges.filter((c) => !isOperatorChange(c)).map((c) => c.key)];
-    const operatorChangeable = values.filter((v) => [v.change, v.tenant_change].some((c) => c && isOperatorChange(c))).map((v) => v.key);
+    const operatorChangeable = [
+      ...values.filter((v) => [v.change, v.tenant_change].some((c) => c && isOperatorChange(c))).map((v) => v.key),
+      // The capacity limits an operator sets per tenant (null lifts one).
+      ...quotaChanges.filter((c) => isOperatorChange(c)).map((c) => c.key),
+    ];
     if (tenantChangeable.length) {
       const owner = quotaValues.filter((q) => q.changeable_by === "tenant_owner" && tenantChangeable.includes(q.key)).map((q) => q.key);
       text += `\n\nA tenant admin changes ${tenantChangeable.length === 1 ? "it" : "these"} with: ${cavelonCommand("limits", "set", fill("key"), fill("value"))} (shows the change; --confirm sends it)`;
@@ -166,6 +180,8 @@ export const limits: CommandSpec = {
     }
     if (operatorChangeable.length) {
       text += `\n\nAn operator changes ${operatorChangeable.join(", ")} with the same command and a personal access token in Platform mode of the role the change names; --tenant <id|slug> selects one tenant's override or flag.`;
+      const liftable = quotaChanges.filter((c) => c.null_means === NO_LIMIT).map((c) => c.key);
+      if (liftable.length) text += ` For ${liftable.join(", ")}, none lifts the limit (no limit) and 0 allows none.`;
     }
     const pages = [...new Set(values.map((v) => docsPage(v.docs)).filter(Boolean))];
     if (pages.length) text += `\n\nHow to change one: ${cavelonCommand("docs", "get", fill("page"))} (${pages.join(", ")})`;

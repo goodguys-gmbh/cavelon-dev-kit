@@ -6,6 +6,18 @@ and the fake server in `cli/test/` serves them.
 
 ## `cavelon/`
 
+On 2026-11-11 the capacity-limit contracts were selectively refreshed from the
+instance build of goodguys-gmbh/ChatFlow#6507 (its OpenAPI generator, without
+running an instance): the five capacity fields of `TenantDetailResponse` may
+be `null` (no limit), the `knowledge_bases`, `agents` and `tools` rows of
+`TenantQuotaUsage` take any field (a `null` limit, `change`, `zero_means`),
+and `LimitChange`/`QuotaChange` take `null_means`. The capabilities'
+`tenant_quotas.changes` take the five capacity changes as that build publishes
+them for a tenant not on Processing-Step terms. Everything else stays as
+recorded. The fake server also plays an older instance without any of it
+(`capacityContract: false`), which publishes no capacity change and says
+nothing about a row's 0.
+
 On 2026-11-02 the response-rule contracts were selectively refreshed from a
 running instance: `PackageAgent.response_rules`, `PackagePersona.plain_language`
 and the `TextMatchCriterion` shape used by the report-only sentence check.

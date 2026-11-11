@@ -897,6 +897,96 @@
             "settings.manage"
           ],
           "minimum": 0
+        },
+        {
+          "key": "max_knowledge_bases",
+          "operation": "update_tenant_limits_api_v1_tenants__tenant_id__limits_patch",
+          "method": "PATCH",
+          "path": "/api/v1/tenants/{tenant_id}/limits",
+          "field": "max_knowledge_bases",
+          "permissions": [
+            "limits.manage"
+          ],
+          "minimum": 0,
+          "maximum": 2147483647,
+          "requires_role": [
+            "platform_admin",
+            "superadmin"
+          ],
+          "mode": "platform",
+          "null_means": "no_limit"
+        },
+        {
+          "key": "max_documents_per_kb",
+          "operation": "update_tenant_limits_api_v1_tenants__tenant_id__limits_patch",
+          "method": "PATCH",
+          "path": "/api/v1/tenants/{tenant_id}/limits",
+          "field": "max_documents_per_kb",
+          "permissions": [
+            "limits.manage"
+          ],
+          "minimum": 0,
+          "maximum": 2147483647,
+          "requires_role": [
+            "platform_admin",
+            "superadmin"
+          ],
+          "mode": "platform",
+          "null_means": "no_limit"
+        },
+        {
+          "key": "max_storage_bytes",
+          "operation": "update_tenant_limits_api_v1_tenants__tenant_id__limits_patch",
+          "method": "PATCH",
+          "path": "/api/v1/tenants/{tenant_id}/limits",
+          "field": "max_storage_bytes",
+          "permissions": [
+            "limits.manage"
+          ],
+          "minimum": 0,
+          "maximum": 9223372036854775807,
+          "requires_role": [
+            "platform_admin",
+            "superadmin"
+          ],
+          "mode": "platform",
+          "null_means": "no_limit"
+        },
+        {
+          "key": "max_agents",
+          "operation": "update_tenant_limits_api_v1_tenants__tenant_id__limits_patch",
+          "method": "PATCH",
+          "path": "/api/v1/tenants/{tenant_id}/limits",
+          "field": "max_agents",
+          "permissions": [
+            "limits.manage"
+          ],
+          "minimum": 0,
+          "maximum": 2147483647,
+          "requires_role": [
+            "platform_admin",
+            "superadmin"
+          ],
+          "mode": "platform",
+          "null_means": "no_limit"
+        },
+        {
+          "key": "max_tools",
+          "operation": "update_tenant_limits_api_v1_tenants__tenant_id__limits_patch",
+          "method": "PATCH",
+          "path": "/api/v1/tenants/{tenant_id}/limits",
+          "field": "max_tools",
+          "permissions": [
+            "limits.manage"
+          ],
+          "minimum": 0,
+          "maximum": 2147483647,
+          "requires_role": [
+            "platform_admin",
+            "superadmin"
+          ],
+          "mode": "platform",
+          "null_means": "no_limit"
         }
       ]
     }
