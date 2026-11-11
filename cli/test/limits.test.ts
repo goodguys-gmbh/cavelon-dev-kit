@@ -53,6 +53,8 @@ beforeAll(async () => {
 afterEach(() => {
   server.state.capsPatch = {};
   server.state.quotaUsage = defaultQuotaUsage();
+  server.state.tenantCapacity.clear();
+  server.state.capacityContract = true;
   server.state.tenantFlags.clear();
   server.state.processingStepCaps.clear();
   server.state.processingStepsUsed = 0;
@@ -163,6 +165,7 @@ describe("cavelon limits", () => {
     usage.monthly_processing_steps = {};
     delete (usage.monthly_inference_tokens as Record<string, unknown>).change;
     server.state.quotaUsage = usage;
+    server.state.capacityContract = false;
     const result = await cli(sb, ["limits"]);
     expect(result.code, result.stderr).toBe(0);
     expect(result.stdout).not.toContain("Branch concurrency");
@@ -191,6 +194,33 @@ describe("cavelon limits", () => {
     expect(text).toMatch(/knowledge_bases\s+9 of 10 \(90%\)\s+close to the quota/);
     expect(text).toMatch(/documents_per_kb\s+current_total 3, limit_per_kb 2000/);
     expect(text).toMatch(/Close to a quota: knowledge_bases 9 of 10 \(90%\)/);
+  });
+
+  it("a capacity limit: null is no limit and 0 allows none, as the row's zero_means says; an older instance's 0 reads as before", async () => {
+    server.state.tenantCapacity.set(tenant, { max_agents: null, max_tools: 0, max_documents_per_kb: null, max_knowledge_bases: 0 });
+    const text = (await cli(sb, ["limits"])).stdout;
+    expect(text).toMatch(/^agents\s+2 \(no limit\)/m);
+    expect(text).toMatch(/^tools\s+0 of 0 \(none allowed\)\s+close to the quota/m);
+    expect(text).toMatch(/^knowledge_bases\s+1 of 0 \(none allowed\)/m);
+    expect(text).toMatch(/^documents_per_kb\s+current_total 3, limit_per_kb no limit/m);
+    // The monthly rows' 0 still caps nothing.
+    expect(text).toMatch(/^monthly_ingestion_tokens\s+0 \(no limit\)/m);
+    expect(text).toContain(
+      "For max_knowledge_bases, max_documents_per_kb, max_storage_bytes, max_agents, max_tools, none lifts the limit (no limit) and 0 allows none.",
+    );
+    const json = (await cli(sb, ["limits", "--json"])).json<{ tenant_quotas: { items: Array<Record<string, unknown>> }; near: Array<{ key: string }> }>();
+    const item = (key: string) => json.tenant_quotas.items.find((q) => q.key === key);
+    expect(item("agents")).toMatchObject({ current: 2, limit: null, ratio: null, near: false, none_allowed_at_zero: true, change: { key: "max_agents", field: "limit" } });
+    expect(item("tools")).toMatchObject({ current: 0, limit: 0, ratio: 1, near: true, none_allowed_at_zero: true });
+    expect(item("monthly_ingestion_tokens")).toMatchObject({ limit: 0, near: false, none_allowed_at_zero: false });
+    expect(json.near.map((q) => q.key).sort()).toEqual(["knowledge_bases", "tools"]);
+
+    // 0 on a row that does not say what it means is no limit, as an older instance's always read.
+    server.state.capacityContract = false;
+    server.state.tenantCapacity.set(tenant, { max_tools: 0 });
+    const older = (await cli(sb, ["limits"])).stdout;
+    expect(older).toMatch(/^tools\s+0 \(no limit\)/m);
+    expect(older).not.toContain("none lifts the limit");
   });
 
   it("filters by key and source, and says when the instance lists no such limit", async () => {

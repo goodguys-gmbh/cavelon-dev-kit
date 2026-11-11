@@ -15058,6 +15058,18 @@
               }
             ],
             "title": "Mode"
+          },
+          "null_means": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "no_limit"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Null Means"
           }
         },
         "type": "object",
@@ -18124,6 +18136,18 @@
           "key": {
             "type": "string",
             "title": "Key"
+          },
+          "null_means": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "no_limit"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Null Means"
           }
         },
         "type": "object",
@@ -20447,17 +20471,38 @@
             "default": {}
           },
           "max_knowledge_bases": {
-            "type": "integer",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Max Knowledge Bases",
             "default": 10
           },
           "max_documents_per_kb": {
-            "type": "integer",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Max Documents Per Kb",
             "default": 2000
           },
           "max_storage_bytes": {
-            "type": "integer",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Max Storage Bytes",
             "default": 0
           },
@@ -20472,12 +20517,26 @@
             "default": 0
           },
           "max_agents": {
-            "type": "integer",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Max Agents",
             "default": 20
           },
           "max_tools": {
-            "type": "integer",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Max Tools",
             "default": 50
           },
@@ -20841,9 +20900,7 @@
             "title": "Commercial Model"
           },
           "knowledge_bases": {
-            "additionalProperties": {
-              "type": "integer"
-            },
+            "additionalProperties": true,
             "type": "object",
             "title": "Knowledge Bases",
             "default": {}
@@ -20881,17 +20938,13 @@
             "default": {}
           },
           "agents": {
-            "additionalProperties": {
-              "type": "integer"
-            },
+            "additionalProperties": true,
             "type": "object",
             "title": "Agents",
             "default": {}
           },
           "tools": {
-            "additionalProperties": {
-              "type": "integer"
-            },
+            "additionalProperties": true,
             "type": "object",
             "title": "Tools",
             "default": {}

@@ -88,8 +88,10 @@ for a public widget), **propose the change; the person decides.**
   operator. Where it publishes a `change` (the run caps), `limits set` sends it
   only with a personal access token in Platform mode of the role it names, and
   otherwise refuses naming the role and the Admin page; `--tenant <tenant>`
-  then sets one tenant's own run cap. Without a `change` it cannot be changed
-  at runtime. Tell the person who changes it and where, and design within it
+  then sets one tenant's own run cap, or a capacity limit (`max_agents`,
+  `max_tools`, `max_knowledge_bases`, `max_documents_per_kb`,
+  `max_storage_bytes`: `none` is no limit, `0` allows none). Without a
+  `change` it cannot be changed at runtime. Tell the person who changes it and where, and design within it
   meanwhile; never ask for an operator's token. A docs page marked "Platform
   page" describes such an operator's task: this token can read it, not do it.
 - A rate limit only goes down to what the operator allows; above the ceiling

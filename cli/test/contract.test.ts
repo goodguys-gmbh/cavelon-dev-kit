@@ -150,6 +150,7 @@ describe("contract snapshots", () => {
   });
 
   it("names how a tenant admin changes each of its limits, with an operation the OpenAPI publishes", () => {
+    const CAPACITY_KEYS = ["max_knowledge_bases", "max_documents_per_kb", "max_storage_bytes", "max_agents", "max_tools"];
     const caps = JSON.parse(readFileSync(path.join(CONTRACTS, "meta-capabilities.json"), "utf8"));
     const schemas = (doc.components as { schemas: Record<string, { required?: string[]; properties?: Record<string, unknown> }> }).schemas;
     expect(schemas.LimitChange!.required).toEqual(expect.arrayContaining(["operation", "method", "path", "field", "permissions"]));
@@ -159,7 +160,8 @@ describe("contract snapshots", () => {
         { key: v.key, tenant: v.changeable_by === "tenant_admin", change: v.change },
         ...(v.tenant_change ? [{ key: v.key, tenant: false, change: v.tenant_change }] : []),
       ]),
-      ...published.tenantQuotas!.changes.map((c) => ({ key: c.key, tenant: true, change: c })),
+      // A quota change is a Tenant Owner's, except a capacity limit's, which an operator sets per tenant.
+      ...published.tenantQuotas!.changes.map((c) => ({ key: c.key, tenant: !CAPACITY_KEYS.includes(c.key), change: c })),
     ];
     expect(changes.filter((c) => c.change).length).toBeGreaterThanOrEqual(10);
     for (const { key, tenant, change } of changes) {
@@ -182,13 +184,22 @@ describe("contract snapshots", () => {
       if (change.field.endsWith("enabled")) sample = true;
       else if (Array.isArray(published.byKey.get(key)?.value)) sample = ["pdf"];
       expect(schemaErrors(doc, body, nest(sample)), key).toEqual([]);
-      if (change.maximum !== undefined && !change.maximum_setting) expect(schemaErrors(doc, body, nest(change.maximum + 1)), key).not.toEqual([]);
+      // Above 2^53 a JSON number has no next value to send (the storage limit's 2^63 - 1).
+      if (change.maximum !== undefined && !change.maximum_setting && change.maximum < Number.MAX_SAFE_INTEGER) {
+        expect(schemaErrors(doc, body, nest(change.maximum + 1)), key).not.toEqual([]);
+      }
+      // A capacity limit's null lifts it, and the body takes it.
+      if (change.null_means === "no_limit") expect(schemaErrors(doc, body, nest(null)), key).toEqual([]);
     }
     expect(published.byKey.get("rate_limit_chat_rpm")!.change).toMatchObject({ maximum_setting: "RATE_LIMIT_CHAT_RPM", path: "/api/v1/tenants/current/rate-limits" });
     expect(published.tenantQuotas!.changes.map((c) => [c.key, c.path])).toEqual([
       ["monthly_inference_token_budget", "/api/v1/tenants/{tenant_id}/limits"],
       ["monthly_processing_step_cap", "/api/v1/tenants/current/processing-step-cap"],
+      ...CAPACITY_KEYS.map((key) => [key, "/api/v1/tenants/{tenant_id}/limits"]),
     ]);
+    for (const key of CAPACITY_KEYS) {
+      expect(published.tenantQuotas!.changes.find((c) => c.key === key), key).toMatchObject({ field: key, minimum: 0, null_means: "no_limit", requires_role: ["platform_admin", "superadmin"] });
+    }
     // The operator's run caps: the platform's caps, and one tenant's own through tenant_change.
     expect(published.byKey.get("max_concurrent_agent_runs_global")!.change).toMatchObject({ path: "/api/v1/platform-settings/runs/capacity", field: "global", requires_role: ["superadmin"] });
     expect(published.byKey.get("max_concurrent_agent_runs_per_tenant")!.tenant_change).toMatchObject({
