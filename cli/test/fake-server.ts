@@ -577,6 +577,14 @@ export interface FakeState {
   /** Each tenant's own run cap, as an operator sets it with the tenant_change. */
   tenantRunCaps: Map<string, number>;
   tenantDatabaseCaps: Map<string, Record<string, number>>;
+  /** Each tenant's capacity limits an operator set on PATCH /tenants/{tenant_id}/limits; null is no limit. */
+  tenantCapacity: Map<string, Record<string, number | null>>;
+  /**
+   * Whether the instance publishes the capacity contract: the capacity changes
+   * with `null_means`, the rows' `change` and `zero_means`, and null as no limit.
+   * Off is an older instance, which ignores a null and says nothing about 0.
+   */
+  capacityContract: boolean;
   /** Each tenant's feature flags, as PUT /admin/feature-flags/{tenant_id}/{flag_key} sets them. */
   tenantFlags: Map<string, Map<string, boolean>>;
   /** The tenants on Processing-Step terms: the token budget stops nothing there. */
@@ -913,6 +921,8 @@ export async function startFakeServer(): Promise<FakeServer> {
     runCapacity: {},
     tenantRunCaps: new Map(),
     tenantDatabaseCaps: new Map(),
+    tenantCapacity: new Map(),
+    capacityContract: true,
     tenantFlags: new Map(),
     processingStepTerms: new Set(),
     confirmations: { enforced: true },
@@ -2029,6 +2039,10 @@ export async function startFakeServer(): Promise<FakeServer> {
     const quotas = (merged.limits as { tenant_quotas?: { values?: Array<Record<string, unknown>>; changes?: Array<Record<string, unknown>> } } | undefined)?.tenant_quotas;
     // Under Processing-Step terms the inference budget's change is not offered.
     if (quotas?.changes && state.processingStepTerms.has(tenantId)) quotas.changes = quotas.changes.filter((c) => c.key !== "monthly_inference_token_budget");
+    // The plan sets the capacity under those terms, and an older instance publishes no capacity change.
+    if (quotas?.changes && (state.processingStepTerms.has(tenantId) || !state.capacityContract)) {
+      quotas.changes = quotas.changes.filter((c) => !(String(c.key) in CAPACITY_LIMITS));
+    }
     for (const value of quotas?.values ?? []) {
       if (value.key !== "monthly_processing_step_cap") continue;
       const cap = state.processingStepCaps.get(tenantId) ?? null;
@@ -2048,6 +2062,15 @@ export async function startFakeServer(): Promise<FakeServer> {
     }
     const budget = usage.monthly_inference_tokens as Record<string, unknown> | undefined;
     if (budget && "platform_budget" in budget && state.inferenceBudgets.has(tenantId)) budget.platform_budget = state.inferenceBudgets.get(tenantId);
+    const own = state.tenantCapacity.get(tenantId) ?? {};
+    for (const [field, { row, rowField }] of Object.entries(CAPACITY_LIMITS)) {
+      const line = usage[row] as Record<string, unknown> | undefined;
+      if (!line) continue;
+      if (field in own) line[rowField] = own[field];
+      if (!state.capacityContract) continue;
+      line.zero_means = "none_allowed";
+      if (!state.processingStepTerms.has(tenantId)) line.change = { key: field, field: rowField };
+    }
     if (state.processingStepTerms.has(tenantId)) {
       // The token allocation stops nothing under these terms: the row reports 0 and names no change.
       usage.commercial_model = "processing_steps";
@@ -2122,13 +2145,32 @@ export async function startFakeServer(): Promise<FakeServer> {
       else own[field] = value as number;
     }
     state.tenantDatabaseCaps.set(target, own);
+    const capacity = state.tenantCapacity.get(target) ?? {};
+    for (const [field, { maximum }] of Object.entries(CAPACITY_LIMITS)) {
+      if (!(field in sent)) continue;
+      const value = sent[field];
+      if (value !== null && !(Number.isInteger(value) && (value as number) >= 0 && (value as number) <= maximum)) {
+        return send(res, 422, { detail: [{ loc: ["body", field], msg: `A whole number from 0 to ${maximum}` }] });
+      }
+      // An older instance stores no null: it changes nothing there.
+      if (value !== null || state.capacityContract) capacity[field] = value as number | null;
+    }
+    state.tenantCapacity.set(target, capacity);
     const value = (json as { max_concurrent_agent_runs?: unknown } | null)?.max_concurrent_agent_runs;
     if (value !== null && value !== undefined && !(Number.isInteger(value) && (value as number) >= 1 && (value as number) <= 100_000)) {
       return send(res, 422, { detail: [{ type: "greater_than_equal", loc: ["body", "max_concurrent_agent_runs"], msg: "Input should be greater than or equal to 1" }] });
     }
     if (value === null) state.tenantRunCaps.delete(target);
     else if (typeof value === "number") state.tenantRunCaps.set(target, value);
-    return send(res, 200, tenantDetail(target, { max_concurrent_agent_runs: state.tenantRunCaps.get(target) ?? null, max_database_connections: own.max_database_connections ?? null, max_database_queries: own.max_database_queries ?? null }));
+    return send(
+      res,
+      200,
+      tenantDetail(target, {
+        max_concurrent_agent_runs: state.tenantRunCaps.get(target) ?? null,
+        max_database_connections: own.max_database_connections ?? null,
+        max_database_queries: own.max_database_queries ?? null,
+      }),
+    );
   }
 
   /** PUT /admin/feature-flags/{tenant_id}/{flag_key}: an operator switches one tenant's flag. */
@@ -2244,6 +2286,13 @@ export async function startFakeServer(): Promise<FakeServer> {
     return {
       ...tenant,
       monthly_inference_token_budget: state.inferenceBudgets.get(tid) ?? 1_000_000,
+      // A stored null is no limit; a field never set has the default.
+      ...Object.fromEntries(
+        Object.entries(CAPACITY_LIMITS).map(([field, { fallback }]) => {
+          const own = state.tenantCapacity.get(tid) ?? {};
+          return [field, field in own ? own[field] : fallback];
+        }),
+      ),
       agent_max_turns_default: 25,
       context_source_limits: {
         attached_documents: {
@@ -2609,6 +2658,19 @@ function declarations(pkg: Record<string, unknown>, kind: "variables" | "secrets
   const rows = pkg[`required_${kind}`];
   return Array.isArray(rows) ? rows.filter((r): r is { name: string; description?: string | null } => Boolean(r) && typeof r.name === "string" && r.name !== "") : [];
 }
+
+/**
+ * The capacity limits an operator sets per tenant: the quota-usage row and its
+ * limit field, the column's largest value, and the default a tenant starts with.
+ */
+const CAPACITY_LIMITS: Record<string, { row: string; rowField: string; maximum: number; fallback: number }> = {
+  max_knowledge_bases: { row: "knowledge_bases", rowField: "limit", maximum: 2_147_483_647, fallback: 10 },
+  max_documents_per_kb: { row: "documents_per_kb", rowField: "limit_per_kb", maximum: 2_147_483_647, fallback: 2000 },
+  // The bigint column's largest value, 2^63 - 1, as a JSON number reads it.
+  max_storage_bytes: { row: "storage_bytes", rowField: "limit", maximum: 2 ** 63, fallback: 5_368_709_120 },
+  max_agents: { row: "agents", rowField: "limit", maximum: 2_147_483_647, fallback: 20 },
+  max_tools: { row: "tools", rowField: "limit", maximum: 2_147_483_647, fallback: 50 },
+};
 
 /** A tenant's quotas and their use, as /tenants/current/quota-usage serves them. */
 export function defaultQuotaUsage(): Record<string, unknown> {

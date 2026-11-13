@@ -32,8 +32,12 @@ the built-in default.
 
 Below the limits, **tenant quotas** show what the tenant has used: knowledge
 bases, documents, storage, agents, tools, and the monthly inference and
-Processing Step budgets, each with its use and state. `cavelon status` names
-every quota at 80 % or more. When the use cannot be read, `limits` still shows
+Processing Step budgets, each with its use and state. A capacity limit
+(knowledge bases, documents per knowledge base, storage, agents, tools) may be
+**no limit**, and a limit of `0` there allows none: `limits` shows it as
+`0 of 0 (none allowed)`, where the instance says so on the row
+(`zero_means: none_allowed`). On the monthly rows `0` caps nothing. `cavelon
+status` names every quota at 80 % or more, and a capacity limit of 0. When the use cannot be read, `limits` still shows
 the limits and says why the quotas are missing (`--json`:
 `tenant_quotas.unavailable`).
 
@@ -103,7 +107,7 @@ Admin actions. See [Connect a database](connect-a-database.md).
 |---|---|---|
 | **A tenant admin** | the tenant's upload defaults, archive uploads and caps, agent defaults, rate limits, the monthly inference budget | `cavelon limits set` with their personal access token or a tenant API key with the permission |
 | **A Tenant Owner** | additionally the monthly Processing Step cap | `cavelon limits set monthly_processing_step_cap …` |
-| **The instance operator** | platform values, the run caps, a single tenant's run cap or database connection/query caps, whether a tenant's branches run concurrently | the Admin, or `cavelon limits set … --tenant <tenant>` with a Platform-mode token |
+| **The instance operator** | platform values, the run caps, a single tenant's run cap, database connection/query caps or capacity limits, whether a tenant's branches run concurrently | the Admin, or `cavelon limits set … --tenant <tenant>` with a Platform-mode token |
 | **Nobody at runtime** | values from the licence or the instance's environment, without a published change | `limits` names the setting; the operator changes the deployment |
 
 The instance decides who holds which permission. `cavelon` reads the
@@ -217,7 +221,17 @@ and the Admin page. The limits are still read for a tenant, so name one:
 cavelon limits set max_concurrent_agent_runs_global 150 --tenant acme --confirm    # every tenant
 cavelon limits set max_concurrent_agent_runs_per_tenant 6 --tenant acme --confirm  # acme's own cap
 cavelon limits set orchestration_parallel_branches false --tenant acme --confirm   # acme's branches in sequence
+cavelon limits set max_agents none --tenant acme --confirm                         # acme: no limit on agents
+cavelon limits set max_tools 0 --tenant acme --confirm                             # acme: no tools allowed
 ```
+
+A tenant's capacity limits (`max_knowledge_bases`, `max_documents_per_kb`,
+`max_storage_bytes`, `max_agents`, `max_tools`) are the operator's too, where
+the instance lists them in `tenant_quotas.changes`. Their change says
+`null_means: no_limit`: `none` (or `unlimited`) sends JSON `null` and lifts
+the limit, while `0` is a limit that allows none. A value you leave out is
+never sent as `null`. Under Processing-Step terms the plan sets them, and the
+instance lists no change for them.
 
 ## For agents
 

@@ -54,6 +54,8 @@ afterEach(() => {
   server.state.runCapacity = {};
   server.state.tenantRunCaps.clear();
   server.state.tenantFlags.clear();
+  server.state.tenantCapacity.clear();
+  server.state.capacityContract = true;
   server.state.processingStepTerms.clear();
   server.state.catalogWithout = [];
   server.state.enforcedCeilings = {};
@@ -442,6 +444,94 @@ describe("an operator's change in Platform mode", () => {
     }
   });
 
+  it("a platform admin lifts a tenant's capacity limit with none (null), sets 0 for none allowed, and reads each back", async () => {
+    const opSb = sandbox();
+    try {
+      const env = operatorEnv({ globalRole: "platform_admin" });
+      const preview = await cli(opSb, ["limits", "set", "max_agents", "none", "--tenant", "acme", "--json"], { env });
+      expect(preview.code, preview.stderr).toBe(0);
+      expect(preview.json()).toMatchObject({
+        key: "max_agents",
+        kind: "quota",
+        scope: "one_tenant",
+        previous: 20,
+        value: null,
+        requires_role: ["platform_admin", "superadmin"],
+        operation: { path: "/api/v1/tenants/{tenant_id}/limits", params: { tenant_id: tenant }, mode: "platform", body: { max_agents: null } },
+        changed: false,
+        sent: false,
+      });
+      const text = await cli(opSb, ["limits", "set", "max_agents", "none", "--tenant", "acme"], { env });
+      expect(text.stdout).toContain("max_agents: 20 → no limit.\n");
+      expect(text.stdout).toContain(`For tenant ${tenant} only.\n`);
+      expect(text.stdout).toContain('Sends: PATCH /api/v1/tenants/{tenant_id}/limits {"max_agents":null} (Platform mode, no X-Tenant-Id)\n');
+      expect(sentTo(`/api/v1/tenants/${tenant}/limits`)).toEqual([]);
+
+      const lifted = await cli(opSb, ["limits", "set", "max_agents", "none", "--tenant", "acme", "--confirm"], { env });
+      expect(lifted.code, lifted.stderr).toBe(0);
+      expect(lifted.stdout).toBe("Changed max_agents: 20 → no limit.\n");
+      const [sent] = sentTo(`/api/v1/tenants/${tenant}/limits`);
+      // JSON null, sent without X-Tenant-Id: the operator's change of this one tenant.
+      expect(sent!.body).toStrictEqual({ max_agents: null });
+      expect(sent!.headers["x-tenant-id"]).toBeUndefined();
+      const again = await cli(opSb, ["limits", "set", "max_agents", "unlimited", "--tenant", "acme", "--confirm", "--json"], { env });
+      expect(again.json()).toMatchObject({ previous: null, value: null, changed: false, sent: false });
+      expect(sentTo(`/api/v1/tenants/${tenant}/limits`)).toHaveLength(1);
+
+      // 0 is a limit: none allowed.
+      const none = await cli(opSb, ["limits", "set", "max_tools", "0", "--tenant", "acme", "--confirm"], { env });
+      expect(none.stdout).toBe("Changed max_tools: 50 → 0 (none allowed).\n");
+      expect(sentTo(`/api/v1/tenants/${tenant}/limits`).at(-1)!.body).toEqual({ max_tools: 0 });
+      // The per-KB document limit reads its current value from limit_per_kb.
+      const docs = await cli(opSb, ["limits", "set", "max_documents_per_kb", "no-limit", "--tenant", "acme", "--confirm"], { env });
+      expect(docs.stdout).toBe("Changed max_documents_per_kb: 2000 → no limit.\n");
+
+      const listed = await cli(opSb, ["limits", "--tenant", "acme"], { env });
+      expect(listed.stdout).toMatch(/^agents\s+2 \(no limit\)/m);
+      expect(listed.stdout).toMatch(/^tools\s+0 of 0 \(none allowed\)/m);
+      expect(listed.stdout).toMatch(/^documents_per_kb\s+current_total 3, limit_per_kb no limit/m);
+    } finally {
+      opSb.cleanup();
+    }
+  });
+
+  it("a capacity limit is refused before sending: a tenant's token, a value out of bounds, a word that is not a number", async () => {
+    const tenantToken = await cli(sb, ["limits", "set", "max_agents", "none", "--confirm", "--json"]);
+    expect(tenantToken.code).toBe(7);
+    expect(errorOf(tenantToken)).toMatchObject({ code: "platform_role_required", details: { key: "max_agents", sent: false } });
+    expect(errorOf(tenantToken).hint).toContain("changes it in the Admin (the tenant's Limits section (Capacity))");
+    const opSb = sandbox();
+    try {
+      const env = operatorEnv({ globalRole: "platform_admin" });
+      const word = await cli(opSb, ["limits", "set", "max_tools", "lots", "--tenant", "acme", "--json"], { env });
+      expect(word.code).toBe(2);
+      expect(errorOf(word).message).toBe('max_tools takes a whole number, or none for no limit (0 allows none); got "lots".');
+      const above = await cli(opSb, ["limits", "set", "max_tools", "2147483648", "--tenant", "acme", "--json"], { env });
+      expect(errorOf(above)).toMatchObject({ code: "request_invalid", details: { key: "max_tools", maximum: 2147483647, sent: false } });
+    } finally {
+      opSb.cleanup();
+    }
+    expect(server.state.requests.filter((r) => r.method !== "GET")).toEqual([]);
+  });
+
+  it("an instance that publishes no capacity change, or a tenant on Processing-Step terms, refuses before sending", async () => {
+    const env = operatorEnv({ globalRole: "platform_admin" });
+    for (const setup of [() => (server.state.capacityContract = false), () => server.state.processingStepTerms.add(tenant)]) {
+      server.state.capacityContract = true;
+      server.state.processingStepTerms.clear();
+      setup();
+      const opSb = sandbox();
+      try {
+        const result = await cli(opSb, ["limits", "set", "max_agents", "none", "--tenant", "acme", "--confirm", "--json"], { env });
+        expect(result.code).toBe(1);
+        expect(errorOf(result)).toMatchObject({ code: "limit_not_found", details: { key: "max_agents", sent: false } });
+      } finally {
+        opSb.cleanup();
+      }
+    }
+    expect(server.state.requests.filter((r) => r.method !== "GET")).toEqual([]);
+  });
+
   it("is refused before sending without a Platform-mode token of the role, naming the role and the Admin page", async () => {
     const cases: Array<{ name: string; env: Record<string, string>; args: string[]; why: RegExp }> = [
       { name: "a tenant's token", env: { CAVELON_URL: server.url, CAVELON_TOKEN: token }, args: ["max_concurrent_agent_runs_global", "150"], why: /does not work in Platform mode/ },
@@ -667,7 +757,7 @@ describe("limits set refuses before sending", () => {
     const error = errorOf(result);
     expect(error.code).toBe("limit_not_found");
     expect(error.hint).toMatch(
-      /^A tenant admin or owner changes these: kb_upload_max_file_size_mb, kb_upload_allowed_extensions, kb_upload_archive_enabled, .*rate_limit_widget_rpm, rate_limit_chat_visitor_rpm, rate_limit_widget_visitor_rpm, monthly_inference_token_budget, monthly_processing_step_cap\. An operator changes these in Platform mode: max_concurrent_agent_runs_per_tenant, max_concurrent_agent_runs_global, agent_run_slot_wait_seconds, orchestration_parallel_branches\./,
+      /^A tenant admin or owner changes these: kb_upload_max_file_size_mb, kb_upload_allowed_extensions, kb_upload_archive_enabled, .*rate_limit_widget_rpm, rate_limit_chat_visitor_rpm, rate_limit_widget_visitor_rpm, monthly_inference_token_budget, monthly_processing_step_cap\. An operator changes these in Platform mode: max_concurrent_agent_runs_per_tenant, max_concurrent_agent_runs_global, agent_run_slot_wait_seconds, orchestration_parallel_branches, max_knowledge_bases, max_documents_per_kb, max_storage_bytes, max_agents, max_tools\./,
     );
   });
 

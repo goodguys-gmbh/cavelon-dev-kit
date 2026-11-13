@@ -12,6 +12,7 @@ import {
   isOperatorChange,
   LIMIT_ABOVE_CEILING,
   limitRef,
+  NO_LIMIT,
   quotaSetting,
   readLimits,
   type Limit,
@@ -74,10 +75,13 @@ const UNIT_WORDS: Record<string, string[]> = {
 const TRUE_WORDS = new Set(["true", "on", "yes", "enabled"]);
 const FALSE_WORDS = new Set(["false", "off", "no", "disabled"]);
 const CLEAR_WORDS = new Set(["none", "null"]);
+/** Words that lift a limit whose change publishes `null_means: no_limit` (a capacity limit), next to none. */
+const NO_LIMIT_WORDS = new Set(["unlimited", "no-limit", "no_limit", "nolimit"]);
 
 /** Where an operator changes a value in the Admin, by what it is (the docs name the pages). */
 const RUN_CAPS_PAGE = "Platform › Operations › Rate limits › Run caps";
 const TENANT_LIMITS_PAGE = "the tenant's Limits section (Concurrent Agent Runs)";
+const CAPACITY_PAGE = "the tenant's Limits section (Capacity)";
 const FEATURE_FLAGS_PAGE = "Configure › Feature Flags";
 
 function notPublished(message: string, hint: string, details: Record<string, unknown> = {}): CavelonError {
@@ -261,15 +265,21 @@ function bareExtension(word: string): string {
   return word.slice(start);
 }
 
-/** Whether `none` clears the value: a limit's own value, an operator's cap, or a quota published with "no cap" as a state. */
+/** Whether an explicit null lifts the limit ("No limit"), as a capacity limit's change publishes. */
+function liftsLimit(target: Target): boolean {
+  return target.change.null_means === NO_LIMIT;
+}
+
+/** Whether `none` clears the value: a limit's own value, an operator's cap, a quota published with "no cap" as a state, or a capacity limit it lifts. */
 function clears(target: Target): boolean {
   if (target.flag) return false;
-  return target.kind === "limit" || Boolean(target.quota);
+  return target.kind === "limit" || Boolean(target.quota) || liftsLimit(target);
 }
 
 function parseValue(raw: string, kind: Kind, target: Target): Value {
   const word = raw.trim();
   const lower = word.toLowerCase();
+  if (liftsLimit(target) && NO_LIMIT_WORDS.has(lower)) return null;
   if (CLEAR_WORDS.has(lower)) {
     if (!clears(target)) {
       throw usageError(
@@ -294,7 +304,8 @@ function parseValue(raw: string, kind: Kind, target: Target): Value {
   const { digits, rest } = splitNumber(word, kind === "number");
   const unit = target.limit?.unit ?? target.quota?.unit ?? "count";
   const units = unit === "count" || unit === "processing_steps" ? "" : ` of ${unit}`;
-  if (!digits) throw usageError(`${target.key} takes a ${kind === "number" ? "number" : "whole number"}${units}${clears(target) ? ", or none to clear it" : ""}; got "${raw}".`);
+  const clearWith = liftsLimit(target) ? ", or none for no limit (0 allows none)" : clears(target) ? ", or none to clear it" : "";
+  if (!digits) throw usageError(`${target.key} takes a ${kind === "number" ? "number" : "whole number"}${units}${clearWith}; got "${raw}".`);
   if (rest && !(UNIT_WORDS[unit] ?? []).includes(rest)) {
     throw usageError(`${target.key} is in ${unit}; "${raw}" is not. Give the number of ${unit}${UNIT_WORDS[unit] ? ` (e.g. ${digits} or ${digits}${UNIT_WORDS[unit]![0]})` : ""}.`);
   }
@@ -375,6 +386,7 @@ function anyOf(names: string[], none = "a permission the instance does not name"
 /** The Admin page where an operator makes the same change. */
 function adminPage(target: Target): string {
   if (target.flag) return FEATURE_FLAGS_PAGE;
+  if (liftsLimit(target)) return CAPACITY_PAGE;
   if (target.change.field.startsWith("max_database_")) return "the tenant's Limits section (Database connections and Database queries)";
   return target.scope === "one_tenant" ? TENANT_LIMITS_PAGE : RUN_CAPS_PAGE;
 }
@@ -480,6 +492,11 @@ async function pathParams(ctx: Context, change: LimitChange, principal: MetaPrin
 
 function valueText(target: Target, value: Value | undefined, kind: Kind): string {
   if (value === undefined) return "not published";
+  if (liftsLimit(target)) {
+    // A capacity limit: null is no limit, and 0 allows none.
+    if (value === null) return "no limit";
+    if (value === 0) return "0 (none allowed)";
+  }
   if (value === null) {
     if (target.quota) return "none (no cap)";
     if (target.scope === "one_tenant") return "none (the platform's cap applies)";
@@ -531,7 +548,8 @@ function noChange(target: Target, previous: Value | undefined, value: Value, fro
   if (target.flag) return previous === value ? `${target.key} is already ${from} (${target.flag.setting})` : undefined;
   if (target.kind === "quota") {
     const wanted = target.quota ? capValue(value) : value;
-    return previous !== undefined && sameValue(previous, wanted) ? `${target.key} is already ${from}` : undefined;
+    if (previous !== undefined && sameValue(previous, wanted)) return `${target.key} is already ${from}${target.scope === "one_tenant" ? " for this tenant" : ""}`;
+    return undefined;
   }
   const limit = target.limit!;
   if (target.scope === "one_tenant") {
@@ -593,6 +611,8 @@ export const limitsSet: CommandSpec = {
     "Reads the limit's published change (operation, body field, bounds, permissions, roles) and checks the value against it\n" +
     "before sending. Without --confirm, shows the old and new value, the operation and who may run it, and changes nothing.\n" +
     "Also changes the tenant quotas in tenant_quotas.changes (the inference budget, the monthly Processing Step cap).\n" +
+    "An operator sets a tenant's capacity limits (max_agents, max_tools, max_knowledge_bases, max_documents_per_kb,\n" +
+    "max_storage_bytes) where the instance publishes them: none lifts one (no limit), 0 allows none.\n" +
     "An operator's change (a run cap) is sent only with a personal access token in Platform mode of a role it names, without\n" +
     "X-Tenant-Id; --tenant <id|slug> then sets one tenant's override, including database connection/query caps. An environment or licence limit, a value out of bounds,\n" +
     "an instance that does not publish how to change the limit, and a credential without the permission or the role are refused\n" +
@@ -606,7 +626,9 @@ export const limitsSet: CommandSpec = {
     { name: "key", description: "The limit's key, as `cavelon limits` lists it (e.g. kb_upload_max_file_size_mb).", required: true },
     {
       name: "value",
-      description: "The new value in the limit's unit (50 or 50MB), a comma-separated list of file types, true/false, or none to clear the tenant's own value.",
+      description:
+        "The new value in the limit's unit (50 or 50MB), a comma-separated list of file types, true/false, or none to clear the tenant's own value " +
+        "(on a capacity limit, none is no limit and 0 allows none).",
       required: true,
     },
   ],
@@ -622,6 +644,7 @@ export const limitsSet: CommandSpec = {
     "cavelon limits set monthly_processing_step_cap none --confirm",
     "cavelon limits set max_concurrent_agent_runs_global 150 --confirm",
     "cavelon limits set max_concurrent_agent_runs_per_tenant 6 --tenant acme --confirm",
+    "cavelon limits set max_agents none --tenant acme --confirm",
   ],
   async run(ctx, input) {
     const key = positional(input, "key")!.trim();

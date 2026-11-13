@@ -1530,12 +1530,12 @@ Change a limit through the operation the instance names: a tenant's, or an opera
 cavelon limits set <key> <value> [options]
 ```
 
-Reads the limit's published change (operation, body field, bounds, permissions, roles) and checks the value against it before sending. Without --confirm, shows the old and new value, the operation and who may run it, and changes nothing. Also changes the tenant quotas in tenant_quotas.changes (the inference budget, the monthly Processing Step cap). An operator's change (a run cap) is sent only with a personal access token in Platform mode of a role it names, without X-Tenant-Id; --tenant &lt;id\|slug&gt; then sets one tenant's override, including database connection/query caps. An environment or licence limit, a value out of bounds, an instance that does not publish how to change the limit, and a credential without the permission or the role are refused before anything is sent. Propose the change to the person; never raise a limit on your own. A coding agent cannot confirm it: over MCP the client asks the person, and from an agent's shell the person runs the confirm in their own terminal.
+Reads the limit's published change (operation, body field, bounds, permissions, roles) and checks the value against it before sending. Without --confirm, shows the old and new value, the operation and who may run it, and changes nothing. Also changes the tenant quotas in tenant_quotas.changes (the inference budget, the monthly Processing Step cap). An operator sets a tenant's capacity limits (max_agents, max_tools, max_knowledge_bases, max_documents_per_kb, max_storage_bytes) where the instance publishes them: none lifts one (no limit), 0 allows none. An operator's change (a run cap) is sent only with a personal access token in Platform mode of a role it names, without X-Tenant-Id; --tenant &lt;id\|slug&gt; then sets one tenant's override, including database connection/query caps. An environment or licence limit, a value out of bounds, an instance that does not publish how to change the limit, and a credential without the permission or the role are refused before anything is sent. Propose the change to the person; never raise a limit on your own. A coding agent cannot confirm it: over MCP the client asks the person, and from an agent's shell the person runs the confirm in their own terminal.
 
 | Argument | Description |
 |---|---|
 | `key` | The limit's key, as `cavelon limits` lists it (e.g. kb_upload_max_file_size_mb). Required. |
-| `value` | The new value in the limit's unit (50 or 50MB), a comma-separated list of file types, true/false, or none to clear the tenant's own value. Required. |
+| `value` | The new value in the limit's unit (50 or 50MB), a comma-separated list of file types, true/false, or none to clear the tenant's own value (on a capacity limit, none is no limit and 0 allows none). Required. |
 
 | Option | Description | MCP |
 |---|---|---|
@@ -1552,6 +1552,7 @@ cavelon limits set monthly_inference_token_budget 2000000
 cavelon limits set monthly_processing_step_cap none --confirm
 cavelon limits set max_concurrent_agent_runs_global 150 --confirm
 cavelon limits set max_concurrent_agent_runs_per_tenant 6 --tenant acme --confirm
+cavelon limits set max_agents none --tenant acme --confirm
 ```
 
 ### cavelon models list

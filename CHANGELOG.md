@@ -17,6 +17,24 @@ CLI, the skills and the plugin.
   instance older than batches publishes neither field, and the run is waited
   for as before.
 
+## [0.2.18] - 2026-11-11
+
+### Added
+
+- `cavelon limits set` changes a tenant's capacity limits (`max_agents`,
+  `max_tools`, `max_knowledge_bases`, `max_documents_per_kb`,
+  `max_storage_bytes`) where the instance publishes them: an operator's
+  change, in Platform mode with `--tenant`. `none` (or `unlimited`) sends JSON
+  `null` and lifts the limit; `0` allows none. An instance that does not
+  publish them refuses before sending (`limit_not_found`) (#363).
+
+### Fixed
+
+- `cavelon limits` showed a capacity limit of `0` as "no limit". Where the
+  instance marks the row (`zero_means: none_allowed`) it now reads
+  `0 of 0 (none allowed)` and counts as full; a lifted limit (`null`) reads
+  "no limit" (#363).
+
 ## [0.2.17] - 2026-11-06
 
 ### Added
