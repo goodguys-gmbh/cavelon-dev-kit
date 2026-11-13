@@ -471,6 +471,24 @@ describe("test run", () => {
       expect(wait.json<{ failed_results: Array<Record<string, unknown>> }>().failed_results[0]).toMatchObject({ counts: { pending_review: 2 }, exit_code: 5 });
     });
 
+    it("waits for every pass of a batch and fails when a case failed in one of them", async () => {
+      // A profile that repeats its cases as separate runs: the first pass passed, the second did not.
+      server.state.batchPasses = [{ passed: 2, failed: 0, pass_rate: 1 }, { passed: 1, failed: 1, pass_rate: 0.5 }];
+      try {
+        const started = await cli(sb, ["test", "run", "--suite", "smoke", "--json"]);
+        expect(started.code, started.stdout).toBe(0);
+        const data = started.json<{ runs: Array<{ batch_id?: string }>; operation_ids: string[] }>();
+        expect(data.operation_ids[0]).toMatch(/^op_test_run_batch_/);
+        expect(data.runs[0]!.batch_id).toBeTruthy();
+        const waited = await cli(sb, ["test", "run", "--suite", "smoke", "--wait"]);
+        expect(waited.code, waited.stdout).toBe(1);
+        expect(waited.stdout).toMatch(/smoke \(pass 1 of 2\): completed {2}passed 2 {2}failed 0/);
+        expect(waited.stdout).toMatch(/smoke \(pass 2 of 2\): completed {2}passed 1 {2}failed 1/);
+      } finally {
+        server.state.batchPasses = null;
+      }
+    });
+
     it("says why a case waits: the short reason next to the count, the case's own reason, and the explain to run", async () => {
       server.state.runResults = [
         { name: "Refund policy", status: "calibration_required", error_message: "knowledge_base_not_ready: Policies has no ready documents" },
