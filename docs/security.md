@@ -127,7 +127,8 @@ Over MCP, `cavelon` limits it further:
   `limits_set`, `models_set_limit`, `trigger_identity`, `harness_default`,
   `activate` where it previews, `deactivate`, `api` outside its known routine
   operations, and `apply` where its preview needs a person (it changes the
-  tenant-wide sections, reaches an active solution, deletes, goes to
+  tenant-wide sections, reaches an active solution, changes shared rows on an
+  instance whose preview does not follow them, deletes, goes to
   `env/prod`, or writes saved database queries). When the agent confirms one
   with its token, `cavelon` asks you in your agent client's own dialog (MCP elicitation: **Make this change**,
   yes or no), without first asking for a separate chat yes, and changes

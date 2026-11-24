@@ -14,6 +14,20 @@ CLI, the skills and the plugin.
   `filing_access: kb_readers`, or one with `kb_readers` and groups. The import
   preview blocks these; before, validate said "Valid". An entry that leaves a
   field out to keep an existing knowledge base's value gets a warning (#369).
+- `cavelon apply` shows the shared rows a preview changes (`changes shared:`
+  tools, knowledge bases, skills, guardrails) and, for each active solution it
+  reaches, the skills, guardrails and published workflow steps it reaches
+  through, where the instance names them. The new refusals for web sources
+  and tool bindings show at their line in the package (#371).
+
+### Changed
+
+- `cavelon apply`: on an instance whose preview does not name
+  `changed_skills` and `changed_guardrails`, a preview that changes skills,
+  guardrails, tools, knowledge bases or tool bindings, or that carries web
+  sources, needs a person. YOLO and an agent's own confirmation no longer
+  take it as routine: that preview follows only agents' assignments, so an
+  empty "reaches active" did not mean no active solution was reached (#371).
 
 ## [0.2.18] - 2026-11-11
 

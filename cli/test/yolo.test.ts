@@ -176,11 +176,13 @@ it("rejects stale critical previews before bothering the person", async () => {
   } finally { await client.close(); }
 });
 
-it.each(["deletions", "query definitions", "shared settings", "unknown impact"])("does not automatically apply %s", async kind => {
+it.each(["deletions", "query definitions", "shared settings", "unknown impact", "an older instance's change to a shared row"])("does not automatically apply %s", async kind => {
   if (kind === "deletions") server.state.previewExtras = { summary: { creates: {}, updates: {}, deletes: { agents: 1 } } };
   if (kind === "query definitions") server.state.previewExtras = { database_queries: { would_write: ["lookup"] } };
   if (kind === "shared settings") server.state.previewExtras = { impact: { active_harnesses: [{ harness_slug: "another-live-solution" }] } };
   if (kind === "unknown impact") server.state.previewExtras = { impact: undefined };
+  // An instance before changed_skills follows only agents' assignments: an empty list says nothing about a changed knowledge base.
+  if (kind === "an older instance's change to a shared row") server.state.previewExtras = { impact: { changed_tools: [], changed_knowledge_bases: [], active_harnesses: [], sandbox_writers: [] } };
   const result = await cli(sb, ["apply", "--yolo", "--json"], { cwd: dir, env: agent });
   expect(result.code, result.stdout).toBe(0);
   expect(result.json()).toMatchObject({ previewed: true });

@@ -313,6 +313,28 @@ every solution's package; `apply` says so when the folder holds one, and
 `validate` warns about such a file in a solution's folder
 (`tenant_wide_section`). The tenant's full configuration always carries them.
 
+Tools, knowledge bases, skills and guardrails are tenant rows too: a
+solution's import that changes one changes it at once for every solution that
+uses it, also when the import only adds a draft. The preview names them
+(`changed_tools`, `changed_knowledge_bases`, `changed_skills`,
+`changed_guardrails`) and lists each active solution they reach under
+"reaches active", with the published workflow steps that name a changed tool
+or knowledge base. What a solution's import (without
+`--include-tenant-wide`) may write is narrower on a recent instance:
+
+- **Web sources** only into a knowledge base its package carries
+  (`web_source_kb_not_in_package` otherwise), and never into a knowledge base
+  that is neither in the package nor on the instance (`reference_missing`).
+- **Tool bindings** always apply to the platform tool of that slug, also
+  where the tenant has a tool of its own by the same name. A binding for a
+  platform builtin tool sets its configuration for every solution, so a
+  solution's import refuses it; a whole-tenant import (or
+  `--include-tenant-wide`) carries it, which restores a full export.
+
+A solution's export leaves out the rehearsal suites the Admin's Harness
+Architect leaves behind (tagged `rehearsal`), so `pull` returns fewer suites
+for a solution the Architect has tried.
+
 A package never contains a secret's value. It names the **variables**
 (`{{var:name}}`) and **secrets** (`{{secret:name}}`) the solution needs, in
 `required_variables` and `required_secrets`, and `apply` lists which of them
@@ -693,7 +715,12 @@ same content.
 `--mode overwrite` (the default) creates and updates; `--mode replace` also
 deletes what the package does not hold. A preview that reaches an active
 solution, deletes something, or goes to `env/prod` says to show it to a person
-before confirming, and the Cavelon skills make the agent do so.
+before confirming, and the Cavelon skills make the agent do so. On an instance
+whose preview does not yet name `changed_skills` and `changed_guardrails`, an
+empty "reaches active" says nothing about skills, guardrails, tools,
+knowledge bases, tool bindings or web sources the import changes (an older
+preview follows only agents' assignments), so such a preview needs a person
+too.
 
 Other commands that delete or overwrite follow the same pattern: `limits set`,
 `models set-limit`, `variables delete`, `secrets delete`, `loop cancel`,

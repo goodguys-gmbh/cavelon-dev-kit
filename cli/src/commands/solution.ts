@@ -664,7 +664,20 @@ interface Preview {
   impact?: {
     changed_tools?: string[];
     changed_knowledge_bases?: string[];
-    active_harnesses?: Array<{ harness_slug?: string; name?: string; tools?: string[]; knowledge_bases?: string[]; sandboxes?: string[] }>;
+    /** Recent instances: they follow skills, guardrails, new bindings, workflow steps and web sources to the solutions they reach. */
+    changed_skills?: string[];
+    changed_guardrails?: string[];
+    active_harnesses?: Array<{
+      harness_slug?: string;
+      name?: string;
+      tools?: string[];
+      knowledge_bases?: string[];
+      skills?: string[];
+      guardrails?: string[];
+      /** The published workflow steps that name one of the entry's tools or knowledge bases. */
+      nodes?: string[];
+      sandboxes?: string[];
+    }>;
     sandbox_writers?: Array<{ name?: string; sandbox_id?: string; writer_expires_at?: string }>;
   };
   loop_budgets?: Array<{ node_slug?: string; harness_slug?: string; limits?: Record<string, unknown>; worst_case_cost?: unknown }>;
@@ -820,9 +833,18 @@ export function previewText(p: Preview, context: PreviewContext = {}): string {
   if (skipped.length) lines.push(["not applied", notAppliedLines(skipped)]);
   const impact = p.impact ?? {};
   const active = (impact.active_harnesses ?? []).map((h) => {
-    const via = [...(h.tools ?? []), ...(h.knowledge_bases ?? []), ...(h.sandboxes ?? [])];
-    return `${h.name ?? h.harness_slug} (${h.harness_slug})${via.length ? ` through ${list(via, 5)}` : ""}`;
+    const via = [...(h.tools ?? []), ...(h.knowledge_bases ?? []), ...(h.skills ?? []), ...(h.guardrails ?? []), ...(h.sandboxes ?? [])];
+    const steps = h.nodes?.length ? `; workflow step${h.nodes.length === 1 ? "" : "s"} ${list(h.nodes, 5)}` : "";
+    return `${h.name ?? h.harness_slug} (${h.harness_slug})${via.length ? ` through ${list(via, 5)}` : ""}${steps}`;
   });
+  // Tenant rows every solution that uses them shares: they change at once, also when the import only adds a draft.
+  const changed = [
+    ["tools", impact.changed_tools],
+    ["knowledge bases", impact.changed_knowledge_bases],
+    ["skills", impact.changed_skills],
+    ["guardrails", impact.changed_guardrails],
+  ].filter((entry): entry is [string, string[]] => Array.isArray(entry[1]) && entry[1].length > 0);
+  if (changed.length) lines.push(["changes shared", changed.map(([what, names]) => `${what} ${list(names, 5)}`).join("; ")]);
   if (active.length) lines.push(["reaches active", active.map((a) => `\n  - ${a}`).join("")]);
   if (impact.sandbox_writers?.length) lines.push(["busy sandboxes", list(impact.sandbox_writers.map((w) => w.name ?? w.sandbox_id ?? "?"))]);
   for (const budget of p.loop_budgets ?? []) {
@@ -1299,6 +1321,26 @@ function graphDraftTarget(preview: Preview, harness: Harness | undefined): boole
 }
 
 /**
+ * Tenant rows an import writes whose reach an older instance's preview does
+ * not follow. A recent instance names `changed_skills` and
+ * `changed_guardrails`, and its `active_harnesses` then also follows skills,
+ * guardrails, new bindings, published workflow steps and web sources; an
+ * older one lists only what agents are assigned, so an empty list there says
+ * nothing about these rows. Read from the preview's counts, and for web
+ * sources (which it does not count) from the package.
+ */
+const UNFOLLOWED_UPDATES = ["skills", "guardrails", "tools", "knowledge_bases", "tool_bindings"];
+export function unfollowedRows(preview: Preview, pkg: Record<string, unknown>): string[] {
+  const impact = preview.impact;
+  if (!impact || (Array.isArray(impact.changed_skills) && Array.isArray(impact.changed_guardrails))) return [];
+  const updates = preview.summary?.updates ?? {};
+  const rows = UNFOLLOWED_UPDATES.filter((section) => (updates[section] ?? 0) > 0);
+  if ((preview.summary?.creates?.tool_bindings ?? 0) > 0 && !rows.includes("tool_bindings")) rows.push("tool_bindings");
+  if (Array.isArray(pkg.web_sources) && pkg.web_sources.length) rows.push("web_sources");
+  return rows;
+}
+
+/**
  * Whether a preview needs a person's look before it is confirmed, and why; naming the active solutions it reaches. Tenant-wide
  * sections it imports come first: they change every solution of the tenant, active or not.
  */
@@ -1310,6 +1352,7 @@ function personReason(
   shared: string[] = [],
   sharedReaches: string[] = [],
   live: string[] = [],
+  unfollowed: string[] = [],
 ): string | undefined {
   if (shared.length) {
     const reaching = sharedReaches.length ? `, reaching the active solution${sharedReaches.length === 1 ? "" : "s"} ${list(sharedReaches, 5)}` : "";
@@ -1321,6 +1364,11 @@ function personReason(
   // A graph draft keeps live traffic on the published version; these persona fields do not wait for a publication.
   if (live.length && harness?.status === "active") return `changes ${list(live, 5)}, which visitors of the active solution ${harness.slug} see at once, without a publication`;
   if (preview.impact?.active_harnesses?.length) return "reaches an active solution";
+  if (unfollowed.length) {
+    const rows = unfollowed.map((s) => s.replace(/_/g, " "));
+    const named = rows.length > 1 ? `${rows.slice(0, -1).join(", ")} and ${rows.at(-1)}` : rows[0];
+    return `changes ${named} that other solutions may use, and this instance's preview does not say which active solutions that reaches`;
+  }
   if (counts(preview.summary?.deletes) || mode === "replace") return "deletes";
   if (env === "prod") return "goes to env/prod";
   if (importWritesQueries(preview)) return QUERY_IMPORT_REASON;
@@ -1565,7 +1613,7 @@ export const apply: CommandSpec = {
     if (!preview.preview_id) {
       ctx.warn("This instance's preview returns no preview id, so `apply --confirm` cannot import exactly it; update the instance.");
     }
-    const reason = personReason(preview, harness, mode, envFile?.name, sharedImported, reaches, livePointers);
+    const reason = personReason(preview, harness, mode, envFile?.name, sharedImported, reaches, livePointers, unfollowedRows(preview, sent.package));
     if (preview.preview_id) {
       const stored: StoredPreview = {
         preview_id: preview.preview_id,

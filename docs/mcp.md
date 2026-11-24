@@ -310,7 +310,9 @@ repeat them:
   effect is unknown, or `make_default`), `deactivate` (it takes a solution
   out of live traffic), `api` outside its known routine operations, and
   `apply` where its preview needs a person: it changes the tenant-wide
-  sections, reaches an active solution, deletes (or `mode` `replace`), or goes
+  sections, reaches an active solution (or, on an instance whose preview does
+  not follow them, changes shared rows such as skills, tool bindings or web
+  sources), deletes (or `mode` `replace`), or goes
   to `env/prod`, or creates or changes a database query
   (`database_queries.would_write`). Query creation, changes and deletion through
   `api` need your yes too, even on a draft. Their previews say how in

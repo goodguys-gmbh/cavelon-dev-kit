@@ -1796,6 +1796,63 @@ describe("apply", () => {
     expect(result.stdout).toMatch(/show this preview to a person before confirming/);
   });
 
+  it("names the shared rows a change reaches, with the skills, guardrails and workflow steps of each active solution", async () => {
+    const dir = await pulled();
+    server.state.previewExtras = {
+      impact: {
+        changed_tools: ["crm"],
+        changed_knowledge_bases: [],
+        changed_skills: ["faq"],
+        changed_guardrails: ["no-pii"],
+        active_harnesses: [{ harness_slug: "billing", name: "Billing", tools: ["crm"], knowledge_bases: [], skills: ["faq"], guardrails: ["no-pii"], nodes: ["lookup-order"], sandboxes: [] }],
+        sandbox_writers: [],
+      },
+    };
+    const result = await cli(sb, ["apply"], { cwd: dir });
+    expect(result.code, result.stdout).toBe(0);
+    expect(result.stdout).toMatch(/changes shared: tools crm; skills faq; guardrails no-pii/);
+    expect(result.stdout).toMatch(/reaches active:\s*\n\s+- Billing \(billing\) through crm, faq, no-pii; workflow step lookup-order/);
+    expect(result.stdout).toMatch(/show this preview to a person before confirming/);
+    const json = (await cli(sb, ["apply", "--json"], { cwd: dir })).json<{ impact: { changed_skills: string[]; active_harnesses: Array<{ nodes: string[] }> } }>();
+    expect(json.impact.changed_skills).toEqual(["faq"]);
+    expect(json.impact.active_harnesses[0]!.nodes).toEqual(["lookup-order"]);
+  });
+
+  it("on an instance whose preview does not follow skills, guardrails, bindings and web sources, leaves a change to them to a person", async () => {
+    const dir = await pulled();
+    const older = { changed_tools: [], changed_knowledge_bases: [], active_harnesses: [], sandbox_writers: [] };
+    server.state.previewExtras = { impact: older, summary: { creates: { tool_bindings: 1 }, updates: { skills: 2 }, deletes: {}, references: {} } };
+    const result = await cli(sb, ["apply"], { cwd: dir });
+    expect(result.code, result.stdout).toBe(0);
+    expect(result.stdout).toContain(
+      "This changes skills and tool bindings that other solutions may use, and this instance's preview does not say which active solutions that reaches: show this preview to a person before confirming.",
+    );
+    expect((await cli(sb, ["apply", "--json"], { cwd: dir })).json<{ show_to_person: boolean }>().show_to_person).toBe(true);
+
+    // Web sources, which the preview does not count, are read from the package.
+    writeFileSync(path.join(dir, "package", "web_sources.yaml"), stringify([{ knowledge_base_name: "Handbook", source_type: "website", config: { url: "https://example.com/help" } }]));
+    server.state.previewExtras = { impact: older, summary: { creates: { agents: 1 }, updates: {}, deletes: {}, references: {} } };
+    expect((await cli(sb, ["apply"], { cwd: dir })).stdout).toMatch(/This changes web sources that other solutions may use/);
+
+    // A recent instance follows them, so an empty list means none is reached.
+    server.state.previewExtras = { impact: { ...older, changed_skills: ["faq"], changed_guardrails: [] }, summary: { creates: { tool_bindings: 1 }, updates: { skills: 2 }, deletes: {}, references: {} } };
+    expect((await cli(sb, ["apply", "--json"], { cwd: dir })).json<{ show_to_person: boolean }>().show_to_person).toBe(false);
+  });
+
+  it("shows a web source's refusal at its line in web_sources", async () => {
+    const dir = await pulled();
+    writeFileSync(path.join(dir, "package", "web_sources.yaml"), stringify([{ knowledge_base_name: "Other team's KB", source_type: "website" }]));
+    const message = "Web source for knowledge base 'Other team's KB': a solution's import adds web sources only to the knowledge bases it carries.";
+    server.state.previewBlockers = [message];
+    server.state.previewExtras = {
+      blocker_details: [{ code: "web_source_kb_not_in_package", message, path: "web_sources[0].knowledge_base_name", hint: "Add the knowledge base to the package, or import with include_tenant_wide." }],
+    };
+    const result = await cli(sb, ["apply"], { cwd: dir });
+    expect(result.code).toBe(3);
+    expect(result.stdout).toMatch(/- web_source_kb_not_in_package {2}package\/web_sources\.yaml:1 web_sources\[0\]\.knowledge_base_name: Web source for knowledge base/);
+    expect(result.stdout).toContain("more: cavelon explain web_source_kb_not_in_package");
+  });
+
   it("stops at blockers and at local validation errors, before importing", async () => {
     const dir = await pulled();
     server.state.previewBlockers = ["Tool crm needs a connection."];
