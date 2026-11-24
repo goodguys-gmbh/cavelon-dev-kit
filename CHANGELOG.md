@@ -7,6 +7,8 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+## [0.2.19] - 2026-11-24
+
 ### Added
 
 - `cavelon validate` reports `kb_filing_access_invalid`: a knowledge base that
