@@ -53,6 +53,10 @@ jobs:
           const asset='cavelon-'+({win32:'windows',darwin:'darwin',linux:'linux'}[process.platform])+'-'+process.arch+(process.platform==='win32'?'.exe':'');
           fs.appendFileSync(process.env.GITHUB_ENV, 'CAVELON_EXECUTABLE='+path.resolve('build',asset)+'\nCAVELON_CLIENT_RUNTIME='+path.resolve('../.wt/client-runtime','${{ matrix.client }}')+'\n');"
       - name: Provision the pinned released client
+        env:
+          # OMP's onnxruntime-node fetches CUDA binaries on Linux x64 at install; the
+          # qualification runs on CPU, and that download answers 404 for its release.
+          ONNXRUNTIME_NODE_INSTALL_CUDA: skip
         run: node ../.github/scripts/provision-coding-client.mjs ${{ matrix.client }}
       - name: Use the pinned OMP runtime after the standalone build
         if: matrix.client == 'omp'
