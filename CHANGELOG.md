@@ -7,6 +7,14 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Added
+
+- `cavelon validate` reports `kb_filing_access_invalid`: a knowledge base that
+  accepts email attachments without a `default_acl_groups` entry or
+  `filing_access: kb_readers`, or one with `kb_readers` and groups. The import
+  preview blocks these; before, validate said "Valid". An entry that leaves a
+  field out to keep an existing knowledge base's value gets a warning (#369).
+
 ## [0.2.18] - 2026-11-11
 
 ### Added

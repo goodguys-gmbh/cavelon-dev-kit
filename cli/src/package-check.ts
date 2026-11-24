@@ -60,6 +60,11 @@ const SEARCH_DOCS = "/docs/reference/builtin-tools#binding-knowledge-bases-to-se
 const SEARCH_TOOL = "search_documents";
 const LIST_TOOL = "list_documents";
 
+/** A knowledge base that accepts email attachments, and who may read what it files. */
+const KB_FILING_CODE = "kb_filing_access_invalid";
+const KB_FILING_DOCS = "/docs/concepts/agent-graph#what-a-solutions-package-may-change";
+const KB_READERS = "kb_readers";
+
 /** A persona that shows a greeting or a fallback whose text is empty. */
 const PERSONA_MESSAGE_CODE = "persona_message_empty";
 const PERSONA_DOCS = "/docs/concepts/personas";
@@ -157,6 +162,17 @@ export const KIT_CODES: CatalogEntry[] = [
       `A knowledge base reaches an agent only through a built-in document tool: add \`- tool_slug: ${SEARCH_TOOL}\` (or ${LIST_TOOL}, with read_document to read ` +
       "what it lists) to the tool_assignments of the skill that names the knowledge base, or of the agent. `cavelon docs get reference/builtin-tools` shows the binding.",
     docs: SEARCH_DOCS,
+  },
+  {
+    code: KB_FILING_CODE,
+    area: "package",
+    message:
+      "A knowledge base that accepts email attachments needs at least one default_acl_groups entry, or filing_access " +
+      "'kb_readers' so every reader of it may read them; with 'kb_readers' it names no default_acl_groups.",
+    hint:
+      "Name the group that reads the filed attachments in default_acl_groups, or set filing_access: kb_readers and leave " +
+      "default_acl_groups empty. The import preview blocks the knowledge base until then.",
+    docs: KB_FILING_DOCS,
   },
   {
     code: ASSERTION_UNCHECKED_CODE,
@@ -516,6 +532,7 @@ export function checkPackage(disk: PackageOnDisk, options: CheckOptions): Findin
   findings.push(...checkEndpointLimits(disk, options.schema));
   findings.push(...checkBranchConcurrency(disk, options.limits));
   findings.push(...checkKnowledgeSearch(disk));
+  findings.push(...checkFilingAccess(disk, options.schema));
   findings.push(...checkAttachedDocuments(disk, options.schema));
   findings.push(...checkUnknownFields(disk, options.schema, findings));
   findings.push(...checkReferences(disk, options.inventory));
@@ -738,6 +755,53 @@ function checkKnowledgeSearch(disk: PackageOnDisk): Finding[] {
         `${first.via ? ` through the skill "${first.via}"` : ""}, but no tool that searches or lists ${names.length === 1 ? "it" : "them"} reaches the agent, ` +
         `so it cannot read ${names.length === 1 ? "it" : "them"}: add ${SEARCH_TOOL} (or ${LIST_TOOL}) to the ${first.via ? "skill's" : "agent's"} tool_assignments.`,
     });
+  });
+  return findings;
+}
+
+/**
+ * The instance's two CHECK constraints on a knowledge base's filing, which the
+ * package schema cannot express: one that accepts email attachments names
+ * who reads them (a default group, or `filing_access: kb_readers`), and
+ * `kb_readers` names no default groups. A field the entry leaves out keeps an
+ * existing knowledge base's value, so a problem that rests on a left-out
+ * field is judged as for a new knowledge base and is a warning; one the entry
+ * states in full is an error, as the import preview would block it. Checked
+ * only where the instance's schema carries the fields.
+ */
+function checkFilingAccess(disk: PackageOnDisk, schema: PackageSchema): Finding[] {
+  const entry = schemaNode(schema, listItems(schema, schema.properties?.knowledge_bases));
+  const fields = asObject(entry?.properties) ?? {};
+  if (!["accepts_email_attachments", "filing_access", "default_acl_groups"].every((f) => f in fields)) return [];
+  const findings: Finding[] = [];
+  asList(disk.package.knowledge_bases).forEach((kb, i) => {
+    const stated = (field: string) => kb[field] !== undefined && kb[field] !== null;
+    const groups = Array.isArray(kb.default_acl_groups) ? kb.default_acl_groups.filter((g) => typeof g === "string") : [];
+    // A left-out filing_access means default_groups for a new knowledge base, and with groups set for any.
+    const readers = kb.filing_access === KB_READERS;
+    const name = typeof kb.name === "string" ? ` "${kb.name}"` : "";
+    let problem: { pointer: string; certain: boolean; message: string } | undefined;
+    if (readers && groups.length) {
+      problem = {
+        pointer: `/knowledge_bases/${i}/default_acl_groups`,
+        certain: true,
+        message:
+          `The knowledge base${name} lets every reader of it read its filings (filing_access: kb_readers), so it names no default_acl_groups: ` +
+          "remove the groups, or set filing_access to default_groups.",
+      };
+    } else if (kb.accepts_email_attachments === true && !readers && !groups.length) {
+      const left = ["default_acl_groups", "filing_access"].filter((f) => !stated(f));
+      const certain = !left.length;
+      problem = {
+        pointer: `/knowledge_bases/${i}/accepts_email_attachments`,
+        certain,
+        message:
+          `The knowledge base${name} accepts email attachments, but no one may read them: name a group in default_acl_groups, ` +
+          `or set filing_access: kb_readers so every reader of the knowledge base may.` +
+          (certain ? "" : ` The entry leaves ${left.join(" and ")} out: an existing knowledge base keeps ${left.length === 1 ? "its value" : "its values"}, a new one is blocked by the import.`),
+      };
+    }
+    if (problem) findings.push({ code: KB_FILING_CODE, severity: problem.certain ? "error" : "warning", ...locate(disk, problem.pointer), message: problem.message });
   });
   return findings;
 }
