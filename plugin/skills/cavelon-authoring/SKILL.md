@@ -342,6 +342,13 @@ personal access token holding `playground.use` reaches the draft; without
   nothing. Without such a tool the
   agent answers from memory; `cavelon validate` warns
   (`knowledge_base_without_search_tool`).
+- **A knowledge base that accepts email attachments names who reads them.**
+  With `accepts_email_attachments: true`, give it at least one
+  `default_acl_groups` entry, or `filing_access: kb_readers` (every reader of
+  the knowledge base may read them); `kb_readers` names no groups. Pick the
+  group with the person: it decides who reads a mailbox's filings. The import
+  preview blocks it otherwise, and `cavelon validate` reports it first
+  (`kb_filing_access_invalid`).
 - **The model comes from the tenant.** Set an agent's `llm_model` and
   `llm_provider` to a row of `cavelon models list` (MODEL_ID, PROVIDER); the
   models differ per instance and tenant, and the preview blocks one the tenant

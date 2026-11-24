@@ -1086,6 +1086,77 @@ describe("validate", () => {
     }
   });
 
+  it("reports a knowledge base that accepts email attachments without readers (kb_filing_access_invalid)", async () => {
+    const dir = await initSolution();
+    await cli(sb, ["pull"], { cwd: dir });
+    const kbFile = path.join(dir, "package", "knowledge_bases.yaml");
+    const write = (entries: Array<Record<string, unknown>>) => writeFileSync(kbFile, stringify(entries));
+    const findings = async () => {
+      const result = await cli(sb, ["validate", "--offline", "--json"], { cwd: dir });
+      const json = result.json<{ valid: boolean; findings: Array<{ code: string; severity: string; file: string; line: number; message: string; hint: string; docs: string }> }>();
+      return { code: result.code, valid: json.valid, filing: json.findings.filter((f) => f.code === "kb_filing_access_invalid") };
+    };
+
+    // Stated in full: the preview would block it, so validate says so before apply.
+    write([{ name: "Inbox", accepts_email_attachments: true, default_acl_groups: [], filing_access: "default_groups" }]);
+    const blocked = await findings();
+    expect(blocked.code).toBe(3);
+    expect(blocked.valid).toBe(false);
+    expect(blocked.filing).toEqual([expect.objectContaining({ severity: "error", file: "package/knowledge_bases.yaml" })]);
+    expect(read(kbFile).split("\n")[blocked.filing[0]!.line - 1]).toMatch(/accepts_email_attachments: true/);
+    expect(blocked.filing[0]!.message).toBe(
+      'The knowledge base "Inbox" accepts email attachments, but no one may read them: name a group in default_acl_groups, or set filing_access: kb_readers so every reader of the knowledge base may.',
+    );
+    expect(blocked.filing[0]!.hint).toMatch(/filing_access: kb_readers/);
+    expect(blocked.filing[0]!.docs).toMatch(/concepts\/agent-graph#what-a-solutions-package-may-change$/);
+
+    // A group, or kb_readers without groups, names the readers.
+    write([{ name: "Inbox", accepts_email_attachments: true, default_acl_groups: ["front-desk"], filing_access: "default_groups" }]);
+    expect((await findings()).filing).toEqual([]);
+    write([{ name: "Inbox", accepts_email_attachments: true, default_acl_groups: [], filing_access: "kb_readers" }]);
+    expect((await findings()).filing).toEqual([]);
+    // Without email attachments nothing is filed: no readers needed.
+    write([{ name: "Inbox", accepts_email_attachments: false, default_acl_groups: [], filing_access: "default_groups" }]);
+    expect((await findings()).filing).toEqual([]);
+
+    // kb_readers together with groups breaks the other constraint, whether or not it takes attachments.
+    write([{ name: "Inbox", default_acl_groups: ["front-desk"], filing_access: "kb_readers" }]);
+    const both = await findings();
+    expect(both.filing).toEqual([expect.objectContaining({ severity: "error" })]);
+    expect(both.filing[0]!.message).toMatch(/names no default_acl_groups: remove the groups, or set filing_access to default_groups\.$/);
+
+    // A left-out field keeps an existing knowledge base's value: only a new one is sure to be blocked, so a warning.
+    write([{ name: "Inbox", accepts_email_attachments: true }]);
+    const left = await findings();
+    expect(left.code).toBe(0);
+    expect(left.filing).toEqual([expect.objectContaining({ severity: "warning" })]);
+    expect(left.filing[0]!.message).toMatch(/leaves default_acl_groups and filing_access out: an existing knowledge base keeps its values, a new one is blocked by the import\.$/);
+    write([{ name: "Inbox", accepts_email_attachments: true, default_acl_groups: [] }]);
+    expect((await findings()).filing[0]).toMatchObject({ severity: "warning", message: expect.stringMatching(/leaves filing_access out: an existing knowledge base keeps its value,/) });
+
+    const explained = await cli(sb, ["explain", "kb_filing_access_invalid", "--json"], { cwd: dir });
+    expect(explained.json()).toMatchObject({ code: "kb_filing_access_invalid", kind: "kit" });
+  });
+
+  it("stays silent on kb_filing_access_invalid where the instance's package schema has no filing fields", async () => {
+    // A sandbox of its own: the shared one has cached the full schema.
+    const own = sandbox();
+    server.state.packageSchemaEdit = (schema) => {
+      delete (schema as unknown as { $defs: Record<string, { properties: Record<string, unknown> }> }).$defs.PackageKnowledgeBase!.properties.filing_access;
+    };
+    try {
+      await login(own, server.url, token);
+      const dir = folder();
+      expect((await cli(own, ["init", "--instance", server.url, "--tenant", tenant, "--harness", "support"], { cwd: dir })).code).toBe(0);
+      writeFileSync(path.join(dir, "package", "knowledge_bases.yaml"), stringify([{ name: "Inbox", accepts_email_attachments: true, default_acl_groups: [] }]));
+      const result = await cli(own, ["validate", "--json"], { cwd: dir });
+      expect(result.json<{ findings: Array<{ code: string }> }>().findings.filter((f) => f.code === "kb_filing_access_invalid")).toEqual([]);
+    } finally {
+      server.state.packageSchemaEdit = null;
+      own.cleanup();
+    }
+  });
+
   it("warns when an agent is given a knowledge base but no search tool reaches it", async () => {
     const dir = await initSolution();
     await cli(sb, ["pull"], { cwd: dir });
