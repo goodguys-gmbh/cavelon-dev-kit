@@ -1664,7 +1664,7 @@ export async function startFakeServer(): Promise<FakeServer> {
         blockers,
         ...(queryBlocked.length ? { blocker_details: queryBlocked } : {}),
         ignored: { sections: ignored, fields: ignoredFields, count: ignored.length + ignoredFields.length },
-        impact: { changed_tools: [], changed_knowledge_bases: [], active_harnesses: [], sandbox_writers: [] },
+        impact: { changed_tools: [], changed_knowledge_bases: [], changed_skills: [], changed_guardrails: [], active_harnesses: [], sandbox_writers: [] },
         loop_budgets: [],
         target_needs: { ...valueNeeds(tid, b.package), oauth_grants: [], runtime_bindings: [], trigger_identities: [] },
         ...tenantWide,

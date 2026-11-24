@@ -375,6 +375,9 @@ when:
 
 - the preview lists an active solution under "reaches active", or the target
   solution is active without explicit isolated-draft metadata;
+- the preview says it changes skills, guardrails, tools, knowledge bases,
+  tool bindings or web sources "that other solutions may use": an older
+  instance's preview does not say which active solutions they reach;
 - the environment is `prod` (`--env prod`), or the preview deletes anything
   (`--mode replace`);
 - the preview changes tenant-wide sections (`tenant-wide: … change for every
