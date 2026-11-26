@@ -20,6 +20,8 @@ export interface TestRunState {
   suite_name?: string | null;
   status: string;
   summary?: Record<string, unknown>;
+  /** What the run was started with and, on recent instances, what its agents held (`stamp`). */
+  config?: Record<string, unknown>;
 }
 
 /** The fields of a test result (TestResultResponse) the kit reads. */
@@ -194,6 +196,101 @@ export function countsText(counts: Record<string, number>): string {
       return `${value} ${key === "errors" ? "errored" : key.replaceAll("_", " ")}${why ? ` (${why})` : ""}`;
     })
     .join(", ");
+}
+
+/** How a test run treated what the solution's agents learned from earlier runs (Experience), as the run records it. */
+export interface RunExperience {
+  /** "off" or "waiting" when the run measured: it votes for no release gate or readiness and is no baseline; null for a usual run. */
+  measured: "off" | "waiting" | null;
+  /** Whether an agent of the solution learns, as the run's stamp records it; null when the stamp does not say. */
+  enabled: boolean | null;
+  /** The released insights the agents held when the run started. */
+  insights: number | null;
+  /** The insights waiting for review that a "waiting" run held too. */
+  waiting: number | null;
+  agents: Array<{ slug: string; insights: number | null; waiting: number | null }>;
+  /** What the run's stages were handed, once the run is done. */
+  handed: { stages: number | null; insights: number | null; waiting: number | null } | null;
+}
+
+function record(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+}
+
+function count(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/**
+ * A test run's Experience from its `config`: the choice it was started with
+ * (`config.experience`) and what its agents held and handed
+ * (`config.stamp.experience`). Undefined on an instance that records neither.
+ */
+export function runExperience(config: unknown): RunExperience | undefined {
+  const cfg = record(config);
+  const choice = cfg?.experience;
+  const stamp = record(record(cfg?.stamp)?.experience);
+  if (choice === undefined && !stamp) return undefined;
+  const measured =
+    choice === "off" || stamp?.off_for_run === true ? "off" : choice === "waiting" || stamp?.waiting_for_run === true ? "waiting" : null;
+  const handed = record(stamp?.handed);
+  const agents = Array.isArray(stamp?.agents) ? stamp.agents : [];
+  return {
+    measured,
+    enabled: typeof stamp?.enabled === "boolean" ? stamp.enabled : null,
+    insights: count(stamp?.insights),
+    waiting: count(stamp?.waiting),
+    agents: agents
+      .map(record)
+      .filter((a): a is Record<string, unknown> => typeof a?.slug === "string")
+      .map((a) => ({ slug: a.slug as string, insights: count(a.insights), waiting: count(a.waiting) })),
+    handed: handed ? { stages: count(handed.stages), insights: count(handed.insights), waiting: count(handed.waiting) } : null,
+  };
+}
+
+/** The measurement a run was, in words; empty for a usual run. */
+export function measuredText(measured: RunExperience["measured"]): string {
+  if (!measured) return "";
+  const what = measured === "off" ? "without what the agents learned (experience off)" : "with the insights that wait for review (experience waiting)";
+  return `a measurement ${what}: it votes for no release gate or readiness and is no baseline`;
+}
+
+/**
+ * A run's Experience in a line or two: what the agents held, what the stages
+ * were handed, and a warning when agents that hold insights handed none to a
+ * run that should have received them. Empty when no agent learns.
+ */
+export function experienceLines(experience: RunExperience | undefined): string[] {
+  if (!experience) return [];
+  const lines: string[] = [];
+  if (experience.measured) lines.push(`Experience: ${measuredText(experience.measured)}.`);
+  if (experience.enabled === true || experience.insights !== null) {
+    const parts: string[] = [];
+    if (experience.insights !== null) {
+      const perAgent = experience.agents.filter((a) => a.insights !== null).map((a) => `${a.slug} ${a.insights}`);
+      parts.push(
+        `the agents held ${experience.insights} released insight${experience.insights === 1 ? "" : "s"}` +
+          (perAgent.length ? ` (${perAgent.join(", ")})` : "") +
+          (experience.waiting ? `, ${experience.waiting} waiting for review` : ""),
+      );
+    }
+    const h = experience.handed;
+    if (h && h.insights !== null) {
+      parts.push(
+        `the run's stages were handed ${h.insights}${h.waiting ? ` (+${h.waiting} waiting)` : ""}` +
+          (h.stages !== null ? ` over ${h.stages} stage${h.stages === 1 ? "" : "s"}` : ""),
+      );
+    }
+    if (parts.length) lines.push(`Experience: ${parts.join("; ")}.`);
+  }
+  const h = experience.handed;
+  if (experience.measured !== "off" && h?.insights === 0 && !h.waiting && (experience.insights ?? 0) > 0) {
+    lines.push(
+      "  No insight reached this run. An agent that keeps its insights apart (experience_config.scope_path) hands a case only " +
+        "what was filed under that case's own value, so cases whose inputs carry other values than the real runs receive nothing.",
+    );
+  }
+  return lines;
 }
 
 /** The case statuses behind a run's counts, for the `cavelon explain` that says what to do. */

@@ -6,6 +6,16 @@ and the fake server in `cli/test/` serves them.
 
 ## `cavelon/`
 
+On 2026-11-26 the Experience contracts were selected from the instance's
+source on ChatFlow main (goodguys-gmbh/ChatFlow epic #7154), without running an
+instance: `TestRunCreate.experience` (`on`, `off`, `waiting`) and
+`TestRunBrief.experience`, without prose, and `PackageAgent.experience_config`,
+an open object like the other agent configs. Everything else stays as
+recorded. The fake server records the choice in a run's `config` and, when a
+test sets `runExperienceStamp`, the stamp's `experience`; by default it plays an
+instance older than Experience, whose runs record neither, and a test edits the
+OpenAPI to drop `experience`.
+
 On 2026-11-11 the capacity-limit contracts were selectively refreshed from the
 instance build of goodguys-gmbh/ChatFlow#6507 (its OpenAPI generator, without
 running an instance): the five capacity fields of `TenantDetailResponse` may

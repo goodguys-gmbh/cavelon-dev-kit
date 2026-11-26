@@ -368,6 +368,19 @@ personal access token holding `playground.use` reaches the draft; without
   anyone else. Read the approval node in the schema and the human-in-the-loop
   docs for the shape. A test only shows the approval is reached; a person
   decides once per branch.
+- **An agent that learns from finished runs (Experience)** carries
+  `experience_config` where the package schema lists it: `enabled: true`,
+  optionally `scope_path` ("keep apart by", at most 200 characters, starting
+  with `$.run_state.` or `$.trigger_payload.`; the import refuses any other
+  root) and `focus` (what to learn, at most 500 characters). No other key is
+  accepted. Leaving the field out keeps the target agent's setting; `{}`
+  switches it off. The insights themselves never travel: a package, a clone or
+  a pull carries the setting and starts with none. It does nothing while the
+  tenant's own Experience switch is off, and takes effect when the solution
+  is published. Insights come from corrections at an Approval, and a solution
+  that another solution calls cannot hold one: put the agent that should learn
+  into the solution that holds the Approval. Releasing, rewording or widening
+  an insight is a person's step in the Admin; never offer it.
 
 ## Variables and secrets the solution needs
 

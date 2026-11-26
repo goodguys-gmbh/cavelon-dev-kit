@@ -24,7 +24,7 @@ import { callOperation, callStable, workflowOperation } from "../invoke.js";
 import { deref, jsonBodySchema, type Operation } from "../openapi.js";
 import { bindsNow, changedBy, limitError, limitsOrWarn, readLimits, type Limit, type PublishedLimits } from "../limits.js";
 import { getOperation } from "../operations.js";
-import { caseCounts, caseLabel, countsText, failedCase, caseKnowledgeOutcomes, NOT_PASSED, runVerdict, type TestResultState } from "../results.js";
+import { caseCounts, caseLabel, countsText, experienceLines, failedCase, caseKnowledgeOutcomes, measuredText, NOT_PASSED, runExperience, runVerdict, type TestResultState } from "../results.js";
 import { isUuid } from "../session.js";
 import { cavelonCommand } from "../printed.js";
 import { readZipSummary, ZipError, type ZipSummary } from "../zip.js";
@@ -898,7 +898,7 @@ function hasProfile(suite: Suite, profile: string): boolean | undefined {
 }
 
 /** An instance whose run route does not take the field is older than run profiles; nothing is sent then. */
-async function requireRunField(ctx: Context, field: "profile" | "tags"): Promise<void> {
+async function requireRunField(ctx: Context, field: "profile" | "tags" | "experience"): Promise<void> {
   const { doc, op } = await workflowOperation(ctx, "POST", "/api/v1/test-suites/{suite_id}/runs", "test runs");
   const schema = doc ? jsonBodySchema(op) : undefined;
   const properties = doc && schema ? (deref(doc, schema) as { properties?: Record<string, unknown> } | undefined)?.properties : undefined;
@@ -906,7 +906,10 @@ async function requireRunField(ctx: Context, field: "profile" | "tags"): Promise
   throw new CavelonError(ExitCode.failure, {
     code: "operation_unavailable",
     message: `This instance's OpenAPI does not establish support for ${field} in test runs (POST /api/v1/test-suites/{suite_id}/runs), so nothing was sent.`,
-    hint: `The instance may be older than run profiles or its request schema unavailable. Restore its published contract, or run the whole suite instead. \`${cavelonCommand("status")}\` shows its version.`,
+    hint:
+      field === "experience"
+        ? `The instance may be older than Experience (agents that learn from earlier runs) or its request schema unavailable; without it, a test run is the usual one. \`${cavelonCommand("status")}\` shows its version.`
+        : `The instance may be older than run profiles or its request schema unavailable. Restore its published contract, or run the whole suite instead. \`${cavelonCommand("status")}\` shows its version.`,
     details: { sent: false },
   });
 }
@@ -917,7 +920,15 @@ interface TestRun {
   suite_name?: string | null;
   status: string;
   summary?: Record<string, unknown>;
+  config?: Record<string, unknown>;
   operation_id?: string | null;
+}
+
+const EXPERIENCE_CHOICES = ["on", "off", "waiting"];
+
+/** The line that says the runs are a measurement, not a verdict on the solution. */
+function measurementText(experience: string | undefined): string {
+  return experience === "off" || experience === "waiting" ? `These runs are ${measuredText(experience)}.` : "";
 }
 
 /** The counts of a test run's summary that it carries, and what kept it from passing. */
@@ -954,6 +965,11 @@ export const testRun: CommandSpec = {
     "suite that has it, the others listed as skipped. Where a suite's gate names a profile, only a run of that profile\n" +
     "counts for publishing. --tags runs the cases carrying one of the tags. An instance older than run profiles refuses\n" +
     "both before anything is sent. An unavailable request schema also refuses both; whole-suite runs keep their fallback.\n" +
+    "--experience off runs the cases without what the solution's agents learned from earlier runs (Experience);\n" +
+    "--experience waiting hands them the insights that wait for review too. Such a run is a measurement: it votes for no\n" +
+    "release gate or readiness and is no baseline. --experience on (the default) sends nothing. An instance older than\n" +
+    "Experience refuses off and waiting before anything is sent. A waited run's result says what the agents held and\n" +
+    "what the run's stages were handed.\n" +
     "With --wait, exits 1 when a case failed or a run measured nothing comparable (cases not run, technical errors),\n" +
     "5 when answers wait for a manual verdict or a value a case needs.\n" +
     "--as-chat-user chooses a Chat User reader for these runs only, for knowledge and identity-bound database queries;\n" +
@@ -971,6 +987,11 @@ export const testRun: CommandSpec = {
     "as-chat-user": AS_CHAT_USER_OPTION,
     profile: { type: "string", value: "<profile>", description: "Run this run profile of each suite (its key), in place of the whole suite." },
     tags: { type: "string", multiple: true, value: "<tag>", description: "Run only the cases carrying one of these tags." },
+    experience: {
+      type: "string",
+      value: "<mode>",
+      description: "on (default), off (without what the agents learned) or waiting (with the insights that wait for review too); off and waiting measure, no gate vote.",
+    },
     wait: WAIT_OPTION,
     timeout: TIMEOUT_OPTION,
     "idempotency-key": { type: "string", value: "<key>", description: "Send an Idempotency-Key with each start." },
@@ -979,6 +1000,7 @@ export const testRun: CommandSpec = {
     "cavelon test run --suite smoke --wait --timeout 10m",
     "cavelon test run --harness support --json",
     "cavelon test run --profile s0 --wait",
+    "cavelon test run --profile s2 --experience off --wait",
   ],
   async run(ctx, input) {
     const session = await ctx.session();
@@ -987,6 +1009,11 @@ export const testRun: CommandSpec = {
     if (profile !== undefined && tags.length) throw usageError("Give --profile or --tags, not both.");
     if (profile !== undefined) await requireRunField(ctx, "profile");
     if (tags.length) await requireRunField(ctx, "tags");
+    const experience = stringOption(input, "experience");
+    if (experience !== undefined && !EXPERIENCE_CHOICES.includes(experience)) throw usageError("--experience takes on, off or waiting.");
+    // "on" is what a test run does without the field, so it is not sent and works on any instance.
+    const measuring = experience === "off" || experience === "waiting" ? experience : undefined;
+    if (measuring) await requireRunField(ctx, "experience");
     const reader = await chatUserReader(ctx, input, "/api/v1/test-suites/{suite_id}/runs");
     const harnessRef = stringOption(input, "harness") ?? session.project?.harness;
     const harnessId = harnessRef ? await resolveHarnessId(ctx, harnessRef) : undefined;
@@ -1049,6 +1076,7 @@ export const testRun: CommandSpec = {
       if (harnessId) body.harness_id = harnessId;
       if (profile !== undefined) body.profile = profile;
       if (tags.length) body.tags = tags;
+      if (measuring) body.experience = measuring;
       runs.push(
         await callStable<TestRun>(ctx, "POST", "/api/v1/test-suites/{suite_id}/runs", "test runs", {
           params: { suite_id: [suite.id] },
@@ -1075,7 +1103,14 @@ export const testRun: CommandSpec = {
           const code = runVerdict(latest.summary).exit_code;
           if (code === ExitCode.failure || (code === ExitCode.needsAction && verdictCode === ExitCode.ok)) verdictCode = code;
         }
-        results.push({ run_id: latest.id, suite: latest.suite_name ?? latest.suite_id, status: latest.status, summary: latest.summary ?? {} });
+        const exp = runExperience(latest.config);
+        results.push({
+          run_id: latest.id,
+          suite: latest.suite_name ?? latest.suite_id,
+          status: latest.status,
+          summary: latest.summary ?? {},
+          ...(exp ? { experience: exp } : {}),
+        });
       }
       let exitCode = waited.exitCode;
       if (exitCode === ExitCode.ok) exitCode = verdictCode;
@@ -1084,22 +1119,42 @@ export const testRun: CommandSpec = {
       const text = [
         waited.body,
         "",
-        ...results.map((r) => `${r.suite}: ${r.status}  ${summaryText(r.summary)}`),
+        ...results.flatMap((r) => [
+          `${r.suite}: ${r.status}  ${summaryText(r.summary)}`,
+          // The measurement line is said once for all runs below; each run's own lines say what its agents held.
+          ...experienceLines(r.experience ? { ...r.experience, measured: null } : undefined).map((line) => `  ${line}`),
+        ]),
+        ...(measuring ? ["", measurementText(measuring)] : []),
         ...(skipped.length ? ["", skippedText(skipped)] : []),
         ...(withoutProfile.length ? ["", withoutProfileText(withoutProfile, profile!)] : []),
         ...(resume ? ["", `${waited.why} after the timeout; the runs go on. Resume: ${resume}`] : []),
       ].join("\n");
       return {
-        data: { runs: results, failed_cases: failedCases, ...waited.data, ...reader, ...skippedData(skipped, withoutProfile), ...(resume ? { resume } : {}) },
+        data: {
+          runs: results,
+          failed_cases: failedCases,
+          ...waited.data,
+          ...reader,
+          ...(measuring ? { experience: measuring, measurement: true } : {}),
+          ...skippedData(skipped, withoutProfile),
+          ...(resume ? { resume } : {}),
+        },
         text: reader ? `Reading as Chat User ${reader.reader_chat_user_id} for these runs only.\n${text}` : text,
         exitCode,
       };
     }
     return {
-      data: { runs: started, operation_ids: operationIds, ...reader, ...skippedData(skipped, withoutProfile) },
+      data: {
+        runs: started,
+        operation_ids: operationIds,
+        ...reader,
+        ...(measuring ? { experience: measuring, measurement: true } : {}),
+        ...skippedData(skipped, withoutProfile),
+      },
       text:
         (reader ? `Reading as Chat User ${reader.reader_chat_user_id} for these runs only.\n` : "") +
         table(started, ["suite", "run_id", "status", "operation_id"]) +
+        (measuring ? `\n\n${measurementText(measuring)}` : "") +
         (skipped.length ? `\n\n${skippedText(skipped)}` : "") +
         (withoutProfile.length ? `\n\n${withoutProfileText(withoutProfile, profile!)}` : "") +
         (operationIds.length ? `\n\nWait with: ${cavelonCommand("wait", ...operationIds)}` : ""),
@@ -1360,6 +1415,21 @@ function judgedLines(r: TestResultState, max: number, full: boolean): string[] {
   ];
 }
 
+/**
+ * The run's Experience (what its agents held and handed, and whether it was a
+ * measurement). A run that cannot be read only goes without these lines: its
+ * results are what the trace is for.
+ */
+async function testRunExperience(ctx: Context, id: string) {
+  try {
+    const run = await callStable<TestRun>(ctx, "GET", "/api/v1/test-runs/{run_id}", "test runs", { params: { run_id: [id] } });
+    return runExperience(run.config);
+  } catch (error) {
+    if (error instanceof CavelonError) return undefined;
+    throw error;
+  }
+}
+
 /** A test run's results: one line per case, then each case that did not pass with the reasons the instance recorded. */
 async function testRunView(ctx: Context, id: string, results: TestResultState[], options: { limit: number; cursor?: string; full: boolean }) {
   const max = options.full ? Number.MAX_SAFE_INTEGER : 1000;
@@ -1395,9 +1465,12 @@ async function testRunView(ctx: Context, id: string, results: TestResultState[],
     byConversation ? `A case's traces, by the conversation_id in its row: ${caseTraceCommand(byConversation)!.command}` : "",
     byRun ? `A trigger case's traces, by the run_id in its row: ${caseTraceCommand(byRun)!.command}` : "",
   ].filter(Boolean);
+  const experience = await testRunExperience(ctx, id);
+  const said = experienceLines(experience);
   return {
-    data: { kind: "test", run_id: id, results: { ...page, items } },
+    data: { kind: "test", run_id: id, ...(experience ? { experience } : {}), results: { ...page, items } },
     text:
+      (said.length ? `${said.join("\n")}\n\n` : "") +
       table(items, ["case", "step", "status", "score", ...(items.some((r) => r.agent) ? ["agent"] : []), ...(items.some((r) => r.run_id) ? ["run_id"] : []), "conversation_id"]) +
       moreHint(page.next_cursor, cavelonCommand("trace", id, "--kind", "test")) +
       (notPassed.length ? `\n\nDid not pass:\n${notPassed.flatMap((r) => notPassedLines(r, max, options.full)).join("\n")}` : "") +

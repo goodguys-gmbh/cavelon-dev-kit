@@ -197,6 +197,24 @@ deploy; without `--suite`, every suite that has it, the others skipped as
 counts for publishing: run that one before asking for activation. `--tags`
 runs the cases carrying one of the tags and never counts for publishing.
 
+### Experience: what the agents learned
+
+Where agents learn from finished runs (`experience_config`), a test run hands
+their stages the released insights as any run does. `--experience off` runs
+without them; `--experience waiting` adds the insights that still wait for a
+person's review, to try one before a real run receives it. Either is a
+measurement: it votes for no release gate or readiness and is no baseline, so
+never take it as the run that lets a solution activate. No test run writes
+or counts anything on an insight. `test run --wait` and `cavelon trace <run>`
+show what the agents held and what the stages were handed; `handed 0` while
+the agents hold insights usually means `scope_path` keeps them apart and the
+cases' inputs carry other values than the real runs that filed them.
+
+One run with and one without proves nothing, since a model varies from call to
+call: compare a run profile with repetitions both ways. To check what an agent
+proposes at an Approval, use a trigger case with `expect_status:
+reaches_approval` and an output assertion on the proposal; no judge is needed.
+
 ## Database query tools
 
 Test edited package SQL before apply with `cavelon db test-run <slug> --draft

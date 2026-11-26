@@ -7,6 +7,19 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+### Added
+
+- `cavelon test run --experience off|waiting` (and the `test_run` tool's
+  `experience`) runs the cases without what the solution's agents learned, or
+  with the insights that wait for review too. The output says such a run is a
+  measurement that votes for no release gate or readiness. An instance older
+  than Experience refuses it before anything is sent (#376).
+- `test run --wait` and `cavelon trace <test-run>` show what a run's agents
+  held and what its stages were handed, and warn when agents with insights
+  handed none (a `scope_path` that keeps them apart from the cases' values).
+- The authoring and testing skills describe an agent's `experience_config` and
+  how to measure what the insights do (#376).
+
 ## [0.2.19] - 2026-11-24
 
 ### Added

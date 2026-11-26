@@ -21951,6 +21951,21 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "experience": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "off",
+                  "waiting"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Experience"
           }
         },
         "type": "object",
@@ -22076,6 +22091,22 @@
               }
             ],
             "title": "Reader Chat User Id"
+          },
+          "experience": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "on",
+                  "off",
+                  "waiting"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Experience"
           }
         },
         "additionalProperties": false,
