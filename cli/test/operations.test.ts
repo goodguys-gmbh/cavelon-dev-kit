@@ -415,6 +415,105 @@ describe("test run", () => {
     });
   });
 
+  describe("experience", () => {
+    const starts = (since: number) =>
+      server.state.requests.slice(since).filter((r) => r.method === "POST" && r.path.endsWith("/runs"));
+
+    it("sends off or waiting, and says the runs are a measurement", async () => {
+      for (const value of ["off", "waiting"]) {
+        const since = server.state.requests.length;
+        const result = await cli(sb, ["test", "run", "--suite", "smoke", "--experience", value, "--json"]);
+        expect(result.code, result.stderr).toBe(0);
+        expect(starts(since).map((r) => r.body)).toEqual([{ experience: value }]);
+        expect(result.json()).toMatchObject({ experience: value, measurement: true });
+      }
+      const text = await cli(sb, ["test", "run", "--suite", "smoke", "--experience", "off"]);
+      expect(text.stdout).toContain(
+        "These runs are a measurement without what the agents learned (experience off): it votes for no release gate or readiness and is no baseline.",
+      );
+    });
+
+    it("sends nothing for on, which is what a test run does anyway, and refuses another value", async () => {
+      const since = server.state.requests.length;
+      const on = await cli(sb, ["test", "run", "--suite", "smoke", "--experience", "on", "--json"]);
+      expect(on.code, on.stderr).toBe(0);
+      expect(starts(since).map((r) => r.body)).toEqual([{}]);
+      expect(on.json()).not.toHaveProperty("measurement");
+
+      const wrong = await cli(sb, ["test", "run", "--suite", "smoke", "--experience", "none"]);
+      expect(wrong.code).toBe(2);
+      expect(wrong.stderr).toContain("--experience takes on, off or waiting.");
+    });
+
+    it("refuses off on an instance older than Experience, before anything is sent", async () => {
+      server.state.openapiEdit = (doc) => {
+        delete doc.components.schemas.TestRunCreate.properties.experience;
+      };
+      try {
+        const since = server.state.requests.length;
+        const result = await cli(sb, ["test", "run", "--suite", "smoke", "--experience", "off", "--json"], {
+          env: { CAVELON_CACHE_DIR: path.join(sb.home, "cache-older-than-experience") },
+        });
+        expect(result.code).toBe(1);
+        expect(result.json()).toMatchObject({ error: { code: "operation_unavailable", details: { sent: false } } });
+        expect(result.json<{ error: { hint: string } }>().error.hint).toContain("older than Experience");
+        expect(starts(since)).toEqual([]);
+      } finally {
+        server.state.openapiEdit = null;
+      }
+    });
+
+    it("shows what the agents held and warns when none of it reached the run", async () => {
+      server.state.runExperienceStamp = {
+        enabled: true,
+        insights: 3,
+        agents: [{ slug: "classifier", insights: 3, hash: "h1" }],
+        hash: "h",
+        handed: { stages: 4, insights: 0 },
+      };
+      try {
+        const result = await cli(sb, ["test", "run", "--suite", "smoke", "--wait", "--json"]);
+        expect(result.code, result.stderr).toBe(0);
+        const run = result.json<{ runs: Array<{ experience: Record<string, unknown> }> }>().runs[0]!;
+        expect(run.experience).toEqual({
+          measured: null,
+          enabled: true,
+          insights: 3,
+          waiting: null,
+          agents: [{ slug: "classifier", insights: 3, waiting: null }],
+          handed: { stages: 4, insights: 0, waiting: null },
+        });
+
+        const text = await cli(sb, ["test", "run", "--suite", "smoke", "--wait"]);
+        expect(text.stdout).toContain("Experience: the agents held 3 released insights (classifier 3); the run's stages were handed 0 over 4 stages.");
+        expect(text.stdout).toContain("No insight reached this run.");
+        expect(text.stdout).toContain("experience_config.scope_path");
+
+        // A trace of the run says the same above its cases.
+        const id = result.json<{ runs: Array<{ run_id: string }> }>().runs[0]!.run_id;
+        const trace = await cli(sb, ["trace", id, "--kind", "test", "--json"]);
+        expect(trace.json()).toMatchObject({ kind: "test", experience: { insights: 3, handed: { insights: 0 } } });
+      } finally {
+        server.state.runExperienceStamp = null;
+      }
+    });
+
+    it("names a measured run in its trace, and stays silent where the instance records no Experience", async () => {
+      server.state.runExperienceStamp = { enabled: false, off_for_run: true, insights: 0, agents: [], hash: "h" };
+      try {
+        const run = await cli(sb, ["test", "run", "--suite", "smoke", "--experience", "off", "--json"]);
+        const id = run.json<{ runs: Array<{ run_id: string }> }>().runs[0]!.run_id;
+        const trace = await cli(sb, ["trace", id, "--kind", "test"]);
+        expect(trace.stdout).toContain("Experience: a measurement without what the agents learned (experience off)");
+        expect(trace.stdout).not.toContain("No insight reached this run.");
+      } finally {
+        server.state.runExperienceStamp = null;
+      }
+      const older = await cli(sb, ["test", "run", "--suite", "smoke", "--wait"]);
+      expect(older.stdout).not.toContain("Experience");
+    });
+  });
+
   it("runs one suite and waits for its result", async () => {
     const result = await cli(sb, ["test", "run", "--suite", "smoke", "--wait", "--json"]);
     expect(result.code, result.stderr + result.stdout).toBe(0);

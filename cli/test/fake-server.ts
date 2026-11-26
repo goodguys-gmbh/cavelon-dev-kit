@@ -364,7 +364,7 @@ export interface FakeState {
   chatUsers: FakeChatUser[];
   readerOverrides: boolean;
   chatUserEmailVerified: boolean;
-  runs: Array<{ id: string; tenant_id: string; suite_id: string; summary: Record<string, unknown>; harness_id?: string | null }>;
+  runs: Array<{ id: string; tenant_id: string; suite_id: string; summary: Record<string, unknown>; harness_id?: string | null; config?: Record<string, unknown> }>;
   operations: Map<string, FakeOperation>;
   /** By "trigger:<run id>" or "conversation:<conversation id>". */
   traces: Map<string, Array<Record<string, unknown>>>;
@@ -393,6 +393,8 @@ export interface FakeState {
   quotaUsage: Record<string, unknown>;
   /** The summary a new test run finishes with. */
   runSummary: Record<string, unknown>;
+  /** What a run's stamp records of Experience (`config.stamp.experience`); null plays an instance older than Experience. */
+  runExperienceStamp: Record<string, unknown> | null;
   /** The results a test run lists, as fields over the default result; null lists two passed chat cases. */
   runResults: Array<Record<string, unknown> & { name: string; status: string }> | null;
   /**
@@ -855,6 +857,7 @@ export async function startFakeServer(): Promise<FakeServer> {
     enforcedCeilings: {},
     quotaUsage: defaultQuotaUsage(),
     runSummary: { passed: 2, failed: 0, pass_rate: 1 },
+    runExperienceStamp: null,
     runResults: null,
     rootPathsReachApi: true,
     serveOpenapi: true,
@@ -1510,7 +1513,13 @@ export async function startFakeServer(): Promise<FakeServer> {
       if (!admitReader(res, info, tid, readerRequest?.reader_mode ? body.json : suite.settings)) return;
       const id = randomUUID();
       const asked = (body.json as { harness_id?: unknown } | undefined)?.harness_id;
-      const run = { id, tenant_id: tid, suite_id: suite.id, summary: { ...state.runSummary }, harness_id: typeof asked === "string" ? asked : suite.harness_id };
+      // Like the instance: the run's config answers the Experience choice, and its stamp records what the agents held.
+      const experience = (body.json as { experience?: unknown } | undefined)?.experience;
+      const config: Record<string, unknown> = {
+        ...(typeof experience === "string" && experience !== "on" ? { experience } : {}),
+        ...(state.runExperienceStamp ? { stamp: { experience: { ...state.runExperienceStamp } } } : {}),
+      };
+      const run = { id, tenant_id: tid, suite_id: suite.id, summary: { ...state.runSummary }, harness_id: typeof asked === "string" ? asked : suite.harness_id, config };
       state.runs.push(run);
       const op = addOperation("test_run", tid, [...state.defaultSteps], {
         id: opId("test_run", id),
@@ -2741,7 +2750,7 @@ function suiteView(s: FakeState["suites"][number]) {
   };
 }
 
-function runView(run: { id: string; suite_id: string; summary: Record<string, unknown>; harness_id?: string | null }, suiteName: string | null, status: string, operationId: string | null) {
+function runView(run: { id: string; suite_id: string; summary: Record<string, unknown>; harness_id?: string | null; config?: Record<string, unknown> }, suiteName: string | null, status: string, operationId: string | null) {
   return {
     id: run.id,
     suite_id: run.suite_id,
@@ -2750,7 +2759,7 @@ function runView(run: { id: string; suite_id: string; summary: Record<string, un
     status,
     started_at: now(),
     completed_at: status === "completed" ? now() : null,
-    config: {},
+    config: run.config ?? {},
     summary: status === "completed" ? run.summary : {},
     triggered_by: "cavelon",
     notes: null,

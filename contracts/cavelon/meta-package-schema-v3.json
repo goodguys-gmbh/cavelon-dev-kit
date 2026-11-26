@@ -220,6 +220,19 @@
           "default": null,
           "title": "Attachment Config"
         },
+        "experience_config": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Experience Config"
+        },
         "history_token_budget": {
           "anyOf": [
             {
