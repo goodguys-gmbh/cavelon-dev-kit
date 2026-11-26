@@ -7,6 +7,8 @@ CLI, the skills and the plugin.
 
 ## [Unreleased]
 
+## [0.2.20] - 2026-11-26
+
 ### Added
 
 - `cavelon test run --experience off|waiting` (and the `test_run` tool's
